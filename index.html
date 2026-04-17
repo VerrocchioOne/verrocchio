@@ -13,12 +13,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script>
-const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410262:web:dcbd72e6eedddc3622fab7"};
-firebase.initializeApp(firebaseConfig);
-const db=firebase.firestore();
-const DOC=db.collection("users").doc("main");
-</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
@@ -50,6 +44,11 @@ a{-webkit-tap-highlight-color:transparent}
 <body>
 <div id="root"></div>
 <script>
+document.addEventListener("DOMContentLoaded", function() {
+const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410262:web:dcbd72e6eedddc3622fab7"};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+const DOC=db.collection("users").doc("main");
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
@@ -3421,13 +3420,12 @@ function App() {
         })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
           style: {
             flex: 1,
-            minWidth: 0
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4
           }
         }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            marginBottom: 3
-          }
-        }, /*#__PURE__*/React.createElement("span", {
           style: {
             fontSize: 13,
             fontWeight: 500,
@@ -3436,66 +3434,25 @@ function App() {
             wordBreak: "break-word",
             lineHeight: 1.4
           }
-        }, habit.text)), habit.notes && /*#__PURE__*/React.createElement("div", {
+        }, habit.text), habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
             color: "#6b7280",
             lineHeight: 1.5,
             fontStyle: "italic"
           }
-        }, habit.notes), (() => {
-          const linkedGoal = habit.goalId && data.goals.find(g => String(g.id) === String(habit.goalId));
-          return linkedGoal ? /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontSize: 10,
-              color: "#7c3aed",
-              fontWeight: 600,
-              marginTop: 2,
-              display: "flex",
-              alignItems: "center",
-              gap: 3
-            }
-          }, /*#__PURE__*/React.createElement("span", {
-            style: {
-              opacity: .6
-            }
-          }, "\uD83C\uDFAF"), linkedGoal.text) : null;
-        })()), /*#__PURE__*/React.createElement("div", {
+        }, habit.notes), /*#__PURE__*/React.createElement("div", {
           style: {
-            display: "flex",
-            flexDirection: "column",
-            gap: 3,
-            flexShrink: 0,
-            alignSelf: "center"
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: "flex",
-            gap: 3
-          }
-        }, imp && /*#__PURE__*/React.createElement("div", {
-          style: {
-            width: 74,
-            height: 18,
-            background: imp.bg,
-            border: `1px solid ${imp.border}`,
-            borderRadius: 4,
             display: "flex",
             alignItems: "center",
-            justifyContent: "center"
+            gap: 4,
+            flexWrap: "wrap"
           }
-        }, /*#__PURE__*/React.createElement("span", {
+        }, fmtDur(habit.duration) && /*#__PURE__*/React.createElement("div", {
           style: {
-            fontSize: 7,
-            fontWeight: 700,
-            color: imp.color,
-            textTransform: "uppercase",
-            whiteSpace: "nowrap"
-          }
-        }, imp.value)), fmtDur(habit.duration) ? /*#__PURE__*/React.createElement("div", {
-          style: {
-            width: 34,
             height: 18,
+            paddingLeft: 6,
+            paddingRight: 6,
             background: "#f0f9ff",
             border: "1px solid #bae6fd",
             borderRadius: 4,
@@ -3505,32 +3462,47 @@ function App() {
           }
         }, /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 7,
+            fontSize: 9,
             fontWeight: 700,
             color: "#0891b2",
             whiteSpace: "nowrap"
           }
-        }, "\u23F1", fmtDur(habit.duration))) : /*#__PURE__*/React.createElement("div", {
+        }, "\u23F1", fmtDur(habit.duration))), imp && /*#__PURE__*/React.createElement("div", {
           style: {
-            width: 34
+            height: 18,
+            paddingLeft: 6,
+            paddingRight: 6,
+            background: imp.bg,
+            border: `1px solid ${imp.border}`,
+            borderRadius: 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
           }
-        })), /*#__PURE__*/React.createElement("div", {
+        }, /*#__PURE__*/React.createElement("span", {
           style: {
-            width: 111,
+            fontSize: 9,
+            fontWeight: 700,
+            color: imp.color,
+            textTransform: "uppercase",
+            whiteSpace: "nowrap"
+          }
+        }, imp.value)), /*#__PURE__*/React.createElement("div", {
+          style: {
             display: "flex",
             alignItems: "center",
             gap: 3,
+            height: 18,
+            paddingLeft: 5,
+            paddingRight: 5,
             background: "#fafafa",
             border: "1px solid #e5e7eb",
-            borderRadius: 4,
-            padding: "2px 5px",
-            boxSizing: "border-box"
+            borderRadius: 4
           }
         }, /*#__PURE__*/React.createElement("div", {
           style: {
             display: "flex",
-            gap: 1.5,
-            flexShrink: 0
+            gap: 1.5
           }
         }, l14.map((x, i) => /*#__PURE__*/React.createElement("div", {
           key: i,
@@ -3542,20 +3514,34 @@ function App() {
           }
         }))), streak >= 2 && /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 7,
+            fontSize: 9,
             fontWeight: 700,
-            color: streak >= 7 ? "#d97706" : "#7c3aed",
-            flexShrink: 0
+            color: streak >= 7 ? "#d97706" : "#7c3aed"
           }
         }, streak >= 7 ? "🔥" : "", streak), /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 7,
+            fontSize: 9,
             fontWeight: 600,
             color: rate.pct >= 80 ? "#16a34a" : rate.pct >= 50 ? "#d97706" : "#dc2626",
-            marginLeft: "auto",
-            flexShrink: 0
+            marginLeft: 2
           }
-        }, rate.pct, "%"))), /*#__PURE__*/React.createElement("button", {
+        }, rate.pct, "%"))), (() => {
+          const linkedGoal = habit.goalId && data.goals.find(g => String(g.id) === String(habit.goalId));
+          return linkedGoal ? /*#__PURE__*/React.createElement("div", {
+            style: {
+              fontSize: 10,
+              color: "#7c3aed",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              gap: 3
+            }
+          }, /*#__PURE__*/React.createElement("span", {
+            style: {
+              opacity: .6
+            }
+          }, "\uD83C\uDFAF"), linkedGoal.text) : null;
+        })()), /*#__PURE__*/React.createElement("button", {
           className: "edit-btn",
           onClick: () => sEHabit(habit),
           style: {
@@ -3566,7 +3552,8 @@ function App() {
             fontSize: 12,
             opacity: 0,
             flexShrink: 0,
-            padding: "2px 4px"
+            padding: "2px 4px",
+            alignSelf: "flex-start"
           }
         }, "\u270E"), /*#__PURE__*/React.createElement("button", {
           className: "del-btn",
@@ -3578,7 +3565,8 @@ function App() {
             color: "#d1d5db",
             fontSize: 16,
             opacity: 0,
-            flexShrink: 0
+            flexShrink: 0,
+            alignSelf: "flex-start"
           }
         }, "\xD7"), ht && /*#__PURE__*/React.createElement("div", {
           style: {
@@ -4973,6 +4961,7 @@ function App() {
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
 
+});
 </script>
 </body>
 </html>
