@@ -226,6 +226,7 @@ const SF_FIELDS = [{
   label: "T — Time-bound",
   ph: "What is your target date?"
 }];
+const HABIT_ICONS = ["🏃", "💪", "🧘", "🚴", "🏊", "⚽", "🎾", "🥊", "🤸", "🧗", "📖", "✍️", "🎯", "🧠", "💻", "🎓", "📝", "🔬", "🎨", "🎭", "🥗", "💊", "💧", "🛌", "🌅", "🧘", "🍎", "🥦", "☕", "🫁", "🙏", "📿", "✝️", "🕊️", "🌿", "⭐", "🌙", "☀️", "🔥", "❤️", "💰", "📊", "💼", "🏦", "📈", "💳", "🏠", "🚗", "✈️", "💎", "🎵", "🎹", "🎸", "🎺", "🎻", "🖼️", "📸", "🌍", "🗣️", "🤝", "😴", "🧹", "🪥", "🛁", "👟", "⌚", "📱", "🔑", "📦", "🎁"];
 const PRESET_QUOTES = [{
   "text": "Waking up to who you are requires letting go of who you imagine yourself to be.",
   "author": "Alan Watts"
@@ -1599,6 +1600,17 @@ function App() {
     name: "Family"
   }];
 
+  /* PROFILE */
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileName, setProfileName] = useState(() => localStorage.getItem("v-profile-name") || "");
+  const [profileGoal, setProfileGoal] = useState(() => localStorage.getItem("v-profile-goal") || "");
+
+  /* SECTION FILTER (habits tab) */
+  const [secFilter, setSecFilter] = useState("all"); // "all"|"morning"|"afternoon"|"evening"|"avoid"
+
+  /* ICON PICKER */
+  const [showIconPicker, setShowIconPicker] = useState(null); // {id, kind:"habit"|"goal"}
+
   /* MORNING BRIEF */
   const [briefTxt, setBriefTxt] = useState("");
   const [briefing, setBriefing] = useState(false);
@@ -2287,10 +2299,10 @@ function App() {
   };
 
   /* GROUPED HABITS */
-  const groupedH = useMemo(() => SECTIONS.map(sec => ({
+  const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter === "all" || sec.value === secFilter).map(sec => ({
     ...sec,
     habits: filtH.filter(h => h.section === sec.value).sort((a, b) => (a._order ?? 999) - (b._order ?? 999))
-  })).filter(g => g.habits.length > 0), [filtH]);
+  })).filter(g => g.habits.length > 0), [filtH, secFilter]);
 
   /* ── RENDER ── */
   return /*#__PURE__*/React.createElement("div", {
@@ -2303,7 +2315,6 @@ function App() {
     style: {
       background: "#fff",
       borderBottom: "1px solid #e5e7eb",
-      padding: "12px 16px",
       boxShadow: "0 1px 3px rgba(0,0,0,.05)",
       position: "sticky",
       top: 0,
@@ -2313,7 +2324,8 @@ function App() {
     style: {
       display: "flex",
       justifyContent: "space-between",
-      alignItems: "center"
+      alignItems: "center",
+      padding: "10px 16px 8px"
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
     style: {
@@ -2329,7 +2341,7 @@ function App() {
       fontSize: 10,
       color: "#9ca3af",
       fontWeight: 500,
-      marginTop: 2,
+      marginTop: 1,
       letterSpacing: .5
     }
   }, "Achieve Anything")), /*#__PURE__*/React.createElement("div", {
@@ -2346,12 +2358,12 @@ function App() {
         fontWeight: 600,
         display: "flex",
         alignItems: "center",
-        gap: 4
+        gap: 3
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
-        width: 7,
-        height: 7,
+        width: 6,
+        height: 6,
         borderRadius: "50%",
         background: "#9ca3af",
         display: "inline-block",
@@ -2365,12 +2377,12 @@ function App() {
         fontWeight: 600,
         display: "flex",
         alignItems: "center",
-        gap: 4
+        gap: 3
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
-        width: 7,
-        height: 7,
+        width: 6,
+        height: 6,
         borderRadius: "50%",
         background: "#d97706",
         display: "inline-block",
@@ -2384,12 +2396,12 @@ function App() {
         fontWeight: 600,
         display: "flex",
         alignItems: "center",
-        gap: 4
+        gap: 3
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
-        width: 7,
-        height: 7,
+        width: 6,
+        height: 6,
         borderRadius: "50%",
         background: "#dc2626",
         display: "inline-block"
@@ -2402,47 +2414,122 @@ function App() {
         fontWeight: 600,
         display: "flex",
         alignItems: "center",
-        gap: 4
+        gap: 3
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
-        width: 7,
-        height: 7,
+        width: 6,
+        height: 6,
         borderRadius: "50%",
         background: "#16a34a",
         display: "inline-block"
       }
     }), "\u2713 Synced");
-  })(), /*#__PURE__*/React.createElement("div", {
+  })(), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowProfile(true),
     style: {
-      background: "#f9fafb",
-      border: "1px solid #e5e7eb",
-      borderRadius: 8,
-      padding: "5px 10px",
+      width: 34,
+      height: 34,
+      borderRadius: "50%",
+      background: "#2d5a2d",
+      border: "none",
+      cursor: "pointer",
       display: "flex",
       alignItems: "center",
-      gap: 4
+      justifyContent: "center",
+      flexShrink: 0
     }
-  }, /*#__PURE__*/React.createElement("span", {
+  }, profileName ? /*#__PURE__*/React.createElement("span", {
     style: {
-      fontSize: 10
+      color: "#fff",
+      fontSize: 14,
+      fontWeight: 700
     }
-  }, "\uD83D\uDCC5"), /*#__PURE__*/React.createElement("select", {
-    value: selDate,
-    onChange: e => setSelDate(e.target.value),
-    style: {
-      background: "transparent",
-      border: "none",
-      fontSize: 11,
-      fontWeight: 700,
-      color: isToday ? "#16a34a" : "#2d5a2d",
-      cursor: "pointer",
-      outline: "none"
-    }
-  }, dateOpts.map(o => /*#__PURE__*/React.createElement("option", {
-    key: o.val,
-    value: o.val
-  }, o.label))))))), undoToast && /*#__PURE__*/React.createElement("div", {
+  }, profileName.charAt(0).toUpperCase()) : /*#__PURE__*/React.createElement("svg", {
+    width: "18",
+    height: "18",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "white",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "12",
+    cy: "7",
+    r: "4"
+  }))))), (() => {
+    const days = Array.from({
+      length: 7
+    }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (3 - i));
+      const val = d.toISOString().split("T")[0];
+      const isT = val === tk();
+      const isSel = val === selDate;
+      const dayName = d.toLocaleDateString("en-US", {
+        weekday: "short"
+      });
+      const dayNum = d.getDate();
+      return {
+        val,
+        isT,
+        isSel,
+        dayName,
+        dayNum
+      };
+    });
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-around",
+        alignItems: "center",
+        padding: "4px 12px 10px"
+      }
+    }, days.map(day => /*#__PURE__*/React.createElement("button", {
+      key: day.val,
+      onClick: () => setSelDate(day.val),
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 3,
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        padding: "0 2px",
+        WebkitTapHighlightColor: "transparent"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        fontWeight: 500,
+        color: day.isSel ? "#2d5a2d" : "#9ca3af",
+        textTransform: "uppercase",
+        letterSpacing: .3
+      }
+    }, day.dayName), /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: day.isSel ? "#2d5a2d" : day.isT ? "#f0f7f0" : "transparent",
+        border: day.isT && !day.isSel ? "1.5px solid #2d5a2d" : "1.5px solid transparent",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "all .15s"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 13,
+        fontWeight: day.isSel || day.isT ? 700 : 400,
+        color: day.isSel ? "#fff" : day.isT ? "#2d5a2d" : "#374151"
+      }
+    }, day.dayNum)))));
+  })()), undoToast && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       bottom: 90,
@@ -2555,33 +2642,7 @@ function App() {
       textTransform: "uppercase",
       letterSpacing: .5
     }
-  }, s.label)))), (() => {
-    const q = todayQ();
-    return q ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "linear-gradient(135deg,#f0f7f0,#f5faf5)",
-        border: "1px solid #c6dfc6",
-        borderRadius: 14,
-        padding: "14px 16px",
-        marginBottom: 16
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 13,
-        fontStyle: "italic",
-        color: "#374151",
-        lineHeight: 1.6,
-        marginBottom: 4
-      }
-    }, "\"", q.text.length > 160 ? q.text.slice(0, 160) + "…" : q.text, "\""), q.author && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#2d5a2d",
-        fontWeight: 600
-      }
-    }, "\u2014 ", q.author)) : null;
-  })(), /*#__PURE__*/React.createElement("div", {
+  }, s.label)))), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
@@ -2638,7 +2699,199 @@ function App() {
       color: "#d1d5db",
       fontSize: 13
     }
-  }, "Tap Generate for a personalized morning briefing")), /*#__PURE__*/React.createElement("div", {
+  }, "Tap Generate for a personalized morning briefing")), (() => {
+    const today7 = Array.from({
+      length: 7
+    }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().split("T")[0];
+    });
+    const activeH = habits.filter(h => h.section !== "avoid");
+    const stats = {
+      streak: Math.max(0, ...activeH.map(h => getStreak(h))),
+      pctToday: activeH.length ? Math.round(activeH.filter(h => isDone(h, selDate)).length / activeH.length * 100) : 0,
+      pct7: activeH.length ? Math.round(today7.reduce((s, d) => s + activeH.filter(h => isDone(h, d)).length, 0) / (activeH.length * 7) * 100) : 0,
+      perfect7: today7.filter(d => activeH.length > 0 && activeH.every(h => isDone(h, d))).length
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        padding: "16px",
+        marginBottom: 16,
+        boxShadow: "0 1px 3px rgba(0,0,0,.04)"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "'Lora',serif",
+        fontSize: 15,
+        fontWeight: 700,
+        color: "#111827",
+        marginBottom: 12
+      }
+    }, "Habit Report"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        overflowX: "auto",
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("table", {
+      style: {
+        width: "100%",
+        borderCollapse: "collapse",
+        minWidth: 280
+      }
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+      style: {
+        width: "40%",
+        fontSize: 9,
+        color: "#9ca3af",
+        fontWeight: 600,
+        paddingBottom: 4,
+        textTransform: "uppercase"
+      }
+    }, "Habit"), today7.map(d => {
+      const dd = new Date(d + "T12:00:00");
+      return /*#__PURE__*/React.createElement("td", {
+        key: d,
+        style: {
+          textAlign: "center",
+          fontSize: 9,
+          color: d === selDate ? "#2d5a2d" : "#9ca3af",
+          fontWeight: d === selDate ? 700 : 400,
+          paddingBottom: 4,
+          textTransform: "uppercase"
+        }
+      }, dd.toLocaleDateString("en-US", {
+        weekday: "short"
+      }).slice(0, 1), /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          fontWeight: d === selDate ? 700 : 500
+        }
+      }, dd.getDate()));
+    }))), /*#__PURE__*/React.createElement("tbody", null, activeH.slice(0, 8).map(h => /*#__PURE__*/React.createElement("tr", {
+      key: h.id
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        fontSize: 11,
+        color: "#374151",
+        paddingRight: 6,
+        paddingBottom: 3,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        maxWidth: 0,
+        width: "40%"
+      }
+    }, h.icon && /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginRight: 3
+      }
+    }, h.icon), h.text.length > 18 ? h.text.slice(0, 18) + "…" : h.text), today7.map(d => {
+      const done = isDone(h, d);
+      const miss = isMissed(h, d);
+      return /*#__PURE__*/React.createElement("td", {
+        key: d,
+        style: {
+          textAlign: "center",
+          paddingBottom: 3
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          width: 20,
+          height: 20,
+          borderRadius: 4,
+          margin: "0 auto",
+          background: done ? "#22c55e" : miss ? "#ef4444" : "#f3f4f6",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }
+      }, done && /*#__PURE__*/React.createElement("svg", {
+        width: "10",
+        height: "10",
+        viewBox: "0 0 10 10",
+        fill: "none"
+      }, /*#__PURE__*/React.createElement("path", {
+        d: "M1.5 5L4 7.5L8.5 2.5",
+        stroke: "white",
+        strokeWidth: "1.5",
+        strokeLinecap: "round"
+      })), miss && /*#__PURE__*/React.createElement("svg", {
+        width: "8",
+        height: "8",
+        viewBox: "0 0 8 8",
+        fill: "none"
+      }, /*#__PURE__*/React.createElement("path", {
+        d: "M1 1L7 7M7 1L1 7",
+        stroke: "white",
+        strokeWidth: "1.5",
+        strokeLinecap: "round"
+      }))));
+    }))))), activeH.length > 8 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#9ca3af",
+        marginTop: 4
+      }
+    }, "+", activeH.length - 8, " more habits")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "repeat(4,1fr)",
+        gap: 8
+      }
+    }, [{
+      label: "Today",
+      val: `${stats.pctToday}%`,
+      color: "#2d5a2d",
+      sub: "complete"
+    }, {
+      label: "7-Day",
+      val: `${stats.pct7}%`,
+      color: "#0891b2",
+      sub: "avg rate"
+    }, {
+      label: "Best Streak",
+      val: stats.streak,
+      color: "#d97706",
+      sub: "days"
+    }, {
+      label: "Perfect Days",
+      val: stats.perfect7,
+      color: "#7c3aed",
+      sub: "this week"
+    }].map(s => /*#__PURE__*/React.createElement("div", {
+      key: s.label,
+      style: {
+        textAlign: "center",
+        background: "#f9fafb",
+        borderRadius: 8,
+        padding: "8px 4px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontFamily: "'Lora',serif",
+        fontSize: 18,
+        fontWeight: 700,
+        color: s.color
+      }
+    }, s.val), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: "#9ca3af",
+        fontWeight: 600,
+        textTransform: "uppercase",
+        marginTop: 1
+      }
+    }, s.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 9,
+        color: "#b0b8c1"
+      }
+    }, s.sub)))));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
@@ -2910,99 +3163,74 @@ function App() {
       }
     }, "More"))), /*#__PURE__*/React.createElement("div", {
       style: {
-        marginBottom: 12
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => setHFilter(p => p.filter(x => x !== "__show__").length > 0 ? [] : ["__show__"]),
-      style: {
         display: "flex",
-        alignItems: "center",
         gap: 6,
-        background: hFilter.filter(x => x !== "__show__").length > 0 ? "#f0f7f0" : "#f9fafb",
-        border: `1px solid ${hFilter.filter(x => x !== "__show__").length > 0 ? "#2d5a2d" : "#e5e7eb"}`,
-        borderRadius: 8,
-        padding: "7px 14px",
-        cursor: "pointer",
-        fontSize: 12,
-        fontWeight: 600,
-        color: hFilter.filter(x => x !== "__show__").length > 0 ? "#2d5a2d" : "#6b7280"
+        marginBottom: 12,
+        overflowX: "auto",
+        paddingBottom: 2
       }
-    }, /*#__PURE__*/React.createElement("svg", {
-      width: "14",
-      height: "14",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "2"
-    }, /*#__PURE__*/React.createElement("polygon", {
-      points: "22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"
-    })), "Filter", hFilter.filter(x => x !== "__show__").length > 0 ? ` (${hFilter.filter(x => x !== "__show__").length})` : ""), (hFilter.includes("__show__") || hFilter.filter(x => x !== "__show__").length > 0) && /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: {
-        marginTop: 8
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        fontWeight: 600,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        marginBottom: 5
-      }
-    }, "Area of Life"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 5,
-        flexWrap: "wrap",
-        marginBottom: 8
-      }
-    }, HT.map(t => {
-      const on = hFilter.includes(t.value);
+    }, [{
+      val: "all",
+      label: "All",
+      icon: "✦",
+      color: "#2d5a2d",
+      bg: "#f0f7f0",
+      border: "#c6dfc6"
+    }, {
+      val: "morning",
+      label: "Morning",
+      icon: "🌅",
+      color: "#d97706",
+      bg: "#fffbeb",
+      border: "#fde68a"
+    }, {
+      val: "afternoon",
+      label: "Afternoon",
+      icon: "☀️",
+      color: "#ea580c",
+      bg: "#fff7ed",
+      border: "#fed7aa"
+    }, {
+      val: "evening",
+      label: "Evening",
+      icon: "🌙",
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      border: "#ddd6fe"
+    }, {
+      val: "avoid",
+      label: "Avoid",
+      icon: "🚫",
+      color: "#dc2626",
+      bg: "#fef2f2",
+      border: "#fecaca"
+    }].map(f => {
+      const on = secFilter === f.val;
       return /*#__PURE__*/React.createElement("button", {
-        key: t.value,
-        onClick: () => setHFilter(p => on ? p.filter(x => x !== t.value) : [...p.filter(x => x !== "__show__"), t.value]),
+        key: f.val,
+        onClick: () => setSecFilter(f.val),
         style: {
-          fontSize: 10,
-          fontWeight: 600,
-          padding: "4px 10px",
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "6px 12px",
           borderRadius: 20,
-          border: `1px solid ${on ? t.border : "#e5e7eb"}`,
-          background: on ? t.bg : "#fff",
-          color: on ? t.color : "#9ca3af",
-          cursor: "pointer"
+          border: `1.5px solid ${on ? f.border : "#e5e7eb"}`,
+          background: on ? f.bg : "#fff",
+          color: on ? f.color : "#9ca3af",
+          fontSize: 11,
+          fontWeight: on ? 700 : 500,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          transition: "all .15s"
         }
-      }, t.value);
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12
+        }
+      }, f.icon), f.label);
     })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        fontWeight: 600,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        marginBottom: 5
-      }
-    }, "Importance"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 5,
-        flexWrap: "wrap"
-      }
-    }, IMP.map(i => {
-      const on = hFilter.includes(i.value);
-      return /*#__PURE__*/React.createElement("button", {
-        key: i.value,
-        onClick: () => setHFilter(p => on ? p.filter(x => x !== i.value) : [...p.filter(x => x !== "__show__"), i.value]),
-        style: {
-          fontSize: 10,
-          fontWeight: 600,
-          padding: "4px 10px",
-          borderRadius: 20,
-          border: `1px solid ${on ? i.border : "#e5e7eb"}`,
-          background: on ? i.bg : "#fff",
-          color: on ? i.color : "#9ca3af",
-          cursor: "pointer"
-        }
-      }, i.value);
-    })))), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 16
       }
@@ -3291,7 +3519,11 @@ function App() {
               whiteSpace: "nowrap",
               textDecoration: d || missed ? "line-through" : "none"
             }
-          }, habit.text));
+          }, habit.icon && /*#__PURE__*/React.createElement("span", {
+            style: {
+              marginRight: 4
+            }
+          }, habit.icon), habit.text));
         }
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
@@ -3441,7 +3673,11 @@ function App() {
             wordBreak: "break-word",
             lineHeight: 1.4
           }
-        }, habit.text), habit.notes && /*#__PURE__*/React.createElement("div", {
+        }, habit.icon && /*#__PURE__*/React.createElement("span", {
+          style: {
+            marginRight: 4
+          }
+        }, habit.icon), habit.text), habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
             color: "#6b7280",
@@ -4753,7 +4989,61 @@ function App() {
           [f.key]: e.target.value
         })),
         placeholder: f.ph
-      })))), /*#__PURE__*/React.createElement(SC, {
+      })))), /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginBottom: 8
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          fontWeight: 600,
+          color: "#6b7280",
+          marginBottom: 5,
+          textTransform: "uppercase"
+        }
+      }, "Icon"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          gap: 3,
+          flexWrap: "wrap"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => save({
+          ...data,
+          goals: data.goals.map(g => g.id === goal.id ? {
+            ...g,
+            icon: null
+          } : g)
+        }),
+        style: {
+          width: 28,
+          height: 28,
+          borderRadius: 5,
+          border: `1px solid ${!goal.icon ? "#2d5a2d" : "#e5e7eb"}`,
+          background: !goal.icon ? "#f0f7f0" : "#f9fafb",
+          fontSize: 10,
+          cursor: "pointer",
+          color: "#9ca3af"
+        }
+      }, "\u2014"), HABIT_ICONS.slice(0, 30).map(ic => /*#__PURE__*/React.createElement("button", {
+        key: ic,
+        onClick: () => save({
+          ...data,
+          goals: data.goals.map(g => g.id === goal.id ? {
+            ...g,
+            icon: ic
+          } : g)
+        }),
+        style: {
+          width: 28,
+          height: 28,
+          borderRadius: 5,
+          border: `1px solid ${goal.icon === ic ? "#2d5a2d" : "#e5e7eb"}`,
+          background: goal.icon === ic ? "#f0f7f0" : "#f9fafb",
+          fontSize: 14,
+          cursor: "pointer"
+        }
+      }, ic)))), /*#__PURE__*/React.createElement(SC, {
         onSave: () => svEGoal(goal.id),
         onCancel: () => sEGId(null)
       })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
@@ -4768,7 +5058,11 @@ function App() {
           fontWeight: 500,
           lineHeight: 1.4
         }
-      }, goal.text), hasSm && /*#__PURE__*/React.createElement("div", {
+      }, goal.icon && /*#__PURE__*/React.createElement("span", {
+        style: {
+          marginRight: 5
+        }
+      }, goal.icon), goal.text), hasSm && /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 10,
           color: "#9ca3af",
@@ -5570,7 +5864,227 @@ function App() {
       fontWeight: 600,
       cursor: "pointer"
     }
-  }, "Create Group"))))), editHabitModal && /*#__PURE__*/React.createElement("div", {
+  }, "Create Group"))))), showProfile && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 300,
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    },
+    onClick: e => {
+      if (e.target === e.currentTarget) setShowProfile(false);
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      background: "#fff",
+      borderRadius: "20px 20px 0 0",
+      padding: "24px 20px",
+      width: "100%",
+      maxWidth: 640,
+      maxHeight: "80vh",
+      overflowY: "auto",
+      boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Lora',serif",
+      fontSize: 17,
+      fontWeight: 700,
+      color: "#111827"
+    }
+  }, "Your Profile"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowProfile(false),
+    style: {
+      background: "#f3f4f6",
+      border: "none",
+      borderRadius: "50%",
+      width: 30,
+      height: 30,
+      cursor: "pointer",
+      fontSize: 16,
+      color: "#6b7280",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 64,
+      height: 64,
+      borderRadius: "50%",
+      background: "#2d5a2d",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 8
+    }
+  }, profileName ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#fff",
+      fontSize: 28,
+      fontWeight: 700
+    }
+  }, profileName.charAt(0).toUpperCase()) : /*#__PURE__*/React.createElement("svg", {
+    width: "32",
+    height: "32",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "white",
+    strokeWidth: "2"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "12",
+    cy: "7",
+    r: "4"
+  })))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: "#6b7280",
+      marginBottom: 5,
+      textTransform: "uppercase",
+      letterSpacing: .5
+    }
+  }, "Your Name"), /*#__PURE__*/React.createElement("input", {
+    value: profileName,
+    onChange: e => {
+      setProfileName(e.target.value);
+      localStorage.setItem("v-profile-name", e.target.value);
+    },
+    placeholder: "Enter your name...",
+    style: {
+      background: "#f9fafb",
+      border: "1px solid #e5e7eb",
+      borderRadius: 8,
+      padding: "10px 12px",
+      fontSize: 13,
+      width: "100%",
+      outline: "none",
+      fontFamily: "inherit"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: "#6b7280",
+      marginBottom: 5,
+      textTransform: "uppercase",
+      letterSpacing: .5
+    }
+  }, "Your Primary Goal"), /*#__PURE__*/React.createElement("input", {
+    value: profileGoal,
+    onChange: e => {
+      setProfileGoal(e.target.value);
+      localStorage.setItem("v-profile-goal", e.target.value);
+    },
+    placeholder: "What are you working toward?",
+    style: {
+      background: "#f9fafb",
+      border: "1px solid #e5e7eb",
+      borderRadius: 8,
+      padding: "10px 12px",
+      fontSize: 13,
+      width: "100%",
+      outline: "none",
+      fontFamily: "inherit"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "14px",
+      background: "#f0f7f0",
+      borderRadius: 10,
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3,1fr)",
+      gap: 10,
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Lora',serif",
+      fontSize: 20,
+      fontWeight: 700,
+      color: "#2d5a2d"
+    }
+  }, data.habits?.length || 0), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#6b7280",
+      fontWeight: 600,
+      textTransform: "uppercase"
+    }
+  }, "Habits")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Lora',serif",
+      fontSize: 20,
+      fontWeight: 700,
+      color: "#2d5a2d"
+    }
+  }, data.goals?.length || 0), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#6b7280",
+      fontWeight: 600,
+      textTransform: "uppercase"
+    }
+  }, "Goals")), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Lora',serif",
+      fontSize: 20,
+      fontWeight: 700,
+      color: "#2d5a2d"
+    }
+  }, data.journal?.length || 0), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#6b7280",
+      fontWeight: 600,
+      textTransform: "uppercase"
+    }
+  }, "Entries")))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setShowProfile(false),
+    style: {
+      background: "#2d5a2d",
+      border: "none",
+      borderRadius: 10,
+      padding: "13px",
+      width: "100%",
+      color: "#fff",
+      fontSize: 14,
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, "Done"))), editHabitModal && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
@@ -5776,7 +6290,74 @@ function App() {
       fontSize: 12,
       background: "#2d5a2d"
     }
-  }, "Add")), /*#__PURE__*/React.createElement("textarea", {
+  }, "Add")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 600,
+      color: "#6b7280",
+      marginBottom: 6,
+      textTransform: "uppercase",
+      letterSpacing: .5
+    }
+  }, "Icon (optional)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => save({
+      ...data,
+      habits: (data.habits || []).map(h => h.id === editHabitModal?.id ? {
+        ...h,
+        icon: null
+      } : h)
+    }),
+    style: {
+      width: 32,
+      height: 32,
+      borderRadius: 6,
+      border: `1.5px solid ${!editHabitModal?.icon ? "#2d5a2d" : "#e5e7eb"}`,
+      background: !editHabitModal?.icon ? "#f0f7f0" : "#f9fafb",
+      fontSize: 12,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "#9ca3af"
+    }
+  }, "\u2014"), HABIT_ICONS.map(ic => /*#__PURE__*/React.createElement("button", {
+    key: ic,
+    onClick: () => {
+      save({
+        ...data,
+        habits: (data.habits || []).map(h => h.id === editHabitModal?.id ? {
+          ...h,
+          icon: ic
+        } : h)
+      });
+      setEditHabitModal(p => p ? {
+        ...p,
+        icon: ic
+      } : p);
+    },
+    style: {
+      width: 32,
+      height: 32,
+      borderRadius: 6,
+      border: `1.5px solid ${editHabitModal?.icon === ic ? "#2d5a2d" : "#e5e7eb"}`,
+      background: editHabitModal?.icon === ic ? "#f0f7f0" : "#f9fafb",
+      fontSize: 16,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, ic)))), /*#__PURE__*/React.createElement("textarea", {
     value: eHNotes,
     onChange: e => sEHNotes(e.target.value),
     placeholder: "Details",
