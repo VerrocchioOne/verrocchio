@@ -47,7 +47,7 @@ a{-webkit-tap-highlight-color:transparent}
 <div id="root"></div>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410252:web:dcbd72e6eedddc3622fab7"};
+const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410262:web:dcbd72e6eedddc3622fab7"};
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 const DOC=db.collection("users").doc("main");
@@ -1626,6 +1626,7 @@ function App() {
 
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
+  const [goalMoreMenu, setGoalMoreMenu] = useState(null); // goal.id
 
   /* MORNING BRIEF */
   const [briefTxt, setBriefTxt] = useState("");
@@ -2403,10 +2404,11 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "flex",
-      justifyContent: "space-between",
+      display: "grid",
+      gridTemplateColumns: "1fr auto 1fr",
       alignItems: "center",
-      padding: "10px 16px 8px"
+      padding: "10px 16px 8px",
+      gap: 8
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
     style: {
@@ -2425,11 +2427,25 @@ function App() {
       marginTop: 1,
       letterSpacing: .5
     }
-  }, "Achieve Anything")), /*#__PURE__*/React.createElement("div", {
+  }, "Achieve Anything")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setSelDate(tk()),
+    style: {
+      background: selDate === tk() ? "#2d5a2d" : "#f0f7f0",
+      border: "1px solid #c6dfc6",
+      borderRadius: 20,
+      padding: "5px 14px",
+      fontSize: 11,
+      fontWeight: 700,
+      color: selDate === tk() ? "#fff" : "#2d5a2d",
+      cursor: "pointer",
+      whiteSpace: "nowrap"
+    }
+  }, "Today"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
-      alignItems: "center"
+      alignItems: "center",
+      justifyContent: "flex-end"
     }
   }, (() => {
     if (syncState === "loading") return /*#__PURE__*/React.createElement("span", {
@@ -2561,32 +2577,42 @@ function App() {
       color: "#9ca3af",
       flexShrink: 0,
       display: "flex",
-      flexDirection: "column",
-      gap: 2,
+      alignItems: "center",
+      justifyContent: "center",
       WebkitTapHighlightColor: "transparent"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 16,
-      height: 2,
-      background: "#c1c7d0",
-      borderRadius: 1
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 16,
-      height: 2,
-      background: "#c1c7d0",
-      borderRadius: 1
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 16,
-      height: 2,
-      background: "#c1c7d0",
-      borderRadius: 1
-    }
-  })), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "18",
+    height: "18",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "#9ca3af",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "3",
+    y: "4",
+    width: "18",
+    height: "18",
+    rx: "2",
+    ry: "2"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "16",
+    y1: "2",
+    x2: "16",
+    y2: "6"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "8",
+    y1: "2",
+    x2: "8",
+    y2: "6"
+  }), /*#__PURE__*/React.createElement("line", {
+    x1: "3",
+    y1: "10",
+    x2: "21",
+    y2: "10"
+  }))), /*#__PURE__*/React.createElement("div", {
     style: {
       flex: 1,
       display: "flex",
@@ -2656,20 +2682,7 @@ function App() {
         color: isSel ? "#fff" : isT ? "#2d5a2d" : isFuture ? "#b0b8c1" : "#374151"
       }
     }, d.getDate())));
-  })), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setSelDate(tk()),
-    style: {
-      background: selDate === tk() ? "#2d5a2d" : "#f0f7f0",
-      border: "1px solid #c6dfc6",
-      borderRadius: 20,
-      padding: "4px 10px",
-      fontSize: 10,
-      fontWeight: 700,
-      color: selDate === tk() ? "#fff" : "#2d5a2d",
-      cursor: "pointer",
-      flexShrink: 0
-    }
-  }, "Today")), headerExpanded && (() => {
+  }))), headerExpanded && (() => {
     const sd = new Date(selDate + "T12:00:00");
     const yr = sd.getFullYear();
     const mo = sd.getMonth();
@@ -2977,9 +2990,38 @@ function App() {
     const pct7 = activeH.length ? Math.round(today7.reduce((s, d) => s + activeH.filter(h => isDone(h, d)).length, 0) / (activeH.length * 7) * 100) : 0;
     const bestStreak = activeH.length > 0 ? Math.max(0, ...activeH.map(h => getStreak(h))) : 0;
     const perfect7 = today7.filter(d => activeH.length > 0 && activeH.every(h => isDone(h, d))).length;
-    const randGoal = data.goals.length > 0 ? data.goals[Math.abs(tk().split("-").reduce((a, b) => a * 17 + parseInt(b), 0)) % data.goals.length] : null;
-    const tips = ["Small consistent actions beat sporadic effort.", "Track it to improve it.", "Progress, not perfection.", "One habit at a time builds momentum.", "Review yesterday before planning today."];
-    const tip = tips[Math.abs(tk().split("-").reduce((a, b) => a * 13 + parseInt(b), 0)) % tips.length];
+    // Build 3 smart action tips
+    const smartTips = [];
+    const noSmartGoal = data.goals.find(g => !g.smart || !Object.values(g.smart).some(v => v && v.trim()));
+    if (noSmartGoal) smartTips.push({
+      icon: "🎯",
+      title: "Add S.M.A.R.T. details",
+      body: `Your goal "${noSmartGoal.text.slice(0, 40)}…" has no SMART framework. Tap to add specifics.`,
+      action: () => setTab("goals")
+    });
+    const lowHabit = activeH.find(h => getCR(h).pct < 30);
+    if (lowHabit) smartTips.push({
+      icon: "📉",
+      title: "Habit needs attention",
+      body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`,
+      action: () => setTab("habits")
+    });
+    const yestIncomplete = activeH.filter(h => !isDone(h, yest) && !isMissed(h, yest));
+    if (yestIncomplete.length > 0) smartTips.push({
+      icon: "📋",
+      title: "Review yesterday",
+      body: `${yestIncomplete.length} habit${yestIncomplete.length > 1 ? "s" : ""} from yesterday not marked. Still time to record.`,
+      action: () => {
+        setSelDate(yest);
+        setTab("habits");
+      }
+    });
+    if (smartTips.length < 3) smartTips.push({
+      icon: "💡",
+      title: "Stay consistent",
+      body: "Small consistent actions compound over time. Even 1% better each day is transformative.",
+      action: null
+    });
     return /*#__PURE__*/React.createElement("div", {
       style: {
         background: "#fff",
@@ -3003,7 +3045,7 @@ function App() {
         color: "#9ca3af",
         marginBottom: 14
       }
-    }, "Verify your habit completions look accurate."), /*#__PURE__*/React.createElement("div", {
+    }, "Verify completions and act on these insights."), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -3011,9 +3053,7 @@ function App() {
         marginBottom: 14
       }
     }, /*#__PURE__*/React.createElement("div", {
-      onClick: () => {
-        setTab("habits");
-      },
+      onClick: () => setTab("habits"),
       style: {
         background: "#f9fafb",
         border: "1px solid #e5e7eb",
@@ -3047,10 +3087,8 @@ function App() {
         color: "#6b7280",
         marginTop: 2
       }
-    }, "habits completed")), /*#__PURE__*/React.createElement("div", {
-      onClick: () => {
-        setTab("habits");
-      },
+    }, "habits done")), /*#__PURE__*/React.createElement("div", {
+      onClick: () => setTab("habits"),
       style: {
         background: "#f0f7f0",
         border: "1px solid #c6dfc6",
@@ -3084,7 +3122,7 @@ function App() {
         color: "#6b7280",
         marginTop: 2
       }
-    }, "habits completed"))), /*#__PURE__*/React.createElement("div", {
+    }, "habits done"))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "repeat(4,1fr)",
@@ -3094,23 +3132,19 @@ function App() {
     }, [{
       label: "7-Day",
       val: `${pct7}%`,
-      color: "#0891b2",
-      sub: "avg"
+      color: "#0891b2"
     }, {
       label: "Streak",
       val: bestStreak,
-      color: "#d97706",
-      sub: "days"
+      color: "#d97706"
     }, {
       label: "Perfect",
       val: perfect7,
-      color: "#2d5a2d",
-      sub: "days"
+      color: "#2d5a2d"
     }, {
       label: "Goals",
       val: data.goals.length,
-      color: "#7c3aed",
-      sub: "active"
+      color: "#7c3aed"
     }].map(s => /*#__PURE__*/React.createElement("div", {
       key: s.label,
       style: {
@@ -3133,77 +3167,124 @@ function App() {
         fontWeight: 600,
         textTransform: "uppercase"
       }
-    }, s.label), /*#__PURE__*/React.createElement("div", {
+    }, s.label)))), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 9,
-        color: "#d1d5db"
+        display: "flex",
+        flexDirection: "column",
+        gap: 8
       }
-    }, s.sub)))), /*#__PURE__*/React.createElement("div", {
+    }, smartTips.slice(0, 3).map((tip, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      onClick: tip.action || undefined,
       style: {
-        background: "#f0f7f0",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10,
+        background: "#f9fafb",
         borderRadius: 8,
         padding: "10px 12px",
-        marginBottom: randGoal ? 12 : 0
+        cursor: tip.action ? "pointer" : "default",
+        border: "1px solid #f3f4f6"
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
-        fontSize: 10,
-        fontWeight: 700,
-        color: "#2d5a2d",
-        textTransform: "uppercase",
-        marginRight: 6
+        fontSize: 18,
+        flexShrink: 0,
+        marginTop: 1
       }
-    }, "Tip"), /*#__PURE__*/React.createElement("span", {
+    }, tip.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
+        fontWeight: 700,
         color: "#374151",
+        marginBottom: 2
+      }
+    }, tip.title), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#6b7280",
         lineHeight: 1.5
       }
-    }, tip)), randGoal && /*#__PURE__*/React.createElement("div", {
+    }, tip.body)), tip.action && /*#__PURE__*/React.createElement("svg", {
+      width: "14",
+      height: "14",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "#9ca3af",
+      strokeWidth: "2",
       style: {
-        borderTop: "1px solid #f3f4f6",
-        paddingTop: 12,
-        marginTop: 0
+        flexShrink: 0,
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("polyline", {
+      points: "9 18 15 12 9 6"
+    }))))));
+  })(), (() => {
+    const randGoal = data.goals.length > 0 ? data.goals[Math.abs(tk().split("-").reduce((a, b) => a * 17 + parseInt(b), 0)) % data.goals.length] : null;
+    if (!randGoal) return null;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#fff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        padding: "16px",
+        marginBottom: 16,
+        boxShadow: "0 1px 3px rgba(0,0,0,.04)"
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 10,
+        fontFamily: "'Lora',serif",
+        fontSize: 15,
         fontWeight: 700,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        marginBottom: 6
+        color: "#111827",
+        marginBottom: 4
       }
     }, "Goal to Reflect On"), /*#__PURE__*/React.createElement("div", {
       style: {
+        fontSize: 12,
+        color: "#9ca3af",
+        marginBottom: 12
+      }
+    }, "Take a moment to check in on this goal."), /*#__PURE__*/React.createElement("div", {
+      style: {
         display: "flex",
         alignItems: "center",
-        gap: 8,
-        marginBottom: 8
+        gap: 10,
+        background: "#f0f7f0",
+        border: "1px solid #c6dfc6",
+        borderRadius: 10,
+        padding: "12px",
+        marginBottom: 12
       }
     }, randGoal.icon && /*#__PURE__*/React.createElement("span", {
       style: {
-        fontSize: 18
+        fontSize: 22
       }
     }, randGoal.icon), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 13,
-        fontWeight: 600,
-        color: "#1f2937",
         flex: 1
       }
-    }, randGoal.text)), /*#__PURE__*/React.createElement("button", {
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        fontWeight: 600,
+        color: "#1f2937"
+      }
+    }, randGoal.text), randGoal.type && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#2d5a2d",
+        marginTop: 2
+      }
+    }, randGoal.type))), /*#__PURE__*/React.createElement("button", {
       onClick: () => setTab("reflection"),
       style: {
-        background: "#2d5a2d",
-        border: "none",
-        borderRadius: 8,
-        padding: "8px 14px",
-        color: "#fff",
-        fontSize: 12,
-        fontWeight: 600,
-        cursor: "pointer"
+        ...AB,
+        width: "100%",
+        padding: "9px",
+        textAlign: "center"
       }
-    }, "Journal About This \u2192")));
+    }, "Journal About This Goal \u2192"));
   })(), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
@@ -3287,16 +3368,37 @@ function App() {
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 6,
-        marginBottom: 8,
-        overflowX: "auto",
-        paddingBottom: 2
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
         gap: 5,
-        flex: 1
+        marginBottom: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => setShowAddHabit(p => !p),
+      style: {
+        width: 28,
+        height: 28,
+        borderRadius: "50%",
+        background: "#2d5a2d",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#fff",
+        fontSize: 18,
+        lineHeight: 1,
+        fontWeight: 300
+      }
+    }, "+")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        display: "flex",
+        gap: 4,
+        overflowX: "auto",
+        scrollbarWidth: "none"
       }
     }, [{
       val: "all",
@@ -3342,7 +3444,7 @@ function App() {
           display: "flex",
           alignItems: "center",
           gap: 3,
-          padding: "5px 10px",
+          padding: "5px 9px",
           borderRadius: 20,
           border: `1.5px solid ${on ? f.border : "#e5e7eb"}`,
           background: on ? f.bg : "#fff",
@@ -3356,7 +3458,7 @@ function App() {
         }
       }, /*#__PURE__*/React.createElement("span", {
         style: {
-          fontSize: 11
+          fontSize: 10
         }
       }, f.icon), f.label);
     })), /*#__PURE__*/React.createElement("button", {
@@ -3364,21 +3466,20 @@ function App() {
       style: {
         display: "flex",
         alignItems: "center",
-        gap: 4,
-        padding: "5px 10px",
+        gap: 3,
+        padding: "5px 8px",
         borderRadius: 20,
-        border: "1.5px solid #e5e7eb",
+        border: "1px solid #e5e7eb",
         background: "#fff",
         color: "#6b7280",
         fontSize: 10,
         fontWeight: 600,
         cursor: "pointer",
-        whiteSpace: "nowrap",
         flexShrink: 0
       }
     }, /*#__PURE__*/React.createElement("svg", {
-      width: "12",
-      height: "12",
+      width: "11",
+      height: "11",
       viewBox: "0 0 24 24",
       fill: "none",
       stroke: "currentColor",
@@ -3386,27 +3487,32 @@ function App() {
     }, /*#__PURE__*/React.createElement("polyline", {
       points: "22 12 18 12 15 21 9 3 6 12 2 12"
     })), "Stats"), /*#__PURE__*/React.createElement("button", {
-      onClick: () => setShowAddHabit(p => !p),
       style: {
-        width: 28,
-        height: 28,
-        borderRadius: "50%",
-        background: "#2d5a2d",
-        border: "none",
-        cursor: "pointer",
         display: "flex",
         alignItems: "center",
-        justifyContent: "center",
+        gap: 3,
+        padding: "5px 8px",
+        borderRadius: 20,
+        border: "1px solid #e5e7eb",
+        background: "#fff",
+        color: "#6b7280",
+        fontSize: 10,
+        fontWeight: 600,
+        cursor: "pointer",
         flexShrink: 0
       }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        color: "#fff",
-        fontSize: 18,
-        lineHeight: 1,
-        fontWeight: 300
-      }
-    }, "+"))), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("svg", {
+      width: "11",
+      height: "11",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "2"
+    }, /*#__PURE__*/React.createElement("path", {
+      d: "M21 8v13H3V8"
+    }), /*#__PURE__*/React.createElement("path", {
+      d: "M1 3h22v5H1z"
+    })), "Archive")), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 5,
@@ -3425,28 +3531,27 @@ function App() {
       }
     }, "Priority:"), [{
       val: "all",
-      label: "All"
-    }, {
-      val: "Non-Negotiable",
-      label: "Must"
-    }, {
-      val: "Important",
-      label: "Key"
-    }, {
-      val: "Additive",
-      label: "Nice"
-    }].map(f => {
+      label: "All",
+      color: "#2d5a2d",
+      border: "#c6dfc6",
+      bg: "#f0f7f0"
+    }, ...IMP.map(i => ({
+      val: i.value,
+      label: i.value,
+      color: i.color,
+      border: i.border,
+      bg: i.bg
+    }))].map(f => {
       const on = impFilter === f.val;
-      const imp = IMP.find(i => i.value === f.val);
       return /*#__PURE__*/React.createElement("button", {
         key: f.val,
         onClick: () => setImpFilter(f.val),
         style: {
           padding: "3px 9px",
           borderRadius: 20,
-          border: `1px solid ${on ? imp?.border || "#2d5a2d" : "#e5e7eb"}`,
-          background: on ? imp?.bg || "#f0f7f0" : "#fff",
-          color: on ? imp?.color || "#2d5a2d" : "#9ca3af",
+          border: `1px solid ${on ? f.border : "#e5e7eb"}`,
+          background: on ? f.bg : "#fff",
+          color: on ? f.color : "#9ca3af",
           fontSize: 10,
           fontWeight: on ? 700 : 400,
           cursor: "pointer",
@@ -3463,36 +3568,28 @@ function App() {
         flexShrink: 0,
         marginLeft: 4
       }
-    }, "Time:"), [{
-      val: 0,
-      label: "Any"
-    }, {
-      val: 15,
-      label: "≤15m"
-    }, {
-      val: 30,
-      label: "≤30m"
-    }, {
-      val: 60,
-      label: "≤1h"
-    }].map(f => {
-      const on = durFilter === f.val;
-      return /*#__PURE__*/React.createElement("button", {
-        key: f.val,
-        onClick: () => setDurFilter(f.val),
-        style: {
-          padding: "3px 9px",
-          borderRadius: 20,
-          border: `1px solid ${on ? "#0891b2" : "#e5e7eb"}`,
-          background: on ? "#f0f9ff" : "#fff",
-          color: on ? "#0891b2" : "#9ca3af",
-          fontSize: 10,
-          fontWeight: on ? 700 : 400,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-          flexShrink: 0
-        }
-      }, f.label);
+    }, "Max time:"), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: durFilter === 0 ? "#9ca3af" : "#0891b2",
+        fontWeight: 600,
+        flexShrink: 0,
+        minWidth: 28
+      }
+    }, durFilter === 0 ? "Any" : `${durFilter}m`), /*#__PURE__*/React.createElement("input", {
+      type: "range",
+      min: 0,
+      max: 120,
+      step: 5,
+      value: durFilter,
+      onChange: e => setDurFilter(Number(e.target.value)),
+      style: {
+        flex: 1,
+        minWidth: 60,
+        maxWidth: 100,
+        accentColor: "#0891b2",
+        cursor: "pointer"
+      }
     })), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 16
@@ -4025,19 +4122,18 @@ function App() {
             right: ht ? "28px" : "4px",
             top: "50%",
             transform: "translateY(-50%)",
-            background: "rgba(255,255,255,0.9)",
+            background: "rgba(255,255,255,0.92)",
             border: "1px solid #e5e7eb",
             borderRadius: 6,
-            width: 24,
-            height: 24,
+            width: 26,
+            height: 26,
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            opacity: 0,
-            transition: "opacity .15s"
-          },
-          className: "edit-btn"
+            boxShadow: "0 1px 3px rgba(0,0,0,.1)",
+            zIndex: 2
+          }
         }, /*#__PURE__*/React.createElement("svg", {
           width: "11",
           height: "11",
@@ -4439,80 +4535,39 @@ function App() {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 11,
+      fontFamily: "'Lora',serif",
+      fontSize: 15,
       fontWeight: 700,
-      color: "#9ca3af",
-      textTransform: "uppercase",
-      letterSpacing: .5,
-      marginBottom: 12
+      color: "#111827",
+      marginBottom: 10
     }
-  }, "Personal Journal"), /*#__PURE__*/React.createElement("div", {
+  }, "Daily Journal"), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
       borderRadius: 12,
-      padding: "16px",
-      marginBottom: 16,
+      padding: "14px",
+      marginBottom: 12,
       boxShadow: "0 1px 3px rgba(0,0,0,.04)"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      flexWrap: "wrap",
-      marginBottom: 10
-    }
-  }, MOODS.map(m => /*#__PURE__*/React.createElement("button", {
-    key: m.label,
-    onClick: () => sJMood(p => p === m.label ? "" : m.label),
-    style: {
-      padding: "6px 10px",
-      borderRadius: 20,
-      border: `1px solid ${jMood === m.label ? m.color : "#e5e7eb"}`,
-      background: jMood === m.label ? `${m.color}18` : "#f9fafb",
-      cursor: "pointer",
-      fontSize: 12,
-      color: jMood === m.label ? m.color : "#6b7280",
-      fontWeight: jMood === m.label ? 700 : 400,
-      transition: "all .15s"
-    }
-  }, m.icon, " ", m.label))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 5,
-      flexWrap: "wrap",
-      marginBottom: 10
-    }
-  }, JTAGS.map(t => /*#__PURE__*/React.createElement("button", {
-    key: t,
-    onClick: () => sJTag(t),
-    style: {
-      padding: "4px 10px",
-      borderRadius: 20,
-      border: `1px solid ${jTag === t ? "#2d5a2d" : "#e5e7eb"}`,
-      background: jTag === t ? "#f0f7f0" : "#f9fafb",
-      cursor: "pointer",
-      fontSize: 11,
-      color: jTag === t ? "#2d5a2d" : "#9ca3af",
-      fontWeight: jTag === t ? 700 : 400
-    }
-  }, t))), /*#__PURE__*/React.createElement("textarea", {
+  }, /*#__PURE__*/React.createElement("textarea", {
     value: jTxt,
     onChange: e => sJTxt(e.target.value),
-    placeholder: "What happened today? What did you learn? What are you grateful for?",
-    rows: 5,
+    placeholder: "What happened today? What are you grateful for? What did you learn?",
+    rows: 4,
     style: {
       width: "100%",
       background: "#f9fafb",
       border: "1px solid #e5e7eb",
       borderRadius: 8,
-      padding: "12px",
+      padding: "10px 12px",
       color: "#1f2937",
-      fontSize: 14,
-      lineHeight: 1.75,
+      fontSize: 13,
+      lineHeight: 1.7,
       marginBottom: 10,
       outline: "none",
-      fontFamily: "system-ui,-apple-system,sans-serif"
+      fontFamily: "system-ui,-apple-system,sans-serif",
+      resize: "none"
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4520,17 +4575,32 @@ function App() {
       justifyContent: "flex-end"
     }
   }, /*#__PURE__*/React.createElement("button", {
-    className: "add-btn",
-    onClick: addJ,
+    onClick: () => {
+      if (!jTxt.trim()) return;
+      save({
+        ...data,
+        journal: [...(data.journal || []), {
+          id: Date.now(),
+          text: jTxt.trim(),
+          mood: "",
+          tag: "general",
+          timestamp: new Date().toISOString(),
+          dateKey: tk()
+        }]
+      });
+      sJTxt("");
+    },
     style: {
       ...AB,
-      padding: "9px 20px"
+      padding: "8px 18px",
+      fontSize: 12
     }
   }, "Save Entry"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 6,
-      marginBottom: 14
+      marginBottom: 12,
+      alignItems: "center"
     }
   }, [{
     k: "today",
@@ -4545,24 +4615,24 @@ function App() {
     key: f.k,
     onClick: () => sJFil(f.k),
     style: {
-      padding: "5px 14px",
+      padding: "4px 12px",
       borderRadius: 20,
       border: `1px solid ${jFil === f.k ? "#2d5a2d" : "#e5e7eb"}`,
       background: jFil === f.k ? "#f0f7f0" : "#fff",
-      fontSize: 12,
+      fontSize: 11,
       color: jFil === f.k ? "#2d5a2d" : "#6b7280",
       fontWeight: jFil === f.k ? 600 : 400,
       cursor: "pointer"
     }
-  }, f.l)), (data.journal || []).length >= 5 && /*#__PURE__*/React.createElement("button", {
+  }, f.l)), (data.journal || []).filter(e => e.tag === "general" || !e.tag).length >= 5 && /*#__PURE__*/React.createElement("button", {
     onClick: genIns,
     style: {
       marginLeft: "auto",
       background: "#2d5a2d",
       border: "none",
       borderRadius: 20,
-      padding: "5px 14px",
-      fontSize: 12,
+      padding: "4px 12px",
+      fontSize: 11,
       fontWeight: 600,
       color: "#fff",
       cursor: "pointer"
@@ -4572,20 +4642,20 @@ function App() {
       background: "linear-gradient(135deg,#f0f7f0,#f5faf5)",
       border: "1px solid #c6dfc6",
       borderRadius: 12,
-      padding: "16px",
-      marginBottom: 16
+      padding: "14px",
+      marginBottom: 12
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      marginBottom: 10
+      marginBottom: 8
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontFamily: "'Lora',serif",
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: 700,
       color: "#2d5a2d"
     }
@@ -4603,434 +4673,366 @@ function App() {
     className: "pulsing",
     style: {
       textAlign: "center",
-      padding: "20px",
+      padding: "16px",
       color: "#9ca3af",
       fontSize: 13
     }
-  }, "Analyzing your entries\u2026") : /*#__PURE__*/React.createElement("div", {
+  }, "Analyzing\u2026") : /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 13,
       lineHeight: 1.75,
       color: "#374151",
       whiteSpace: "pre-wrap"
     }
-  }, ins)), fj.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center",
-      color: "#d1d5db",
-      fontSize: 13,
-      padding: "32px 0"
-    }
-  }, "No entries yet for this period") : /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, [...fj].reverse().map(entry => {
-    const isE = eJId === entry.id;
-    const isX = jExp === entry.id;
-    const mood = MOODS.find(m => m.label === entry.mood);
-    return /*#__PURE__*/React.createElement("div", {
-      key: entry.id,
-      className: "ecard",
+  }, ins)), (() => {
+    const dailyEntries = (data.journal || []).filter(e => (!e.tag || e.tag === "general" || e.tag === "reflection" || e.tag === "gratitude" || e.tag === "wins" || e.tag === "challenges" || e.tag === "ideas" || e.tag === "feelings" || e.tag === "learning") && e.tag !== "goals");
+    const filtered = jFil === "today" ? dailyEntries.filter(e => e.dateKey === tk()) : jFil === "week" ? dailyEntries.filter(e => {
+      const w = new Date();
+      w.setDate(w.getDate() - 7);
+      return new Date(e.timestamp) >= w;
+    }) : dailyEntries;
+    return filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
       style: {
-        background: "#fff",
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        overflow: "hidden",
-        boxShadow: "0 1px 3px rgba(0,0,0,.04)"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        padding: "12px 14px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        marginBottom: isE ? 10 : 6
-      }
-    }, mood && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 14
-      }
-    }, mood.icon), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        fontWeight: 700,
-        textTransform: "uppercase",
-        letterSpacing: .5,
-        color: "#9ca3af"
-      }
-    }, fmtD(entry.timestamp)), entry.tag && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9,
-        fontWeight: 600,
-        color: "#2d5a2d",
-        background: "#f0f7f0",
-        padding: "1px 6px",
-        borderRadius: 8,
-        marginLeft: 6
-      }
-    }, entry.tag), mood && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9,
-        fontWeight: 600,
-        color: mood.color,
-        background: `${mood.color}12`,
-        padding: "1px 6px",
-        borderRadius: 8,
-        marginLeft: 4
-      }
-    }, mood.label)), !isE && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 2
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      className: "e-edit",
-      onClick: () => sEJ(entry),
-      style: {
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        color: "#9ca3af",
-        fontSize: 13,
-        opacity: 0,
-        padding: "4px"
-      }
-    }, "\u270E"), /*#__PURE__*/React.createElement("button", {
-      className: "e-del",
-      onClick: () => delJ(entry.id),
-      style: {
-        background: "none",
-        border: "none",
-        cursor: "pointer",
+        textAlign: "center",
         color: "#d1d5db",
-        fontSize: 18,
-        opacity: 0,
-        lineHeight: 1,
-        padding: "4px"
-      }
-    }, "\xD7"))), isE ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("textarea", {
-      value: eJTxt,
-      onChange: e => sEJTxt(e.target.value),
-      rows: 4,
-      autoFocus: true,
-      style: {
-        width: "100%",
-        background: "#f9fafb",
-        border: "1px solid #2d5a2d",
-        borderRadius: 8,
-        padding: "10px",
-        color: "#1f2937",
         fontSize: 13,
-        lineHeight: 1.7,
-        outline: "none",
-        marginBottom: 8
+        padding: "24px 0"
       }
-    }), /*#__PURE__*/React.createElement("div", {
+    }, "No entries yet") : /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
-        gap: 6,
-        flexWrap: "wrap",
-        marginBottom: 8
+        flexDirection: "column",
+        gap: 8,
+        marginBottom: 24
       }
-    }, MOODS.map(m => /*#__PURE__*/React.createElement("button", {
-      key: m.label,
-      onClick: () => sEJMood(p => p === m.label ? "" : m.label),
-      style: {
-        padding: "4px 8px",
-        borderRadius: 12,
-        border: `1px solid ${eJMood === m.label ? m.color : "#e5e7eb"}`,
-        background: eJMood === m.label ? `${m.color}18` : "#f9fafb",
-        cursor: "pointer",
-        fontSize: 11,
-        color: eJMood === m.label ? m.color : "#6b7280"
-      }
-    }, m.icon))), /*#__PURE__*/React.createElement(SC, {
-      onSave: () => svEJ(entry.id),
-      onCancel: () => sEJId(null)
-    })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        color: "#374151",
-        lineHeight: 1.75,
-        whiteSpace: "pre-wrap"
-      }
-    }, isX ? entry.text : entry.text.length > 180 ? entry.text.slice(0, 180) + "…" : entry.text), entry.text.length > 180 && /*#__PURE__*/React.createElement("button", {
-      onClick: () => sJExp(p => p === entry.id ? null : entry.id),
-      style: {
-        background: "none",
-        border: "none",
-        color: "#2d5a2d",
-        fontSize: 11,
-        fontWeight: 600,
-        cursor: "pointer",
-        padding: "4px 0",
-        marginTop: 2
-      }
-    }, isX ? "▲ Less" : "▼ More"))));
-  })), /*#__PURE__*/React.createElement("div", {
+    }, [...filtered].reverse().map(entry => {
+      const isE = eJId === entry.id;
+      const isX = jExp === entry.id;
+      return /*#__PURE__*/React.createElement("div", {
+        key: entry.id,
+        className: "ecard",
+        style: {
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
+          boxShadow: "0 1px 2px rgba(0,0,0,.04)"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "10px 12px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: isE ? 8 : 4
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          fontWeight: 700,
+          textTransform: "uppercase",
+          color: "#9ca3af",
+          flex: 1
+        }
+      }, fmtD(entry.timestamp)), !isE && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+        className: "e-edit",
+        onClick: () => sEJ(entry),
+        style: {
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#9ca3af",
+          fontSize: 12,
+          opacity: 0,
+          padding: "3px"
+        }
+      }, "\u270E"), /*#__PURE__*/React.createElement("button", {
+        className: "e-del",
+        onClick: () => delJ(entry.id),
+        style: {
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#d1d5db",
+          fontSize: 16,
+          opacity: 0,
+          lineHeight: 1,
+          padding: "3px"
+        }
+      }, "\xD7"))), isE ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("textarea", {
+        value: eJTxt,
+        onChange: e => sEJTxt(e.target.value),
+        rows: 3,
+        autoFocus: true,
+        style: {
+          width: "100%",
+          background: "#f9fafb",
+          border: "1px solid #2d5a2d",
+          borderRadius: 8,
+          padding: "8px",
+          color: "#1f2937",
+          fontSize: 13,
+          lineHeight: 1.6,
+          outline: "none",
+          marginBottom: 8,
+          resize: "none"
+        }
+      }), /*#__PURE__*/React.createElement(SC, {
+        onSave: () => svEJ(entry.id),
+        onCancel: () => sEJId(null)
+      })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: "#374151",
+          lineHeight: 1.7,
+          whiteSpace: "pre-wrap"
+        }
+      }, isX ? entry.text : entry.text.length > 160 ? entry.text.slice(0, 160) + "…" : entry.text), entry.text.length > 160 && /*#__PURE__*/React.createElement("button", {
+        onClick: () => sJExp(p => p === entry.id ? null : entry.id),
+        style: {
+          background: "none",
+          border: "none",
+          color: "#2d5a2d",
+          fontSize: 11,
+          cursor: "pointer",
+          padding: "3px 0"
+        }
+      }, isX ? "▲ Less" : "▼ More"))));
+    }));
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       height: 1,
       background: "#e5e7eb",
-      margin: "22px 0"
+      marginBottom: 20
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 11,
+      fontFamily: "'Lora',serif",
+      fontSize: 15,
       fontWeight: 700,
-      color: "#9ca3af",
-      textTransform: "uppercase",
-      letterSpacing: .5,
-      marginBottom: 12
+      color: "#111827",
+      marginBottom: 10
     }
-  }, "Quote Collection"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 6,
-      marginBottom: 14
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    value: qFilter,
-    onChange: e => setQFilter(e.target.value),
-    placeholder: "Search quotes...",
-    style: {
-      ...IS,
-      flex: 1
-    }
-  }), qFilter && /*#__PURE__*/React.createElement("button", {
-    onClick: () => setQFilter(""),
-    style: {
-      background: "#f3f4f6",
-      border: "none",
-      borderRadius: 8,
-      padding: "8px 12px",
-      color: "#6b7280",
-      cursor: "pointer",
-      fontSize: 13
-    }
-  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+  }, "Goal-Specific Journal"), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
       borderRadius: 12,
       padding: "14px",
-      marginBottom: 16,
-      boxShadow: "0 1px 4px rgba(0,0,0,.06)"
+      marginBottom: 12,
+      boxShadow: "0 1px 3px rgba(0,0,0,.04)"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("select", {
+    value: nGType,
+    onChange: e => sNGType(e.target.value),
     style: {
-      fontSize: 10,
-      fontWeight: 600,
-      letterSpacing: 1,
-      color: "#9ca3af",
-      marginBottom: 10,
-      textTransform: "uppercase"
+      ...S,
+      width: "100%",
+      marginBottom: 8,
+      color: HT.find(t => t.value === nGType)?.color || "#9ca3af"
     }
-  }, "Add Your Own Quote"), /*#__PURE__*/React.createElement("textarea", {
-    value: nQ,
-    onChange: e => sNQ(e.target.value),
-    placeholder: "Enter a quote to reflect on...",
-    rows: 3,
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\uD83C\uDFAF Select a Goal (optional)"), data.goals.map(g => /*#__PURE__*/React.createElement("option", {
+    key: g.id,
+    value: g.id
+  }, g.text.slice(0, 50)))), /*#__PURE__*/React.createElement("textarea", {
+    value: jTxt.startsWith("GOAL:") ? jTxt : "",
+    onChange: e => sJTxt("GOAL:" + e.target.value.replace(/^GOAL:/, "")),
+    onFocus: e => {
+      if (!jTxt.startsWith("GOAL:")) sJTxt("GOAL:");
+    },
+    placeholder: "Journal about this goal \u2014 progress, obstacles, reflections...",
+    rows: 4,
     style: {
       width: "100%",
       background: "#f9fafb",
       border: "1px solid #e5e7eb",
       borderRadius: 8,
-      padding: "11px",
+      padding: "10px 12px",
       color: "#1f2937",
-      fontSize: 14,
+      fontSize: 13,
       lineHeight: 1.7,
-      marginBottom: 8,
+      marginBottom: 10,
       outline: "none",
-      fontFamily: "system-ui,-apple-system,sans-serif"
+      fontFamily: "system-ui,-apple-system,sans-serif",
+      resize: "none"
     }
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      gap: 6
+      justifyContent: "flex-end"
     }
-  }, /*#__PURE__*/React.createElement("input", {
-    value: nQA,
-    onChange: e => sNQA(e.target.value),
-    onKeyDown: e => e.key === "Enter" && addQ(),
-    placeholder: "Author (optional)",
-    style: {
-      ...IS,
-      flex: 1
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    className: "add-btn",
-    onClick: addQ,
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      const text = jTxt.replace(/^GOAL:/, "").trim();
+      if (!text) return;
+      const linkedGoal = data.goals.find(g => String(g.id) === String(nGType));
+      save({
+        ...data,
+        journal: [...(data.journal || []), {
+          id: Date.now(),
+          text: text + (linkedGoal ? `
+
+[Goal: ${linkedGoal.text}]` : ""),
+          mood: "",
+          tag: "goals",
+          goalId: nGType || null,
+          timestamp: new Date().toISOString(),
+          dateKey: tk()
+        }]
+      });
+      sJTxt("");
+      sNGType("");
+    },
     style: {
       ...AB,
-      padding: "9px 18px"
+      padding: "8px 18px",
+      fontSize: 12
     }
-  }, "Save"))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      fontWeight: 600,
-      color: "#9ca3af",
-      textTransform: "uppercase",
-      letterSpacing: .5,
-      marginBottom: 8
-    }
-  }, qFilter ? `Search results` : `All Quotes (${allQuotes.length})`), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, allQuotes.filter(q => !qFilter || q.text.toLowerCase().includes(qFilter.toLowerCase()) || q.author.toLowerCase().includes(qFilter.toLowerCase())).map(q => {
-    const isE = eQId === q.id;
-    const isCustom = q.custom;
-    return /*#__PURE__*/React.createElement("div", {
-      key: q.id,
-      className: "ecard",
+  }, "Save Goal Entry"))), (() => {
+    const goalEntries = (data.journal || []).filter(e => e.tag === "goals" || e.goalId);
+    return goalEntries.length === 0 ? /*#__PURE__*/React.createElement("div", {
       style: {
-        background: "linear-gradient(135deg,#f0f7f0,#f5faf5)",
-        border: "1px solid #c6dfc6",
-        borderRadius: 12,
-        padding: "14px 16px",
-        position: "relative",
-        boxShadow: "0 1px 3px rgba(0,0,0,.04)"
-      }
-    }, isE ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("textarea", {
-      value: eQTxt,
-      onChange: e => sEQTxt(e.target.value),
-      rows: 3,
-      autoFocus: true,
-      style: {
-        width: "100%",
-        background: "#fff",
-        border: "1px solid #2d5a2d",
-        borderRadius: 8,
-        padding: "10px",
-        color: "#1f2937",
-        fontSize: 14,
-        lineHeight: 1.7,
-        outline: "none",
-        marginBottom: 8
-      }
-    }), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 6
-      }
-    }, /*#__PURE__*/React.createElement("input", {
-      value: eQA,
-      onChange: e => sEQA(e.target.value),
-      placeholder: "Author",
-      style: {
-        ...EI,
-        flex: 1
-      }
-    }), /*#__PURE__*/React.createElement(SC, {
-      onSave: () => svEQ(q.id),
-      onCancel: () => sEQId(null)
-    }))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        fontStyle: "italic",
-        color: "#374151",
-        lineHeight: 1.6,
-        marginBottom: q.author ? 5 : 0
-      }
-    }, "\"", q.text, "\""), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        marginTop: 2,
-        flexWrap: "wrap",
-        gap: 4
-      }
-    }, q.author ? /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#2d5a2d",
-        fontWeight: 600
-      }
-    }, "\u2014 ", q.author) : /*#__PURE__*/React.createElement("span", null), !isCustom && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9,
-        color: "#2d5a2d",
-        opacity: .6,
-        textTransform: "uppercase",
-        letterSpacing: .5
-      }
-    }, "Your Collection")), isCustom && /*#__PURE__*/React.createElement("div", {
-      style: {
-        position: "absolute",
-        top: 10,
-        right: 10,
-        display: "flex",
-        gap: 2
-      }
-    }, /*#__PURE__*/React.createElement("button", {
-      className: "e-edit",
-      onClick: () => sEQ(q),
-      style: {
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        color: "#9ca3af",
-        fontSize: 13,
-        opacity: 0,
-        padding: "4px"
-      }
-    }, "\u270E"), /*#__PURE__*/React.createElement("button", {
-      className: "e-del",
-      onClick: () => delQ(q.id),
-      style: {
-        background: "none",
-        border: "none",
-        cursor: "pointer",
+        textAlign: "center",
         color: "#d1d5db",
-        fontSize: 18,
-        opacity: 0,
-        lineHeight: 1,
-        padding: "4px"
+        fontSize: 13,
+        padding: "20px 0"
       }
-    }, "\xD7"))));
-  }))), tab === "goals" && /*#__PURE__*/React.createElement("div", {
+    }, "No goal-specific entries yet") : /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 8
+      }
+    }, [...goalEntries].reverse().map(entry => {
+      const isX = jExp === entry.id;
+      const linkedGoal = entry.goalId && data.goals.find(g => String(g.id) === String(entry.goalId));
+      return /*#__PURE__*/React.createElement("div", {
+        key: entry.id,
+        className: "ecard",
+        style: {
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
+          boxShadow: "0 1px 2px rgba(0,0,0,.04)"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "10px 12px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 4
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#9ca3af"
+        }
+      }, fmtD(entry.timestamp)), linkedGoal && /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 9,
+          color: "#2d5a2d",
+          background: "#f0f7f0",
+          padding: "1px 6px",
+          borderRadius: 8,
+          fontWeight: 600,
+          flex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }
+      }, "\uD83C\uDFAF ", linkedGoal.text.slice(0, 30)), /*#__PURE__*/React.createElement("button", {
+        className: "e-del",
+        onClick: () => delJ(entry.id),
+        style: {
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          color: "#d1d5db",
+          fontSize: 16,
+          opacity: 0,
+          lineHeight: 1,
+          padding: "3px"
+        }
+      }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 13,
+          color: "#374151",
+          lineHeight: 1.7,
+          whiteSpace: "pre-wrap"
+        }
+      }, isX ? entry.text : entry.text.length > 160 ? entry.text.slice(0, 160) + "…" : entry.text), entry.text.length > 160 && /*#__PURE__*/React.createElement("button", {
+        onClick: () => sJExp(p => p === entry.id ? null : entry.id),
+        style: {
+          background: "none",
+          border: "none",
+          color: "#2d5a2d",
+          fontSize: 11,
+          cursor: "pointer",
+          padding: "3px 0"
+        }
+      }, isX ? "▲ Less" : "▼ More")));
+    }));
+  })()), tab === "goals" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 5,
-      marginBottom: 10,
-      overflowX: "auto",
-      paddingBottom: 2
+      gap: 8,
+      marginBottom: 10
     }
   }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setExpGForm(p => !p),
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      background: "#2d5a2d",
+      border: "none",
+      borderRadius: 20,
+      padding: "6px 14px",
+      color: "#fff",
+      fontSize: 11,
+      fontWeight: 600,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("svg", {
+    width: "12",
+    height: "12",
+    viewBox: "0 0 12 12",
+    fill: "none"
+  }, /*#__PURE__*/React.createElement("path", {
+    d: "M6 1v10M1 6h10",
+    stroke: "white",
+    strokeWidth: "2",
+    strokeLinecap: "round"
+  })), "Add Goal"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowGoalArchive(true),
     style: {
       display: "flex",
       alignItems: "center",
-      gap: 4,
-      padding: "5px 10px",
-      borderRadius: 20,
-      border: "1px solid #e5e7eb",
+      gap: 5,
       background: "#fff",
+      border: "1px solid #e5e7eb",
+      borderRadius: 20,
+      padding: "6px 14px",
       color: "#6b7280",
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: 600,
-      cursor: "pointer",
-      flexShrink: 0
+      cursor: "pointer"
     }
   }, /*#__PURE__*/React.createElement("svg", {
-    width: "11",
-    height: "11",
+    width: "12",
+    height: "12",
     viewBox: "0 0 24 24",
     fill: "none",
     stroke: "currentColor",
@@ -5039,7 +5041,7 @@ function App() {
     d: "M21 8v13H3V8"
   }), /*#__PURE__*/React.createElement("path", {
     d: "M1 3h22v5H1z"
-  })), "Archive", (data.goalArchive || []).length > 0 && /*#__PURE__*/React.createElement("span", {
+  })), "Goal Archive", (data.goalArchive || []).length > 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       background: "#9ca3af",
       color: "#fff",
@@ -5049,14 +5051,22 @@ function App() {
       marginLeft: 2,
       fontWeight: 700
     }
-  }, (data.goalArchive || []).length)), [{
+  }, (data.goalArchive || []).length))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 5,
+      marginBottom: 12
+    }
+  }, [{
     val: "all",
     label: "All",
     color: "#2d5a2d",
-    border: "#c6dfc6"
+    border: "#c6dfc6",
+    bg: "#f0f7f0"
   }, ...HT.map(t => ({
     val: t.value,
-    label: t.value.slice(0, 4),
+    label: t.value,
     color: t.color,
     border: t.border,
     bg: t.bg
@@ -5066,44 +5076,18 @@ function App() {
       key: f.val,
       onClick: () => setGoalTypeFilter(f.val),
       style: {
-        padding: "4px 8px",
+        padding: "4px 10px",
         borderRadius: 20,
         border: `1px solid ${on ? f.border : "#e5e7eb"}`,
-        background: on ? f.bg || "#f0f7f0" : "#fff",
+        background: on ? f.bg : "#fff",
         color: on ? f.color : "#9ca3af",
         fontSize: 10,
         fontWeight: on ? 700 : 400,
         cursor: "pointer",
-        whiteSpace: "nowrap",
-        flexShrink: 0
+        whiteSpace: "nowrap"
       }
     }, f.label);
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setExpGForm(p => !p),
-    style: {
-      width: 28,
-      height: 28,
-      borderRadius: "50%",
-      background: "#2d5a2d",
-      border: "none",
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-      marginLeft: "auto"
-    }
-  }, /*#__PURE__*/React.createElement("svg", {
-    width: "14",
-    height: "14",
-    viewBox: "0 0 14 14",
-    fill: "none"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M7 1v12M1 7h12",
-    stroke: "white",
-    strokeWidth: "2",
-    strokeLinecap: "round"
-  })))), expGForm && /*#__PURE__*/React.createElement("div", {
+  })), expGForm && /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
     style: {
       background: "#fff",
@@ -5269,7 +5253,7 @@ function App() {
           paddingRight: gt ? "34px" : "14px",
           position: "relative"
         }
-      }), !isE && /*#__PURE__*/React.createElement(Grip, null), /*#__PURE__*/React.createElement("div", {
+      }), /*#__PURE__*/React.createElement("div", {
         style: {
           width: 8,
           height: 8,
@@ -5437,59 +5421,127 @@ function App() {
           flexShrink: 0
         }
       }, isExp ? "▲" : "▼"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => setCompleteGoalModal(goal),
-        title: "Complete goal",
+        onClick: () => setExpGoalHabits(p => ({
+          ...p,
+          [goal.id]: !p[goal.id]
+        })),
         style: {
-          background: "#f0fdf4",
-          border: "1px solid #bbf7d0",
+          background: "#f0f7f0",
+          border: "1px solid #c6dfc6",
           borderRadius: 6,
           cursor: "pointer",
-          color: "#16a34a",
-          fontSize: 11,
-          padding: "3px 7px",
+          color: "#2d5a2d",
+          fontSize: 10,
+          padding: "3px 8px",
           flexShrink: 0,
-          fontWeight: 700
+          fontWeight: 600
         }
-      }, "\u2713"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          setTab("reflection");
+      }, "Habits"), /*#__PURE__*/React.createElement("button", {
+        onClick: e => {
+          e.stopPropagation();
+          setGoalMoreMenu(p => p === goal.id ? null : goal.id);
         },
-        title: "Journal about this",
         style: {
           background: "#f9fafb",
           border: "1px solid #e5e7eb",
           borderRadius: 6,
           cursor: "pointer",
-          color: "#9ca3af",
-          fontSize: 11,
-          padding: "3px 7px",
-          flexShrink: 0
-        }
-      }, "\uD83D\uDCDD"), /*#__PURE__*/React.createElement("button", {
-        className: "edit-btn",
-        onClick: () => sEGoal(goal),
-        style: {
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "#9ca3af",
-          fontSize: 13,
-          opacity: 0,
-          padding: "4px"
-        }
-      }, "\u270E"), /*#__PURE__*/React.createElement("button", {
-        className: "del-btn",
-        onClick: () => delGoal(goal.id),
-        style: {
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "#d1d5db",
-          fontSize: 18,
-          opacity: 0,
+          color: "#6b7280",
+          fontSize: 14,
+          padding: "2px 8px",
+          flexShrink: 0,
+          fontWeight: 700,
           lineHeight: 1
         }
-      }, "\xD7"), gt && /*#__PURE__*/React.createElement("div", {
+      }, "\u22EF"), goalMoreMenu === goal.id && /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "absolute",
+          right: 36,
+          top: 8,
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 10,
+          boxShadow: "0 4px 16px rgba(0,0,0,.12)",
+          zIndex: 50,
+          minWidth: 160,
+          overflow: "hidden"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          sEGoal(goal);
+          setGoalMoreMenu(null);
+        },
+        style: {
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 14px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#374151",
+          textAlign: "left"
+        }
+      }, "\u270E Edit Goal"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setTab("reflection");
+          setGoalMoreMenu(null);
+        },
+        style: {
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 14px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#374151",
+          textAlign: "left",
+          borderTop: "1px solid #f3f4f6"
+        }
+      }, "\uD83D\uDCDD Journal About This"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          setCompleteGoalModal(goal);
+          setGoalMoreMenu(null);
+        },
+        style: {
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 14px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#16a34a",
+          textAlign: "left",
+          borderTop: "1px solid #f3f4f6"
+        }
+      }, "\u2713 Mark Complete"), /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          delGoal(goal.id);
+          setGoalMoreMenu(null);
+        },
+        style: {
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 14px",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#dc2626",
+          textAlign: "left",
+          borderTop: "1px solid #f3f4f6"
+        }
+      }, "\uD83D\uDDD1 Delete Goal")), gt && /*#__PURE__*/React.createElement("div", {
         style: {
           position: "absolute",
           right: 0,
@@ -7231,7 +7283,191 @@ function App() {
       fontWeight: 600,
       textTransform: "uppercase"
     }
-  }, "Entries")))), /*#__PURE__*/React.createElement("button", {
+  }, "Entries")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      height: 1,
+      background: "#e5e7eb",
+      margin: "20px 0"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontFamily: "'Lora',serif",
+      fontSize: 15,
+      fontWeight: 700,
+      color: "#111827",
+      marginBottom: 4
+    }
+  }, "My Inspiration"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#9ca3af",
+      marginBottom: 12
+    }
+  }, "Your personal quote collection."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#f9fafb",
+      borderRadius: 10,
+      padding: "12px",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("textarea", {
+    value: nQ,
+    onChange: e => sNQ(e.target.value),
+    placeholder: "Add a quote...",
+    rows: 2,
+    style: {
+      width: "100%",
+      background: "#fff",
+      border: "1px solid #e5e7eb",
+      borderRadius: 8,
+      padding: "8px 10px",
+      color: "#1f2937",
+      fontSize: 13,
+      lineHeight: 1.6,
+      marginBottom: 6,
+      outline: "none",
+      fontFamily: "inherit",
+      resize: "none"
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: nQA,
+    onChange: e => sNQA(e.target.value),
+    placeholder: "Author (optional)",
+    style: {
+      ...IS,
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: addQ,
+    style: {
+      ...AB,
+      padding: "8px 14px",
+      fontSize: 12
+    }
+  }, "Add"))), /*#__PURE__*/React.createElement("input", {
+    value: qFilter,
+    onChange: e => setQFilter(e.target.value),
+    placeholder: "Search quotes...",
+    style: {
+      ...IS,
+      width: "100%",
+      marginBottom: 10
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      maxHeight: 300,
+      overflowY: "auto",
+      marginBottom: 16
+    }
+  }, allQuotes.filter(q => !qFilter || q.text.toLowerCase().includes(qFilter.toLowerCase()) || q.author.toLowerCase().includes(qFilter.toLowerCase())).map(q => {
+    const isCustom = q.custom;
+    const isE = eQId === q.id;
+    return /*#__PURE__*/React.createElement("div", {
+      key: q.id,
+      style: {
+        background: isCustom ? "#f0f7f0" : "#f9fafb",
+        border: `1px solid ${isCustom ? "#c6dfc6" : "#e5e7eb"}`,
+        borderRadius: 10,
+        padding: "10px 12px",
+        position: "relative"
+      }
+    }, isE ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("textarea", {
+      value: eQTxt,
+      onChange: e => sEQTxt(e.target.value),
+      rows: 2,
+      autoFocus: true,
+      style: {
+        width: "100%",
+        background: "#fff",
+        border: "1px solid #2d5a2d",
+        borderRadius: 6,
+        padding: "6px 8px",
+        color: "#1f2937",
+        fontSize: 12,
+        outline: "none",
+        marginBottom: 6,
+        resize: "none"
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 5
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      value: eQA,
+      onChange: e => sEQA(e.target.value),
+      placeholder: "Author",
+      style: {
+        ...EI,
+        flex: 1,
+        fontSize: 12
+      }
+    }), /*#__PURE__*/React.createElement(SC, {
+      onSave: () => svEQ(q.id),
+      onCancel: () => sEQId(null)
+    }))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        fontStyle: "italic",
+        color: "#374151",
+        lineHeight: 1.5,
+        marginBottom: q.author ? 4 : 0
+      }
+    }, "\"", q.text, "\""), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+      }
+    }, q.author ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#2d5a2d",
+        fontWeight: 600
+      }
+    }, "\u2014 ", q.author) : /*#__PURE__*/React.createElement("span", null), !isCustom && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 9,
+        color: "#9ca3af",
+        textTransform: "uppercase",
+        letterSpacing: .5
+      }
+    }, "Collection"), isCustom && /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 2
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: () => sEQ(q),
+      style: {
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        color: "#9ca3af",
+        fontSize: 12,
+        padding: "2px"
+      }
+    }, "\u270E"), /*#__PURE__*/React.createElement("button", {
+      onClick: () => delQ(q.id),
+      style: {
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        color: "#d1d5db",
+        fontSize: 15,
+        padding: "2px",
+        lineHeight: 1
+      }
+    }, "\xD7")))));
+  })), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowProfile(false),
     style: {
       background: "#2d5a2d",
