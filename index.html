@@ -5031,15 +5031,19 @@ function App() {
     style: {
       display: "flex",
       alignItems: "center",
+      justifyContent: "center",
       gap: 6,
       background: "#2d5a2d",
       border: "none",
       borderRadius: 20,
-      padding: "6px 14px",
+      padding: "6px 10px",
       color: "#fff",
       fontSize: 11,
       fontWeight: 600,
-      cursor: "pointer"
+      cursor: "pointer",
+      flex: 1,
+      minWidth: 0,
+      whiteSpace: "nowrap"
     }
   }, /*#__PURE__*/React.createElement("svg", {
     width: "12",
@@ -5056,15 +5060,19 @@ function App() {
     style: {
       display: "flex",
       alignItems: "center",
+      justifyContent: "center",
       gap: 5,
       background: "#fff",
       border: "1px solid #e5e7eb",
       borderRadius: 20,
-      padding: "6px 14px",
+      padding: "6px 10px",
       color: "#6b7280",
       fontSize: 11,
       fontWeight: 600,
-      cursor: "pointer"
+      cursor: "pointer",
+      flex: 1,
+      minWidth: 0,
+      whiteSpace: "nowrap"
     }
   }, /*#__PURE__*/React.createElement("svg", {
     width: "12",
@@ -5089,7 +5097,7 @@ function App() {
     }
   }, (data.goalArchive || []).length)), /*#__PURE__*/React.createElement("button", {
     onClick: () => { setGoalJournal({id:null, text:"Goal Journal"}); setGoalJournalTxt(""); },
-    style: {display:"flex",alignItems:"center",gap:5,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,padding:"6px 14px",color:"#0891b2",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",marginLeft:"auto"}
+    style: {display:"flex",alignItems:"center",justifyContent:"center",gap:5,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,padding:"6px 10px",color:"#0891b2",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",flex:1,minWidth:0}
   }, "+ Add Entry")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
