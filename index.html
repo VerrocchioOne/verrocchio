@@ -3805,43 +3805,72 @@ function App() {
             onDoubleClick: () => sEHabit(habit),
             onTouchStart: e => {
               const t = e.touches[0];
-              swipeRef.current["av" + habit.id] = {
-                holdTimer: setTimeout(() => sEHabit(habit), 600),
-                x: t.clientX
+              swipeRef.current[habit.id] = {
+                x: t.clientX,
+                y: t.clientY,
+                holdTimer: setTimeout(() => sEHabit(habit), 600)
               };
             },
             onTouchMove: e => {
-              const s = swipeRef.current["av" + habit.id];
-              if (s && Math.abs(e.touches[0].clientX - s.x) > 8) clearTimeout(s.holdTimer);
+              const s = swipeRef.current[habit.id];
+              if (!s) return;
+              const dx = e.touches[0].clientX - s.x;
+              if (Math.abs(dx) > 8) clearTimeout(s.holdTimer);
             },
             onTouchEnd: e => {
-              const s = swipeRef.current["av" + habit.id];
-              if (s) {
-                clearTimeout(s.holdTimer);
-                delete swipeRef.current["av" + habit.id];
+              const s = swipeRef.current[habit.id];
+              if (!s) return;
+              clearTimeout(s.holdTimer);
+              const dx = e.changedTouches[0].clientX - s.x;
+              const dy = e.changedTouches[0].clientY - s.y;
+              delete swipeRef.current[habit.id];
+              if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+              if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
+                if (dx > 0) {
+                  setSwipeAnim(p => ({ ...p, [habit.id]: "done" }));
+                  if (navigator.vibrate) navigator.vibrate(40);
+                  const msgs = ["Strong willpower! ", "Temptation conquered!", "Discipline pays off!", "Another win!", "You resisted! "];
+                  setSwipeFeedback({ msg: msgs[Math.floor(Math.random() * msgs.length)], type: "done" });
+                  setTimeout(() => setSwipeFeedback(null), 2500);
+                  setTimeout(() => {
+                    togHabit(habit.id, selDate, "done");
+                    setSwipeAnim(p => { const n = { ...p }; delete n[habit.id]; return n; });
+                  }, 320);
+                } else {
+                  setSwipeAnim(p => ({ ...p, [habit.id]: "missed" }));
+                  if (navigator.vibrate) navigator.vibrate([30, 30, 30]);
+                  const msgs2 = ["Tomorrow is a new day.", "Progress, not perfection.", "Slip-ups happen. Keep going!", "Reset and try again."];
+                  setSwipeFeedback({ msg: msgs2[Math.floor(Math.random() * msgs2.length)], type: "missed" });
+                  setTimeout(() => setSwipeFeedback(null), 2500);
+                  setTimeout(() => {
+                    togHabit(habit.id, selDate, "missed");
+                    setSwipeAnim(p => { const n = { ...p }; delete n[habit.id]; return n; });
+                  }, 320);
+                }
               }
             },
             style: {
               display: "flex",
               alignItems: "center",
               gap: 10,
-              background: d ? "#f0fdf4" : "#fff5f5",
-              border: `1px solid ${d ? "#86efac" : "#fecaca"}`,
+              background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff5f5",
+              border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : "#fecaca"}`,
               borderRadius: 12,
               padding: "12px 12px",
               paddingRight: ht ? "30px" : "12px",
-              marginBottom: 8,
-              transition: "all .2s",
-              boxShadow: d ? "0 1px 3px rgba(22,163,74,.1)" : "0 1px 3px rgba(220,38,38,.06)",
+              transform: animState === "done" ? "translateX(110%)" : animState === "missed" ? "translateX(-110%)" : "translateX(0)",
+              transition: "transform 0.32s ease, background 0.2s, border-color 0.2s",
+              boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : "0 1px 3px rgba(220,38,38,.06)",
               position: "relative",
-              overflow: "hidden"
+              overflow: "hidden",
+              marginBottom: 8
             }
           }, /*#__PURE__*/React.createElement("div", {
-            onClick: e => { e.stopPropagation(); !isE && togHabit(habit.id, selDate); },
+            onClick: e => { e.stopPropagation(); if (d || missed) togHabit(habit.id, selDate, undefined); },
             style: {
               width: 36, height: 36, borderRadius: "50%",
               background: d ? "#22c55e" : "#ef4444",
-              cursor: "pointer", flexShrink: 0,
+              cursor: d || missed ? "pointer" : "default", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all .2s",
               boxShadow: d ? "0 2px 8px rgba(34,197,94,.4)" : "0 2px 8px rgba(239,68,68,.3)"
