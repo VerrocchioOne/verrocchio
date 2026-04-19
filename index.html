@@ -1375,6 +1375,8 @@ function loadData() {
       if (!p.archive) p.archive = [];
       if (!p.quotes) p.quotes = [];
       if (!p.todos) p.todos = [];
+      if (!p.customGoalTypes) p.customGoalTypes = [];
+      if (typeof p.xp !== "number") p.xp = 0;
       return p;
     }
   } catch (e) {}
@@ -1516,6 +1518,8 @@ function App() {
   const [nHGoal, sNHGoal] = useState("");
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
+  const [newGoalFromHabit, setNewGoalFromHabit] = useState(false);
+  const [newGoalText, setNewGoalText] = useState("");
   const swipeRef = useRef({});
   const shakeRef = useRef({
     lastShake: 0
@@ -1626,7 +1630,15 @@ function App() {
 
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
+  const [expHabitGoals, setExpHabitGoals] = useState({});
+  const goalHoldRef = useRef({});
   const [goalMoreMenu, setGoalMoreMenu] = useState(null); // goal.id
+  const [addCatModal, setAddCatModal] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatColor, setNewCatColor] = useState("#6366f1");
+  const [goalJournal, setGoalJournal] = useState(null); // goal object
+  const [goalJournalTxt, setGoalJournalTxt] = useState("");
+  const [xpToast, setXpToast] = useState(null);
 
   /* MORNING BRIEF */
   const [briefTxt, setBriefTxt] = useState("");
@@ -1974,28 +1986,25 @@ function App() {
   };
   ;
   const togHabit = (id, fd, mode) => {
+    const key = fd || tk();
+    const targetH = (data.habits || []).find(h => h.id === id);
+    const wasAlreadyDone = targetH && (targetH.completions?.[key] === "done" || targetH.completions?.[key] === true);
     const habits = (data.habits || []).map(h => {
       if (h.id !== id) return h;
-      const c = {
-        ...h.completions
-      };
-      const key = fd || tk();
-      if (mode === "done") {
-        c[key] = "done";
-      } else if (mode === "missed") {
-        c[key] = "missed";
-      } else {
-        delete c[key];
-      }
-      return {
-        ...h,
-        completions: c
-      };
+      const c = { ...h.completions };
+      if (mode === "done") { c[key] = "done"; }
+      else if (mode === "missed") { c[key] = "missed"; }
+      else { delete c[key]; }
+      return { ...h, completions: c };
     });
-    save({
-      ...data,
-      habits
-    });
+    let xpDelta = 0;
+    if (mode === "done" && !wasAlreadyDone && targetH) {
+      const imp = targetH.importance;
+      xpDelta = imp === "Non-Negotiable" ? 30 : imp === "Important" ? 20 : 10;
+      setXpToast({ amount: xpDelta, id: Date.now() });
+      setTimeout(() => setXpToast(null), 2200);
+    }
+    save({ ...data, habits, xp: (data.xp || 0) + xpDelta });
   };
   const isDone = (h, fd) => {
     const v = h.completions?.[fd || tk()];
@@ -2875,7 +2884,14 @@ function App() {
       lineHeight: 1,
       padding: "0 2px"
     }
-  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
+  }, "\xD7")), xpToast && /*#__PURE__*/React.createElement("div", {
+    key: xpToast.id,
+    className: "fade-in",
+    style: {position:"fixed",top:70,right:16,zIndex:500,background:"linear-gradient(135deg,#2d5a2d,#16a34a)",borderRadius:20,padding:"8px 16px",boxShadow:"0 4px 20px rgba(22,163,74,.4)",display:"flex",alignItems:"center",gap:6,pointerEvents:"none"}
+  }, /*#__PURE__*/React.createElement("span", {style:{fontSize:16}}, "\u26A1"),
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:13,fontWeight:700,color:"#fff"}}, "+", xpToast.amount, " XP"),
+    /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:"rgba(255,255,255,.8)"}}, "Level ", Math.floor(((data.xp||0)+xpToast.amount)/500)+1)
+  ), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px 16px 110px",
       maxWidth: 640,
@@ -3362,14 +3378,32 @@ function App() {
         p: total ? done / total : 0
       };
     });
+    const xpTotal = data.xp || 0;
+    const level = Math.floor(xpTotal / 500) + 1;
+    const xpInLevel = xpTotal % 500;
+    const xpPct = Math.round(xpInLevel / 500 * 100);
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in"
     }, /*#__PURE__*/React.createElement("div", {
+      style:{display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#f0fdf4,#f0f7f0)",border:"1px solid #c6dfc6",borderRadius:10,padding:"8px 12px",marginBottom:10}
+    },
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:18}}, "\u26A1"),
+      /*#__PURE__*/React.createElement("div", {style:{flex:1}},
+        /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",marginBottom:3}},
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:"#2d5a2d"}}, "Level ", level),
+          /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:"#6b7280"}}, xpInLevel, " / 500 XP")
+        ),
+        /*#__PURE__*/React.createElement("div", {style:{height:5,background:"#e5e7eb",borderRadius:3,overflow:"hidden"}},
+          /*#__PURE__*/React.createElement("div", {style:{height:"100%",width:xpPct+"%",background:"linear-gradient(90deg,#2d5a2d,#16a34a)",borderRadius:3,transition:"width 0.5s ease"}})
+        )
+      ),
+      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:"#2d5a2d"}}, xpTotal.toLocaleString(), " XP")
+    ), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 5,
-        marginBottom: 8
+        marginBottom: 10
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setShowAddHabit(p => !p),
@@ -3590,7 +3624,7 @@ function App() {
         accentColor: "#0891b2",
         cursor: "pointer"
       }
-    })), /*#__PURE__*/React.createElement("div", {
+    })), /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 16
       }
@@ -3767,6 +3801,7 @@ function App() {
           return /*#__PURE__*/React.createElement("div", {
             key: habit.id,
             className: "hrow",
+            onClick: () => { if (habit.goalId) setExpHabitGoals(p => ({...p, [habit.id]: !p[habit.id]})); },
             onDoubleClick: () => sEHabit(habit),
             onTouchStart: e => {
               const t = e.touches[0];
@@ -3794,66 +3829,69 @@ function App() {
               border: `1px solid ${d ? "#86efac" : "#fecaca"}`,
               borderRadius: 12,
               padding: "12px 12px",
+              paddingRight: ht ? "30px" : "12px",
               marginBottom: 8,
               transition: "all .2s",
-              boxShadow: d ? "0 1px 3px rgba(22,163,74,.1)" : "0 1px 3px rgba(220,38,38,.06)"
+              boxShadow: d ? "0 1px 3px rgba(22,163,74,.1)" : "0 1px 3px rgba(220,38,38,.06)",
+              position: "relative",
+              overflow: "hidden"
             }
           }, /*#__PURE__*/React.createElement("div", {
-            onClick: () => !isE && togHabit(habit.id, selDate),
+            onClick: e => { e.stopPropagation(); !isE && togHabit(habit.id, selDate); },
             style: {
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
+              width: 36, height: 36, borderRadius: "50%",
               background: d ? "#22c55e" : "#ef4444",
-              cursor: "pointer",
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              cursor: "pointer", flexShrink: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all .2s",
               boxShadow: d ? "0 2px 8px rgba(34,197,94,.4)" : "0 2px 8px rgba(239,68,68,.3)"
             }
           }, d ? /*#__PURE__*/React.createElement("svg", {
-            width: "18",
-            height: "18",
-            viewBox: "0 0 18 18",
-            fill: "none"
+            width: "18", height: "18", viewBox: "0 0 18 18", fill: "none"
           }, /*#__PURE__*/React.createElement("path", {
-            d: "M3.5 9L7.5 13L14.5 5",
-            stroke: "white",
-            strokeWidth: "2.2",
-            strokeLinecap: "round",
-            strokeLinejoin: "round"
+            d: "M3.5 9L7.5 13L14.5 5", stroke: "white", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round"
           })) : /*#__PURE__*/React.createElement("svg", {
-            width: "16",
-            height: "16",
-            viewBox: "0 0 16 16",
-            fill: "none"
+            width: "16", height: "16", viewBox: "0 0 16 16", fill: "none"
           }, /*#__PURE__*/React.createElement("path", {
-            d: "M4.5 4.5L11.5 11.5M11.5 4.5L4.5 11.5",
-            stroke: "white",
-            strokeWidth: "2",
-            strokeLinecap: "round"
-          }))), /*#__PURE__*/React.createElement("span", {
-            style: {
-              fontSize: 13,
-              fontWeight: 500,
-              color: d ? "#15803d" : missed ? "#991b1b" : "#374151",
-              flex: 1,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              textDecoration: d || missed ? "line-through" : "none"
-            }
-          }, habit.icon && /*#__PURE__*/React.createElement("span", {
-            style: {
-              marginRight: 4
-            }
-          }, habit.icon), habit.text));
+            d: "M4.5 4.5L11.5 11.5M11.5 4.5L4.5 11.5", stroke: "white", strokeWidth: "2", strokeLinecap: "round"
+          }))), /*#__PURE__*/React.createElement("div", {
+            style: {flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4}
+          }, /*#__PURE__*/React.createElement("div", {
+            style: {fontSize: 13, fontWeight: 500, color: d ? "#15803d" : missed ? "#991b1b" : "#374151", textDecoration: d || missed ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
+          }, habit.icon && /*#__PURE__*/React.createElement("span", {style: {marginRight: 4}}, habit.icon), habit.text),
+          habit.notes && /*#__PURE__*/React.createElement("div", {
+            style: {fontSize: 11, color: "#6b7280", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
+          }, habit.notes),
+          /*#__PURE__*/React.createElement("div", {
+            style: {display: "flex", alignItems: "center", gap: 3, flexWrap: "nowrap", overflow: "hidden", marginTop: 2}
+          }, fmtDur(habit.duration) && /*#__PURE__*/React.createElement("div", {
+            style: {height: 16, paddingLeft: 5, paddingRight: 5, background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#0891b2", whiteSpace: "nowrap"}}, "\u23F1", fmtDur(habit.duration))),
+          imp && /*#__PURE__*/React.createElement("div", {
+            style: {height: 16, paddingLeft: 5, paddingRight: 5, background: imp.bg, border: `1px solid ${imp.border}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: imp.color, textTransform: "uppercase", whiteSpace: "nowrap"}}, imp.value)),
+          /*#__PURE__*/React.createElement("div", {
+            style: {display: "flex", alignItems: "center", gap: 2, height: 16, paddingLeft: 4, paddingRight: 4, background: "#fafafa", border: "1px solid #e5e7eb", borderRadius: 4, flexShrink: 0}
+          }, /*#__PURE__*/React.createElement("div", {style: {display: "flex", gap: 1}},
+            l14.slice(-7).map((x, i) => /*#__PURE__*/React.createElement("div", {key: i, style: {width: 4, height: 4, borderRadius: 1, background: x.done ? "#22c55e" : "#e5e7eb"}}))
+          ), /*#__PURE__*/React.createElement("span", {
+            style: {fontSize: 8, fontWeight: 600, color: rate.pct >= 80 ? "#16a34a" : rate.pct >= 50 ? "#d97706" : "#dc2626", marginLeft: 2}
+          }, rate.pct, "%"), /*#__PURE__*/React.createElement("span", {
+            style: {fontSize: 8, fontWeight: 700, color: streak >= 7 ? "#d97706" : "#22c55e", marginLeft: 3}
+          }, streak >= 7 ? "🔥" : "", streak, streak === 1 ? " Day Streak" : " Days Streak"))),
+          habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
+            style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb"}
+          }, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}},"Goal: "),
+          /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
+            (data.goals||[]).find(g=>String(g.id)===String(habit.goalId))?.text||"")),
+          ht && /*#__PURE__*/React.createElement("div", {
+            style: {position: "absolute", right: 0, top: 0, bottom: 0, width: "22px", background: ht.color, display: "flex", alignItems: "center", justifyContent: "center", borderTopRightRadius: 8, borderBottomRightRadius: 8}
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 7, fontWeight: 700, color: "#fff", textTransform: "uppercase", transform: "rotate(90deg)", whiteSpace: "nowrap", userSelect: "none"}}, ht.value))));
         }
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
           className: "hrow",
+          onClick: () => { if (habit.goalId) setExpHabitGoals(p => ({...p, [habit.id]: !p[habit.id]})); },
           onDoubleClick: () => sEHabit(habit),
           onTouchStart: e => {
             const t = e.touches[0];
@@ -3942,10 +3980,9 @@ function App() {
             marginBottom: 8
           }
         }, /*#__PURE__*/React.createElement("div", {
-          onClick: () => {
-            if (d || missed) {
-              togHabit(habit.id, selDate, undefined);
-            }
+          onClick: e => {
+            e.stopPropagation();
+            if (d || missed) togHabit(habit.id, selDate, undefined);
           },
           style: {
             width: 36,
@@ -4008,8 +4045,9 @@ function App() {
             fontWeight: 500,
             color: d || missed ? "#6b7280" : "#1f2937",
             textDecoration: d || missed ? "line-through" : "none",
-            wordBreak: "break-word",
-            lineHeight: 1.4
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
           }
         }, habit.icon && /*#__PURE__*/React.createElement("span", {
           style: {
@@ -4019,8 +4057,10 @@ function App() {
           style: {
             fontSize: 11,
             color: "#6b7280",
-            lineHeight: 1.5,
-            fontStyle: "italic"
+            fontStyle: "italic",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
           }
         }, habit.notes), /*#__PURE__*/React.createElement("div", {
           style: {
@@ -4090,7 +4130,7 @@ function App() {
             display: "flex",
             gap: 1
           }
-        }, l14.slice(-10).map((x, i) => /*#__PURE__*/React.createElement("div", {
+        }, l14.slice(-7).map((x, i) => /*#__PURE__*/React.createElement("div", {
           key: i,
           style: {
             width: 4,
@@ -4098,54 +4138,21 @@ function App() {
             borderRadius: 1,
             background: x.done ? "#2d5a2d" : "#e5e7eb"
           }
-        }))), streak >= 2 && /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 8,
-            fontWeight: 700,
-            color: streak >= 7 ? "#d97706" : "#2d5a2d",
-            marginLeft: 1
-          }
-        }, streak >= 7 ? "🔥" : "", streak), /*#__PURE__*/React.createElement("span", {
+        }))), /*#__PURE__*/React.createElement("span", {
           style: {
             fontSize: 8,
             fontWeight: 600,
             color: rate.pct >= 80 ? "#16a34a" : rate.pct >= 50 ? "#d97706" : "#dc2626",
-            marginLeft: 1
+            marginLeft: 2
           }
-        }, rate.pct, "%")))), /*#__PURE__*/React.createElement("button", {
-          onClick: e => {
-            e.stopPropagation();
-            sEHabit(habit);
-          },
+        }, rate.pct, "%"), /*#__PURE__*/React.createElement("span", {
           style: {
-            position: "absolute",
-            right: ht ? "28px" : "4px",
-            top: "50%",
-            transform: "translateY(-50%)",
-            background: "rgba(255,255,255,0.92)",
-            border: "1px solid #e5e7eb",
-            borderRadius: 6,
-            width: 26,
-            height: 26,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 1px 3px rgba(0,0,0,.1)",
-            zIndex: 2
+            fontSize: 8,
+            fontWeight: 700,
+            color: streak >= 7 ? "#d97706" : "#2d5a2d",
+            marginLeft: 3
           }
-        }, /*#__PURE__*/React.createElement("svg", {
-          width: "11",
-          height: "11",
-          viewBox: "0 0 24 24",
-          fill: "none",
-          stroke: "#6b7280",
-          strokeWidth: "2.5"
-        }, /*#__PURE__*/React.createElement("path", {
-          d: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-        }), /*#__PURE__*/React.createElement("path", {
-          d: "M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-        }))), ht && /*#__PURE__*/React.createElement("div", {
+        }, streak >= 7 ? "🔥" : "", streak, streak === 1 ? " Day Streak" : " Days Streak"))), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb"}}, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}},"Goal: "), /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},data.goals.find(g=>String(g.id)===String(habit.goalId))?.text||"")), ht && /*#__PURE__*/React.createElement("div", {
           style: {
             position: "absolute",
             right: 0,
@@ -4169,7 +4176,7 @@ function App() {
             whiteSpace: "nowrap",
             userSelect: "none"
           }
-        }, ht.value)));
+        }, ht.value))));
       };
       return /*#__PURE__*/React.createElement("div", {
         key: group.value,
@@ -5051,43 +5058,27 @@ function App() {
       marginLeft: 2,
       fontWeight: 700
     }
-  }, (data.goalArchive || []).length))), /*#__PURE__*/React.createElement("div", {
+  }, (data.goalArchive || []).length))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => { setGoalJournal({id:null, text:"Goal Journal"}); setGoalJournalTxt(""); },
+    style: {display:"flex",alignItems:"center",gap:5,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,padding:"6px 14px",color:"#0891b2",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",marginLeft:"auto"}
+  }, "\uD83D\uDCDD Journal")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexWrap: "wrap",
       gap: 5,
       marginBottom: 12
     }
-  }, [{
-    val: "all",
-    label: "All",
-    color: "#2d5a2d",
-    border: "#c6dfc6",
-    bg: "#f0f7f0"
-  }, ...HT.map(t => ({
-    val: t.value,
-    label: t.value,
-    color: t.color,
-    border: t.border,
-    bg: t.bg
-  }))].map(f => {
-    const on = goalTypeFilter === f.val;
-    return /*#__PURE__*/React.createElement("button", {
-      key: f.val,
-      onClick: () => setGoalTypeFilter(f.val),
-      style: {
-        padding: "4px 10px",
-        borderRadius: 20,
-        border: `1px solid ${on ? f.border : "#e5e7eb"}`,
-        background: on ? f.bg : "#fff",
-        color: on ? f.color : "#9ca3af",
-        fontSize: 10,
-        fontWeight: on ? 700 : 400,
-        cursor: "pointer",
-        whiteSpace: "nowrap"
-      }
-    }, f.label);
-  })), expGForm && /*#__PURE__*/React.createElement("div", {
+  }, (() => {
+    const allHT = [...HT, ...(data.customGoalTypes || [])];
+    const filters = [{val:"all",label:"All",color:"#2d5a2d",border:"#c6dfc6",bg:"#f0f7f0"}, ...allHT.map(t => ({val:t.value,label:t.value,color:t.color,border:t.border,bg:t.bg}))];
+    return /*#__PURE__*/React.createElement(React.Fragment, null,
+      filters.map(f => {
+        const on = goalTypeFilter === f.val;
+        return /*#__PURE__*/React.createElement("button", {key:f.val, onClick:()=>setGoalTypeFilter(f.val), style:{padding:"4px 10px",borderRadius:20,border:`1px solid ${on?f.border:"#e5e7eb"}`,background:on?f.bg:"#fff",color:on?f.color:"#9ca3af",fontSize:10,fontWeight:on?700:400,cursor:"pointer",whiteSpace:"nowrap"}}, f.label);
+      }),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>{setAddCatModal(true);setNewCatName("");setNewCatColor("#6366f1");}, style:{padding:"4px 10px",borderRadius:20,border:"1px dashed #d1d5db",background:"#fafafa",color:"#9ca3af",fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}, "+ Category")
+    );
+  })()), /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), expGForm && /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
     style: {
       background: "#fff",
@@ -5114,11 +5105,11 @@ function App() {
       ...S,
       width: "100%",
       marginBottom: 8,
-      color: HT.find(t => t.value === nGType)?.color || "#9ca3af"
+      color: [...HT,...(data.customGoalTypes||[])].find(t => t.value === nGType)?.color || "#9ca3af"
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
-  }, "\uD83C\uDFF7 Area of Life"), HT.map(t => /*#__PURE__*/React.createElement("option", {
+  }, "\uD83C\uDFF7 Area of Life"), [...HT,...(data.customGoalTypes||[])].map(t => /*#__PURE__*/React.createElement("option", {
     key: t.value,
     value: t.value
   }, t.value))), /*#__PURE__*/React.createElement("div", {
@@ -5233,6 +5224,22 @@ function App() {
       const isExp = expGoals[goal.id];
       const gt = HT.find(t => t.value === goal.type);
       const hasSm = goal.smart && Object.values(goal.smart).some(v => v && v.trim());
+      const smartCount = goal.smart ? Object.values(goal.smart).filter(v => v && v.trim()).length : 0;
+      const linkedHabits = data.habits.filter(h => String(h.goalId) === String(goal.id));
+      const linkedDone = linkedHabits.filter(h => isDone(h, selDate)).length;
+      const linkedTotal = linkedHabits.length;
+      const momentum = (() => {
+        if (!linkedTotal) return null;
+        let total = 0, days = 0;
+        for (let i = 0; i < 7; i++) {
+          const d2 = new Date(); d2.setDate(d2.getDate() - i);
+          const dk = d2.toISOString().split("T")[0];
+          const done = linkedHabits.filter(h => isDone(h, dk)).length;
+          total += done / linkedTotal; days++;
+        }
+        const avg = days ? total / days : 0;
+        return avg >= 0.65 ? "up" : avg <= 0.25 ? "down" : "flat";
+      })();
       return /*#__PURE__*/React.createElement("div", {
         key: goal.id,
         style: {
@@ -5240,7 +5247,35 @@ function App() {
           border: `1px solid ${gt ? gt.border : "#e5e7eb"}`,
           borderRadius: 10,
           overflow: "hidden",
-          boxShadow: "0 1px 3px rgba(0,0,0,.04)"
+          boxShadow: "0 1px 3px rgba(0,0,0,.04)",
+          cursor: isE ? "default" : "pointer",
+          userSelect: "none"
+        },
+        onPointerDown: e => {
+          if (isE) return;
+          goalHoldRef.current[goal.id] = {fired:false, startX:e.clientX, startY:e.clientY,
+            timer: setTimeout(() => {
+              if (goalHoldRef.current[goal.id]) goalHoldRef.current[goal.id].fired = true;
+              setGoalMoreMenu(goal.id);
+            }, 520)};
+        },
+        onPointerMove: e => {
+          const s = goalHoldRef.current[goal.id];
+          if (s && (Math.abs(e.clientX-s.startX)>10 || Math.abs(e.clientY-s.startY)>10)) {
+            clearTimeout(s.timer); delete goalHoldRef.current[goal.id];
+          }
+        },
+        onPointerUp: e => {
+          const s = goalHoldRef.current[goal.id];
+          if (!s) return;
+          clearTimeout(s.timer);
+          const fired = s.fired;
+          delete goalHoldRef.current[goal.id];
+          if (!fired && !isE) setExpGoalHabits(p => ({...p, [goal.id]: !p[goal.id]}));
+        },
+        onPointerCancel: e => {
+          const s = goalHoldRef.current[goal.id];
+          if (s) { clearTimeout(s.timer); delete goalHoldRef.current[goal.id]; }
         }
       }, /*#__PURE__*/React.createElement("div", _extends({
         className: "hrow"
@@ -5253,15 +5288,19 @@ function App() {
           paddingRight: gt ? "34px" : "14px",
           position: "relative"
         }
-      }), /*#__PURE__*/React.createElement("div", {
-        style: {
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: gt?.color || "#6b7280",
-          flexShrink: 0
-        }
-      }), isE ? /*#__PURE__*/React.createElement("div", {
+      }), /*#__PURE__*/React.createElement("svg", {
+        width: 20, height: 20, viewBox: "0 0 12 12", style: {flexShrink: 0}
+      }, /*#__PURE__*/React.createElement("circle", {
+        cx: 6, cy: 6, r: 4, fill: "none", stroke: "#e5e7eb", strokeWidth: 2
+      }), smartCount > 0 && /*#__PURE__*/React.createElement("circle", {
+        cx: 6, cy: 6, r: 4,
+        fill: smartCount === 5 ? (gt?.color || "#6b7280") : "none",
+        stroke: gt?.color || "#6b7280",
+        strokeWidth: 2,
+        strokeDasharray: `${(smartCount / 5) * 25.1} 25.1`,
+        strokeLinecap: "round",
+        transform: "rotate(-90 6 6)"
+      })), isE ? /*#__PURE__*/React.createElement("div", {
         style: {
           flex: 1
         }
@@ -5379,169 +5418,21 @@ function App() {
         onSave: () => svEGoal(goal.id),
         onCancel: () => sEGId(null)
       })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          minWidth: 0
-        },
-        onClick: () => !isE && setExpGoalHabits(p => ({
-          ...p,
-          [goal.id]: !p[goal.id]
-        }))
+        style: {flex: 1, minWidth: 0}
       }, /*#__PURE__*/React.createElement("div", {
         style: {
-          fontSize: 14,
+          fontSize: 13,
           color: "#1f2937",
           fontWeight: 500,
-          lineHeight: 1.4,
-          cursor: "pointer"
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis"
         }
       }, goal.icon && /*#__PURE__*/React.createElement("span", {
-        style: {
-          marginRight: 5
-        }
-      }, goal.icon), goal.text), hasSm && /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          color: "#9ca3af",
-          marginTop: 2
-        }
-      }, "S.M.A.R.T. details added")), hasSm && /*#__PURE__*/React.createElement("button", {
-        onClick: () => setExpGoals(p => ({
-          ...p,
-          [goal.id]: !p[goal.id]
-        })),
-        style: {
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 11,
-          color: "#2d5a2d",
-          padding: "2px 6px",
-          fontWeight: 600,
-          flexShrink: 0
-        }
-      }, isExp ? "▲" : "▼"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => setExpGoalHabits(p => ({
-          ...p,
-          [goal.id]: !p[goal.id]
-        })),
-        style: {
-          background: "#f0f7f0",
-          border: "1px solid #c6dfc6",
-          borderRadius: 6,
-          cursor: "pointer",
-          color: "#2d5a2d",
-          fontSize: 10,
-          padding: "3px 8px",
-          flexShrink: 0,
-          fontWeight: 600
-        }
-      }, "Habits"), /*#__PURE__*/React.createElement("button", {
-        onClick: e => {
-          e.stopPropagation();
-          setGoalMoreMenu(p => p === goal.id ? null : goal.id);
-        },
-        style: {
-          background: "#f9fafb",
-          border: "1px solid #e5e7eb",
-          borderRadius: 6,
-          cursor: "pointer",
-          color: "#6b7280",
-          fontSize: 14,
-          padding: "2px 8px",
-          flexShrink: 0,
-          fontWeight: 700,
-          lineHeight: 1
-        }
-      }, "\u22EF"), goalMoreMenu === goal.id && /*#__PURE__*/React.createElement("div", {
-        style: {
-          position: "absolute",
-          right: 36,
-          top: 8,
-          background: "#fff",
-          border: "1px solid #e5e7eb",
-          borderRadius: 10,
-          boxShadow: "0 4px 16px rgba(0,0,0,.12)",
-          zIndex: 50,
-          minWidth: 160,
-          overflow: "hidden"
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          sEGoal(goal);
-          setGoalMoreMenu(null);
-        },
-        style: {
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 14px",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 13,
-          color: "#374151",
-          textAlign: "left"
-        }
-      }, "\u270E Edit Goal"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          setTab("reflection");
-          setGoalMoreMenu(null);
-        },
-        style: {
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 14px",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 13,
-          color: "#374151",
-          textAlign: "left",
-          borderTop: "1px solid #f3f4f6"
-        }
-      }, "\uD83D\uDCDD Journal About This"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          setCompleteGoalModal(goal);
-          setGoalMoreMenu(null);
-        },
-        style: {
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 14px",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 13,
-          color: "#16a34a",
-          textAlign: "left",
-          borderTop: "1px solid #f3f4f6"
-        }
-      }, "\u2713 Mark Complete"), /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          delGoal(goal.id);
-          setGoalMoreMenu(null);
-        },
-        style: {
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 14px",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 13,
-          color: "#dc2626",
-          textAlign: "left",
-          borderTop: "1px solid #f3f4f6"
-        }
-      }, "\uD83D\uDDD1 Delete Goal")), gt && /*#__PURE__*/React.createElement("div", {
+        style: {marginRight: 5}
+      }, goal.icon), goal.text)), momentum && /*#__PURE__*/React.createElement("span", {
+        style: {fontSize:14,flexShrink:0,color:momentum==="up"?"#16a34a":momentum==="down"?"#dc2626":"#d97706",lineHeight:1,pointerEvents:"none"}
+      }, momentum==="up"?"↑":momentum==="down"?"↓":"→"), gt && /*#__PURE__*/React.createElement("div", {
         style: {
           position: "absolute",
           right: 0,
@@ -5565,7 +5456,17 @@ function App() {
           whiteSpace: "nowrap",
           userSelect: "none"
         }
-      }, gt.value)))), isExp && !isE && hasSm && /*#__PURE__*/React.createElement("div", {
+      }, gt.value)))), linkedTotal > 0 && /*#__PURE__*/React.createElement("div", {
+        style: {height: 3, background: "#f3f4f6"}
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          height: "100%",
+          width: `${Math.round(linkedDone / linkedTotal * 100)}%`,
+          background: gt?.color || "#2d5a2d",
+          transition: "width 0.4s ease",
+          minWidth: linkedDone > 0 ? 4 : 0
+        }
+      })), expGoalHabits[goal.id] && !isE && hasSm && /*#__PURE__*/React.createElement("div", {
         style: {
           borderTop: "1px solid #f3f4f6",
           padding: "12px 14px",
@@ -7480,7 +7381,94 @@ function App() {
       fontWeight: 600,
       cursor: "pointer"
     }
-  }, "Done"))), editHabitModal && /*#__PURE__*/React.createElement("div", {
+  }, "Done"))), goalMoreMenu && (() => {
+    const _g = data.goals.find(g => g.id === goalMoreMenu);
+    if (!_g) return null;
+    const _btnStyle = (color, first) => ({width:"100%",display:"flex",alignItems:"center",padding:"15px 4px",background:"none",border:"none",cursor:"pointer",fontSize:15,color:color,textAlign:"left",fontWeight:500,borderTop:first?"none":"1px solid #f3f4f6"});
+    return /*#__PURE__*/React.createElement("div", {
+      style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+      onClick:e=>{if(e.target===e.currentTarget)setGoalMoreMenu(null);}
+    }, /*#__PURE__*/React.createElement("div", {
+      className:"fade-in",
+      style:{background:"#fff",borderRadius:"20px 20px 0 0",padding:"24px 20px",width:"100%",maxWidth:640,boxShadow:"0 -8px 40px rgba(0,0,0,.2)"}
+    },
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
+        /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, _g.icon?_g.icon+" ":"", _g.text),
+        /*#__PURE__*/React.createElement("button", {onClick:()=>setGoalMoreMenu(null),style:{background:"#f3f4f6",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
+      ),
+      /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f3f4f6",margin:"14px 0"}}),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>{sEGoal(_g);setGoalMoreMenu(null);},style:_btnStyle("#1f2937",true)}, "\u270E\u2002Edit Goal"),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>{setCompleteGoalModal(_g);setGoalMoreMenu(null);},style:_btnStyle("#16a34a",false)}, "\u2713\u2002Mark Complete"),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>{delGoal(_g.id);setGoalMoreMenu(null);},style:_btnStyle("#dc2626",false)}, "\uD83D\uDDD1\u2002Delete Goal")
+    ));
+  })(), goalJournal && /*#__PURE__*/React.createElement("div", {
+    style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+    onClick:e=>{if(e.target===e.currentTarget)setGoalJournal(null);}
+  }, /*#__PURE__*/React.createElement("div", {
+    className:"fade-in",
+    style:{background:"#fff",borderRadius:"20px 20px 0 0",padding:"24px 20px",width:"100%",maxWidth:640,boxShadow:"0 -8px 40px rgba(0,0,0,.2)"}
+  },
+    /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+      /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, "Journal: ", goalJournal.text),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>setGoalJournal(null),style:{background:"#f3f4f6",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
+    ),
+    /*#__PURE__*/React.createElement("textarea", {
+      value: goalJournalTxt,
+      onChange: e => setGoalJournalTxt(e.target.value),
+      placeholder: "Reflect on this goal — what's working, what's not, what's next...",
+      rows: 5,
+      autoFocus: true,
+      style: {width:"100%",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",resize:"none",outline:"none",color:"#1f2937",boxSizing:"border-box",lineHeight:1.6}
+    }),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        if (!goalJournalTxt.trim()) return;
+        const entry = {id:"gj"+Date.now(),text:goalJournalTxt.trim(),dateKey:tk(),timestamp:Date.now(),tag:"goals",goalId:goalJournal.id};
+        save({...data,journal:[entry,...(data.journal||[])]});
+        setGoalJournal(null); setGoalJournalTxt("");
+      },
+      style:{marginTop:12,width:"100%",background:"#2d5a2d",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:600,cursor:"pointer"}
+    }, "Save Entry")
+  )), addCatModal && /*#__PURE__*/React.createElement("div", {
+    style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24},
+    onClick:e=>{if(e.target===e.currentTarget)setAddCatModal(false);}
+  }, /*#__PURE__*/React.createElement("div", {
+    className:"fade-in",
+    style:{background:"#fff",borderRadius:16,padding:"24px 20px",width:"100%",maxWidth:360,boxShadow:"0 8px 40px rgba(0,0,0,.2)"}
+  },
+    /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:16,fontWeight:700,color:"#111827",marginBottom:16}}, "New Goal Category"),
+    /*#__PURE__*/React.createElement("input", {
+      value: newCatName, onChange: e => setNewCatName(e.target.value),
+      placeholder: "Category name (e.g. Health, Family...)",
+      autoFocus: true,
+      style:{width:"100%",border:"1px solid #e5e7eb",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",marginBottom:12,boxSizing:"border-box"}
+    }),
+    /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
+      /*#__PURE__*/React.createElement("div", {style:{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:8,textTransform:"uppercase"}}, "Color"),
+      /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap"}},
+        ["#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#14b8a6","#f97316"].map(c =>
+          /*#__PURE__*/React.createElement("div", {key:c,onClick:()=>setNewCatColor(c),style:{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:newCatColor===c?"3px solid #111":"3px solid transparent",boxSizing:"border-box"}})
+        )
+      )
+    ),
+    /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8}},
+      /*#__PURE__*/React.createElement("button", {onClick:()=>setAddCatModal(false),style:{flex:1,background:"#f3f4f6",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#6b7280",cursor:"pointer"}}, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          const name = newCatName.trim();
+          if (!name) return;
+          const c = newCatColor;
+          const hex2 = c+"22";
+          const newType = {value:name,color:c,bg:hex2,border:c+"66"};
+          const customGoalTypes = [...(data.customGoalTypes||[]).filter(t=>t.value!==name), newType];
+          save({...data,customGoalTypes});
+          setGoalTypeFilter(name);
+          setAddCatModal(false);
+        },
+        style:{flex:2,background:"#2d5a2d",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer"}
+      }, "Create Category")
+    )
+  )), editHabitModal && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
@@ -7940,7 +7928,7 @@ function App() {
         letterSpacing: .2
       }
     }, t.label));
-  }))));
+  })));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
 
