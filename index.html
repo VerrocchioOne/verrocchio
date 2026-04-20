@@ -1364,7 +1364,8 @@ const DD = {
   habits: SEED_HABITS,
   journal: [],
   quotes: [],
-  archive: []
+  archive: [],
+  dailyRitual: {}
 };
 function loadData() {
   try {
@@ -1379,6 +1380,7 @@ function loadData() {
       if (!p.todos) p.todos = [];
       if (!p.customGoalTypes) p.customGoalTypes = [];
       if (typeof p.xp !== "number") p.xp = 0;
+      if (!p.dailyRitual) p.dailyRitual = {};
       // Any pre-existing user (has habits/goals or has completed it before)
       // should skip onboarding so we don't force the new flow on them.
       if (typeof p.onboardingComplete !== "boolean") {
@@ -1788,6 +1790,7 @@ function App() {
         if (!d.archive) d.archive = [];
         if (!d.quotes) d.quotes = [];
         if (!d.todos) d.todos = [];
+        if (!d.dailyRitual) d.dailyRitual = {};
         if (typeof d.onboardingComplete !== "boolean") {
           // Existing cloud user: don't force them through onboarding.
           d.onboardingComplete = (d.habits && d.habits.length > 0) || (d.goals && d.goals.length > 0);
@@ -2356,6 +2359,21 @@ function App() {
   };
 
   /* MORNING BRIEF */
+  /* ── DAILY RITUAL HELPERS ──
+     Per-day state for the Home tab's morning ritual: briefing generation,
+     review checkpoints (yesterday/goals/tips), and intention. */
+  const todayRitual = () => (data.dailyRitual && data.dailyRitual[tk()]) || {};
+  const updateRitual = (patch) => {
+    const k = tk();
+    save({
+      ...data,
+      dailyRitual: {
+        ...(data.dailyRitual || {}),
+        [k]: { ...(data.dailyRitual && data.dailyRitual[k] || {}), ...patch }
+      }
+    });
+  };
+
   const genBrief = async () => {
     setBriefing(true);
     setBriefTxt("");
@@ -2390,12 +2408,32 @@ function App() {
         })
       });
       const j = await r.json();
-      setBriefTxt(j.content?.[0]?.text || "Could not generate.");
+      const txt = j.content?.[0]?.text || "Could not generate.";
+      setBriefTxt(txt);
+      // Persist today's briefing so we don't regenerate across reloads.
+      updateRitual({ briefing: txt });
     } catch {
       setBriefTxt("Error generating brief. Check connection.");
     }
     setBriefing(false);
   };
+
+  /* Auto-hydrate briefTxt from the persisted daily ritual + auto-generate
+     on the first Home-tab view of the day. */
+  useEffect(() => {
+    if (tab !== "brief") return;
+    // Skip during onboarding or when the user has no habits/goals yet.
+    if (!data.onboardingComplete) return;
+    const r = (data.dailyRitual && data.dailyRitual[tk()]) || {};
+    if (r.briefing && !briefTxt) {
+      setBriefTxt(r.briefing);
+      return;
+    }
+    if (!r.briefing && !briefTxt && !briefing) {
+      const hasContent = (data.habits && data.habits.length > 0) || (data.goals && data.goals.length > 0);
+      if (hasContent) genBrief();
+    }
+  }, [tab, data.dailyRitual, data.onboardingComplete]);
 
   /* DERIVED */
   const habits = data.habits || [];
@@ -3546,70 +3584,14 @@ function App() {
       maxWidth: 640,
       margin: "0 auto"
     }
-  }, tab === "brief" && /*#__PURE__*/React.createElement("div", {
-    className: "fade-in"
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "#fff",
-      border: "1px solid #e5e7eb",
-      borderRadius: 12,
-      padding: "16px",
-      marginBottom: 16,
-      boxShadow: "0 1px 4px rgba(0,0,0,.06)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'Lora',serif",
-      fontSize: 16,
-      fontWeight: 700,
-      color: "#111827"
-    }
-  }, "Your Daily Briefing"), /*#__PURE__*/React.createElement("button", {
-    onClick: genBrief,
-    style: {
-      background: "#2d5a2d",
-      border: "none",
-      borderRadius: 8,
-      padding: "7px 14px",
-      color: "white",
-      fontSize: 12,
-      fontWeight: 600,
-      cursor: "pointer"
-    }
-  }, briefing ? "…" : "Generate")), briefing && /*#__PURE__*/React.createElement("div", {
-    className: "pulsing",
-    style: {
-      textAlign: "center",
-      padding: "28px 0",
-      color: "#9ca3af",
-      fontSize: 13
-    }
-  }, "Generating your briefing\u2026"), !briefing && briefTxt && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14,
-      lineHeight: 1.8,
-      color: "#374151",
-      whiteSpace: "pre-wrap"
-    }
-  }, briefTxt), !briefing && !briefTxt && /*#__PURE__*/React.createElement("div", {
-    style: {
-      textAlign: "center",
-      padding: "28px 0",
-      color: "#d1d5db",
-      fontSize: 13
-    }
-  }, "Tap Generate for a personalized morning briefing")), (() => {
+  }, tab === "brief" && (() => {
+    /* ── DAILY RITUAL — morning flow on the Home tab.
+       Canonical card order: briefing → yesterday review → goals review →
+       intention → progress+tips. Once a step is reviewed it collapses to a
+       single-line pill. Intention, when set, is pinned to the very top. */
+    const rit = todayRitual();
     const yest = pastDays(2)[1];
-    const today7 = Array.from({
-      length: 7
-    }, (_, i) => {
+    const today7 = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
       return d.toISOString().split("T")[0];
@@ -3620,370 +3602,290 @@ function App() {
     const pct7 = activeH.length ? Math.round(today7.reduce((s, d) => s + activeH.filter(h => isDone(h, d)).length, 0) / (activeH.length * 7) * 100) : 0;
     const bestStreak = activeH.length > 0 ? Math.max(0, ...activeH.map(h => getStreak(h))) : 0;
     const perfect7 = today7.filter(d => activeH.length > 0 && activeH.every(h => isDone(h, d))).length;
-    // Build 3 smart action tips
+
     const smartTips = [];
     const noSmartGoal = data.goals.find(g => !g.smart || !Object.values(g.smart).some(v => v && v.trim()));
-    if (noSmartGoal) smartTips.push({
-      icon: "🎯",
-      title: "Add S.M.A.R.T. details",
-      body: `Your goal "${noSmartGoal.text.slice(0, 40)}…" has no SMART framework. Tap to add specifics.`,
-      action: () => setTab("goals")
-    });
+    if (noSmartGoal) smartTips.push({ icon: "🎯", title: "Add S.M.A.R.T. details", body: `Your goal "${noSmartGoal.text.slice(0, 40)}…" has no SMART framework. Tap to add specifics.`, action: () => setTab("goals") });
     const lowHabit = activeH.find(h => getCR(h).pct < 30);
-    if (lowHabit) smartTips.push({
-      icon: "📉",
-      title: "Habit needs attention",
-      body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`,
-      action: () => setTab("habits")
-    });
+    if (lowHabit) smartTips.push({ icon: "📉", title: "Habit needs attention", body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`, action: () => setTab("habits") });
     const yestIncomplete = activeH.filter(h => !isDone(h, yest) && !isMissed(h, yest));
-    if (yestIncomplete.length > 0) smartTips.push({
-      icon: "📋",
-      title: "Review yesterday",
-      body: `${yestIncomplete.length} habit${yestIncomplete.length > 1 ? "s" : ""} from yesterday not marked. Still time to record.`,
-      action: () => {
-        setSelDate(yest);
-        setTab("habits");
-      }
-    });
-    if (smartTips.length < 3) smartTips.push({
-      icon: "💡",
-      title: "Stay consistent",
-      body: "Small consistent actions compound over time. Even 1% better each day is transformative.",
-      action: null
-    });
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#fff",
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        padding: "16px",
-        marginBottom: 16,
-        boxShadow: "0 1px 3px rgba(0,0,0,.04)"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 15,
-        fontWeight: 700,
-        color: "#111827",
-        marginBottom: 4
-      }
-    }, "Review Your Progress"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#9ca3af",
-        marginBottom: 14
-      }
-    }, "Verify completions and act on these insights."), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "1fr 1fr",
-        gap: 8,
-        marginBottom: 14
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      onClick: () => setTab("habits"),
-      style: {
-        background: "#f9fafb",
-        border: "1px solid #e5e7eb",
-        borderRadius: 10,
-        padding: "12px",
-        cursor: "pointer"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        fontWeight: 600,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        marginBottom: 4
-      }
-    }, "Yesterday"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 22,
-        fontWeight: 700,
-        color: yestDone === activeH.length ? "#22c55e" : "#d97706"
-      }
-    }, yestDone, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 13,
-        color: "#9ca3af"
-      }
-    }, "/", activeH.length)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#6b7280",
-        marginTop: 2
-      }
-    }, "habits done")), /*#__PURE__*/React.createElement("div", {
-      onClick: () => setTab("habits"),
-      style: {
-        background: "#f0f7f0",
-        border: "1px solid #c6dfc6",
-        borderRadius: 10,
-        padding: "12px",
-        cursor: "pointer"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        fontWeight: 600,
-        color: "#2d5a2d",
-        textTransform: "uppercase",
-        marginBottom: 4
-      }
-    }, "Today"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 22,
-        fontWeight: 700,
-        color: "#2d5a2d"
-      }
-    }, todayDone, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 13,
-        color: "#9ca3af"
-      }
-    }, "/", activeH.length)), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#6b7280",
-        marginTop: 2
-      }
-    }, "habits done"))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "grid",
-        gridTemplateColumns: "repeat(4,1fr)",
-        gap: 6,
-        marginBottom: 14
-      }
-    }, [{
-      label: "7-Day",
-      val: `${pct7}%`,
-      color: "#0891b2"
-    }, {
-      label: "Streak",
-      val: bestStreak,
-      color: "#d97706"
-    }, {
-      label: "Perfect",
-      val: perfect7,
-      color: "#2d5a2d"
-    }, {
-      label: "Goals",
-      val: data.goals.length,
-      color: "#7c3aed"
-    }].map(s => /*#__PURE__*/React.createElement("div", {
-      key: s.label,
-      style: {
-        textAlign: "center",
-        background: "#f9fafb",
-        borderRadius: 8,
-        padding: "8px 4px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 17,
-        fontWeight: 700,
-        color: s.color
-      }
-    }, s.val), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 9,
-        color: "#9ca3af",
-        fontWeight: 600,
-        textTransform: "uppercase"
-      }
-    }, s.label)))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 8
-      }
-    }, smartTips.slice(0, 3).map((tip, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
-      onClick: tip.action || undefined,
-      style: {
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        background: "#f9fafb",
-        borderRadius: 8,
-        padding: "10px 12px",
-        cursor: tip.action ? "pointer" : "default",
-        border: "1px solid #f3f4f6"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 18,
-        flexShrink: 0,
-        marginTop: 1
-      }
-    }, tip.icon), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        fontWeight: 700,
-        color: "#374151",
-        marginBottom: 2
-      }
-    }, tip.title), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 11,
-        color: "#6b7280",
-        lineHeight: 1.5
-      }
-    }, tip.body)), tip.action && /*#__PURE__*/React.createElement("svg", {
-      width: "14",
-      height: "14",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "#9ca3af",
-      strokeWidth: "2",
-      style: {
-        flexShrink: 0,
-        marginTop: 4
-      }
-    }, /*#__PURE__*/React.createElement("polyline", {
-      points: "9 18 15 12 9 6"
-    }))))));
-  })(), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "#fff",
-      border: "1px solid #e5e7eb",
-      borderRadius: 12,
-      padding: "16px",
-      marginBottom: 16,
-      boxShadow: "0 1px 3px rgba(0,0,0,.04)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'Lora',serif",
-      fontSize: 15,
-      fontWeight: 700,
-      color: "#111827",
-      marginBottom: 4
-    }
-  }, "Set Your Intention"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      color: "#9ca3af",
-      marginBottom: 12
-    }
-  }, "What is the one thing you must accomplish today?"), /*#__PURE__*/React.createElement("textarea", {
-    value: jTxt,
-    onChange: e => sJTxt(e.target.value),
-    placeholder: "Write your intention for today...",
-    rows: 3,
-    style: {
-      width: "100%",
-      background: "#f9fafb",
-      border: "1px solid #e5e7eb",
-      borderRadius: 8,
-      padding: "10px 12px",
-      color: "#1f2937",
-      fontSize: 13,
-      lineHeight: 1.6,
-      outline: "none",
-      fontFamily: "system-ui,-apple-system,sans-serif",
-      resize: "none",
-      marginBottom: 10
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      if (!jTxt.trim()) return;
-      save({
-        ...data,
-        journal: [...(data.journal || []), {
-          id: Date.now(),
-          text: jTxt.trim(),
-          mood: jMood,
-          tag: "goals",
-          timestamp: new Date().toISOString(),
-          dateKey: tk()
-        }]
-      });
-      sJTxt("");
+    if (yestIncomplete.length > 0) smartTips.push({ icon: "📋", title: "Review yesterday", body: `${yestIncomplete.length} habit${yestIncomplete.length > 1 ? "s" : ""} from yesterday not marked. Still time to record.`, action: () => { setSelDate(yest); setTab("habits"); } });
+    if (smartTips.length < 3) smartTips.push({ icon: "💡", title: "Stay consistent", body: "Small consistent actions compound over time. Even 1% better each day is transformative.", action: null });
+
+    const intentionSet = !!(rit.intention && rit.intention.trim());
+    const briefReviewed = !!rit.briefingReviewed;
+    const yestReviewed = !!rit.yesterdayReviewed;
+    const goalsReviewed = !!rit.goalsReviewed;
+    const tipsReviewed = !!rit.tipsReviewed;
+
+    const cardStyle = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,.04)" };
+    const titleStyle = { fontFamily: "'Lora',serif", fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 };
+    const subTitleStyle = { fontSize: 12, color: "#9ca3af", marginBottom: 12 };
+
+    const reviewedPill = (k, label, onUndo) => /*#__PURE__*/React.createElement("div", {
+      key: k,
+      style: { display: "flex", alignItems: "center", gap: 10, background: "#f0f7f0", border: "1px solid #c6dfc6", borderRadius: 10, padding: "10px 14px", marginBottom: 10 }
     },
-    style: {
-      ...AB,
-      flex: 1,
-      padding: "9px"
-    }
-  }, "Save Intention"))), (() => {
-    const randGoal = data.goals.length > 0 ? data.goals[Math.abs(tk().split("-").reduce((a, b) => a * 17 + parseInt(b), 0)) % data.goals.length] : null;
-    if (!randGoal) return null;
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "#fff",
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        padding: "16px",
-        marginBottom: 16,
-        boxShadow: "0 1px 3px rgba(0,0,0,.04)"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 15,
-        fontWeight: 700,
-        color: "#111827",
-        marginBottom: 4
-      }
-    }, "Goal to Reflect On"), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: "#9ca3af",
-        marginBottom: 12
-      }
-    }, "Take a moment to check in on this goal."), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        background: "#f0f7f0",
-        border: "1px solid #c6dfc6",
-        borderRadius: 10,
-        padding: "12px",
-        marginBottom: 12
-      }
-    }, randGoal.icon && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 22
-      }
-    }, randGoal.icon), /*#__PURE__*/React.createElement("div", {
-      style: {
-        flex: 1
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 13,
-        fontWeight: 600,
-        color: "#1f2937"
-      }
-    }, randGoal.text), randGoal.type && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#2d5a2d",
-        marginTop: 2
-      }
-    }, randGoal.type))), /*#__PURE__*/React.createElement("button", {
-      onClick: () => setTab("reflection"),
-      style: {
-        ...AB,
-        width: "100%",
-        padding: "9px",
-        textAlign: "center"
-      }
-    }, "Journal About This Goal \u2192"));
-  })()), tab === "habits" && (() => {
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "\u2713"),
+      /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "#1f2937" } }, label),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: onUndo,
+        style: { background: "transparent", border: "none", color: "#6b7280", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "2px 6px" }
+      }, "Undo")
+    );
+
+    // Pinned intention card — only when an intention is saved for today.
+    const intentionPinned = intentionSet ? /*#__PURE__*/React.createElement("div", {
+      key: "int-pin",
+      style: { background: "linear-gradient(135deg, #2d5a2d, #3d7a3d)", borderRadius: 12, padding: "16px 18px", marginBottom: 12, boxShadow: "0 2px 8px rgba(45,90,45,.2)", color: "#fff" }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,.8)", marginBottom: 6 } }, "TODAY'S INTENTION"),
+      /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 17, fontWeight: 600, lineHeight: 1.45, marginBottom: 10 } }, rit.intention),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => updateRitual({ intention: "" }),
+        style: { background: "rgba(255,255,255,.15)", border: "1px solid rgba(255,255,255,.25)", color: "#fff", fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 6, cursor: "pointer" }
+      }, "Edit")
+    ) : null;
+
+    // Daily Briefing card.
+    const briefingCard = briefReviewed
+      ? reviewedPill("brief-p", "Daily Briefing reviewed", () => updateRitual({ briefingReviewed: false }))
+      : /*#__PURE__*/React.createElement("div", { key: "brief", style: cardStyle },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "#111827" } }, "Your Daily Briefing"),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: genBrief,
+              disabled: briefing,
+              style: { background: briefing ? "#9ca3af" : "#2d5a2d", border: "none", borderRadius: 8, padding: "7px 14px", color: "#fff", fontSize: 12, fontWeight: 600, cursor: briefing ? "default" : "pointer" }
+            }, briefing ? "\u2026" : (briefTxt ? "Regenerate" : "Generate"))
+          ),
+          briefing && /*#__PURE__*/React.createElement("div", {
+            className: "pulsing",
+            style: { textAlign: "center", padding: "28px 0", color: "#9ca3af", fontSize: 13 }
+          }, "Generating your briefing\u2026"),
+          !briefing && briefTxt && /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 14, lineHeight: 1.8, color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }
+          }, briefTxt),
+          !briefing && !briefTxt && /*#__PURE__*/React.createElement("div", {
+            style: { textAlign: "center", padding: "28px 0", color: "#d1d5db", fontSize: 13 }
+          }, "Tap Generate for a personalized morning briefing"),
+          !briefing && briefTxt && /*#__PURE__*/React.createElement("button", {
+            onClick: () => updateRitual({ briefingReviewed: true }),
+            style: { ...AB, width: "100%", padding: "9px" }
+          }, "Mark as Reviewed \u2713")
+        );
+
+    // Review Yesterday card — quick tap to toggle yesterday's entries.
+    const yesterdayCard = yestReviewed
+      ? reviewedPill("yd-p", "Yesterday's habits reviewed", () => updateRitual({ yesterdayReviewed: false }))
+      : /*#__PURE__*/React.createElement("div", { key: "yd", style: cardStyle },
+          /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
+          /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, `Confirm each entry \u2014 ${yestDone} of ${activeH.length} recorded.`),
+          activeH.length > 0 ? /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 12, maxHeight: 260, overflowY: "auto" }
+          },
+            activeH.map(h => {
+              const cs = h.completions && h.completions[yest];
+              const done = cs && cs !== "missed";
+              return /*#__PURE__*/React.createElement("div", {
+                key: "yh-" + h.id,
+                onClick: () => {
+                  const next = done ? null : "completed";
+                  const nh = data.habits.map(hh => hh.id === h.id
+                    ? { ...hh, completions: { ...(hh.completions || {}), [yest]: next } }
+                    : hh);
+                  save({ ...data, habits: nh });
+                },
+                style: {
+                  display: "flex", alignItems: "center", gap: 10,
+                  background: done ? "#f0f7f0" : "#f9fafb",
+                  border: "1px solid " + (done ? "#c6dfc6" : "#e5e7eb"),
+                  borderRadius: 8, padding: "8px 10px", cursor: "pointer"
+                }
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: { width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (done ? "#2d5a2d" : "#d1d5db"), background: done ? "#2d5a2d" : "transparent", color: "#fff", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }
+                }, done ? "\u2713" : ""),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { flex: 1, fontSize: 13, color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                }, h.text)
+              );
+            })
+          ) : /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: 12, textAlign: "center", padding: "12px 0" }
+          }, "No habits tracked yesterday."),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => updateRitual({ yesterdayReviewed: true }),
+            style: { ...AB, width: "100%", padding: "9px" }
+          }, "Mark Reviewed \u2713")
+        );
+
+    // Review Goals card.
+    const goalsList = (data.goals || []).slice(0, 6);
+    const goalsCard = goalsReviewed
+      ? reviewedPill("g-p", "Goals reviewed", () => updateRitual({ goalsReviewed: false }))
+      : /*#__PURE__*/React.createElement("div", { key: "g", style: cardStyle },
+          /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Your Goals"),
+          /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "Are you still moving toward what matters?"),
+          goalsList.length > 0 ? /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 12, maxHeight: 280, overflowY: "auto" }
+          },
+            goalsList.map(g => {
+              const t = HT.find(x => x.value === g.type) || HT[0];
+              const linked = (data.habits || []).filter(h => h.goalId === g.id && h.section !== "avoid");
+              const doneToday = linked.filter(h => isDone(h, tk())).length;
+              return /*#__PURE__*/React.createElement("div", {
+                key: "gl-" + g.id,
+                onClick: () => setTab("goals"),
+                style: { display: "flex", alignItems: "center", gap: 10, background: t.bg, border: "1px solid " + t.border, borderRadius: 8, padding: "10px 12px", cursor: "pointer" }
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 9, fontWeight: 700, color: t.color, textTransform: "uppercase", letterSpacing: 0.5, minWidth: 56 }
+                }, g.type || "\u2014"),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { flex: 1, fontSize: 13, fontWeight: 600, color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                }, g.text),
+                linked.length > 0 ? /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 11, fontWeight: 600, color: t.color, flexShrink: 0 }
+                }, doneToday + "/" + linked.length) : null
+              );
+            })
+          ) : /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: 12, textAlign: "center", padding: "12px 0" }
+          }, "No goals yet."),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => updateRitual({ goalsReviewed: true }),
+            style: { ...AB, width: "100%", padding: "9px" }
+          }, "Mark Reviewed \u2713")
+        );
+
+    // Intention input card — only when the intention hasn't been saved yet.
+    const intentionInput = !intentionSet ? /*#__PURE__*/React.createElement("div", { key: "int-in", style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Set Today's Intention"),
+      /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "What is the one thing you must accomplish today?"),
+      /*#__PURE__*/React.createElement("textarea", {
+        value: jTxt,
+        onChange: e => sJTxt(e.target.value),
+        placeholder: "Write your intention for today...",
+        rows: 3,
+        style: { width: "100%", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", color: "#1f2937", fontSize: 13, lineHeight: 1.6, outline: "none", fontFamily: "system-ui,-apple-system,sans-serif", resize: "none", marginBottom: 10, boxSizing: "border-box" }
+      }),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          if (!jTxt.trim()) return;
+          const txt = jTxt.trim();
+          const k = tk();
+          // Atomic write: journal entry + dailyRitual.intention together
+          // so they survive Firestore's debounced save.
+          save({
+            ...data,
+            journal: [...(data.journal || []), { id: Date.now(), text: txt, mood: jMood, tag: "goals", timestamp: new Date().toISOString(), dateKey: k }],
+            dailyRitual: { ...(data.dailyRitual || {}), [k]: { ...(data.dailyRitual && data.dailyRitual[k] || {}), intention: txt } }
+          });
+          sJTxt("");
+        },
+        style: { ...AB, width: "100%", padding: "9px" }
+      }, "Save Intention")
+    ) : null;
+
+    // Today's Progress + Tips card. Progress stays visible after tips collapse.
+    const progressCard = /*#__PURE__*/React.createElement("div", { key: "prog", style: cardStyle },
+      /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Today's Progress"),
+      /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "How are you showing up right now?"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          onClick: () => setTab("habits"),
+          style: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", cursor: "pointer" }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", marginBottom: 4 } }, "Yesterday"),
+          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 700, color: (yestDone === activeH.length && activeH.length > 0) ? "#22c55e" : "#d97706" } },
+            yestDone,
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#9ca3af" } }, "/", activeH.length)
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, "habits done")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          onClick: () => setTab("habits"),
+          style: { background: "#f0f7f0", border: "1px solid #c6dfc6", borderRadius: 10, padding: "12px", cursor: "pointer" }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 600, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 4 } }, "Today"),
+          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 700, color: "#2d5a2d" } },
+            todayDone,
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#9ca3af" } }, "/", activeH.length)
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, "habits done")
+        )
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6, marginBottom: 14 }
+      },
+        [{ label: "7-Day", val: `${pct7}%`, color: "#0891b2" },
+         { label: "Streak", val: bestStreak, color: "#d97706" },
+         { label: "Perfect", val: perfect7, color: "#2d5a2d" },
+         { label: "Goals", val: data.goals.length, color: "#7c3aed" }
+        ].map(s => /*#__PURE__*/React.createElement("div", {
+          key: s.label,
+          style: { textAlign: "center", background: "#f9fafb", borderRadius: 8, padding: "8px 4px" }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 17, fontWeight: 700, color: s.color } }, s.val),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" } }, s.label)
+        ))
+      ),
+      // Tips sub-section — collapses into a pill once reviewed.
+      tipsReviewed
+        ? /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", alignItems: "center", gap: 10, background: "#f0f7f0", border: "1px solid #c6dfc6", borderRadius: 10, padding: "10px 14px" }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "\u2713"),
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "#1f2937" } }, "Tips reviewed"),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => updateRitual({ tipsReviewed: false }),
+              style: { background: "transparent", border: "none", color: "#6b7280", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "2px 6px" }
+            }, "Show again")
+          )
+        : /*#__PURE__*/React.createElement(React.Fragment, null,
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }
+            }, "Tips & Reminders"),
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }
+            },
+              smartTips.slice(0, 3).map((tip, i) => /*#__PURE__*/React.createElement("div", {
+                key: "tip" + i,
+                onClick: tip.action || undefined,
+                style: { display: "flex", alignItems: "flex-start", gap: 10, background: "#f9fafb", borderRadius: 8, padding: "10px 12px", cursor: tip.action ? "pointer" : "default", border: "1px solid #f3f4f6" }
+              },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, flexShrink: 0, marginTop: 1 } }, tip.icon),
+                /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 2 } }, tip.title),
+                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", lineHeight: 1.5 } }, tip.body)
+                ),
+                tip.action && /*#__PURE__*/React.createElement("svg", {
+                  width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "#9ca3af", strokeWidth: "2",
+                  style: { flexShrink: 0, marginTop: 4 }
+                }, /*#__PURE__*/React.createElement("polyline", { points: "9 18 15 12 9 6" }))
+              ))
+            ),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => updateRitual({ tipsReviewed: true }),
+              style: { ...AB, width: "100%", padding: "9px" }
+            }, "Mark Tips Reviewed \u2713")
+          )
+    );
+
+    return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
+      intentionPinned,
+      briefingCard,
+      yesterdayCard,
+      goalsCard,
+      intentionInput,
+      progressCard
+    );
+  })(), tab === "habits" && (() => {
     const hmap = pastDays(30).reverse().map(day => {
       const total = dH.length;
       const done = dH.filter(h => h.completions?.[day]).length;
