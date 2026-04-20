@@ -1482,6 +1482,7 @@ function App() {
   const [authErr, setAuthErr] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(u => {
       setAuthUser(u || null);
@@ -1505,7 +1506,35 @@ function App() {
     }
     setAuthBusy(false);
   };
-  const doSignOut = () => { auth.signOut(); setHasSeenWelcome(false); };
+  const doSignOut = () => {
+    if (demoMode) { exitDemo(); return; }
+    auth.signOut();
+    setHasSeenWelcome(false);
+  };
+  const startDemo = () => {
+    setAuthErr("");
+    setAuthEmail(""); setAuthPass("");
+    setData({
+      habits: JSON.parse(JSON.stringify(SEED_HABITS)),
+      goals: JSON.parse(JSON.stringify(SEED_GOALS)),
+      todos: [],
+      customGoalTypes: [],
+      xp: 0,
+      journal: [],
+      quotes: [],
+      archive: [],
+      travelDays: []
+    });
+    setHasSeenWelcome(false);
+    setDemoMode(true);
+  };
+  const exitDemo = () => {
+    setDemoMode(false);
+    setHasSeenWelcome(false);
+    // Reload real data from localStorage (or blank default) so the demo
+    // state doesn't bleed into the next session.
+    try { setData(loadData()); } catch (e) { setData(JSON.parse(JSON.stringify(DD))); }
+  };
 
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
@@ -1708,6 +1737,7 @@ function App() {
 
   // Load from Firestore on mount, fall back to localStorage
   useEffect(() => {
+    if (demoMode) return; // demo mode uses in-memory seed data only
     setSyncState("loading");
     DOC.get().then(snap => {
       if (snap.exists) {
@@ -1731,6 +1761,14 @@ function App() {
   const save = useCallback(d => {
     setData(d);
     latestData.current = d;
+    if (demoMode) {
+      // In-memory only — don't touch localStorage or Firestore so the demo
+      // can't overwrite a real user's data.
+      setSaved(true);
+      setTimeout(() => setSaved(false), 800);
+      setSyncState("synced");
+      return;
+    }
     // Write to localStorage immediately
     try {
       localStorage.setItem(SK, JSON.stringify(d));
@@ -1747,7 +1785,7 @@ function App() {
         setSyncState("offline");
       });
     }, 800);
-  }, []);
+  }, [demoMode]);
   const exportData = () => {
     const b = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json"
@@ -2483,8 +2521,8 @@ function App() {
     ]);
   }
 
-  // Login / Signup screen
-  if (authUser === null) {
+  // Login / Signup screen (skipped when the demo-mode preview is running)
+  if (authUser === null && !demoMode) {
     const isSignup = authMode === "signup";
     return onboardShell([
       React.createElement("div", { key: "lg", style: { fontSize: 30, fontWeight: 800, letterSpacing: "0.08em", color: "#1f2937", marginBottom: 4 } }, "VERROCCHIO"),
@@ -2523,7 +2561,17 @@ function App() {
           onClick: () => { setAuthErr(""); setAuthMode(isSignup ? "login" : "signup"); },
           style: { color: "#1f2937", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }
         }, isSignup ? "Log in" : "Create an account")
-      )
+      ),
+      React.createElement("div", { key: "demoDiv", style: { display: "flex", alignItems: "center", gap: 10, margin: "18px 0 10px" } },
+        React.createElement("div", { style: { flex: 1, height: 1, background: "#e5e7eb" } }),
+        React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", letterSpacing: .6, fontWeight: 600 } }, "OR"),
+        React.createElement("div", { style: { flex: 1, height: 1, background: "#e5e7eb" } })),
+      React.createElement("button", {
+        key: "demo",
+        onClick: startDemo,
+        style: { width: "100%", padding: "10px 12px", fontSize: 13, fontWeight: 600, color: "#1f2937", background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, cursor: "pointer" }
+      }, "\u2728 Try the demo"),
+      React.createElement("div", { key: "demoNote", style: { fontSize: 10.5, color: "#9ca3af", marginTop: 8, lineHeight: 1.4 } }, "Walk through onboarding with sample data. Nothing is saved.")
     ]);
   }
 
@@ -2553,7 +2601,15 @@ function App() {
       minHeight: "100vh",
       minHeight: "-webkit-fill-available"
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, demoMode && /*#__PURE__*/React.createElement("div", {
+    style: { background: "linear-gradient(90deg,#fef3c7,#fde68a)", borderBottom: "1px solid #fcd34d", padding: "6px 14px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 60 }
+  },
+    /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700 } }, "\u2728 Demo Mode \u2014 nothing is saved"),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: exitDemo,
+      style: { background: "#78350f", color: "#fff", border: "none", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }
+    }, "Exit demo")),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       borderBottom: "1px solid #e5e7eb",
@@ -3567,58 +3623,7 @@ function App() {
           fontSize: 10
         }
       }, f.icon), f.label);
-    })), /*#__PURE__*/React.createElement("button", {
-      onClick: () => setShowHabitStats(true),
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 3,
-        padding: "5px 8px",
-        borderRadius: 20,
-        border: "1px solid #e5e7eb",
-        background: "#fff",
-        color: "#6b7280",
-        fontSize: 10,
-        fontWeight: 600,
-        cursor: "pointer",
-        flexShrink: 0
-      }
-    }, /*#__PURE__*/React.createElement("svg", {
-      width: "11",
-      height: "11",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "2"
-    }, /*#__PURE__*/React.createElement("polyline", {
-      points: "22 12 18 12 15 21 9 3 6 12 2 12"
-    })), "Stats"), /*#__PURE__*/React.createElement("button", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 3,
-        padding: "5px 8px",
-        borderRadius: 20,
-        border: "1px solid #e5e7eb",
-        background: "#fff",
-        color: "#6b7280",
-        fontSize: 10,
-        fontWeight: 600,
-        cursor: "pointer",
-        flexShrink: 0
-      }
-    }, /*#__PURE__*/React.createElement("svg", {
-      width: "11",
-      height: "11",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: "currentColor",
-      strokeWidth: "2"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M21 8v13H3V8"
-    }), /*#__PURE__*/React.createElement("path", {
-      d: "M1 3h22v5H1z"
-    })), "Archive")), /*#__PURE__*/React.createElement("div", {
+    }))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 5,
@@ -4706,7 +4711,17 @@ function App() {
       padding: "8px 18px",
       fontSize: 12
     }
-  }, "Save Entry"))), /*#__PURE__*/React.createElement("div", {
+  }, "Save Entry"))), (() => {
+    const selSD = new Date(selDate + "T12:00:00");
+    const sameYear = selSD.getFullYear() === new Date().getFullYear();
+    const fmtOpts = sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" };
+    const dayIdx = selSD.getDay();
+    const wStart = new Date(selSD); wStart.setDate(selSD.getDate() - dayIdx); wStart.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const curStart = new Date(now); curStart.setDate(now.getDate() - now.getDay()); curStart.setHours(0, 0, 0, 0);
+    const todayLabel = selDate === tk() ? "Today" : selSD.toLocaleDateString("en-US", fmtOpts);
+    const weekLabel = wStart.getTime() === curStart.getTime() ? "This Week" : "Week of " + wStart.toLocaleDateString("en-US", fmtOpts);
+    return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 6,
@@ -4715,10 +4730,10 @@ function App() {
     }
   }, [{
     k: "today",
-    l: "Today"
+    l: todayLabel
   }, {
     k: "week",
-    l: "This Week"
+    l: weekLabel
   }, {
     k: "all",
     l: "All"
@@ -4748,7 +4763,8 @@ function App() {
       color: "#fff",
       cursor: "pointer"
     }
-  }, "\u2728 Insights")), insV && /*#__PURE__*/React.createElement("div", {
+  }, "\u2728 Insights"));
+  })(), insV && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "linear-gradient(135deg,#f0f7f0,#f5faf5)",
       border: "1px solid #c6dfc6",
@@ -4797,10 +4813,12 @@ function App() {
     }
   }, ins)), (() => {
     const dailyEntries = (data.journal || []).filter(e => (!e.tag || e.tag === "general" || e.tag === "reflection" || e.tag === "gratitude" || e.tag === "wins" || e.tag === "challenges" || e.tag === "ideas" || e.tag === "feelings" || e.tag === "learning") && e.tag !== "goals");
-    const filtered = jFil === "today" ? dailyEntries.filter(e => e.dateKey === tk()) : jFil === "week" ? dailyEntries.filter(e => {
-      const w = new Date();
-      w.setDate(w.getDate() - 7);
-      return new Date(e.timestamp) >= w;
+    const _sd = new Date(selDate + "T12:00:00");
+    const _wStart = new Date(_sd); _wStart.setDate(_sd.getDate() - _sd.getDay()); _wStart.setHours(0, 0, 0, 0);
+    const _wEnd = new Date(_wStart); _wEnd.setDate(_wStart.getDate() + 7);
+    const filtered = jFil === "today" ? dailyEntries.filter(e => e.dateKey === selDate) : jFil === "week" ? dailyEntries.filter(e => {
+      const ts = new Date(e.timestamp);
+      return ts >= _wStart && ts < _wEnd;
     }) : dailyEntries;
     return filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
       style: {
@@ -5097,86 +5115,8 @@ function App() {
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setExpGForm(p => !p),
-    style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 6,
-      background: "#2d5a2d",
-      border: "none",
-      borderRadius: 20,
-      padding: "6px 10px",
-      color: "#fff",
-      fontSize: 11,
-      fontWeight: 600,
-      cursor: "pointer",
-      flex: 1,
-      minWidth: 0,
-      whiteSpace: "nowrap"
-    }
-  }, /*#__PURE__*/React.createElement("svg", {
-    width: "12",
-    height: "12",
-    viewBox: "0 0 12 12",
-    fill: "none"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M6 1v10M1 6h10",
-    stroke: "white",
-    strokeWidth: "2",
-    strokeLinecap: "round"
-  })), "Add Goal"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setShowGoalArchive(true),
-    style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 5,
-      background: "#fff",
-      border: "1px solid #e5e7eb",
-      borderRadius: 20,
-      padding: "6px 10px",
-      color: "#6b7280",
-      fontSize: 11,
-      fontWeight: 600,
-      cursor: "pointer",
-      flex: 1,
-      minWidth: 0,
-      whiteSpace: "nowrap"
-    }
-  }, /*#__PURE__*/React.createElement("svg", {
-    width: "12",
-    height: "12",
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "2"
-  }, /*#__PURE__*/React.createElement("path", {
-    d: "M21 8v13H3V8"
-  }), /*#__PURE__*/React.createElement("path", {
-    d: "M1 3h22v5H1z"
-  })), "Goal Archive", (data.goalArchive || []).length > 0 && /*#__PURE__*/React.createElement("span", {
-    style: {
-      background: "#9ca3af",
-      color: "#fff",
-      borderRadius: 10,
-      fontSize: 9,
-      padding: "0 5px",
-      marginLeft: 2,
-      fontWeight: 700
-    }
-  }, (data.goalArchive || []).length)), /*#__PURE__*/React.createElement("button", {
-    onClick: () => { setGoalJournal({id:null, text:"Goal Journal"}); setGoalJournalTxt(""); },
-    style: {display:"flex",alignItems:"center",justifyContent:"center",gap:5,background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,padding:"6px 10px",color:"#0891b2",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",flex:1,minWidth:0}
-  }, "+ Add Entry")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
       flexWrap: "wrap",
+      alignItems: "center",
       gap: 5,
       marginBottom: 12
     }
@@ -5188,6 +5128,13 @@ function App() {
         const on = goalTypeFilter === f.val;
         return /*#__PURE__*/React.createElement("button", {key:f.val, onClick:()=>setGoalTypeFilter(f.val), style:{padding:"4px 10px",borderRadius:20,border:`1px solid ${on?f.border:"#e5e7eb"}`,background:on?f.bg:"#fff",color:on?f.color:"#9ca3af",fontSize:10,fontWeight:on?700:400,cursor:"pointer",whiteSpace:"nowrap"}}, f.label);
       }),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setExpGForm(p => !p),
+        style: {display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,border:"1px solid #2d5a2d",background:"#2d5a2d",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}
+      },
+        /*#__PURE__*/React.createElement("svg", { width: "10", height: "10", viewBox: "0 0 12 12", fill: "none" },
+          /*#__PURE__*/React.createElement("path", { d: "M6 1v10M1 6h10", stroke: "white", strokeWidth: "2", strokeLinecap: "round" })),
+        "Add Goal"),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{setAddCatModal(true);setNewCatName("");setNewCatColor("#6366f1");}, style:{padding:"4px 10px",borderRadius:20,border:"1px dashed #d1d5db",background:"#fafafa",color:"#9ca3af",fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}, "+ Category")
     );
   })()), /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), expGForm && /*#__PURE__*/React.createElement("div", {
@@ -7357,7 +7304,8 @@ function App() {
         /*#__PURE__*/React.createElement("button", {onClick:()=>setGoalMoreMenu(null),style:{background:"#f3f4f6",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
       ),
       /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f3f4f6",margin:"14px 0"}}),
-      /*#__PURE__*/React.createElement("button", {onClick:()=>{sEGoal(_g);setGoalMoreMenu(null);},style:_btnStyle("#1f2937",true)}, "\u270E\u2002Edit Goal"),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>{setGoalJournal({id:_g.id, text:_g.text}); setGoalJournalTxt(""); setGoalMoreMenu(null);},style:_btnStyle("#0891b2",true)}, "\uD83D\uDCDD\u2002Add Journal Entry"),
+      /*#__PURE__*/React.createElement("button", {onClick:()=>{sEGoal(_g);setGoalMoreMenu(null);},style:_btnStyle("#1f2937",false)}, "\u270E\u2002Edit Goal"),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{setCompleteGoalModal(_g);setGoalMoreMenu(null);},style:_btnStyle("#16a34a",false)}, "\u2713\u2002Mark Complete"),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{delGoal(_g.id);setGoalMoreMenu(null);},style:_btnStyle("#dc2626",false)}, "\uD83D\uDDD1\u2002Delete Goal")
     ));
