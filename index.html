@@ -1665,6 +1665,7 @@ function App() {
   const [nextGoalTxt, setNextGoalTxt] = useState("");
   const [goalTypeFilter, setGoalTypeFilter] = useState("all");
   const [headerExpanded, setHeaderExpanded] = useState(false);
+  const [calTravelMode, setCalTravelMode] = useState(false);
 
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
@@ -2322,7 +2323,8 @@ function App() {
   const dH = habits.filter(h => h.section !== "avoid");
   const doneHCt = dH.filter(h => isDone(h, selDate)).length;
   const isToday = selDate === tk();
-  const routineMode = data.routineMode || "home";
+  const travelDays = data.travelDays || [];
+  const routineMode = travelDays.includes(selDate) ? "travel" : "home";
   const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
     if (impFilter !== "all" && h.importance !== impFilter) return false;
@@ -2762,6 +2764,12 @@ function App() {
     const mo = sd.getMonth();
     const first = new Date(yr, mo, 1).getDay();
     const dim = new Date(yr, mo + 1, 0).getDate();
+    const tdSet = new Set(data.travelDays || []);
+    const toggleTravel = val => {
+      const next = new Set(data.travelDays || []);
+      if (next.has(val)) next.delete(val); else next.add(val);
+      save({ ...data, travelDays: Array.from(next).sort() });
+    };
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in",
       style: {
@@ -2814,7 +2822,27 @@ function App() {
         color: "#6b7280",
         padding: "0 6px"
       }
-    }, "\u203A")), /*#__PURE__*/React.createElement("div", {
+    }, "\u203A")),
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 6, marginBottom: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, padding: 3 }
+    },
+      [{ val: false, label: "\uD83D\uDCC5 Select date", color: "#2d5a2d", bg: "#f0f7f0", border: "#c6dfc6" },
+       { val: true,  label: "\u2708 Assign travel",  color: "#0891b2", bg: "#f0f9ff", border: "#bae6fd" }].map(o => {
+        const on = calTravelMode === o.val;
+        return /*#__PURE__*/React.createElement("button", {
+          key: String(o.val),
+          onClick: () => setCalTravelMode(o.val),
+          style: {
+            flex: 1, minWidth: 0, padding: "5px 8px", borderRadius: 14,
+            border: on ? `1px solid ${o.border}` : "1px solid transparent",
+            background: on ? o.bg : "transparent",
+            color: on ? o.color : "#9ca3af",
+            fontSize: 11, fontWeight: on ? 700 : 500, cursor: "pointer",
+            whiteSpace: "nowrap", textAlign: "center", transition: "all .15s"
+          }
+        }, o.label);
+      })),
+    /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
         gridTemplateColumns: "repeat(7,1fr)",
@@ -2842,30 +2870,40 @@ function App() {
       const isT = val === tk();
       const isSel = val === selDate;
       const isFut = val > tk();
+      const isTrav = tdSet.has(val);
       const hasDone = habits.some(h => isDone(h, val));
+      // Selected day color adapts to its mode (Travel = cyan, Home = green)
+      const selColor = isTrav ? "#0891b2" : "#2d5a2d";
+      const todayBg  = isTrav ? "#f0f9ff" : "#f0f7f0";
+      const todayFg  = isTrav ? "#0891b2" : "#2d5a2d";
+      const travBg   = "#ecfeff";
       return /*#__PURE__*/React.createElement("button", {
         key: day,
         onClick: () => {
-          setSelDate(val);
-          setHeaderExpanded(false);
+          if (calTravelMode) {
+            toggleTravel(val);
+          } else {
+            setSelDate(val);
+            setHeaderExpanded(false);
+          }
         },
         style: {
           aspectRatio: "1",
           borderRadius: "50%",
-          border: "none",
-          background: isSel ? "#2d5a2d" : isT ? "#f0f7f0" : "transparent",
+          border: isTrav && !isSel ? "1px dashed #67e8f9" : "none",
+          background: isSel ? selColor : isT ? todayBg : isTrav ? travBg : "transparent",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           position: "relative",
-          opacity: isFut ? .5 : 1
+          opacity: isFut && !calTravelMode ? .7 : 1
         }
       }, /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 11,
-          fontWeight: isSel || isT ? 700 : 400,
-          color: isSel ? "#fff" : isT ? "#2d5a2d" : "#374151"
+          fontWeight: isSel || isT || isTrav ? 700 : 400,
+          color: isSel ? "#fff" : isT ? todayFg : isTrav ? "#0e7490" : "#374151"
         }
       }, day), hasDone && !isSel && /*#__PURE__*/React.createElement("div", {
         style: {
@@ -2879,7 +2917,14 @@ function App() {
           background: "#22c55e"
         }
       }));
-    })));
+    })),
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 10, justifyContent: "center", marginTop: 8, fontSize: 10, color: "#6b7280" }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
+        /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#f0f7f0", border: "1px solid #c6dfc6" } }), "Home"),
+      /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
+        /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#ecfeff", border: "1px dashed #67e8f9" } }), "Travel")));
   })())), swipeFeedback && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -2970,29 +3015,6 @@ function App() {
   }, tab === "brief" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
-    style: {display:"flex",gap:8,marginBottom:12,background:"#f5f4f0",borderRadius:24,padding:4,border:"1px solid #e5e7eb"}
-  }, [{val:"home", label:"\uD83C\uDFE0 Home", color:"#2d5a2d", bg:"#f0f7f0", border:"#c6dfc6"}, {val:"travel", label:"\u2708 Travel", color:"#0891b2", bg:"#f0f9ff", border:"#bae6fd"}].map(r => {
-    const on = (data.routineMode || "home") === r.val;
-    return /*#__PURE__*/React.createElement("button", {
-      key: r.val,
-      onClick: () => save({...data, routineMode: r.val}),
-      style: {
-        flex: 1,
-        minWidth: 0,
-        padding: "7px 12px",
-        borderRadius: 20,
-        border: on ? `1px solid ${r.border}` : "1px solid transparent",
-        background: on ? r.bg : "transparent",
-        color: on ? r.color : "#9ca3af",
-        fontSize: 12,
-        fontWeight: on ? 700 : 500,
-        cursor: "pointer",
-        transition: "all .2s",
-        whiteSpace: "nowrap",
-        textAlign: "center"
-      }
-    }, r.label);
-  })), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
