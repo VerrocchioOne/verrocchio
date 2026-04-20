@@ -1379,6 +1379,11 @@ function loadData() {
       if (!p.todos) p.todos = [];
       if (!p.customGoalTypes) p.customGoalTypes = [];
       if (typeof p.xp !== "number") p.xp = 0;
+      // Any pre-existing user (has habits/goals or has completed it before)
+      // should skip onboarding so we don't force the new flow on them.
+      if (typeof p.onboardingComplete !== "boolean") {
+        p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
+      }
       return p;
     }
   } catch (e) {}
@@ -1483,6 +1488,26 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  /* ── ONBOARDING STATE ── */
+  // Which step of the onboarding we're on. Steps:
+  //   0 = app walkthrough (multi-slide carousel)
+  //   1 = balanced-life framework primer
+  //   2 = intent capture ("why are you here?")
+  //   3 = first goal (area + text + basic SMART)
+  //   4 = first habits (1-3 habits tied to that goal)
+  //   5 = ready / you're all set
+  const [onboardStep, setOnboardStep] = useState(0);
+  const [walkSlide, setWalkSlide] = useState(0);
+  const [onbIntent, setOnbIntent] = useState("");
+  const [onbGoalArea, setOnbGoalArea] = useState("Physical");
+  const [onbGoalText, setOnbGoalText] = useState("");
+  const [onbGoalSpecific, setOnbGoalSpecific] = useState("");
+  const [onbGoalMeasurable, setOnbGoalMeasurable] = useState("");
+  const [onbGoalTimebound, setOnbGoalTimebound] = useState("");
+  const [onbHabits, setOnbHabits] = useState([]); // [{text, section, importance}]
+  const [onbHabitDraft, setOnbHabitDraft] = useState("");
+  const [onbHabitSec, setOnbHabitSec] = useState("morning");
+  const [onbHabitImp, setOnbHabitImp] = useState("Non-Negotiable");
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(u => {
       setAuthUser(u || null);
@@ -1514,17 +1539,32 @@ function App() {
   const startDemo = () => {
     setAuthErr("");
     setAuthEmail(""); setAuthPass("");
+    // Start with an empty workspace so the new-user onboarding flow fires.
     setData({
-      habits: JSON.parse(JSON.stringify(SEED_HABITS)),
-      goals: JSON.parse(JSON.stringify(SEED_GOALS)),
+      habits: [],
+      goals: [],
       todos: [],
       customGoalTypes: [],
       xp: 0,
       journal: [],
       quotes: [],
       archive: [],
-      travelDays: []
+      travelDays: [],
+      onboardingComplete: false
     });
+    // Reset onboarding state so reruns of the demo start from step 0.
+    setOnboardStep(0);
+    setWalkSlide(0);
+    setOnbIntent("");
+    setOnbGoalArea("Physical");
+    setOnbGoalText("");
+    setOnbGoalSpecific("");
+    setOnbGoalMeasurable("");
+    setOnbGoalTimebound("");
+    setOnbHabits([]);
+    setOnbHabitDraft("");
+    setOnbHabitSec("morning");
+    setOnbHabitImp("Non-Negotiable");
     setHasSeenWelcome(false);
     setDemoMode(true);
   };
@@ -1748,6 +1788,10 @@ function App() {
         if (!d.archive) d.archive = [];
         if (!d.quotes) d.quotes = [];
         if (!d.todos) d.todos = [];
+        if (typeof d.onboardingComplete !== "boolean") {
+          // Existing cloud user: don't force them through onboarding.
+          d.onboardingComplete = (d.habits && d.habits.length > 0) || (d.goals && d.goals.length > 0);
+        }
         setData(d);
         try {
           localStorage.setItem(SK, JSON.stringify(d));
@@ -2591,6 +2635,430 @@ function App() {
         onClick: () => setHasSeenWelcome(true),
         style: { width: "100%", padding: "12px 16px", fontSize: 15, fontWeight: 600, color: "#fff", background: "#1f2937", border: "none", borderRadius: 10, cursor: "pointer", letterSpacing: "0.02em" }
       }, "Continue")
+    ]);
+  }
+
+  /* ── NEW-USER ONBOARDING FLOW ──
+     Runs once per user, after welcome, before main app. Has 6 steps:
+       0 walkthrough, 1 balanced-life, 2 intent, 3 first goal, 4 first habits, 5 ready */
+  if (!data.onboardingComplete) {
+    const finishOnboarding = () => {
+      const nowId = Date.now();
+      const goalId = "g_ob_" + nowId;
+      const newGoal = {
+        id: goalId,
+        text: onbGoalText.trim() || "My first goal",
+        type: onbGoalArea,
+        smart: {
+          specific: onbGoalSpecific.trim(),
+          measurable: onbGoalMeasurable.trim(),
+          achievable: "",
+          relevant: "",
+          timebound: onbGoalTimebound.trim()
+        }
+      };
+      const newHabits = onbHabits.map((h, i) => ({
+        id: "h_ob_" + nowId + "_" + i,
+        text: h.text,
+        section: h.section,
+        importance: h.importance,
+        type: onbGoalArea,
+        duration: "",
+        goalId: goalId,
+        completions: {}
+      }));
+      save({
+        ...data,
+        goals: [newGoal, ...(data.goals || []).filter(g => g && g.text)],
+        habits: [...newHabits, ...(data.habits || []).filter(h => h && h.text)],
+        userIntent: onbIntent.trim(),
+        onboardingComplete: true
+      });
+    };
+
+    // Wider shell for the onboarding — form-heavy screens need more room.
+    const onbShell = (children) => React.createElement("div", {
+      style: {
+        background: "linear-gradient(180deg, #f8f7f4 0%, #efece5 100%)",
+        minHeight: "100vh",
+        minHeight: "-webkit-fill-available",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "24px 16px",
+        fontFamily: "system-ui,-apple-system,sans-serif"
+      }
+    }, React.createElement("div", {
+      style: {
+        width: "100%",
+        maxWidth: 440,
+        background: "#fff",
+        borderRadius: 16,
+        border: "1px solid #e5e7eb",
+        boxShadow: "0 10px 30px rgba(0,0,0,.08)",
+        padding: "24px 22px 20px",
+        display: "flex",
+        flexDirection: "column"
+      }
+    }, children));
+
+    // Progress dots for steps 0..5 (6 total)
+    const progressBar = React.createElement("div", {
+      key: "prog",
+      style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 18 }
+    }, [0,1,2,3,4,5].map(i => React.createElement("div", {
+      key: "d" + i,
+      style: {
+        width: i === onboardStep ? 22 : 8,
+        height: 8,
+        borderRadius: 4,
+        background: i <= onboardStep ? "#1f2937" : "#e5e7eb",
+        transition: "all .2s"
+      }
+    })));
+
+    const skipBtn = React.createElement("button", {
+      key: "skip",
+      onClick: () => save({ ...data, onboardingComplete: true, userIntent: onbIntent.trim() }),
+      style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 12, cursor: "pointer", padding: "6px 10px" }
+    }, "Skip for now");
+
+    const primaryBtn = (label, onClick, opts) => React.createElement("button", {
+      onClick,
+      disabled: opts && opts.disabled,
+      style: {
+        flex: opts && opts.flex !== undefined ? opts.flex : 1,
+        padding: "12px 16px",
+        fontSize: 15,
+        fontWeight: 600,
+        color: "#fff",
+        background: (opts && opts.disabled) ? "#9ca3af" : "#1f2937",
+        border: "none",
+        borderRadius: 10,
+        cursor: (opts && opts.disabled) ? "default" : "pointer"
+      }
+    }, label);
+
+    const secondaryBtn = (label, onClick) => React.createElement("button", {
+      onClick,
+      style: {
+        padding: "12px 14px",
+        fontSize: 14,
+        fontWeight: 600,
+        color: "#1f2937",
+        background: "#fff",
+        border: "1px solid #d1d5db",
+        borderRadius: 10,
+        cursor: "pointer"
+      }
+    }, label);
+
+    // STEP 0 — App walkthrough (3 sub-slides)
+    if (onboardStep === 0) {
+      const slides = [
+        { icon: "🎯", ttl: "Welcome to Verrocchio", body: "A habit tracker for people who are serious about becoming better. You'll set goals that matter, and build the daily habits that get you there." },
+        { icon: "🪜", ttl: "Goals + Habits, linked", body: "Every habit ladders up to a goal. Track compound progress over weeks and months — not just today's check-ins." },
+        { icon: "🧭", ttl: "Reflect & adjust", body: "Daily briefings, journals, and XP keep you honest. When life shifts, your habits shift with it — and history is preserved." }
+      ];
+      const s = slides[walkSlide];
+      const last = walkSlide === slides.length - 1;
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 44, textAlign: "center", marginBottom: 10 } }, s.icon),
+        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 10 } }, s.ttl),
+        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 22, padding: "0 6px" } }, s.body),
+        React.createElement("div", { key: "dots", style: { display: "flex", gap: 5, justifyContent: "center", marginBottom: 20 } },
+          slides.map((_, i) => React.createElement("div", {
+            key: "sd" + i,
+            style: { width: 7, height: 7, borderRadius: "50%", background: i === walkSlide ? "#1f2937" : "#e5e7eb" }
+          }))
+        ),
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          walkSlide > 0 ? secondaryBtn("Back", () => setWalkSlide(walkSlide - 1)) : null,
+          primaryBtn(last ? "Next" : "Continue", () => {
+            if (last) setOnboardStep(1);
+            else setWalkSlide(walkSlide + 1);
+          })
+        ),
+        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
+      ]);
+    }
+
+    // STEP 1 — Balanced-life framework primer
+    if (onboardStep === 1) {
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "⚖️"),
+        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "A balanced life"),
+        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 18, padding: "0 6px" } }, "Verrocchio organizes your goals and habits into seven Areas of Life. Aim for breadth — not just grinding on one axis."),
+        React.createElement("div", {
+          key: "grid",
+          style: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginBottom: 22 }
+        }, HT.map(t => React.createElement("div", {
+          key: t.value,
+          style: {
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: t.bg,
+            border: "1px solid " + t.border,
+            color: t.color,
+            fontSize: 13,
+            fontWeight: 600,
+            textAlign: "center"
+          }
+        }, t.value))),
+        React.createElement("div", { key: "hint", style: { fontSize: 11.5, color: "#6b7280", textAlign: "center", marginBottom: 18, fontStyle: "italic" } }, "You can rename or customize these later in Profile."),
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          secondaryBtn("Back", () => setOnboardStep(0)),
+          primaryBtn("Continue", () => setOnboardStep(2))
+        ),
+        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
+      ]);
+    }
+
+    // STEP 2 — Intent capture
+    if (onboardStep === 2) {
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "✨"),
+        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Why are you here?"),
+        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } }, "One sentence on what you want to accomplish. We'll show it back to you on the hard days."),
+        React.createElement("textarea", {
+          key: "ta",
+          value: onbIntent,
+          onChange: e => setOnbIntent(e.target.value),
+          placeholder: "I want to...",
+          rows: 4,
+          style: {
+            width: "100%",
+            padding: "10px 12px",
+            fontSize: 14,
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            marginBottom: 20,
+            outline: "none",
+            boxSizing: "border-box",
+            background: "#fff",
+            color: "#1f2937",
+            resize: "vertical",
+            fontFamily: "inherit",
+            lineHeight: 1.5
+          }
+        }),
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          secondaryBtn("Back", () => setOnboardStep(1)),
+          primaryBtn("Continue", () => setOnboardStep(3))
+        ),
+        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
+      ]);
+    }
+
+    // STEP 3 — First goal
+    if (onboardStep === 3) {
+      const goalReady = onbGoalText.trim().length > 0;
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "🎯"),
+        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Your first goal"),
+        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 18, padding: "0 6px" } }, "Start with one. Small beats zero."),
+
+        React.createElement("div", { key: "alabel", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Area of Life"),
+        React.createElement("div", {
+          key: "areas",
+          style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }
+        }, HT.map(t => React.createElement("button", {
+          key: t.value,
+          onClick: () => setOnbGoalArea(t.value),
+          style: {
+            padding: "6px 10px",
+            borderRadius: 999,
+            background: onbGoalArea === t.value ? t.color : t.bg,
+            color: onbGoalArea === t.value ? "#fff" : t.color,
+            border: "1px solid " + (onbGoalArea === t.value ? t.color : t.border),
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: "pointer"
+          }
+        }, t.value))),
+
+        React.createElement("div", { key: "glabel", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Goal"),
+        React.createElement("input", {
+          key: "gtxt",
+          type: "text",
+          value: onbGoalText,
+          onChange: e => setOnbGoalText(e.target.value),
+          placeholder: "e.g. Run a marathon",
+          style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 14, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+        }),
+
+        React.createElement("div", { key: "smtLbl", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Make it measurable (optional)"),
+        React.createElement("input", {
+          key: "meas",
+          type: "text",
+          value: onbGoalMeasurable,
+          onChange: e => setOnbGoalMeasurable(e.target.value),
+          placeholder: "How will you measure it? e.g. finish under 4:00",
+          style: { width: "100%", padding: "9px 12px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+        }),
+        React.createElement("input", {
+          key: "tb",
+          type: "text",
+          value: onbGoalTimebound,
+          onChange: e => setOnbGoalTimebound(e.target.value),
+          placeholder: "By when? e.g. October 2026",
+          style: { width: "100%", padding: "9px 12px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 20, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+        }),
+
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          secondaryBtn("Back", () => setOnboardStep(2)),
+          primaryBtn("Continue", () => setOnboardStep(4), { disabled: !goalReady })
+        ),
+        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
+      ]);
+    }
+
+    // STEP 4 — First habits
+    if (onboardStep === 4) {
+      const addHabit = () => {
+        const t = onbHabitDraft.trim();
+        if (!t) return;
+        if (onbHabits.length >= 3) return;
+        setOnbHabits([...onbHabits, { text: t, section: onbHabitSec, importance: onbHabitImp }]);
+        setOnbHabitDraft("");
+      };
+      const removeHabit = (idx) => {
+        setOnbHabits(onbHabits.filter((_, i) => i !== idx));
+      };
+      const canAdd = onbHabitDraft.trim().length > 0 && onbHabits.length < 3;
+      const hasHabit = onbHabits.length > 0;
+      const importanceOpts = ["Non-Negotiable", "Priority", "Nice-to-have"];
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "🔁"),
+        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 6 } }, "Habits to get there"),
+        React.createElement("div", { key: "body", style: { fontSize: 13.5, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } },
+          "Add up to 3 daily habits that move you toward ",
+          React.createElement("span", { style: { fontWeight: 700, color: "#1f2937" } }, "\u201C" + (onbGoalText.trim() || "your goal") + "\u201D"),
+          "."
+        ),
+
+        React.createElement("input", {
+          key: "htxt",
+          type: "text",
+          value: onbHabitDraft,
+          onChange: e => setOnbHabitDraft(e.target.value),
+          onKeyDown: e => { if (e.key === "Enter") addHabit(); },
+          placeholder: "e.g. Morning 5k run",
+          style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+        }),
+
+        React.createElement("div", {
+          key: "secs",
+          style: { display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }
+        }, SECTIONS.map(sec => React.createElement("button", {
+          key: sec.value,
+          onClick: () => setOnbHabitSec(sec.value),
+          style: {
+            padding: "6px 10px",
+            borderRadius: 999,
+            background: onbHabitSec === sec.value ? sec.color : sec.bg,
+            color: onbHabitSec === sec.value ? "#fff" : sec.color,
+            border: "1px solid " + (onbHabitSec === sec.value ? sec.color : sec.border),
+            fontSize: 11.5,
+            fontWeight: 600,
+            cursor: "pointer"
+          }
+        }, sec.icon + " " + sec.label))),
+
+        React.createElement("div", {
+          key: "imps",
+          style: { display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }
+        }, importanceOpts.map(imp => React.createElement("button", {
+          key: imp,
+          onClick: () => setOnbHabitImp(imp),
+          style: {
+            padding: "6px 10px",
+            borderRadius: 999,
+            background: onbHabitImp === imp ? "#1f2937" : "#f3f4f6",
+            color: onbHabitImp === imp ? "#fff" : "#4b5563",
+            border: "1px solid " + (onbHabitImp === imp ? "#1f2937" : "#e5e7eb"),
+            fontSize: 11.5,
+            fontWeight: 600,
+            cursor: "pointer"
+          }
+        }, imp))),
+
+        React.createElement("button", {
+          key: "addBtn",
+          onClick: addHabit,
+          disabled: !canAdd,
+          style: {
+            width: "100%",
+            padding: "9px 12px",
+            fontSize: 13,
+            fontWeight: 600,
+            color: canAdd ? "#1f2937" : "#9ca3af",
+            background: "#fff",
+            border: "1px dashed " + (canAdd ? "#9ca3af" : "#e5e7eb"),
+            borderRadius: 10,
+            cursor: canAdd ? "pointer" : "default",
+            marginBottom: 14
+          }
+        }, onbHabits.length >= 3 ? "Maximum of 3 habits" : "+ Add habit"),
+
+        onbHabits.length > 0 ? React.createElement("div", {
+          key: "list",
+          style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 18 }
+        }, onbHabits.map((h, i) => {
+          const sec = SECTIONS.find(s => s.value === h.section) || SECTIONS[0];
+          return React.createElement("div", {
+            key: "h" + i,
+            style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10 }
+          },
+            React.createElement("span", { style: { fontSize: 16 } }, sec.icon),
+            React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#1f2937", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, h.text),
+              React.createElement("div", { style: { fontSize: 10.5, color: "#6b7280" } }, sec.label + " \u2022 " + h.importance)
+            ),
+            React.createElement("button", {
+              onClick: () => removeHabit(i),
+              style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 18, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
+            }, "\u00D7")
+          );
+        })) : React.createElement("div", { key: "empty", style: { fontSize: 12, color: "#9ca3af", textAlign: "center", marginBottom: 18, fontStyle: "italic" } }, "No habits yet. Add at least one to continue."),
+
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          secondaryBtn("Back", () => setOnboardStep(3)),
+          primaryBtn("Continue", () => setOnboardStep(5), { disabled: !hasHabit })
+        ),
+        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
+      ]);
+    }
+
+    // STEP 5 — Ready
+    if (onboardStep === 5) {
+      const habitCount = onbHabits.length;
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 52, textAlign: "center", marginBottom: 12 } }, "🚀"),
+        React.createElement("div", { key: "ttl", style: { fontSize: 22, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 10 } }, "You're all set"),
+        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.6, textAlign: "center", marginBottom: 20, padding: "0 6px" } },
+          habitCount + " habit" + (habitCount === 1 ? "" : "s") + " tied to ",
+          React.createElement("span", { style: { fontWeight: 700, color: "#1f2937" } }, "\u201C" + (onbGoalText.trim() || "your goal") + "\u201D"),
+          ". Show up tomorrow."
+        ),
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          secondaryBtn("Back", () => setOnboardStep(4)),
+          primaryBtn("Enter Verrocchio", finishOnboarding)
+        )
+      ]);
+    }
+
+    // Fallback — should never hit, but complete onboarding gracefully
+    return onbShell([
+      React.createElement("div", { key: "fb", style: { textAlign: "center", padding: "20px 0" } },
+        primaryBtn("Enter Verrocchio", finishOnboarding)
+      )
     ]);
   }
 
