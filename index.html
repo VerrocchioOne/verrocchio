@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;-webkit-text-size-adjust:100%}
@@ -50,6 +51,7 @@ document.addEventListener("DOMContentLoaded", function() {
 const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410262:web:dcbd72e6eedddc3622fab7"};
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
+const auth=firebase.auth();
 const DOC=db.collection("users").doc("main");
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
@@ -1472,6 +1474,39 @@ function RadarChart(_ref) {
 
 /* ── MAIN APP ── */
 function App() {
+  /* AUTH */
+  const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = not logged in
+  const [authMode, setAuthMode] = useState("login"); // login | signup
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPass, setAuthPass] = useState("");
+  const [authErr, setAuthErr] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => {
+      setAuthUser(u || null);
+      if (!u) setHasSeenWelcome(false);
+    });
+    return unsub;
+  }, []);
+  const doAuth = async () => {
+    setAuthErr("");
+    if (!authEmail.trim() || !authPass) { setAuthErr("Email and password required."); return; }
+    setAuthBusy(true);
+    try {
+      if (authMode === "signup") {
+        await auth.createUserWithEmailAndPassword(authEmail.trim(), authPass);
+      } else {
+        await auth.signInWithEmailAndPassword(authEmail.trim(), authPass);
+      }
+      setAuthPass("");
+    } catch (e) {
+      setAuthErr(e?.message?.replace("Firebase: ", "") || "Authentication failed.");
+    }
+    setAuthBusy(false);
+  };
+  const doSignOut = () => { auth.signOut(); setHasSeenWelcome(false); };
+
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
   const [saved, setSaved] = useState(false);
@@ -1533,6 +1568,7 @@ function App() {
   const [eHSec, sEHSec] = useState("morning");
   const [eHNotes, sEHNotes] = useState("");
   const [eHGoal, sEHGoal] = useState("");
+  const [eHLoc, sEHLoc] = useState("both");
 
   /* JOURNAL */
   const [jTxt, sJTxt] = useState("");
@@ -1975,6 +2011,7 @@ function App() {
         duration: nHDur || null,
         notes: nHNotes.trim() || null,
         goalId: nHGoal || null,
+        location: "both",
         completions: {}
       }]
     });
@@ -2039,6 +2076,7 @@ function App() {
     sEHSec(h.section || "morning");
     sEHNotes(h.notes || "");
     sEHGoal(h.goalId || "");
+    sEHLoc(h.location || "both");
     setEditHabitModal(h);
   };
   const svEHabit = id => {
@@ -2053,7 +2091,8 @@ function App() {
         importance: eHImp,
         section: eHSec,
         notes: eHNotes.trim() || null,
-        goalId: eHGoal || null
+        goalId: eHGoal || null,
+        location: eHLoc || "both"
       } : h)
     });
     sEHId(null);
@@ -2275,9 +2314,12 @@ function App() {
   const dH = habits.filter(h => h.section !== "avoid");
   const doneHCt = dH.filter(h => isDone(h, selDate)).length;
   const isToday = selDate === tk();
+  const routineMode = data.routineMode || "home";
+  const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
     if (impFilter !== "all" && h.importance !== impFilter) return false;
     if (durFilter > 0 && (parseInt(h.duration) || 0) > durFilter) return false;
+    if (!matchesRoutine(h)) return false;
     return true;
   });
   const dateOpts = Array.from({
@@ -2394,6 +2436,105 @@ function App() {
     ...sec,
     habits: filtH.filter(h => h.section === sec.value).sort((a, b) => (a._order ?? 999) - (b._order ?? 999))
   })).filter(g => g.habits.length > 0), [filtH, secFilter]);
+
+  /* ── ONBOARDING: AUTH + WELCOME GATES ── */
+  // Shared page shell for auth/welcome
+  const onboardShell = (children) => React.createElement("div", {
+    style: {
+      background: "linear-gradient(180deg, #f8f7f4 0%, #efece5 100%)",
+      minHeight: "100vh",
+      minHeight: "-webkit-fill-available",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px 16px",
+      fontFamily: "system-ui,-apple-system,sans-serif"
+    }
+  }, React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 380,
+      background: "#fff",
+      borderRadius: 16,
+      border: "1px solid #e5e7eb",
+      boxShadow: "0 10px 30px rgba(0,0,0,.08)",
+      padding: "28px 24px",
+      textAlign: "center"
+    }
+  }, children));
+
+  // Loading spinner while auth state is resolving
+  if (authUser === undefined) {
+    return onboardShell([
+      React.createElement("div", { key: "lg", style: { fontSize: 28, fontWeight: 800, letterSpacing: "0.08em", color: "#1f2937", marginBottom: 6 } }, "VERROCCHIO"),
+      React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 22 } }, "Achieve Anything"),
+      React.createElement("div", { key: "sp", style: { width: 28, height: 28, margin: "0 auto", border: "3px solid #e5e7eb", borderTopColor: "#1f2937", borderRadius: "50%", animation: "spin 1s linear infinite" } }),
+      React.createElement("style", { key: "st" }, "@keyframes spin{to{transform:rotate(360deg)}}")
+    ]);
+  }
+
+  // Login / Signup screen
+  if (authUser === null) {
+    const isSignup = authMode === "signup";
+    return onboardShell([
+      React.createElement("div", { key: "lg", style: { fontSize: 30, fontWeight: 800, letterSpacing: "0.08em", color: "#1f2937", marginBottom: 4 } }, "VERROCCHIO"),
+      React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 24, fontStyle: "italic" } }, "Achieve Anything"),
+      React.createElement("div", { key: "ttl", style: { fontSize: 18, fontWeight: 700, color: "#1f2937", marginBottom: 16 } }, isSignup ? "Create your account" : "Welcome back"),
+      React.createElement("input", {
+        key: "email",
+        type: "email",
+        value: authEmail,
+        onChange: e => setAuthEmail(e.target.value),
+        placeholder: "Email",
+        autoComplete: "email",
+        onKeyDown: e => { if (e.key === "Enter") doAuth(); },
+        style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+      }),
+      React.createElement("input", {
+        key: "pass",
+        type: "password",
+        value: authPass,
+        onChange: e => setAuthPass(e.target.value),
+        placeholder: "Password",
+        autoComplete: isSignup ? "new-password" : "current-password",
+        onKeyDown: e => { if (e.key === "Enter") doAuth(); },
+        style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+      }),
+      authErr ? React.createElement("div", { key: "err", style: { fontSize: 12, color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "6px 10px", marginBottom: 10, textAlign: "left" } }, authErr) : null,
+      React.createElement("button", {
+        key: "sub",
+        onClick: doAuth,
+        disabled: authBusy,
+        style: { width: "100%", padding: "10px 12px", fontSize: 14, fontWeight: 600, color: "#fff", background: authBusy ? "#6b7280" : "#1f2937", border: "none", borderRadius: 8, cursor: authBusy ? "default" : "pointer", marginBottom: 12 }
+      }, authBusy ? "Please wait..." : (isSignup ? "Create account" : "Log in")),
+      React.createElement("div", { key: "tog", style: { fontSize: 12, color: "#6b7280" } },
+        isSignup ? "Already have an account? " : "New here? ",
+        React.createElement("span", {
+          onClick: () => { setAuthErr(""); setAuthMode(isSignup ? "login" : "signup"); },
+          style: { color: "#1f2937", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }
+        }, isSignup ? "Log in" : "Create an account")
+      )
+    ]);
+  }
+
+  // Welcome / loading page — shown after auth until user clicks Continue
+  if (!hasSeenWelcome) {
+    const allQuotes = (data.quotes && data.quotes.length ? data.quotes : PRESET_QUOTES);
+    const dayIdx = Math.floor(Date.now() / 86400000);
+    const q = allQuotes[dayIdx % allQuotes.length] || { text: "", author: "" };
+    return onboardShell([
+      React.createElement("div", { key: "lg", style: { fontSize: 34, fontWeight: 800, letterSpacing: "0.10em", color: "#1f2937", marginBottom: 6 } }, "VERROCCHIO"),
+      React.createElement("div", { key: "tag", style: { fontSize: 14, color: "#6b7280", marginBottom: 28, fontStyle: "italic" } }, "Achieve Anything"),
+      React.createElement("div", { key: "qm", style: { fontSize: 40, color: "#d1d5db", lineHeight: 1, marginBottom: 4 } }, "\u201C"),
+      React.createElement("div", { key: "qt", style: { fontSize: 15, color: "#374151", lineHeight: 1.6, fontStyle: "italic", marginBottom: 10, padding: "0 4px" } }, q.text),
+      q.author ? React.createElement("div", { key: "qa", style: { fontSize: 12, color: "#6b7280", marginBottom: 28 } }, "\u2014 " + q.author) : React.createElement("div", { key: "qa", style: { marginBottom: 28 } }),
+      React.createElement("button", {
+        key: "cont",
+        onClick: () => setHasSeenWelcome(true),
+        style: { width: "100%", padding: "12px 16px", fontSize: 15, fontWeight: 600, color: "#fff", background: "#1f2937", border: "none", borderRadius: 10, cursor: "pointer", letterSpacing: "0.02em" }
+      }, "Continue")
+    ]);
+  }
 
   /* ── RENDER ── */
   return /*#__PURE__*/React.createElement("div", {
@@ -2900,6 +3041,29 @@ function App() {
   }, tab === "brief" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
+    style: {display:"flex",gap:8,marginBottom:12,background:"#f5f4f0",borderRadius:24,padding:4,border:"1px solid #e5e7eb"}
+  }, [{val:"home", label:"\uD83C\uDFE0 Home", color:"#2d5a2d", bg:"#f0f7f0", border:"#c6dfc6"}, {val:"travel", label:"\u2708 Travel", color:"#0891b2", bg:"#f0f9ff", border:"#bae6fd"}].map(r => {
+    const on = (data.routineMode || "home") === r.val;
+    return /*#__PURE__*/React.createElement("button", {
+      key: r.val,
+      onClick: () => save({...data, routineMode: r.val}),
+      style: {
+        flex: 1,
+        minWidth: 0,
+        padding: "7px 12px",
+        borderRadius: 20,
+        border: on ? `1px solid ${r.border}` : "1px solid transparent",
+        background: on ? r.bg : "transparent",
+        color: on ? r.color : "#9ca3af",
+        fontSize: 12,
+        fontWeight: on ? 700 : 500,
+        cursor: "pointer",
+        transition: "all .2s",
+        whiteSpace: "nowrap",
+        textAlign: "center"
+      }
+    }, r.label);
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
@@ -3000,7 +3164,7 @@ function App() {
       d.setDate(d.getDate() - (6 - i));
       return d.toISOString().split("T")[0];
     });
-    const activeH = habits.filter(h => h.section !== "avoid");
+    const activeH = habits.filter(h => h.section !== "avoid" && matchesRoutine(h));
     const todayDone = activeH.filter(h => isDone(h, tk())).length;
     const yestDone = activeH.filter(h => isDone(h, yest)).length;
     const pct7 = activeH.length ? Math.round(today7.reduce((s, d) => s + activeH.filter(h => isDone(h, d)).length, 0) / (activeH.length * 7) * 100) : 0;
@@ -3577,6 +3741,7 @@ function App() {
       bg: i.bg
     }))].map(f => {
       const on = impFilter === f.val;
+      const isImp = f.val !== "all";
       return /*#__PURE__*/React.createElement("button", {
         key: f.val,
         onClick: () => setImpFilter(f.val),
@@ -3590,7 +3755,9 @@ function App() {
           fontWeight: on ? 700 : 400,
           cursor: "pointer",
           whiteSpace: "nowrap",
-          flexShrink: 0
+          flexShrink: 0,
+          minWidth: isImp ? 92 : undefined,
+          textAlign: "center"
         }
       }, f.label);
     }), /*#__PURE__*/React.createElement("span", {
@@ -7405,7 +7572,24 @@ function App() {
         lineHeight: 1
       }
     }, "\xD7")))));
-  })), /*#__PURE__*/React.createElement("button", {
+  })), authUser ? /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11, color: "#9ca3af", textAlign: "center", marginTop: 16, marginBottom: 8 }
+  }, "Signed in as ", /*#__PURE__*/React.createElement("span", { style: { color: "#6b7280", fontWeight: 600 } }, authUser.email)) : null,
+  /*#__PURE__*/React.createElement("button", {
+    onClick: () => { setShowProfile(false); doSignOut(); },
+    style: {
+      background: "#fff",
+      border: "1px solid #e5e7eb",
+      borderRadius: 10,
+      padding: "11px",
+      width: "100%",
+      color: "#b91c1c",
+      fontSize: 13,
+      fontWeight: 600,
+      cursor: "pointer",
+      marginBottom: 10
+    }
+  }, "Sign Out"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowProfile(false),
     style: {
       background: "#2d5a2d",
@@ -7632,6 +7816,13 @@ function App() {
     key: i.value,
     value: i.value
   }, i.value)))), /*#__PURE__*/React.createElement("select", {
+    value: eHLoc,
+    onChange: e => sEHLoc(e.target.value),
+    style: { ...S, width: "100%", marginBottom: 10, color: eHLoc === "home" ? "#2d5a2d" : eHLoc === "travel" ? "#0891b2" : "#374151" }
+  }, /*#__PURE__*/React.createElement("option", { value: "both" }, "\uD83D\uDCCD Available: Home & Travel"),
+     /*#__PURE__*/React.createElement("option", { value: "home" }, "\uD83C\uDFE0 Home only"),
+     /*#__PURE__*/React.createElement("option", { value: "travel" }, "\u2708 Travel only")
+  ), /*#__PURE__*/React.createElement("select", {
     value: eHGoal,
     onChange: e => {
       if (e.target.value === "__new__") {
