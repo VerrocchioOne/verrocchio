@@ -1643,6 +1643,7 @@ function App() {
   /* PROFILE */
   const [showProfile, setShowProfile] = useState(false);
   const [profileSection, setProfileSection] = useState("account"); // account | inspiration | history | reports
+  const [profileNavOpen, setProfileNavOpen] = useState(false);
   const [profileName, setProfileName] = useState(() => localStorage.getItem("v-profile-name") || "");
   const [profileGoal, setProfileGoal] = useState(() => localStorage.getItem("v-profile-goal") || "");
 
@@ -2725,77 +2726,37 @@ function App() {
     y1: "10",
     x2: "21",
     y2: "10"
-  }))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      display: "flex",
-      overflowX: "auto",
-      gap: 0,
-      scrollbarWidth: "none",
-      WebkitOverflowScrolling: "touch"
+  }))), (() => {
+    const xpTotal = data.xp || 0;
+    const level = Math.floor(xpTotal / 500) + 1;
+    const xpInLevel = xpTotal % 500;
+    const xpPct = Math.round(xpInLevel / 500 * 100);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        background: "linear-gradient(135deg,#f0fdf4,#f0f7f0)",
+        border: "1px solid #c6dfc6",
+        borderRadius: 10,
+        padding: "6px 12px",
+        minWidth: 0
+      }
     },
-    ref: el => {
-      if (el && !el._init) {
-        el.scrollLeft = 29 * 44 - el.clientWidth / 2 + 22;
-        el._init = true;
-      }
-    }
-  }, Array.from({
-    length: 60
-  }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (29 - i));
-    const val = d.toISOString().split("T")[0];
-    const isFuture = val > tk();
-    const isT = val === tk();
-    const isSel = val === selDate;
-    return /*#__PURE__*/React.createElement("button", {
-      key: val,
-      onClick: () => setSelDate(val),
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 2,
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        padding: 0,
-        width: 44,
-        flexShrink: 0,
-        WebkitTapHighlightColor: "transparent",
-        opacity: isFuture ? .4 : 1
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9,
-        fontWeight: 500,
-        color: isSel ? "#2d5a2d" : "#9ca3af",
-        textTransform: "uppercase",
-        letterSpacing: .2
-      }
-    }, d.toLocaleDateString("en-US", {
-      weekday: "short"
-    })), /*#__PURE__*/React.createElement("div", {
-      style: {
-        width: 30,
-        height: 30,
-        borderRadius: "50%",
-        background: isSel ? "#2d5a2d" : isT ? "#f0f7f0" : "transparent",
-        border: isT && !isSel ? "1.5px solid #2d5a2d" : "1.5px solid transparent",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        transition: "all .15s"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 12,
-        fontWeight: isSel || isT ? 700 : 400,
-        color: isSel ? "#fff" : isT ? "#2d5a2d" : isFuture ? "#b0b8c1" : "#374151"
-      }
-    }, d.getDate())));
-  }))), headerExpanded && (() => {
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 16 } }, "\u26A1"),
+      /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 3 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d" } }, "Level ", level),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280" } }, xpInLevel, " / 500 XP")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { height: 5, background: "#e5e7eb", borderRadius: 3, overflow: "hidden" } },
+          /*#__PURE__*/React.createElement("div", { style: { height: "100%", width: xpPct + "%", background: "linear-gradient(90deg,#2d5a2d,#16a34a)", borderRadius: 3, transition: "width 0.5s ease" } })
+        )
+      ),
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", whiteSpace: "nowrap" } }, xpTotal.toLocaleString(), " XP")
+    );
+  })()), headerExpanded && (() => {
     const sd = new Date(selDate + "T12:00:00");
     const yr = sd.getFullYear();
     const mo = sd.getMonth();
@@ -3008,27 +2969,7 @@ function App() {
     }
   }, tab === "brief" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
-  }, (() => {
-    const xpTotal = data.xp || 0;
-    const level = Math.floor(xpTotal / 500) + 1;
-    const xpInLevel = xpTotal % 500;
-    const xpPct = Math.round(xpInLevel / 500 * 100);
-    return /*#__PURE__*/React.createElement("div", {
-      style:{display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,#f0fdf4,#f0f7f0)",border:"1px solid #c6dfc6",borderRadius:10,padding:"8px 12px",marginBottom:12}
-    },
-      /*#__PURE__*/React.createElement("span", {style:{fontSize:18}}, "\u26A1"),
-      /*#__PURE__*/React.createElement("div", {style:{flex:1}},
-        /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",marginBottom:3}},
-          /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:"#2d5a2d"}}, "Level ", level),
-          /*#__PURE__*/React.createElement("span", {style:{fontSize:10,color:"#6b7280"}}, xpInLevel, " / 500 XP")
-        ),
-        /*#__PURE__*/React.createElement("div", {style:{height:5,background:"#e5e7eb",borderRadius:3,overflow:"hidden"}},
-          /*#__PURE__*/React.createElement("div", {style:{height:"100%",width:xpPct+"%",background:"linear-gradient(90deg,#2d5a2d,#16a34a)",borderRadius:3,transition:"width 0.5s ease"}})
-        )
-      ),
-      /*#__PURE__*/React.createElement("span", {style:{fontSize:11,fontWeight:700,color:"#2d5a2d"}}, xpTotal.toLocaleString(), " XP")
-    );
-  })(), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {display:"flex",gap:8,marginBottom:12,background:"#f5f4f0",borderRadius:24,padding:4,border:"1px solid #e5e7eb"}
   }, [{val:"home", label:"\uD83C\uDFE0 Home", color:"#2d5a2d", bg:"#f0f7f0", border:"#c6dfc6"}, {val:"travel", label:"\u2708 Travel", color:"#0891b2", bg:"#f0f9ff", border:"#bae6fd"}].map(r => {
     const on = (data.routineMode || "home") === r.val;
@@ -7125,7 +7066,7 @@ function App() {
     ];
     const navBtn = (item, on) => /*#__PURE__*/React.createElement("button", {
       key: item.val,
-      onClick: () => setProfileSection(item.val),
+      onClick: () => { setProfileSection(item.val); setProfileNavOpen(false); },
       style: {
         display: "flex", alignItems: "center", gap: 8,
         width: "100%", padding: "10px 12px", borderRadius: 8,
@@ -7336,7 +7277,16 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", flexShrink: 0 }
       },
-        /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "#111827" } }, "Profile"),
+        /*#__PURE__*/React.createElement("button", {
+          "aria-label": "Toggle navigation",
+          onClick: () => setProfileNavOpen(p => !p),
+          style: { background: profileNavOpen ? "#f0f7f0" : "#f3f4f6", border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer", color: profileNavOpen ? "#2d5a2d" : "#374151", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: 0 }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } }),
+          /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } }),
+          /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } })),
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, fontWeight: 700, color: "#6b7280", textTransform: "capitalize" } },
+          (NAV_ITEMS.find(n => n.val === profileSection) || {}).label || "Profile"),
         /*#__PURE__*/React.createElement("button", {
           onClick: () => setShowProfile(false),
           style: { background: "#f3f4f6", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 16, color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center" }
@@ -7344,7 +7294,7 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", flex: 1, minHeight: 0 }
       },
-        /*#__PURE__*/React.createElement("div", {
+        profileNavOpen && /*#__PURE__*/React.createElement("div", {
           style: { width: 150, flexShrink: 0, background: "#f9fafb", borderRight: "1px solid #f3f4f6", padding: "12px 8px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }
         },
           NAV_ITEMS.map(n => navBtn(n, profileSection === n.val)),
