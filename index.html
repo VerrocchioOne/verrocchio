@@ -2587,20 +2587,30 @@ function App() {
       marginTop: 1,
       letterSpacing: .5
     }
-  }, "Achieve Anything")), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setSelDate(tk()),
-    style: {
-      background: selDate === tk() ? "#2d5a2d" : "#f0f7f0",
-      border: "1px solid #c6dfc6",
-      borderRadius: 20,
-      padding: "5px 14px",
-      fontSize: 11,
-      fontWeight: 700,
-      color: selDate === tk() ? "#fff" : "#2d5a2d",
-      cursor: "pointer",
-      whiteSpace: "nowrap"
-    }
-  }, "Today"), /*#__PURE__*/React.createElement("div", {
+  }, "Achieve Anything")), (() => {
+    const isTodaySel = selDate === tk();
+    const sd = new Date(selDate + "T12:00:00");
+    const now = new Date();
+    const sameYear = sd.getFullYear() === now.getFullYear();
+    const label = isTodaySel
+      ? "Today"
+      : sd.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+    return /*#__PURE__*/React.createElement("button", {
+      onClick: () => setSelDate(tk()),
+      title: isTodaySel ? "Showing today" : "Jump to today",
+      style: {
+        background: isTodaySel ? "#2d5a2d" : "#f0f7f0",
+        border: "1px solid #c6dfc6",
+        borderRadius: 20,
+        padding: "5px 14px",
+        fontSize: 11,
+        fontWeight: 700,
+        color: isTodaySel ? "#fff" : "#2d5a2d",
+        cursor: "pointer",
+        whiteSpace: "nowrap"
+      }
+    }, label);
+  })(), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
