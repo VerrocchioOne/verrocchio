@@ -8,10 +8,13 @@ they can be picked up directly.
 
 ## 1. Identity & Branding
 
-- **Final product name** — *unresolved.* "Verrocchio" is a codename; needs a consumer-facing brand. Decide whether Verrocchio stays, becomes a studio name, or is replaced.
-- **Tagline** — "Achieve Anything" is in place. Keep or iterate once the final name is chosen.
-- **Loading / splash animation** — pyramid blocks stacking as the app loads or refreshes.
-- **Logo motion** — the V from the pyramid inverts into the A's in "Achieve Anything"; remaining letters slide in from behind the A.
+- **Product name** — *Verrocchio.* Named for Andrea del Verrocchio, the Renaissance master whose workshop trained Leonardo da Vinci, Botticelli, and Ghirlandaio. The name signals a studio that turns raw potential into mastery — exactly the relationship the app wants with its users.
+- **Slogan** — *Achieve Anything.* Use as the primary tagline in splash, marketing, and App Store copy. Short, declarative, promise-first; no hedging variants ("Achieve almost anything", "Achieve more") should ship.
+- **Logo system** — a stacked pyramid of blocks forming an implicit "V." Works at any scale: full lockup (pyramid + wordmark + slogan), wordmark only, and a square app-icon treatment where the pyramid fills the tile. Needs finalized SVG + favicon + iOS/Android icon exports.
+- **Loading / splash animation** — pyramid blocks stack in sequence as the app loads or refreshes, landing into the final "V" silhouette. Doubles as the first-run intro on a cold launch.
+- **Logo-to-slogan motion** — the V from the pyramid inverts into the two A's in "Achieve Anything"; the remaining letters slide in from behind each A to complete the wordmark. Used on splash, marketing site hero, and the onboarding welcome screen.
+- **Typography & palette** — lock down a primary display face for the wordmark, a UI face for product chrome, and a named palette (the existing green `#2d5a2d → #3d7a3d` gradient is the anchor). Codify in a single `brand.md` so web, app, and store assets stay consistent.
+- **Voice** — confident, studio-master tone. Second-person, present-tense, imperative where possible ("Set today's intention," not "You might want to set an intention"). Mirrors the slogan's directness.
 
 ## 2. Onboarding (new user)
 

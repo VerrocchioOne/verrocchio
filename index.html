@@ -1381,6 +1381,13 @@ function loadData() {
       if (!p.customGoalTypes) p.customGoalTypes = [];
       if (typeof p.xp !== "number") p.xp = 0;
       if (!p.dailyRitual) p.dailyRitual = {};
+      if (typeof p.homeLocation !== "string") p.homeLocation = "";
+      // Migrate legacy travelDays: string[] -> {date, location}[] so each
+      // travel day can carry its own location.
+      if (!Array.isArray(p.travelDays)) p.travelDays = [];
+      p.travelDays = p.travelDays.map(t =>
+        typeof t === "string" ? { date: t, location: "" } : t
+      ).filter(t => t && typeof t.date === "string");
       // Any pre-existing user (has habits/goals or has completed it before)
       // should skip onboarding so we don't force the new flow on them.
       if (typeof p.onboardingComplete !== "boolean") {
@@ -1501,6 +1508,7 @@ function App() {
   const [onboardStep, setOnboardStep] = useState(0);
   const [walkSlide, setWalkSlide] = useState(0);
   const [onbIntent, setOnbIntent] = useState("");
+  const [onbHome, setOnbHome] = useState("");
   const [onbGoalArea, setOnbGoalArea] = useState("Physical");
   const [onbGoalText, setOnbGoalText] = useState("");
   const [onbGoalSpecific, setOnbGoalSpecific] = useState("");
@@ -1552,12 +1560,14 @@ function App() {
       quotes: [],
       archive: [],
       travelDays: [],
+      homeLocation: "",
       onboardingComplete: false
     });
     // Reset onboarding state so reruns of the demo start from step 0.
     setOnboardStep(0);
     setWalkSlide(0);
     setOnbIntent("");
+    setOnbHome("");
     setOnbGoalArea("Physical");
     setOnbGoalText("");
     setOnbGoalSpecific("");
@@ -1754,6 +1764,13 @@ function App() {
   const [briefTxt, setBriefTxt] = useState("");
   const [briefing, setBriefing] = useState(false);
 
+  /* RITUAL PILL INTERACTIONS
+     expandedPill: key of the pill currently expanded by a single tap.
+     pillSheet: object describing an open bottom-sheet with action options
+       (opened by long-press). Shape: { title, actions: [{label, onClick}] }. */
+  const [expandedPill, setExpandedPill] = useState(null);
+  const [pillSheet, setPillSheet] = useState(null);
+
   /* UNDO */
   const undoStack = useRef([]);
   const [undoToast, setUndoToast] = useState(null);
@@ -1791,6 +1808,11 @@ function App() {
         if (!d.quotes) d.quotes = [];
         if (!d.todos) d.todos = [];
         if (!d.dailyRitual) d.dailyRitual = {};
+        if (typeof d.homeLocation !== "string") d.homeLocation = "";
+        if (!Array.isArray(d.travelDays)) d.travelDays = [];
+        d.travelDays = d.travelDays.map(t =>
+          typeof t === "string" ? { date: t, location: "" } : t
+        ).filter(t => t && typeof t.date === "string");
         if (typeof d.onboardingComplete !== "boolean") {
           // Existing cloud user: don't force them through onboarding.
           d.onboardingComplete = (d.habits && d.habits.length > 0) || (d.goals && d.goals.length > 0);
@@ -2444,7 +2466,8 @@ function App() {
   const doneHCt = dH.filter(h => isDone(h, selDate)).length;
   const isToday = selDate === tk();
   const travelDays = data.travelDays || [];
-  const routineMode = travelDays.includes(selDate) ? "travel" : "home";
+  const travelEntryFor = d => travelDays.find(t => t && t.date === d) || null;
+  const routineMode = travelEntryFor(selDate) ? "travel" : "home";
   const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
     if (impFilter !== "all" && h.importance !== impFilter) return false;
@@ -2710,6 +2733,7 @@ function App() {
         goals: [newGoal, ...(data.goals || []).filter(g => g && g.text)],
         habits: [...newHabits, ...(data.habits || []).filter(h => h && h.text)],
         userIntent: onbIntent.trim(),
+        homeLocation: onbHome.trim() || data.homeLocation || "",
         onboardingComplete: true
       });
     };
@@ -2740,11 +2764,11 @@ function App() {
       }
     }, children));
 
-    // Progress dots for steps 0..5 (6 total)
+    // Progress dots for steps 0..6 (7 total)
     const progressBar = React.createElement("div", {
       key: "prog",
       style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 18 }
-    }, [0,1,2,3,4,5].map(i => React.createElement("div", {
+    }, [0,1,2,3,4,5,6].map(i => React.createElement("div", {
       key: "d" + i,
       style: {
         width: i === onboardStep ? 22 : 8,
@@ -2757,7 +2781,7 @@ function App() {
 
     const skipBtn = React.createElement("button", {
       key: "skip",
-      onClick: () => save({ ...data, onboardingComplete: true, userIntent: onbIntent.trim() }),
+      onClick: () => save({ ...data, onboardingComplete: true, userIntent: onbIntent.trim(), homeLocation: onbHome.trim() || data.homeLocation || "" }),
       style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 12, cursor: "pointer", padding: "6px 10px" }
     }, "Skip for now");
 
@@ -2854,8 +2878,44 @@ function App() {
       ]);
     }
 
-    // STEP 2 — Intent capture
+    // STEP 2 — Where is home? (location anchor for travel-day routines)
     if (onboardStep === 2) {
+      const homeReady = onbHome.trim().length > 0;
+      return onbShell([
+        progressBar,
+        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "🏠"),
+        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Where is home?"),
+        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } }, "Your baseline location. We'll use it to tailor your routine and split home vs. travel-day habits."),
+        React.createElement("input", {
+          key: "hin",
+          type: "text",
+          value: onbHome,
+          onChange: e => setOnbHome(e.target.value),
+          placeholder: "City, neighborhood, or address",
+          style: {
+            width: "100%",
+            padding: "11px 12px",
+            fontSize: 14,
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            marginBottom: 14,
+            outline: "none",
+            boxSizing: "border-box",
+            background: "#fff",
+            color: "#1f2937"
+          }
+        }),
+        React.createElement("div", { key: "hint", style: { fontSize: 11.5, color: "#6b7280", textAlign: "center", marginBottom: 18, fontStyle: "italic" } }, "You can change this later and assign a location to each travel day on the calendar."),
+        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
+          secondaryBtn("Back", () => setOnboardStep(1)),
+          primaryBtn("Continue", () => setOnboardStep(3), { disabled: !homeReady })
+        ),
+        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
+      ]);
+    }
+
+    // STEP 3 — Intent capture
+    if (onboardStep === 3) {
       return onbShell([
         progressBar,
         React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "✨"),
@@ -2884,15 +2944,15 @@ function App() {
           }
         }),
         React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(1)),
-          primaryBtn("Continue", () => setOnboardStep(3))
+          secondaryBtn("Back", () => setOnboardStep(2)),
+          primaryBtn("Continue", () => setOnboardStep(4))
         ),
         React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
       ]);
     }
 
-    // STEP 3 — First goal
-    if (onboardStep === 3) {
+    // STEP 4 — First goal
+    if (onboardStep === 4) {
       const goalReady = onbGoalText.trim().length > 0;
       return onbShell([
         progressBar,
@@ -2948,15 +3008,15 @@ function App() {
         }),
 
         React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(2)),
-          primaryBtn("Continue", () => setOnboardStep(4), { disabled: !goalReady })
+          secondaryBtn("Back", () => setOnboardStep(3)),
+          primaryBtn("Continue", () => setOnboardStep(5), { disabled: !goalReady })
         ),
         React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
       ]);
     }
 
-    // STEP 4 — First habits
-    if (onboardStep === 4) {
+    // STEP 5 — First habits
+    if (onboardStep === 5) {
       const addHabit = () => {
         const t = onbHabitDraft.trim();
         if (!t) return;
@@ -3066,15 +3126,15 @@ function App() {
         })) : React.createElement("div", { key: "empty", style: { fontSize: 12, color: "#9ca3af", textAlign: "center", marginBottom: 18, fontStyle: "italic" } }, "No habits yet. Add at least one to continue."),
 
         React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(3)),
-          primaryBtn("Continue", () => setOnboardStep(5), { disabled: !hasHabit })
+          secondaryBtn("Back", () => setOnboardStep(4)),
+          primaryBtn("Continue", () => setOnboardStep(6), { disabled: !hasHabit })
         ),
         React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
       ]);
     }
 
-    // STEP 5 — Ready
-    if (onboardStep === 5) {
+    // STEP 6 — Ready
+    if (onboardStep === 6) {
       const habitCount = onbHabits.length;
       return onbShell([
         progressBar,
@@ -3086,7 +3146,7 @@ function App() {
           ". Show up tomorrow."
         ),
         React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(4)),
+          secondaryBtn("Back", () => setOnboardStep(5)),
           primaryBtn("Enter Verrocchio", finishOnboarding)
         )
       ]);
@@ -3336,11 +3396,33 @@ function App() {
     const mo = sd.getMonth();
     const first = new Date(yr, mo, 1).getDay();
     const dim = new Date(yr, mo + 1, 0).getDate();
-    const tdSet = new Set(data.travelDays || []);
+    // travelDays is now [{date, location}]. Build a map for quick lookup.
+    const tdMap = new Map((data.travelDays || []).map(t => [t.date, t.location || ""]));
+    const tdSet = tdMap; // alias for the grid renderer (checks .has(val))
     const toggleTravel = val => {
-      const next = new Set(data.travelDays || []);
-      if (next.has(val)) next.delete(val); else next.add(val);
-      save({ ...data, travelDays: Array.from(next).sort() });
+      const current = data.travelDays || [];
+      const existing = current.find(t => t.date === val);
+      if (existing) {
+        // Remove this travel day.
+        const next = current.filter(t => t.date !== val);
+        save({ ...data, travelDays: next });
+      } else {
+        // Add with a location, defaulting to home as a sensible starter.
+        const loc = window.prompt("Where will you be on " + val + "?", data.homeLocation || "");
+        if (loc === null) return; // user cancelled
+        const next = [...current, { date: val, location: loc.trim() }]
+          .sort((a, b) => a.date.localeCompare(b.date));
+        save({ ...data, travelDays: next });
+      }
+    };
+    const editTravelLoc = (val) => {
+      const current = data.travelDays || [];
+      const existing = current.find(t => t.date === val);
+      if (!existing) return;
+      const loc = window.prompt("Location for " + val + ":", existing.location || "");
+      if (loc === null) return;
+      const next = current.map(t => t.date === val ? { ...t, location: loc.trim() } : t);
+      save({ ...data, travelDays: next });
     };
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in",
@@ -3494,9 +3576,36 @@ function App() {
       style: { display: "flex", gap: 10, justifyContent: "center", marginTop: 8, fontSize: 10, color: "#6b7280" }
     },
       /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
-        /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#f0f7f0", border: "1px solid #c6dfc6" } }), "Home"),
+        /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#f0f7f0", border: "1px solid #c6dfc6" } }),
+        (data.homeLocation ? "Home \u2014 " + data.homeLocation : "Home")),
       /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
-        /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#ecfeff", border: "1px dashed #67e8f9" } }), "Travel")));
+        /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#ecfeff", border: "1px dashed #67e8f9" } }), "Travel")),
+    // Travel-day location list: tap a row to edit its location, × to remove.
+    (data.travelDays && data.travelDays.length > 0) ? /*#__PURE__*/React.createElement("div", {
+      style: { marginTop: 10, paddingTop: 8, borderTop: "1px solid #e5e7eb" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }
+      }, "Travel locations"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }
+      },
+        (data.travelDays || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(t => /*#__PURE__*/React.createElement("div", {
+          key: "tr-" + t.date,
+          style: { display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#0891b2", minWidth: 72 } }, t.date),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => editTravelLoc(t.date),
+            style: { flex: 1, textAlign: "left", background: "transparent", border: "none", fontSize: 11, color: t.location ? "#1f2937" : "#9ca3af", fontStyle: t.location ? "normal" : "italic", cursor: "pointer", padding: "2px 0" }
+          }, t.location || "Tap to set location"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => toggleTravel(t.date),
+            style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
+          }, "\u00D7")
+        ))
+      )
+    ) : null);
   })())), swipeFeedback && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -3622,17 +3731,54 @@ function App() {
     const titleStyle = { fontFamily: "'Lora',serif", fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 };
     const subTitleStyle = { fontSize: 12, color: "#9ca3af", marginBottom: 12 };
 
-    const reviewedPill = (k, label, onUndo) => /*#__PURE__*/React.createElement("div", {
-      key: k,
-      style: { display: "flex", alignItems: "center", gap: 10, background: "#f0f7f0", border: "1px solid #c6dfc6", borderRadius: 10, padding: "10px 14px", marginBottom: 10 }
-    },
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "\u2713"),
-      /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "#1f2937" } }, label),
-      /*#__PURE__*/React.createElement("button", {
-        onClick: onUndo,
-        style: { background: "transparent", border: "none", color: "#6b7280", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "2px 6px" }
-      }, "Undo")
-    );
+    /* A reviewed-state pill.
+       - Single tap: expand inline to show `detail` (read-only preview).
+       - Long-press (~500ms): open an action sheet built from `actions`.
+       No explicit Undo button — the action sheet is the only way to revert. */
+    const reviewedPill = (k, label, detail, actions) => {
+      const isOpen = expandedPill === k;
+      let pressTimer = null;
+      let longFired = false;
+      const startPress = () => {
+        longFired = false;
+        pressTimer = setTimeout(() => {
+          longFired = true;
+          setPillSheet({ title: label, actions });
+        }, 500);
+      };
+      const endPress = () => {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+      };
+      const cancelPress = () => {
+        if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+        longFired = true; // suppress click after a scroll/move
+      };
+      const handleClick = () => {
+        if (longFired) return;
+        setExpandedPill(isOpen ? null : k);
+      };
+      return /*#__PURE__*/React.createElement("div", {
+        key: k,
+        onClick: handleClick,
+        onMouseDown: startPress, onMouseUp: endPress, onMouseLeave: cancelPress,
+        onTouchStart: startPress, onTouchEnd: endPress, onTouchMove: cancelPress, onTouchCancel: cancelPress,
+        onContextMenu: e => e.preventDefault(),
+        style: {
+          background: "#f0f7f0", border: "1px solid #c6dfc6", borderRadius: 10,
+          padding: "10px 14px", marginBottom: 10, cursor: "pointer",
+          userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "\u2713"),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "#1f2937" } }, label),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", fontWeight: 500 } }, isOpen ? "\u25B2" : "\u25BC")
+        ),
+        isOpen && detail ? /*#__PURE__*/React.createElement("div", {
+          style: { marginTop: 10, paddingTop: 10, borderTop: "1px solid #d8ead8", fontSize: 12, color: "#374151", lineHeight: 1.6 }
+        }, detail) : null
+      );
+    };
 
     // Pinned intention card — only when an intention is saved for today.
     const intentionPinned = intentionSet ? /*#__PURE__*/React.createElement("div", {
@@ -3647,9 +3793,26 @@ function App() {
       }, "Edit")
     ) : null;
 
+    /* Pills collected here and rendered in a group at the bottom, after
+       Today's Progress. Canonical pill order mirrors the card order. */
+    const bottomPills = [];
+
     // Daily Briefing card.
+    if (briefReviewed) {
+      bottomPills.push(reviewedPill(
+        "brief-p",
+        "Daily Briefing reviewed",
+        briefTxt
+          ? /*#__PURE__*/React.createElement("div", { style: { whiteSpace: "pre-wrap" } }, briefTxt)
+          : "No briefing was generated today.",
+        [
+          { label: "Regenerate briefing", onClick: () => { setExpandedPill(null); genBrief(); updateRitual({ briefingReviewed: false }); } },
+          { label: "Undo review", onClick: () => { setExpandedPill(null); updateRitual({ briefingReviewed: false }); } }
+        ]
+      ));
+    }
     const briefingCard = briefReviewed
-      ? reviewedPill("brief-p", "Daily Briefing reviewed", () => updateRitual({ briefingReviewed: false }))
+      ? null
       : /*#__PURE__*/React.createElement("div", { key: "brief", style: cardStyle },
           /*#__PURE__*/React.createElement("div", {
             style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }
@@ -3678,8 +3841,19 @@ function App() {
         );
 
     // Review Yesterday card — quick tap to toggle yesterday's entries.
+    if (yestReviewed) {
+      bottomPills.push(reviewedPill(
+        "yd-p",
+        "Yesterday's habits reviewed",
+        `${yestDone} of ${activeH.length} habits recorded for yesterday.`,
+        [
+          { label: "Edit yesterday in Habits", onClick: () => { setExpandedPill(null); setSelDate(yest); setTab("habits"); } },
+          { label: "Undo review", onClick: () => { setExpandedPill(null); updateRitual({ yesterdayReviewed: false }); } }
+        ]
+      ));
+    }
     const yesterdayCard = yestReviewed
-      ? reviewedPill("yd-p", "Yesterday's habits reviewed", () => updateRitual({ yesterdayReviewed: false }))
+      ? null
       : /*#__PURE__*/React.createElement("div", { key: "yd", style: cardStyle },
           /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
           /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, `Confirm each entry \u2014 ${yestDone} of ${activeH.length} recorded.`),
@@ -3724,8 +3898,19 @@ function App() {
 
     // Review Goals card.
     const goalsList = (data.goals || []).slice(0, 6);
+    if (goalsReviewed) {
+      bottomPills.push(reviewedPill(
+        "g-p",
+        "Goals reviewed",
+        `${(data.goals || []).length} goal${(data.goals || []).length === 1 ? "" : "s"} active.`,
+        [
+          { label: "Open Goals tab", onClick: () => { setExpandedPill(null); setTab("goals"); } },
+          { label: "Undo review", onClick: () => { setExpandedPill(null); updateRitual({ goalsReviewed: false }); } }
+        ]
+      ));
+    }
     const goalsCard = goalsReviewed
-      ? reviewedPill("g-p", "Goals reviewed", () => updateRitual({ goalsReviewed: false }))
+      ? null
       : /*#__PURE__*/React.createElement("div", { key: "g", style: cardStyle },
           /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Your Goals"),
           /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "Are you still moving toward what matters?"),
@@ -3835,18 +4020,10 @@ function App() {
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" } }, s.label)
         ))
       ),
-      // Tips sub-section — collapses into a pill once reviewed.
+      // Tips sub-section — hides entirely once reviewed (pill moves to
+      // the bottom-pills group under Today's Progress).
       tipsReviewed
-        ? /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", alignItems: "center", gap: 10, background: "#f0f7f0", border: "1px solid #c6dfc6", borderRadius: 10, padding: "10px 14px" }
-          },
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "\u2713"),
-            /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "#1f2937" } }, "Tips reviewed"),
-            /*#__PURE__*/React.createElement("button", {
-              onClick: () => updateRitual({ tipsReviewed: false }),
-              style: { background: "transparent", border: "none", color: "#6b7280", fontSize: 11, fontWeight: 600, cursor: "pointer", padding: "2px 6px" }
-            }, "Show again")
-          )
+        ? null
         : /*#__PURE__*/React.createElement(React.Fragment, null,
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }
@@ -3877,13 +4054,63 @@ function App() {
           )
     );
 
+    // Tips pill pushed last so its order at the bottom matches the
+    // canonical card order (briefing → yesterday → goals → tips).
+    if (tipsReviewed) {
+      bottomPills.push(reviewedPill(
+        "tips-p",
+        "Tips reviewed",
+        smartTips.length > 0
+          ? /*#__PURE__*/React.createElement("div", null, smartTips.slice(0, 3).map((t, i) =>
+              /*#__PURE__*/React.createElement("div", { key: "td" + i, style: { marginBottom: 4 } }, t.icon + "  " + t.title)))
+          : "No tips today.",
+        [
+          { label: "Show tips again", onClick: () => { setExpandedPill(null); updateRitual({ tipsReviewed: false }); } }
+        ]
+      ));
+    }
+
+    // Bottom-sheet modal for long-press actions.
+    const sheet = pillSheet ? /*#__PURE__*/React.createElement("div", {
+      onClick: () => setPillSheet(null),
+      style: { position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        onClick: e => e.stopPropagation(),
+        style: { width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", boxShadow: "0 -4px 20px rgba(0,0,0,.2)" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { width: 40, height: 4, background: "#d1d5db", borderRadius: 2, margin: "0 auto 14px" }
+        }),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, textAlign: "center", marginBottom: 12 }
+        }, pillSheet.title),
+        pillSheet.actions.map((a, i) => /*#__PURE__*/React.createElement("button", {
+          key: "act" + i,
+          onClick: () => { a.onClick(); setPillSheet(null); },
+          style: { width: "100%", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 600, color: "#1f2937", marginBottom: 8, cursor: "pointer", textAlign: "center" }
+        }, a.label)),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => setPillSheet(null),
+          style: { width: "100%", background: "transparent", border: "none", padding: "10px", fontSize: 13, color: "#6b7280", cursor: "pointer", marginTop: 4 }
+        }, "Cancel")
+      )
+    ) : null;
+
+    const pillsSection = bottomPills.length > 0 ? /*#__PURE__*/React.createElement("div", {
+      key: "pills",
+      style: { marginTop: 4 }
+    }, bottomPills) : null;
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       briefingCard,
       yesterdayCard,
       goalsCard,
       intentionInput,
-      progressCard
+      progressCard,
+      pillsSection,
+      sheet
     );
   })(), tab === "habits" && (() => {
     const hmap = pastDays(30).reverse().map(day => {
