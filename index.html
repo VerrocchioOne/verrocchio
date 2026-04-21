@@ -9,7 +9,7 @@
 <title>Verrocchio</title>
 <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAABmJLR0QA/wD/AP+gvaeTAAACGUlEQVRIiWP8+vUFAy0BE01NH7VgUFjAQlDFh88ff/78hVWKnZ1NgJefUgsmLpp5/MJprFKWBqb12WX4tQ/9OGDElZP//fu398QhIk1xtrBjYsLuVpxx8Ofv3975U4m0wN7Umo1UC6CAUdTUxUGd49+TC5sPPIanJWYZQx8HWfZfT4+uO/v0D14DCMXB/y/Mcu5RfmGZrnqcCFepeIVExfj46nJ+/UtAPxFxwCygbq0pyfbnxcWzN17/Y2BgYGDiU7bUluX69/ry2asv/jAw4I0DLBbsPnYAJfRZtbOa6/yEvu6bnt11/jsDA4tO+IQuF9GvJ/sT5pz4iqSxODHb1coBzTQikunvmwfOvfrHyG1qosfFwMDAomJjIMr0//OJUxe+EtRLXD74c/PksSd/mbi1LYw4GVmVLS2FmP59OLnvxg8i9BKX0f4+PnLg2R8mLgNrTR5NQ1NRpn8vzx6+gr18QgdY4uDZqxdX79xAU8YtZWihwPv71YMXvAryHD8eXD59+8s/NI3aKhpSYhJogij5oHpC69mrF7A6hEnEq7MpQZtTUICd8e/TzV3TVt/DkUKNtQ1aC6oRGnH4DB38e3ty/+1fjLwC/Ix/7p46+oBg+ocBwsU1FPx/d3jzfIG7Qkz/P189/gI9dKhgAcP/z3f2LrtDtHIYQInk89cuvfnwjmQzUIGIgJChlh52C2gBhn6NNmrBwFsAAPfozWvZqTUYAAAAAElFTkSuQmCC">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -26,13 +26,45 @@ select{-webkit-appearance:none;appearance:none}
 textarea{resize:vertical}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
-@keyframes blockDrop{0%{opacity:0;transform:translateY(-22px) scale(.85)}70%{opacity:1;transform:translateY(2px) scale(1.02)}100%{opacity:1;transform:translateY(0) scale(1)}}
-@keyframes splashFade{0%{opacity:0}8%{opacity:1}88%{opacity:1}100%{opacity:0;transform:scale(.98)}}
 .fade-in{animation:fadeIn .2s ease forwards}
 .pulsing{animation:pulse 1.5s ease infinite}
-.splash-stack{display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:20px;animation:splashFade 1.7s ease forwards}
-.splash-row{display:flex;gap:4px}
-.splash-block{width:22px;height:22px;border-radius:3px;background:linear-gradient(135deg,#2d5a2d,#3d7a3d);box-shadow:0 2px 4px rgba(45,90,45,.3);opacity:0;animation:blockDrop .45s cubic-bezier(.34,1.56,.64,1) forwards}
+/* ── Verrocchio welcome splash (splashv2) ──
+   Full-bleed brand animation: blocks stack bottom-to-top, stick-figure
+   climbs the pyramid with a slip-and-recover moment, summits in a
+   victory pose, fades out; "Verrocchio" wordmark appears above the
+   pyramid, the V drops into the pyramid's bottom three blocks, and
+   "Achieve Anything" shuffles in below. Mounted while splashPhase ==
+   "loading" on the welcome screen — see setSplashPhase timer. */
+.splashv2{position:fixed;inset:0;background:#faf8f3;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;overflow:hidden;z-index:9999}
+.splashv2 .stage{position:relative;flex:0 0 auto;width:360px;height:340px}
+.splashv2 .pyramid{position:absolute;top:80px;left:50%;width:200px;height:112px;transform:translateX(-50%)}
+.splashv2 .block{position:absolute;left:50%;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);transform:translate(-50%,-44px);opacity:0;animation:splashv2Stack .62s cubic-bezier(.34,1.35,.64,1) forwards;will-change:transform,opacity,filter}
+.splashv2 .b1{bottom:0;width:200px;animation-delay:.05s}
+.splashv2 .b2{bottom:28px;width:150px;animation-delay:.22s}
+.splashv2 .b3{bottom:56px;width:100px;animation-delay:.39s}
+.splashv2 .b4{bottom:84px;width:50px;animation-delay:.56s}
+@keyframes splashv2Stack{0%{transform:translate(-50%,-44px);opacity:0;filter:blur(3px)}55%{opacity:1;filter:blur(.4px)}100%{transform:translate(-50%,0);opacity:1;filter:blur(0)}}
+.splashv2 .climber{position:absolute;left:48px;top:156px;width:28px;height:36px;overflow:visible;stroke:#2d5a2d;fill:#2d5a2d;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:splashv2Climb 3.4s cubic-bezier(.5,.05,.5,.95) 1.25s forwards,splashv2ClimberOff .4s ease-out 4.9s forwards;will-change:transform,opacity;z-index:3;pointer-events:none}
+@keyframes splashv2ClimberOff{0%{opacity:1}100%{opacity:0}}
+@keyframes splashv2Climb{0%{opacity:0;transform:translate(0,0)}3%{opacity:1;transform:translate(0,0)}6%{transform:translate(0,0)}9%{transform:translate(2px,-5px)}13%{transform:translate(8px,-20px)}17%{transform:translate(24px,-28px)}20%{transform:translate(38px,-26px)}25%{transform:translate(38px,-26px)}28%{transform:translate(40px,-32px)}32%{transform:translate(46px,-44px)}35%{transform:translate(44px,-38px)}38%{transform:translate(45px,-42px)}42%{transform:translate(52px,-54px)}45%{transform:translate(63px,-54px)}51%{transform:translate(63px,-54px)}54%{transform:translate(65px,-60px)}59%{transform:translate(71px,-72px)}64%{transform:translate(80px,-82px)}68%{transform:translate(88px,-82px)}74%{transform:translate(88px,-82px)}77%{transform:translate(90px,-88px)}83%{transform:translate(96px,-104px)}89%{transform:translate(108px,-112px)}93%{transform:translate(118px,-110px)}100%{opacity:1;transform:translate(118px,-110px)}}
+.splashv2 .climber .pose{opacity:0}
+.splashv2 .climber .pose.mount{animation:splashv2Mount 3.4s linear 1.25s forwards}
+.splashv2 .climber .pose.reach{animation:splashv2Reach 3.4s linear 1.25s forwards}
+.splashv2 .climber .pose.victory{animation:splashv2Victory 3.4s linear 1.25s forwards}
+@keyframes splashv2Mount{0%{opacity:1}5%{opacity:1}6%{opacity:0}19%{opacity:0}21%{opacity:1}25%{opacity:1}26%{opacity:0}44%{opacity:0}46%{opacity:1}51%{opacity:1}52%{opacity:0}67%{opacity:0}69%{opacity:1}74%{opacity:1}75%{opacity:0}100%{opacity:0}}
+@keyframes splashv2Reach{0%{opacity:0}5%{opacity:0}6%{opacity:1}19%{opacity:1}20%{opacity:0}25%{opacity:0}26%{opacity:1}44%{opacity:1}45%{opacity:0}51%{opacity:0}52%{opacity:1}67%{opacity:1}68%{opacity:0}74%{opacity:0}75%{opacity:1}93%{opacity:1}94%{opacity:0}100%{opacity:0}}
+@keyframes splashv2Victory{0%{opacity:0}92%{opacity:0}95%{opacity:1}100%{opacity:1}}
+.splashv2 .brand-wordmark{position:absolute;top:30px;left:50%;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-style:normal;font-size:39px;line-height:1;color:#2d5a2d;letter-spacing:.005em;white-space:nowrap;opacity:0;transform:translate(-50%,6px);animation:splashv2BrandIn .7s cubic-bezier(.22,1,.36,1) 5.1s forwards;will-change:transform,opacity,filter;pointer-events:none}
+@keyframes splashv2BrandIn{0%{opacity:0;transform:translate(-50%,6px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,0);filter:blur(0)}}
+.splashv2 .v-mark{position:absolute;top:112px;left:50%;transform:translate(-50%,-4px);width:100px;height:78px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:88px;line-height:1;color:#f4efe4;text-shadow:0 2px 10px rgba(0,0,0,.28);opacity:0;animation:splashv2VFade .7s cubic-bezier(.22,1,.36,1) 5.95s forwards;will-change:transform,opacity,filter;pointer-events:none}
+@keyframes splashv2VFade{0%{opacity:0;transform:translate(-50%,4px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,-4px);filter:blur(0)}}
+.splashv2 .a-mark{position:absolute;top:198px;left:50%;width:14px;height:28px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:22px;line-height:1;color:#111;opacity:0;transform:translate(-50%,6px) scale(.82);animation:splashv2AMove 2.4s cubic-bezier(.65,0,.35,1) 6.75s forwards;will-change:transform,opacity,filter}
+@keyframes splashv2AMove{0%{opacity:0;transform:translate(-50%,6px) scale(.82);filter:blur(2px)}18%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}40%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}55%{filter:blur(.5px)}70%{opacity:1;transform:translate(calc(-50% - 82px),0) scale(1);filter:blur(0)}100%{opacity:1;transform:translate(calc(-50% - 82px),0) scale(1);filter:blur(0)}}
+.splashv2 .tagline{position:absolute;top:198px;left:calc(50% - 75px);height:28px;display:flex;align-items:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;font-weight:700;color:#111;letter-spacing:0;white-space:nowrap;pointer-events:none}
+.splashv2 .tagline .char{display:inline-block;opacity:0;transform:translate(6px,0);filter:blur(2px);animation:splashv2CharIn .5s cubic-bezier(.22,1,.36,1) forwards;will-change:transform,opacity,filter}
+.splashv2 .tagline .char.space{width:.26em}
+@keyframes splashv2CharIn{0%{opacity:0;transform:translate(6px,0);filter:blur(2px)}100%{opacity:1;transform:translate(0,0);filter:blur(0)}}
+@media (prefers-reduced-motion: reduce){.splashv2 .block,.splashv2 .climber,.splashv2 .climber .pose,.splashv2 .v-mark,.splashv2 .a-mark,.splashv2 .tagline .char,.splashv2 .brand-wordmark{animation-duration:.01s!important}}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 .hrow:hover .del-btn,.hrow:hover .edit-btn,.ecard:hover .e-del,.ecard:hover .e-edit{opacity:1!important}
@@ -2529,7 +2561,9 @@ function App() {
     const willShowWelcome = authUser !== undefined && (authUser !== null || demoMode);
     if (!willShowWelcome) return;
     if (splashPhase !== "loading") return;
-    const t = setTimeout(() => setSplashPhase("quote"), 1700);
+    // Splash animation runs ~9.4s (last tagline char lands at 9.42s).
+    // Transition to the quote once the full brand lockup has landed.
+    const t = setTimeout(() => setSplashPhase("quote"), 9400);
     return () => clearTimeout(t);
   }, [hasSeenWelcome, splashPhase, authUser, demoMode]);
 
@@ -2757,38 +2791,71 @@ function App() {
   }
 
   // Welcome / loading page — shown after auth until user clicks Continue.
-  // Phase 1: animated pyramid blocks + wordmark. Phase 2: daily quote.
+  // Phase 1: full-bleed Verrocchio brand splash animation.
+  //          (pyramid stacks → climber ascends → "Verrocchio" + V + "Achieve Anything".)
+  //          See splash-animation.html for the standalone preview.
+  // Phase 2: daily quote card.
   if (!hasSeenWelcome) {
-    // Pyramid layout — 4 rows stacking up, forming a V silhouette.
-    // Each block staggers on with a blockDrop animation.
-    const pyramidRows = [
-      [0, 1, 2, 3],       // bottom (4 blocks)
-      [4, 5, 6],          // (3)
-      [7, 8],             // (2)
-      [9]                 // top (1)
-    ];
-    const totalBlocks = 10;
-    const delayPer = 0.09;
-    const pyramid = React.createElement("div", {
-      key: "pyr", className: "splash-stack"
-    }, pyramidRows.map((row, rIdx) =>
-      React.createElement("div", { key: "r" + rIdx, className: "splash-row" },
-        row.map(i => React.createElement("div", {
-          key: "b" + i,
-          className: "splash-block",
-          // Blocks appear bottom-up, so later rows (higher up visually,
-          // but we render bottom row first, need reverse stagger).
-          style: { animationDelay: ((totalBlocks - 1 - i) * delayPer) + "s" }
-        }))
-      )
-    ));
-
     if (splashPhase === "loading") {
-      return onboardShell([
-        pyramid,
-        React.createElement("div", { key: "lg", style: { fontSize: 30, fontWeight: 800, letterSpacing: "0.10em", color: "#1f2937", marginBottom: 4, animation: "fadeIn .6s ease .5s both" } }, "VERROCCHIO"),
-        React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", fontStyle: "italic", animation: "fadeIn .6s ease .9s both" } }, "Achieve Anything")
-      ]);
+      // Tagline shuffles in character-by-character, each char delayed
+      // proportionally — see the matching charIn keyframe timing.
+      const TAGLINE_START = 8.25;
+      const CHAR_STAGGER  = 0.045;
+      const taglineChars = [..."chieve Anything"].map((ch, i) =>
+        React.createElement("span", {
+          key: "c" + i,
+          className: "char" + (ch === " " ? " space" : ""),
+          style: { animationDelay: (TAGLINE_START + i * CHAR_STAGGER) + "s" }
+        }, ch === " " ? "\u00A0" : ch)
+      );
+      // Three synced SVG poses — mount (standing), reach (pulling up),
+      // victory (arms raised at the summit). All three share a single
+      // SVG; CSS crossfades opacity in lockstep with the climb keyframes.
+      const poseMount = React.createElement("g", { key: "mount", className: "pose mount" },
+        React.createElement("circle", { cx: 14, cy: 5.5, r: 3.4, stroke: "none" }),
+        React.createElement("line", { x1: 14, y1: 8.9, x2: 14, y2: 22 }),
+        React.createElement("line", { x1: 14, y1: 12, x2: 9.5, y2: 20 }),
+        React.createElement("line", { x1: 14, y1: 12, x2: 18.5, y2: 20 }),
+        React.createElement("line", { x1: 14, y1: 22, x2: 11, y2: 34 }),
+        React.createElement("line", { x1: 14, y1: 22, x2: 17, y2: 34 })
+      );
+      const poseReach = React.createElement("g", { key: "reach", className: "pose reach" },
+        React.createElement("circle", { cx: 14, cy: 5.5, r: 3.4, stroke: "none" }),
+        React.createElement("line", { x1: 14, y1: 8.9, x2: 13, y2: 21.5 }),
+        React.createElement("line", { x1: 14, y1: 11.5, x2: 19, y2: 3 }),
+        React.createElement("line", { x1: 19, y1: 3, x2: 22, y2: -2 }),
+        React.createElement("line", { x1: 14, y1: 11.5, x2: 8.5, y2: 14 }),
+        React.createElement("line", { x1: 8.5, y1: 14, x2: 11, y2: 19 }),
+        React.createElement("line", { x1: 13, y1: 21.5, x2: 8.5, y2: 26 }),
+        React.createElement("line", { x1: 8.5, y1: 26, x2: 11, y2: 33 }),
+        React.createElement("line", { x1: 13, y1: 21.5, x2: 17, y2: 28 }),
+        React.createElement("line", { x1: 17, y1: 28, x2: 19, y2: 34 })
+      );
+      const poseVictory = React.createElement("g", { key: "victory", className: "pose victory" },
+        React.createElement("circle", { cx: 14, cy: 5.5, r: 3.4, stroke: "none" }),
+        React.createElement("line", { x1: 14, y1: 8.9, x2: 14, y2: 22.5 }),
+        React.createElement("line", { x1: 14, y1: 12, x2: 6, y2: 1 }),
+        React.createElement("line", { x1: 14, y1: 12, x2: 22, y2: 1 }),
+        React.createElement("line", { x1: 14, y1: 22.5, x2: 10, y2: 34 }),
+        React.createElement("line", { x1: 14, y1: 22.5, x2: 18, y2: 34 })
+      );
+      return React.createElement("div", { className: "splashv2" },
+        React.createElement("div", { className: "stage" },
+          React.createElement("div", { className: "pyramid" },
+            React.createElement("div", { className: "block b1" }),
+            React.createElement("div", { className: "block b2" }),
+            React.createElement("div", { className: "block b3" }),
+            React.createElement("div", { className: "block b4" })
+          ),
+          React.createElement("svg", { className: "climber", viewBox: "0 0 28 36", "aria-hidden": "true" },
+            poseMount, poseReach, poseVictory
+          ),
+          React.createElement("div", { className: "brand-wordmark" }, "Verrocchio"),
+          React.createElement("div", { className: "v-mark" }, "V"),
+          React.createElement("div", { className: "a-mark" }, "A"),
+          React.createElement("div", { className: "tagline", "aria-label": "Achieve Anything" }, taglineChars)
+        )
+      );
     }
 
     const allQuotes = (data.quotes && data.quotes.length ? data.quotes : PRESET_QUOTES);
