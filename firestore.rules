@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// Verrocchio Firestore security rules.
+//
+// Threat model: the browser client holds the Firebase config and a user's
+// auth token, which means a technically motivated user CAN open devtools
+// and issue arbitrary Firestore queries with their own credentials. The
+// app-level code at users/<uid> is the *happy path* — these rules are the
+// actual enforcement and make cross-user reads/writes impossible.
+//
+// Invariants enforced:
+//   1. Only a signed-in user can read or write their OWN user doc.
+//   2. No user (including the admin) can read any other user's doc.
+//   3. Any path not explicitly matched is denied by default.
+//
+// Deploy: paste this into Firebase Console → Firestore Database → Rules
+// and click Publish. Or run `firebase deploy --only firestore:rules` if
+// the Firebase CLI is set up locally.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Every user's workspace (habits, goals, journal, etc.) lives at
+    // users/<uid>. Only the owner of that uid may touch it. This also
+    // covers any nested subcollections the app may add later under the
+    // user's doc (e.g. users/<uid>/history/...).
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                        && request.auth.uid == userId;
+
+      match /{document=**} {
+        allow read, write: if request.auth != null
+                          && request.auth.uid == userId;
+      }
+    }
+
+    // Everything else is denied. Add narrower rules here later if/when
+    // the app introduces genuinely shared data (e.g. a public community
+    // feed) — never weaken the users/<uid> rule above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

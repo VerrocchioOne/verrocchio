@@ -18,10 +18,135 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+:root{--accent:#2d5a2d;--accent-2:#3d7a3d;--app-bg:#f8f7f4;--app-text:#1f2937}
 html{height:100%;-webkit-text-size-adjust:100%}
-body{background:#f8f7f4;font-family:system-ui,-apple-system,sans-serif;color:#1f2937;min-height:100%;min-height:-webkit-fill-available;overscroll-behavior:none}
+body{background:var(--app-bg);font-family:system-ui,-apple-system,sans-serif;color:var(--app-text);min-height:100%;min-height:-webkit-fill-available;overscroll-behavior:none}
+/* Dark mode: flip base surfaces + invert card backgrounds. Cards stay
+   legible because all card content uses gray-100/gray-700 text which we
+   also remap. Hard-coded dark theme, not a full auto-inversion.
+   The remapping uses inline-style-attribute substring selectors because
+   nearly every component in the file uses React inline styles with hex
+   literals — React normalizes those to rgb() in the DOM, so each
+   override matches a specific rgb triple. If you add new surfaces in
+   light mode, add a matching rule here. */
+body.dark{--app-bg:#0b0d0f;--app-text:#e5e7eb}
+body.dark .splashv2{background:#0b0d0f}
+/* ── neutral surface → dark card ── */
+body.dark [style*="background: rgb(255, 255, 255)"]{background:#17191c!important}
+body.dark [style*="background: rgb(249, 250, 251)"]{background:#1c1f23!important}
+body.dark [style*="background: rgb(243, 244, 246)"]{background:#22262a!important}
+body.dark [style*="background: rgb(248, 247, 244)"]{background:#0b0d0f!important}
+/* ── green tints (brand) ── */
+body.dark [style*="background: rgb(240, 247, 240)"]{background:#182418!important}
+body.dark [style*="background: rgb(240, 253, 244)"]{background:#162216!important}
+body.dark [style*="background: rgb(245, 250, 245)"]{background:#182418!important}
+body.dark [style*="background: rgb(198, 223, 198)"]{background:#2a3d2a!important}
+/* ── amber / warning tints ── */
+body.dark [style*="background: rgb(255, 251, 235)"]{background:#2a220f!important}
+body.dark [style*="background: rgb(255, 247, 237)"]{background:#2a1e0f!important}
+body.dark [style*="background: rgb(254, 243, 199)"]{background:#332810!important}
+body.dark [style*="background: rgb(254, 249, 195)"]{background:#332e0f!important}
+/* ── red / danger tints ── */
+body.dark [style*="background: rgb(254, 242, 242)"]{background:#2a1414!important}
+body.dark [style*="background: rgb(254, 226, 226)"]{background:#3a1a1a!important}
+/* ── cyan / travel tints ── */
+body.dark [style*="background: rgb(240, 249, 255)"]{background:#0f2231!important}
+body.dark [style*="background: rgb(236, 254, 255)"]{background:#0f2631!important}
+body.dark [style*="background: rgb(207, 250, 254)"]{background:#123340!important}
+body.dark [style*="background: rgb(186, 230, 253)"]{background:#153a4d!important}
+/* ── blue tints ── */
+body.dark [style*="background: rgb(239, 246, 255)"]{background:#0f1a31!important}
+body.dark [style*="background: rgb(219, 234, 254)"]{background:#1a2540!important}
+/* ── purple / violet tints ── */
+body.dark [style*="background: rgb(245, 243, 255)"]{background:#1f1a31!important}
+body.dark [style*="background: rgb(221, 214, 254)"]{background:#2d2540!important}
+/* ── pink / rose tints ── */
+body.dark [style*="background: rgb(253, 244, 255)"]{background:#2a1531!important}
+body.dark [style*="background: rgb(240, 171, 252)"]{background:#3d2040!important}
+/* ── teal tints ── */
+body.dark [style*="background: rgb(240, 253, 250)"]{background:#0f2626!important}
+/* ── light gradients → dark gradients (hand-mapped to the 2 specific
+   gradients actually used by the XP/Level bar and the Insights card) ── */
+body.dark [style*="linear-gradient(135deg, rgb(240, 253, 244), rgb(240, 247, 240))"]{background:linear-gradient(135deg,#162216,#182418)!important}
+body.dark [style*="linear-gradient(135deg, rgb(240, 247, 240), rgb(245, 250, 245))"]{background:linear-gradient(135deg,#182418,#1a2a1a)!important}
+body.dark [style*="linear-gradient(180deg, rgb(248, 247, 244) 0%, rgb(239, 236, 229) 100%)"]{background:linear-gradient(180deg,#0b0d0f 0%,#1a1c1f 100%)!important}
+body.dark [style*="linear-gradient(90deg, rgb(254, 243, 199), rgb(253, 230, 138))"]{background:linear-gradient(90deg,#332810,#3d2f10)!important}
+/* ── borders: flip near-white / light gray borders to dark-mode gray ── */
+body.dark [style*="border: 1px solid rgb(243, 244, 246)"]{border-color:#2a2f34!important}
+body.dark [style*="border: 1px solid rgb(229, 231, 235)"]{border-color:#2a2f34!important}
+body.dark [style*="border: 1px solid rgb(198, 223, 198)"]{border-color:#2a3d2a!important}
+body.dark [style*="border: 1px solid rgb(186, 230, 253)"]{border-color:#153a4d!important}
+body.dark [style*="border: 1px solid rgb(253, 186, 116)"]{border-color:#4d2810!important}
+body.dark [style*="border: 1px solid rgb(254, 202, 202)"]{border-color:#4d1a1a!important}
+body.dark [style*="border: 1px solid rgb(253, 211, 77)"]{border-color:#4d3510!important}
+body.dark [style*="border-bottom: 1px solid rgb(243, 244, 246)"]{border-bottom-color:#2a2f34!important}
+body.dark [style*="border-top: 1px solid rgb(229, 231, 235)"]{border-top-color:#2a2f34!important}
+body.dark [style*="border-bottom: 1px solid rgb(252, 211, 77)"]{border-bottom-color:#4d3510!important}
+/* ── text colors: light-mode dark grays → dark-mode near-white ── */
+body.dark [style*="color: rgb(31, 41, 55)"]{color:#e5e7eb!important}
+body.dark [style*="color: rgb(17, 24, 39)"]{color:#f3f4f6!important}
+body.dark [style*="color: rgb(55, 65, 81)"]{color:#d1d5db!important}
+body.dark [style*="color: rgb(75, 85, 99)"]{color:#d1d5db!important}
+body.dark [style*="color: rgb(107, 114, 128)"]{color:#9ca3af!important}
+body.dark [style*="color: rgb(156, 163, 175)"]{color:#9ca3af!important}
+body.dark [style*="color: rgb(209, 213, 219)"]{color:#6b7280!important}
+/* ── accents on tinted cards: keep brand text readable on tinted dark bg ── */
+body.dark [style*="color: rgb(45, 90, 45)"]:not([data-brand]){color:#9fdf9f!important}
+body.dark [style*="color: rgb(8, 145, 178)"]{color:#7dd3fc!important}
+body.dark [style*="color: rgb(120, 53, 15)"]{color:#fcd34d!important}
+body.dark [style*="color: rgb(153, 27, 27)"]{color:#fca5a5!important}
+body.dark [style*="color: rgb(194, 65, 12)"]{color:#fdba74!important}
+body.dark [style*="color: rgb(217, 119, 6)"]{color:#fbbf24!important}
+/* ── dashed travel-day outlines: stay visible on dark calendar ── */
+body.dark [style*="dashed rgb(103, 232, 249)"]{border-color:#67e8f9!important}
+/* Custom accent: remap the default green button background / accent
+   colors to the user's chosen --accent value. Uses inline-style
+   attribute substring matching because most components hard-code
+   "#2d5a2d" as inline style. Anything marked `data-brand="1"`
+   stays on the canonical Verrocchio green — the demo badge and
+   splash/brand artwork explicitly opt out of recoloring. */
+body.accent-custom [style*="background: rgb(45, 90, 45)"]:not([data-brand]){background:var(--accent)!important}
+body.accent-custom [style*="color: rgb(45, 90, 45)"]:not([data-brand]){color:var(--accent)!important}
+body.accent-custom [style*="stroke: rgb(45, 90, 45)"]:not([data-brand]){stroke:var(--accent)!important}
+body.accent-custom [style*="border: 1px solid rgb(45, 90, 45)"]:not([data-brand]){border-color:var(--accent)!important}
 ::placeholder{color:#9ca3af}
 input,select,textarea{outline:none;font-family:inherit;-webkit-appearance:none;border-radius:0}
+/* ── Duration filter slider (Habits tab "Max time" control) ──
+   Native <input type="range"> renders a rectangular track by default.
+   We override with a pill-shaped track on both WebKit and Firefox so
+   the slider matches the rest of the pill-shaped filter chrome.
+   The thumb is a 14px circle in the same cyan accent so drag affordance
+   stays clear. accentColor on the element still tints the filled
+   portion on WebKit (via ::-webkit-slider-runnable-track inheritance)
+   and on Firefox (::-moz-range-progress). */
+/* Dual-thumb duration range slider. Two <input type="range"> elements
+   are absolutely stacked over a shared wrapper; their native tracks are
+   hidden and a custom gray track + accent-colored fill is drawn between
+   the two thumb positions. The inputs themselves get pointer-events:none
+   on the track so neither one steals the wrong thumb — only the thumbs
+   have pointer-events:auto. Thumbs use var(--accent) so they follow the
+   user's selected accent color (Verrocchio green by default). */
+.dur-slider-wrap{position:relative;height:18px;flex:1;min-width:80px}
+.dur-slider-wrap .dur-track{position:absolute;top:50%;transform:translateY(-50%);left:0;right:0;height:6px;border-radius:9999px;background:#e5e7eb;pointer-events:none}
+.dur-slider-wrap .dur-fill{position:absolute;top:50%;transform:translateY(-50%);height:6px;border-radius:9999px;background:var(--accent,#2d5a2d);pointer-events:none}
+.dur-slider-wrap input[type=range].dur-slider{position:absolute;top:0;left:0;width:100%;height:18px;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;margin:0;padding:0}
+.dur-slider-wrap input[type=range].dur-slider:focus{outline:none}
+.dur-slider-wrap input[type=range].dur-slider::-webkit-slider-runnable-track{height:6px;background:transparent;border:none}
+.dur-slider-wrap input[type=range].dur-slider::-moz-range-track{height:6px;background:transparent;border:none}
+.dur-slider-wrap input[type=range].dur-slider::-moz-range-progress{background:transparent}
+.dur-slider-wrap input[type=range].dur-slider::-webkit-slider-thumb{pointer-events:auto;-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent,#2d5a2d);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-top:-5px;cursor:pointer;position:relative;z-index:2}
+.dur-slider-wrap input[type=range].dur-slider::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:var(--accent,#2d5a2d);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;position:relative;z-index:2}
+body.dark .dur-slider-wrap .dur-track{background:#2a2f36}
+body.dark .dur-slider-wrap input[type=range].dur-slider::-webkit-slider-thumb{border-color:#17191c}
+body.dark .dur-slider-wrap input[type=range].dur-slider::-moz-range-thumb{border-color:#17191c}
+/* Prevent iOS Safari from auto-zooming into inputs on focus (it fires
+   when the input's computed font-size < 16px and the zoom persists
+   AFTER blur — leaving the whole app stuck zoomed-in and forcing the
+   user to pinch back out). Forcing 16px on touch devices avoids that
+   without affecting desktop layouts that use smaller inputs. */
+@media (hover:none) and (pointer:coarse){
+  input,select,textarea{font-size:16px!important}
+}
 select{-webkit-appearance:none;appearance:none}
 textarea{resize:vertical}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -44,26 +169,98 @@ textarea{resize:vertical}
 .splashv2 .b3{bottom:56px;width:100px;animation-delay:.52s}
 .splashv2 .b4{bottom:84px;width:50px;animation-delay:.74s}
 @keyframes splashv2Stack{0%{transform:translate(-50%,-44px);opacity:0;filter:blur(3px)}55%{opacity:1;filter:blur(.4px)}100%{transform:translate(-50%,0);opacity:1;filter:blur(0)}}
-.splashv2 .climber{position:absolute;left:48px;top:156px;width:28px;height:36px;overflow:visible;stroke:#2d5a2d;fill:#2d5a2d;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:splashv2Climb 4.2s cubic-bezier(.5,.05,.5,.95) 1.7s forwards,splashv2ClimberOff .5s ease-out 6.15s forwards;will-change:transform,opacity;z-index:3;pointer-events:none}
+/* Climber — single canonical route. The stick figure's ascent plays
+   out in three deliberate phases that symbolize how a new habit gets
+   built: a slow, halting CRAWL up the bottom two blocks (progress is
+   hard, there's even a small slip); a steadier WALK across the middle
+   using his legs (momentum is established); and a decisive JUMP onto
+   the summit block (the leap that crystallises the habit). The path
+   is keyed by splashv2Climb; splashv2Mount/Reach/Crawl/Victory switch
+   poses in lockstep so the posture matches what the body is doing. */
+.splashv2 .climber{position:absolute;left:48px;top:156px;width:28px;height:36px;overflow:visible;stroke:#2d5a2d;fill:#2d5a2d;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation-name:splashv2Climb,splashv2ClimberOff;animation-duration:4.2s,.5s;animation-timing-function:cubic-bezier(.5,.05,.5,.95),ease-out;animation-delay:1.7s,6.15s;animation-fill-mode:forwards,forwards;will-change:transform,opacity;z-index:3;pointer-events:none}
+/* Contrast overlay: a second, identically-animated climber painted in
+   white and clipped to the pyramid silhouette, so whenever any part of
+   the stick figure crosses a green block that exact body part shows in
+   white. Outside the pyramid the overlay is clipped away and the green
+   base climber shows through against the beige stage. The clip-path is
+   expressed in stage pixels (the wrapper spans the full stage) so it
+   stays put while the climber translates through it. Path is a union
+   of four rectangles — one per block — with the 2px gaps preserved so
+   a limb crossing a gap renders green against the beige, not white. */
+.splashv2 .climber-mask{position:absolute;inset:0;pointer-events:none;z-index:4;clip-path:path("M80,166 H280 V192 H80 Z M105,138 H255 V164 H105 Z M130,110 H230 V136 H130 Z M155,82 H205 V108 H155 Z");-webkit-clip-path:path("M80,166 H280 V192 H80 Z M105,138 H255 V164 H105 Z M130,110 H230 V136 H130 Z M155,82 H205 V108 H155 Z")}
+.splashv2 .climber.white{stroke:#ffffff;fill:#ffffff}
 @keyframes splashv2ClimberOff{0%{opacity:1}100%{opacity:0}}
-@keyframes splashv2Climb{0%{opacity:0;transform:translate(0,0)}3%{opacity:1;transform:translate(0,0)}6%{transform:translate(0,0)}9%{transform:translate(2px,-5px)}13%{transform:translate(8px,-20px)}17%{transform:translate(24px,-28px)}20%{transform:translate(38px,-26px)}25%{transform:translate(38px,-26px)}28%{transform:translate(40px,-32px)}32%{transform:translate(46px,-44px)}35%{transform:translate(44px,-38px)}38%{transform:translate(45px,-42px)}42%{transform:translate(52px,-54px)}45%{transform:translate(63px,-54px)}51%{transform:translate(63px,-54px)}54%{transform:translate(65px,-60px)}59%{transform:translate(71px,-72px)}64%{transform:translate(80px,-82px)}68%{transform:translate(88px,-82px)}74%{transform:translate(88px,-82px)}77%{transform:translate(90px,-88px)}83%{transform:translate(96px,-104px)}89%{transform:translate(108px,-112px)}93%{transform:translate(118px,-110px)}100%{opacity:1;transform:translate(118px,-110px)}}
+/* Three-phase ascent keyed to the habit-building metaphor.
+   Phase 1 (0–46%): CRAWL. Body stays low to the ground — inches up
+     the b1 face with a small slip at 14%, drags across b1, hauls up
+     onto b2. The halting timing sells "progress is hard".
+   Phase 2 (46–70%): WALK. Stands tall and strides up b2 → b3 at a
+     confident cadence; momentum is established.
+   Phase 3 (70–100%): JUMP. Crouch at 74%, launch, arc whose apex
+     sits above b4 at 86%, land on the summit block and hold. */
+@keyframes splashv2Climb{
+  0%{opacity:0;transform:translate(0,0)}
+  3%{opacity:1;transform:translate(0,0)}
+  /* crawl — ground → b1 face, with a slip at 14% */
+  6%{transform:translate(2px,0)}
+  10%{transform:translate(6px,-6px)}
+  14%{transform:translate(5px,-4px)}
+  18%{transform:translate(10px,-14px)}
+  22%{transform:translate(16px,-24px)}
+  /* crawl — across b1 */
+  26%{transform:translate(22px,-26px)}
+  30%{transform:translate(28px,-26px)}
+  /* crawl — b1 face → b2 top */
+  34%{transform:translate(32px,-34px)}
+  38%{transform:translate(38px,-44px)}
+  42%{transform:translate(46px,-52px)}
+  46%{transform:translate(54px,-54px)}
+  /* walk — b2 → b3 with clean strides */
+  50%{transform:translate(60px,-60px)}
+  55%{transform:translate(66px,-68px)}
+  60%{transform:translate(74px,-76px)}
+  65%{transform:translate(82px,-80px)}
+  70%{transform:translate(88px,-82px)}
+  /* jump — crouch, launch, apex above b4, land */
+  74%{transform:translate(90px,-80px)}
+  78%{transform:translate(96px,-94px)}
+  82%{transform:translate(104px,-110px)}
+  86%{transform:translate(112px,-120px)}
+  90%{transform:translate(116px,-116px)}
+  94%{transform:translate(118px,-112px)}
+  96%{transform:translate(118px,-110px)}
+  100%{opacity:1;transform:translate(118px,-110px)}
+}
 .splashv2 .climber .pose{opacity:0}
+.splashv2 .climber .pose.crawl{animation:splashv2Crawl 4.2s linear 1.7s forwards}
 .splashv2 .climber .pose.mount{animation:splashv2Mount 4.2s linear 1.7s forwards}
 .splashv2 .climber .pose.reach{animation:splashv2Reach 4.2s linear 1.7s forwards}
 .splashv2 .climber .pose.victory{animation:splashv2Victory 4.2s linear 1.7s forwards}
-@keyframes splashv2Mount{0%{opacity:1}5%{opacity:1}6%{opacity:0}19%{opacity:0}21%{opacity:1}25%{opacity:1}26%{opacity:0}44%{opacity:0}46%{opacity:1}51%{opacity:1}52%{opacity:0}67%{opacity:0}69%{opacity:1}74%{opacity:1}75%{opacity:0}100%{opacity:0}}
-@keyframes splashv2Reach{0%{opacity:0}5%{opacity:0}6%{opacity:1}19%{opacity:1}20%{opacity:0}25%{opacity:0}26%{opacity:1}44%{opacity:1}45%{opacity:0}51%{opacity:0}52%{opacity:1}67%{opacity:1}68%{opacity:0}74%{opacity:0}75%{opacity:1}93%{opacity:1}94%{opacity:0}100%{opacity:0}}
-@keyframes splashv2Victory{0%{opacity:0}92%{opacity:0}95%{opacity:1}100%{opacity:1}}
+/* Pose windows stay in lockstep with the motion phases:
+   • crawl pose holds 0→46% (body low, hauling up),
+   • mount (standing) alternates with reach (step-up) during 46–70% walk
+     and reappears as a crouch at 72–77% before the leap,
+   • reach covers the jump flight (78–94% — arm extended mid-air),
+   • victory locks in once the feet plant on b4 (95% → end). */
+@keyframes splashv2Crawl{0%{opacity:1}44%{opacity:1}46%{opacity:0}100%{opacity:0}}
+@keyframes splashv2Mount{0%{opacity:0}45%{opacity:0}47%{opacity:1}54%{opacity:1}55%{opacity:0}62%{opacity:0}63%{opacity:1}70%{opacity:1}71%{opacity:0}73%{opacity:1}77%{opacity:1}78%{opacity:0}100%{opacity:0}}
+@keyframes splashv2Reach{0%{opacity:0}54%{opacity:0}56%{opacity:1}61%{opacity:1}62%{opacity:0}77%{opacity:0}79%{opacity:1}93%{opacity:1}94%{opacity:0}100%{opacity:0}}
+@keyframes splashv2Victory{0%{opacity:0}93%{opacity:0}95%{opacity:1}100%{opacity:1}}
 .splashv2 .brand-wordmark{position:absolute;top:30px;left:50%;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-style:normal;font-size:39px;line-height:1;color:#2d5a2d;letter-spacing:.005em;white-space:nowrap;opacity:0;transform:translate(-50%,6px);animation:splashv2BrandIn .75s cubic-bezier(.22,1,.36,1) 7.4s forwards;will-change:transform,opacity,filter;pointer-events:none}
 @keyframes splashv2BrandIn{0%{opacity:0;transform:translate(-50%,6px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,0);filter:blur(0)}}
 .splashv2 .v-mark{position:absolute;top:112px;left:50%;transform:translate(-50%,-4px);width:100px;height:78px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:88px;line-height:1;color:#f4efe4;text-shadow:0 2px 10px rgba(0,0,0,.28);opacity:0;animation:splashv2VFade .75s cubic-bezier(.22,1,.36,1) 6.35s forwards;will-change:transform,opacity,filter;pointer-events:none}
 @keyframes splashv2VFade{0%{opacity:0;transform:translate(-50%,4px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,-4px);filter:blur(0)}}
-.splashv2 .a-mark{position:absolute;top:198px;left:50%;width:14px;height:28px;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-weight:600;font-size:22px;line-height:1;color:#111;opacity:0;transform:translate(-50%,6px) scale(.82);animation:splashv2AMove 2.8s cubic-bezier(.65,0,.35,1) 8.5s forwards;will-change:transform,opacity,filter}
-@keyframes splashv2AMove{0%{opacity:0;transform:translate(-50%,6px) scale(.82);filter:blur(2px)}18%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}40%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}55%{filter:blur(.5px)}70%{opacity:1;transform:translate(calc(-50% - 82px),0) scale(1);filter:blur(0)}100%{opacity:1;transform:translate(calc(-50% - 82px),0) scale(1);filter:blur(0)}}
+/* "Achieve Anything" tagline — materialises in place (fade + blur-in)
+   instead of the old sliding A. The leading A is rendered in its final
+   position from the start (no horizontal translate), and each char of
+   "chieve Anything" materialises with the same blur-to-clear effect
+   staggered across a short window. */
+.splashv2 .a-mark{position:absolute;top:198px;left:calc(50% - 82px);width:14px;height:28px;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-weight:600;font-size:22px;line-height:1;color:#111;opacity:0;transform:translate(-50%,0);filter:blur(2px);animation:splashv2AMaterialize .75s cubic-bezier(.22,1,.36,1) 8.5s forwards;will-change:opacity,filter}
+@keyframes splashv2AMaterialize{0%{opacity:0;filter:blur(2px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;filter:blur(0)}}
 .splashv2 .tagline{position:absolute;top:198px;left:calc(50% - 75px);height:28px;display:flex;align-items:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-size:22px;font-weight:600;color:#111;letter-spacing:0;white-space:nowrap;pointer-events:none}
-.splashv2 .tagline .char{display:inline-block;opacity:0;transform:translate(6px,0);filter:blur(2px);animation:splashv2CharIn .5s cubic-bezier(.22,1,.36,1) forwards;will-change:transform,opacity,filter}
+.splashv2 .tagline .char{display:inline-block;opacity:0;filter:blur(2px);animation:splashv2CharIn .5s cubic-bezier(.22,1,.36,1) forwards;will-change:opacity,filter}
 .splashv2 .tagline .char.space{width:.26em}
-@keyframes splashv2CharIn{0%{opacity:0;transform:translate(6px,0);filter:blur(2px)}100%{opacity:1;transform:translate(0,0);filter:blur(0)}}
+@keyframes splashv2CharIn{0%{opacity:0;filter:blur(2px)}100%{opacity:1;filter:blur(0)}}
 @media (prefers-reduced-motion: reduce){.splashv2 .block,.splashv2 .climber,.splashv2 .climber .pose,.splashv2 .v-mark,.splashv2 .a-mark,.splashv2 .tagline .char,.splashv2 .brand-wordmark{animation-duration:.01s!important}}
 /* Compact pyramid + V brand mark — static lockup used on the quote card. */
 .brand-mark{position:relative;width:140px;height:78px;margin:0 auto 22px}
@@ -97,7 +294,12 @@ const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomai
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 const auth=firebase.auth();
-const DOC=db.collection("users").doc("main");
+/* Multi-user scoping: each signed-in Firebase user gets their own
+   Firestore document at users/<uid>. `userDoc(uid)` is a helper so
+   we never accidentally share state across accounts. The legacy
+   users/main doc is no longer read or written — any seed data that
+   lived there stays untouched but is not surfaced to new users. */
+const userDoc = uid => db.collection("users").doc(uid);
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
@@ -161,6 +363,36 @@ const HT = [{
   bg: "#f0fdfa",
   border: "#99f6e4"
 }];
+// Default hour boundaries (24h) for each time-of-day block. Can be
+// overridden per-user via `data.timeRanges`. Evening wraps through
+// midnight (18..6), so `inRange` below handles the wrap case.
+const DEFAULT_TIME_RANGES = {
+  morning:   { start: 6,  end: 12 },
+  afternoon: { start: 12, end: 18 },
+  evening:   { start: 18, end: 6  }
+};
+const getTimeRanges = d => {
+  const t = d && d.timeRanges;
+  return t && t.morning && t.afternoon && t.evening ? t : DEFAULT_TIME_RANGES;
+};
+const hourInRange = (hour, start, end) => {
+  if (start === end) return false;
+  return start < end ? (hour >= start && hour < end)
+                     : (hour >= start || hour < end); // wraps past midnight
+};
+// Returns "morning" | "afternoon" | "evening" for the given Date,
+// based on the user's (or default) time-of-day boundaries. Avoid
+// is not considered a time of day — it always renders separately.
+const getCurrentSection = (d, now = new Date()) => {
+  const r = getTimeRanges(d);
+  const h = now.getHours();
+  if (hourInRange(h, r.morning.start,   r.morning.end))   return "morning";
+  if (hourInRange(h, r.afternoon.start, r.afternoon.end)) return "afternoon";
+  if (hourInRange(h, r.evening.start,   r.evening.end))   return "evening";
+  // Fallback: if the user configured gaps in their day, land on whichever
+  // block sits closest before `h`.
+  return "evening";
+};
 const SECTIONS = [{
   value: "morning",
   label: "Morning",
@@ -190,6 +422,55 @@ const SECTIONS = [{
   bg: "#fef2f2",
   border: "#fecaca"
 }];
+/* ── Achievements definitions ──
+   Each achievement has a `stat` (the derived number we compare) and a
+   `threshold`. When stats[stat] >= threshold, the achievement is
+   unlocked. Tiers are purely cosmetic (Bronze/Silver/Gold/Platinum/
+   Diamond) and inform the badge color. Adding a new achievement is a
+   one-liner — the Level-bar modal + unlock logic pick it up
+   automatically. Ordered: within each category, easier tiers come
+   first so the UI can render them left-to-right as a ladder. */
+const ACHIEVEMENT_TIERS = {
+  Bronze:   { color: "#a16207", bg: "#fef3c7", border: "#fde68a" },
+  Silver:   { color: "#64748b", bg: "#f1f5f9", border: "#cbd5e1" },
+  Gold:     { color: "#ca8a04", bg: "#fefce8", border: "#fde047" },
+  Platinum: { color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" },
+  Diamond:  { color: "#7c3aed", bg: "#f5f3ff", border: "#c4b5fd" }
+};
+const ACHIEVEMENTS = [
+  // DEDICATION — days you opened the app. Icon ladder tracks the time
+  // horizon: seedling (first day) → sunrise (one week of showing up) →
+  // calendar (one month) → century mark → full year lap around the sun.
+  { id:"visit-1",   cat:"Dedication", tier:"Bronze",   icon:"🌱", name:"Show Up",          desc:"Open the app for the first time.",          threshold:1,   stat:"visits" },
+  { id:"visit-7",   cat:"Dedication", tier:"Silver",   icon:"🌅", name:"Week Warrior",     desc:"Open the app on 7 different days.",         threshold:7,   stat:"visits" },
+  { id:"visit-30",  cat:"Dedication", tier:"Gold",     icon:"🗓️", name:"Steady Rhythm",    desc:"Open the app on 30 different days.",        threshold:30,  stat:"visits" },
+  { id:"visit-100", cat:"Dedication", tier:"Platinum", icon:"💯", name:"Century Mind",     desc:"Open the app on 100 different days.",       threshold:100, stat:"visits" },
+  { id:"visit-365", cat:"Dedication", tier:"Diamond",  icon:"🌍", name:"Full Lap",         desc:"Open the app on 365 different days.",       threshold:365, stat:"visits" },
+  // STREAKS — longest streak on any habit (all-time, across all habits)
+  { id:"streak-3",   cat:"Streaks",    tier:"Bronze",   icon:"✨", name:"Spark",           desc:"Hit a 3-day streak on any habit.",          threshold:3,   stat:"bestStreak" },
+  { id:"streak-7",   cat:"Streaks",    tier:"Silver",   icon:"🔥", name:"On Fire",         desc:"Hit a 7-day streak on any habit.",          threshold:7,   stat:"bestStreak" },
+  { id:"streak-30",  cat:"Streaks",    tier:"Gold",     icon:"⚡", name:"Unbreakable",     desc:"Hit a 30-day streak on any habit.",         threshold:30,  stat:"bestStreak" },
+  { id:"streak-100", cat:"Streaks",    tier:"Platinum", icon:"🌋", name:"Century Streak",  desc:"Hit a 100-day streak on any habit.",        threshold:100, stat:"bestStreak" },
+  { id:"streak-365", cat:"Streaks",    tier:"Diamond",  icon:"☄️", name:"Year-Long Blaze", desc:"Hit a 365-day streak on any habit.",        threshold:365, stat:"bestStreak" },
+  // ACHIEVER — goals completed
+  { id:"goal-1",   cat:"Achiever",   tier:"Bronze",   icon:"🎯", name:"First Win",        desc:"Complete your first goal.",                 threshold:1,   stat:"goals" },
+  { id:"goal-3",   cat:"Achiever",   tier:"Silver",   icon:"🏅", name:"Triple Threat",    desc:"Complete 3 goals.",                         threshold:3,   stat:"goals" },
+  { id:"goal-10",  cat:"Achiever",   tier:"Gold",     icon:"🏆", name:"Ten Tall",         desc:"Complete 10 goals.",                        threshold:10,  stat:"goals" },
+  { id:"goal-25",  cat:"Achiever",   tier:"Platinum", icon:"👑", name:"Quarter Master",   desc:"Complete 25 goals.",                        threshold:25,  stat:"goals" },
+  { id:"goal-50",  cat:"Achiever",   tier:"Diamond",  icon:"🌠", name:"Half a Hundred",   desc:"Complete 50 goals.",                        threshold:50,  stat:"goals" },
+  // BUILDER — active habits ever stacked at once
+  { id:"habit-1",  cat:"Builder",    tier:"Bronze",   icon:"🧱", name:"Breaking Ground",  desc:"Add your first habit.",                     threshold:1,   stat:"habitsActive" },
+  { id:"habit-5",  cat:"Builder",    tier:"Silver",   icon:"🏗️", name:"Foundation",       desc:"Have 5 active habits at once.",             threshold:5,   stat:"habitsActive" },
+  { id:"habit-10", cat:"Builder",    tier:"Gold",     icon:"🏛️", name:"Full Routine",     desc:"Have 10 active habits at once.",            threshold:10,  stat:"habitsActive" },
+  { id:"habit-20", cat:"Builder",    tier:"Platinum", icon:"🗼", name:"Master Architect", desc:"Have 20 active habits at once.",            threshold:20,  stat:"habitsActive" },
+  // XP
+  { id:"xp-500",    cat:"XP",         tier:"Bronze",   icon:"⚡", name:"Level 2",          desc:"Reach Level 2 (500 XP).",                   threshold:500,    stat:"xp" },
+  { id:"xp-2500",   cat:"XP",         tier:"Silver",   icon:"⚡", name:"Level 6",          desc:"Reach Level 6 (2,500 XP).",                 threshold:2500,   stat:"xp" },
+  { id:"xp-10000",  cat:"XP",         tier:"Gold",     icon:"⚡", name:"Level 21",         desc:"Earn 10,000 XP.",                           threshold:10000,  stat:"xp" },
+  { id:"xp-50000",  cat:"XP",         tier:"Platinum", icon:"⚡", name:"Level 101",        desc:"Earn 50,000 XP.",                           threshold:50000,  stat:"xp" },
+  { id:"xp-250000", cat:"XP",         tier:"Diamond",  icon:"⚡", name:"XP Legend",        desc:"Earn 250,000 XP.",                          threshold:250000, stat:"xp" }
+];
+const ACHIEVEMENT_CATEGORIES = ["Dedication", "Streaks", "Achiever", "Builder", "XP"];
 const MOODS = [{
   label: "Energized",
   icon: "⚡",
@@ -252,6 +533,111 @@ const DURS = [{
   value: "120",
   label: "2 hr"
 }];
+/* Habit frequency taxonomy. `rank` is used to order habits from "most
+   often" to "least often" when a goal expands its linked habits (lower
+   rank = higher frequency). `daily` is the pre-existing implicit default
+   — any legacy habit without a `frequency` field is treated as daily at
+   display time.
+
+   Field shape per cadence:
+     daily      — no extra fields
+     weekdays   — `days: number[]`  (0..6 Sun..Sat; multi-select)
+     weekly     — `day: number`     (0..6 Sun..Sat; single day of week)
+     monthly    — `monthDay: 1..31` (day of month)
+     quarterly  — `month: 0..11` + `monthDay: 1..31`
+                  (anchor date; repeats every 3 months from the anchor)
+     annual     — `month: 0..11` + `monthDay: 1..31`
+                  (anchor date; repeats every year)
+
+   Historical note: an earlier build had two weekly variants — `weekly`
+   (no day) and `weekly-day` (with day). They've been merged into a
+   single `weekly` that always carries a `day`. Legacy `weekly-day`
+   habits are migrated on read by `getFreq()`. */
+const FREQ = [
+  { value: "daily",       label: "Daily",         icon: "\u{1F4C5}", rank: 1 },
+  { value: "weekdays",    label: "Select Days",   icon: "\u{1F5D3}", rank: 2 },
+  { value: "weekly",      label: "Weekly",        icon: "\u{1F5D3}", rank: 3 },
+  { value: "monthly",     label: "Monthly",       icon: "\u{1F4C6}", rank: 5 },
+  { value: "quarterly",   label: "Quarterly",     icon: "\u{1F4C6}", rank: 6 },
+  { value: "annual",      label: "Annual",        icon: "\u{1F4C6}", rank: 7 }
+];
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_LONG  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+// Ordinal suffix for day-of-month display (1st, 2nd, 3rd, 4th, … 21st, …).
+const ordSuffix = n => {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return n + "th";
+  switch (n % 10) { case 1: return n + "st"; case 2: return n + "nd"; case 3: return n + "rd"; default: return n + "th"; }
+};
+// Indexed by JS `Date.getDay()` — 0 = Sun … 6 = Sat. Kept in Sunday-first
+// order so day values stored in `frequency.days` / `frequency.day` keep
+// their meaning across the whole codebase.
+const DOW_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Display order for the day-picker UI: Mon → Sun. The picker iterates
+// this list when rendering chips so Monday appears first, while the
+// stored day numbers still map to DOW_ABBR. Also used to sort the
+// comma-joined display in freqLabel so "Mon · Wed · Sun" reads left-to
+// -right in the same Monday-first order.
+const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const dowDisplayRank = d => {
+  const i = DOW_ORDER.indexOf(d);
+  return i === -1 ? 99 : i;
+};
+/* Normalize any habit shape to a
+   `{ type, days, day, monthDay, month }` frequency object.
+   - Legacy habits without a `.frequency` field render as "Daily".
+   - Legacy `weekly-day` cadence is collapsed into `weekly` (its `day`
+     value is preserved, so an existing "every Tuesday" habit stays
+     on Tuesday after the merge).
+   - `monthDay` / `month` are new fields for monthly / quarterly /
+     annual habits; they default to null when absent. */
+const getFreq = h => {
+  const f = h && h.frequency;
+  if (!f || !f.type) return { type: "daily", days: [], day: null, monthDay: null, month: null };
+  const rawType = f.type === "weekly-day" ? "weekly" : f.type;
+  return {
+    type: rawType,
+    days: Array.isArray(f.days) ? f.days : [],
+    day: typeof f.day === "number" ? f.day : null,
+    monthDay: typeof f.monthDay === "number" ? f.monthDay : null,
+    month:    typeof f.month    === "number" ? f.month    : null
+  };
+};
+const freqRank = h => {
+  const t = getFreq(h).type;
+  const row = FREQ.find(f => f.value === t);
+  return row ? row.rank : 1;
+};
+const freqLabel = h => {
+  const fq = getFreq(h);
+  if (fq.type === "weekdays") {
+    const picks = (fq.days || []).slice().sort((a, b) => dowDisplayRank(a) - dowDisplayRank(b)).map(d => DOW_ABBR[d]).join(" \u00B7 ");
+    return picks ? "Days: " + picks : "Select Days";
+  }
+  if (fq.type === "weekly") {
+    // Every weekly habit is now anchored to one weekday — merged from
+    // the old weekly / weekly-day split. Show "Weekly — Tue" so the
+    // user can see the anchor at a glance.
+    return "Weekly \u2014 " + (DOW_ABBR[fq.day == null ? 1 : fq.day] || "Mon");
+  }
+  if (fq.type === "monthly") {
+    return fq.monthDay ? "Monthly \u2014 " + ordSuffix(fq.monthDay) : "Monthly";
+  }
+  if (fq.type === "quarterly") {
+    if (fq.month != null && fq.monthDay) {
+      return "Quarterly \u2014 " + MONTHS_SHORT[fq.month] + " " + fq.monthDay;
+    }
+    return "Quarterly";
+  }
+  if (fq.type === "annual") {
+    if (fq.month != null && fq.monthDay) {
+      return "Annual \u2014 " + MONTHS_SHORT[fq.month] + " " + fq.monthDay;
+    }
+    return "Annual";
+  }
+  const row = FREQ.find(f => f.value === fq.type);
+  return row ? row.label : "Daily";
+};
 const SF_FIELDS = [{
   key: "specific",
   label: "S — Specific",
@@ -1348,6 +1734,18 @@ function getStreak(h) {
   }
   return s;
 }
+// How many days back we have to look to find the most recent completion.
+// Used to render the "gone cold" ice emoji + count on habit cards when
+// the user hasn't logged a habit for a while. Returns null if there has
+// never been a completion in the last year (fresh habit or long dormant).
+function daysSinceLast(h) {
+  for (let i = 1; i <= 365; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    if (h.completions?.[d.toISOString().split("T")[0]]) return i;
+  }
+  return null;
+}
 function getCR(h) {
   return {
     pct: Math.round(pastDays(30).filter(d => h.completions?.[d]).length / 30 * 100)
@@ -1424,6 +1822,20 @@ function loadData() {
       if (!p.quotes) p.quotes = [];
       if (!p.todos) p.todos = [];
       if (!p.customGoalTypes) p.customGoalTypes = [];
+      if (!p.customImportance) p.customImportance = [];
+      if (!p.customSections) p.customSections = [];
+      // dayVisits is the sorted, de-duplicated list of every date (YYYY-MM-DD)
+      // the user has opened the app. Used by achievements (visit-N tiers) and
+      // potentially future retention analytics.
+      if (!Array.isArray(p.dayVisits)) p.dayVisits = [];
+      // bestStreaks caches the all-time best streak per habitId so a streak
+      // earned years ago still counts toward achievements even after the
+      // habit has been archived or reset.
+      if (!p.bestStreaks || typeof p.bestStreaks !== "object") p.bestStreaks = {};
+      // achievementsUnlocked maps achievementId -> ISO timestamp of unlock.
+      // We compute achievement status dynamically from stats, but cache the
+      // first-unlock moment here so we can show "unlocked Apr 21, 2026".
+      if (!p.achievementsUnlocked || typeof p.achievementsUnlocked !== "object") p.achievementsUnlocked = {};
       if (typeof p.xp !== "number") p.xp = 0;
       if (!p.dailyRitual) p.dailyRitual = {};
       if (typeof p.homeLocation !== "string") p.homeLocation = "";
@@ -1438,6 +1850,10 @@ function loadData() {
         if (!t.tripId) return { ...t, tripId: "t-" + t.date };
         return t;
       }).filter(Boolean);
+      // Habits created before the frequency field existed default to daily.
+      if (Array.isArray(p.habits)) {
+        p.habits = p.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
+      }
       // Any pre-existing user (has habits/goals or has completed it before)
       // should skip onboarding so we don't force the new flow on them.
       if (typeof p.onboardingComplete !== "boolean") {
@@ -1547,6 +1963,10 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   const [splashPhase, setSplashPhase] = useState("loading"); // "loading" | "quote"
+  // Only a single canonical climb route — the three-phase crawl → walk →
+  // jump ascent defined by splashv2Climb. Previous versions randomised
+  // across 5 routes; that was removed so every splash tells the same
+  // habit-building story.
   const [demoMode, setDemoMode] = useState(false);
   /* ── ONBOARDING STATE ── */
   // Which step of the onboarding we're on. Steps:
@@ -1574,6 +1994,12 @@ function App() {
   const [onbHabitSec, setOnbHabitSec] = useState("morning");
   const [onbHabitImp, setOnbHabitImp] = useState("Non-Negotiable");
   const [onbHabitDuration, setOnbHabitDuration] = useState(""); // time estimate (mins)
+  // Weekly review capture — asked on the final onboarding screen. Day is
+  // JS getDay() (0 = Sun, 6 = Sat); hour is 0..23. Defaults: Sunday 6pm.
+  // Stored on `data.weeklyReview` so a future scheduler can surface the
+  // prompt at that moment.
+  const [onbReviewDay,  setOnbReviewDay]  = useState(0);
+  const [onbReviewHour, setOnbReviewHour] = useState(18);
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(u => {
       setAuthUser(u || null);
@@ -1614,6 +2040,11 @@ function App() {
       goals: [],
       todos: [],
       customGoalTypes: [],
+      customImportance: [],
+      customSections: [],
+      dayVisits: [],
+      bestStreaks: {},
+      achievementsUnlocked: {},
       xp: 0,
       journal: [],
       quotes: [],
@@ -1662,6 +2093,20 @@ function App() {
   /* TODOS */
   const [nTodo, sNTodo] = useState("");
   const [nTodoDue, sNTodoDue] = useState("");
+  const [nTodoGoalId, sNTodoGoalId] = useState("");
+  // Add-todo form collapsed by default. Mirrors the Goals tab pattern
+  // where a round "+" button at the top reveals the form inline — the
+  // goal-link + due-date fields only appear once the user commits to
+  // adding a task, keeping the default view clean.
+  const [expTodoForm, setExpTodoForm] = useState(false);
+  // Section filter pills (All / Today / Week / Month / Later / No Due).
+  // Empty = show all sections. Selecting one pill narrows to that bucket;
+  // tapping "All" restores the full list.
+  const [todoSecFilter, setTodoSecFilter] = useState([]);
+  const [todoPillsOpen, setTodoPillsOpen] = useState(false);
+  // Per-goal quick-add text for the "+ To-Do" row inside each goal card.
+  // Keyed by goalId so multiple goals can be expanded without losing input.
+  const [goalTodoDraft, setGoalTodoDraft] = useState({});
   const [eTodoId, sETodoId] = useState(null);
   const [eTodoTxt, sETodoTxt] = useState("");
   const [eTodoDue, sETodoDue] = useState("");
@@ -1695,6 +2140,13 @@ function App() {
   const [nHType, sNHType] = useState("");
   const [nHImp, sNHImp] = useState("Important");
   const [nHSec, sNHSec] = useState("morning");
+  // Frequency payload extended: the `monthDay` / `month` fields back the
+  // monthly / quarterly / annual cadences, plus `day` covers weekly.
+  // Defaults: day = Monday, monthDay = 1, month = current month.
+  const [nHFreq, sNHFreq] = useState({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
+  // Start date for a new habit — defaults to today (ISO YYYY-MM-DD).
+  // The user can pick a future date to delay the habit's activation.
+  const [nHStart, sNHStart] = useState(() => new Date().toISOString().slice(0, 10));
   const [hFilter, setHFilter] = useState([]);
   const [nHNotes, sNHNotes] = useState("");
   const [nHGoal, sNHGoal] = useState("");
@@ -1703,6 +2155,12 @@ function App() {
   const [newGoalFromHabit, setNewGoalFromHabit] = useState(false);
   const [newGoalText, setNewGoalText] = useState("");
   const swipeRef = useRef({});
+  // Tracks press-and-hold state per habit card. Hold = open edit; a tap
+  // (with no hold firing and no significant pointer move) toggles the
+  // card between compact (title only) and expanded (metadata + goal).
+  // Shared by both the mouse-down path and the touch-hold timer inside
+  // onTouchStart so the synthetic click after a hold is suppressed.
+  const habitHoldRef = useRef({});
   const shakeRef = useRef({
     lastShake: 0
   });
@@ -1716,6 +2174,8 @@ function App() {
   const [eHNotes, sEHNotes] = useState("");
   const [eHGoal, sEHGoal] = useState("");
   const [eHLoc, sEHLoc] = useState("both");
+  const [eHFreq, sEHFreq] = useState({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
+  const [eHStart, sEHStart] = useState(() => new Date().toISOString().slice(0, 10));
 
   /* JOURNAL */
   const [jTxt, sJTxt] = useState("");
@@ -1789,13 +2249,133 @@ function App() {
 
   /* PROFILE */
   const [showProfile, setShowProfile] = useState(false);
-  const [profileSection, setProfileSection] = useState("account"); // account | inspiration | history | reports
+  const [profileSection, setProfileSection] = useState("account"); // account | inspiration | history | reports | settings
   const [profileNavOpen, setProfileNavOpen] = useState(false);
   const [profileName, setProfileName] = useState(() => localStorage.getItem("v-profile-name") || "");
   const [profileGoal, setProfileGoal] = useState(() => localStorage.getItem("v-profile-goal") || "");
 
-  /* SECTION FILTER (habits tab) */
-  const [secFilter, setSecFilter] = useState("all"); // "all"|"morning"|"afternoon"|"evening"|"avoid"
+  /* APP SETTINGS
+     - settingsMode: "default" vs "custom". In default, accent is the
+       Verrocchio green and all category/importance/section edits are
+       ignored. In custom, the user controls accent + can add custom
+       categories / importance levels / time-of-day groupings.
+     - darkMode is independent of settingsMode (works in both).
+     - accentColor only takes effect when settingsMode === "custom".
+     All three persist to localStorage so the choice survives reloads
+     even before data syncs from Firestore. */
+  const [settingsMode, setSettingsMode] = useState(() => localStorage.getItem("v-settings-mode") || "default");
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("v-dark-mode") === "1");
+  const [accentColor, setAccentColor] = useState(() => localStorage.getItem("v-accent-color") || "#2d5a2d");
+  /* Staged-form state for the "Add Importance Level" and
+     "Add Time-of-Day Group" mini-forms inside App Settings. */
+  const [newImpName, setNewImpName] = useState("");
+  const [newImpColor, setNewImpColor] = useState("#6366f1");
+  const [newSecName, setNewSecName] = useState("");
+  const [newSecIcon, setNewSecIcon] = useState("⭐");
+  const [newSecColor, setNewSecColor] = useState("#6366f1");
+  /* Tracks which default row is currently expanded to show its
+     description. Keyed as `${list}:${value}` (e.g. "cat:Physical").
+     Only one row per list stays expanded at a time. */
+  const [expandedDefault, setExpandedDefault] = useState({});
+
+  /* Achievements modal — opened by long-pressing the XP/Level bar
+     in the header. Closes on backdrop tap or × button. */
+  const [showAchievements, setShowAchievements] = useState(false);
+  const levelHoldTimerRef = useRef(null);
+  const levelPressStartRef = useRef(false);
+  const beginLevelPress = () => {
+    levelPressStartRef.current = true;
+    if (levelHoldTimerRef.current) clearTimeout(levelHoldTimerRef.current);
+    levelHoldTimerRef.current = setTimeout(() => {
+      if (levelPressStartRef.current) {
+        setShowAchievements(true);
+        levelPressStartRef.current = false; // suppress the subsequent click
+      }
+    }, 450);
+  };
+  const cancelLevelPress = () => {
+    if (levelHoldTimerRef.current) clearTimeout(levelHoldTimerRef.current);
+    levelHoldTimerRef.current = null;
+    levelPressStartRef.current = false;
+  };
+
+  // Apply dark mode + accent to <body> whenever the toggles change.
+  // Pre-app screens (splash loading, login, onboarding) stay on the
+  // canonical Verrocchio light theme so brand identity is stable on
+  // every first-launch and every shared screenshot — dark mode and
+  // custom accents only turn on once the user is actually inside
+  // the app shell. localStorage is still written unconditionally so
+  // the toggle state is preserved across the splash.
+  //
+  // Demo mode is also locked to the canonical light theme + green
+  // accent: demo is a showroom, and it should always look like the
+  // out-of-the-box Verrocchio regardless of the signed-in user's
+  // personal customization.
+  const inPreApp = !hasSeenWelcome
+    || (authUser === null && !demoMode)
+    || !(data && data.onboardingComplete);
+  const themeLocked = inPreApp || demoMode;
+  useEffect(() => {
+    document.body.classList.toggle("dark", !!darkMode && !themeLocked);
+    localStorage.setItem("v-dark-mode", darkMode ? "1" : "0");
+  }, [darkMode, themeLocked]);
+  useEffect(() => {
+    const isCustom = settingsMode === "custom" && !themeLocked;
+    document.body.classList.toggle("accent-custom", isCustom);
+    document.documentElement.style.setProperty("--accent", isCustom ? accentColor : "#2d5a2d");
+    localStorage.setItem("v-settings-mode", settingsMode);
+    localStorage.setItem("v-accent-color", accentColor);
+  }, [settingsMode, accentColor, themeLocked]);
+
+  /* SECTION FILTER (habits tab) — array of selected values. Empty = "All".
+     Tap a pill = single-select (replace). Long-press (hold) = toggle in
+     multi-select. Same model used for impFilter + goalTypeFilter below. */
+  const [secFilter, setSecFilter] = useState([]); // [] | ["morning","afternoon",...]
+  /* Collapsed-by-default on the Habits page: the main row shows only a
+     compact "Time of Day" and "Priority" toggle. Tapping a toggle
+     expands the full pill row. The pills also auto-show whenever the
+     filter has any active selections so the user can always see what
+     they've picked. */
+  const [secPillsOpen, setSecPillsOpen] = useState(false);
+  const [impPillsOpen, setImpPillsOpen] = useState(false);
+  // Per-section collapse on the Habits page. `true` means the section is
+  // COLLAPSED (habits hidden; tapping the header re-expands). The initial
+  // state expands only the section matching the current time of day so
+  // someone opening the app at 3pm lands on their afternoon habits.
+  // Avoid defaults to expanded on first load but is toggleable like the
+  // other three sections — its collapse state is honored at render time.
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    const cur = getCurrentSection(null); // no data yet in closure
+    return {
+      morning:   cur !== "morning",
+      afternoon: cur !== "afternoon",
+      evening:   cur !== "evening",
+      avoid:     false
+    };
+  });
+  // Re-evaluate the "which section is current" default once per session,
+  // after data (and therefore the user's custom timeRanges, if any) has
+  // loaded. Guarded by a ref so we don't clobber manual toggles afterward.
+  const didInitCollapseRef = useRef(false);
+  // Habits-tab "Goal" filter = filter habits by their Area-of-Life type.
+  // (Habit.type maps to the HT array: Physical / Mental / Career / …)
+  // Kept separate from `goalTypeFilter`, which is the Goals-tab filter.
+  const [habGoalFilter, setHabGoalFilter] = useState([]);
+  const [habGoalPillsOpen, setHabGoalPillsOpen] = useState(false);
+  // Habits-tab "Frequency" filter = filter by habit.frequency.type
+  // (matches the FREQ array values: daily / weekdays / weekly / …).
+  const [habFreqFilter, setHabFreqFilter] = useState([]);
+  const [habFreqPillsOpen, setHabFreqPillsOpen] = useState(false);
+  // Duration is the one filter whose expanded row is a slider rather
+  // than a row of pills. `durPillsOpen` mirrors the open/closed pattern
+  // of the other compact toggles; the expanded row auto-shows whenever
+  // the range has been narrowed so the user can always see / reset it.
+  const [durPillsOpen, setDurPillsOpen] = useState(false);
+  /* GOALS page: collapsed filter layout. Initially only [+] and [All Goals]
+     show. Tapping the All-Goals pill expands the rest of the goal-type
+     filter pills. The + button opens the new-goal form directly; category
+     creation/management lives in Profile → My Account. */
+  const [goalPillsOpen, setGoalPillsOpen] = useState(false);
 
   /* ICON PICKER */
   const [showIconPicker, setShowIconPicker] = useState(null); // {id, kind:"habit"|"goal"}
@@ -1803,14 +2383,18 @@ function App() {
   /* HABIT STATS PANEL */
   const [showHabitStats, setShowHabitStats] = useState(false);
   const [habitMatrixSort, setHabitMatrixSort] = useState("section");
-  const [impFilter, setImpFilter] = useState("all");
-  const [durFilter, setDurFilter] = useState(0);
+  const [impFilter, setImpFilter] = useState([]);
+  // Duration filter is a two-thumb range [min, max] in minutes (0..120).
+  // When min === 0 && max === 120 the filter is treated as "Any" (no
+  // filtering). Thumbs are clamped so min <= max - 5 (slider step).
+  const DUR_MIN = 0, DUR_MAX = 120, DUR_STEP = 5;
+  const [durRange, setDurRange] = useState([DUR_MIN, DUR_MAX]);
   const [swipeFeedback, setSwipeFeedback] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   const [showGoalArchive, setShowGoalArchive] = useState(false);
   const [completeGoalModal, setCompleteGoalModal] = useState(null);
   const [nextGoalTxt, setNextGoalTxt] = useState("");
-  const [goalTypeFilter, setGoalTypeFilter] = useState("all");
+  const [goalTypeFilter, setGoalTypeFilter] = useState([]);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   // When the user scrolls down past a small threshold, collapse the sub-row
   // (calendar icon + At Home/Traveling pill + XP bar) so the top-most
@@ -1828,6 +2412,65 @@ function App() {
   const [expGoalHabits, setExpGoalHabits] = useState({});
   const [expHabitGoals, setExpHabitGoals] = useState({});
   const goalHoldRef = useRef({});
+
+  /* Long-press tracking for filter pills (shared per filter group —
+     the user can only be pressing one pill at a time within a group). */
+  const secLpRef  = useRef({ timer: null, val: null, fired: false });
+  const impLpRef  = useRef({ timer: null, val: null, fired: false });
+  const goalLpRef = useRef({ timer: null, val: null, fired: false });
+  const habGoalLpRef = useRef({ timer: null, val: null, fired: false });
+  const habFreqLpRef = useRef({ timer: null, val: null, fired: false });
+
+  /* filterPressProps — returns the event handlers for a filter pill.
+     Tap: replace the selection with [val] (single-select). If the user
+     taps the currently-only selected pill, revert to "All" ([]).
+     Long-press (≥ 380ms): toggle membership in the selection — this is
+     how the user picks multiple pills at once.
+     `isAll` marks the "All" pill, which always clears to []. */
+  const filterPressProps = (val, selected, setSelected, lpRef, isAll) => {
+    const start = () => {
+      lpRef.current = {
+        val: val,
+        fired: false,
+        timer: setTimeout(() => {
+          lpRef.current.fired = true;
+          if (isAll) { setSelected([]); return; }
+          // Toggle this val in the current selection.
+          if (selected.includes(val)) {
+            const next = selected.filter(v => v !== val);
+            setSelected(next);
+          } else {
+            setSelected([...selected, val]);
+          }
+          if (navigator.vibrate) { try { navigator.vibrate(12); } catch (_) {} }
+        }, 380)
+      };
+    };
+    const cancel = () => {
+      if (lpRef.current && lpRef.current.timer) {
+        clearTimeout(lpRef.current.timer);
+        lpRef.current.timer = null;
+      }
+    };
+    const handleClick = () => {
+      // Suppress click that follows a long-press.
+      if (lpRef.current && lpRef.current.fired) {
+        lpRef.current.fired = false;
+        return;
+      }
+      if (isAll) { setSelected([]); return; }
+      // Tap: single-select. Tapping the currently-only selection clears.
+      if (selected.length === 1 && selected[0] === val) setSelected([]);
+      else setSelected([val]);
+    };
+    return {
+      onPointerDown: start,
+      onPointerUp: cancel,
+      onPointerCancel: cancel,
+      onPointerLeave: cancel,
+      onClick: handleClick
+    };
+  };
   const [goalMoreMenu, setGoalMoreMenu] = useState(null); // goal.id
   const [addCatModal, setAddCatModal] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -1870,11 +2513,69 @@ function App() {
   const saveTimerRef = useRef(null);
   const latestData = useRef(null);
 
-  // Load from Firestore on mount, fall back to localStorage
+  // Per-user localStorage key: prevents one device from leaking account
+  // A's data into account B's session. Anonymous/legacy sessions (no uid)
+  // fall back to the original key so existing single-user installs keep
+  // their data on first load.
+  const uid = authUser && authUser.uid ? authUser.uid : null;
+  const lsKey = uid ? `${SK}-${uid}` : SK;
+
+  // Load from Firestore whenever the signed-in user changes. Clears the
+  // previous user's in-memory data first so we never flash account A's
+  // habits inside account B's session. New users (no doc yet) start
+  // from SEED state and will create their doc on first save.
   useEffect(() => {
     if (demoMode) return; // demo mode uses in-memory seed data only
+    if (!uid) {
+      // Signed out — wipe any previously loaded data so the next sign-in
+      // can't see stale state. The login gate will keep us on the auth
+      // screen until a user signs in.
+      if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+      latestData.current = null;
+      try { setData(JSON.parse(JSON.stringify(DD))); } catch(e){}
+      setSyncState("loading");
+      return;
+    }
     setSyncState("loading");
-    DOC.get().then(snap => {
+    // Prefer a local cached copy of *this* user's data for instant paint,
+    // then reconcile with Firestore below.
+    try {
+      const r = localStorage.getItem(lsKey);
+      if (r) {
+        const d = JSON.parse(r);
+        setData(d);
+      } else {
+        // First time on this device for this user: start from a blank
+        // default so onboarding fires instead of the seed workspace.
+        setData(JSON.parse(JSON.stringify(DD)));
+      }
+    } catch (e) {}
+    // One-time legacy migration: the pre-multi-user build wrote to the
+    // shared `users/main` doc and the unscoped `SK` localStorage key. On
+    // the very first sign-in under the new code on a device that still
+    // has that legacy data, promote it to the current user's scope so
+    // the original owner doesn't lose their workspace. Guarded by the
+    // "v-migrated" flag so only the first account to sign in here claims
+    // it (subsequent accounts on the same browser get a fresh slate).
+    const migrationFlag = "v-migrated";
+    const alreadyMigrated = (() => { try { return !!localStorage.getItem(migrationFlag); } catch(e) { return true; } })();
+    const legacyLocal = (() => { try { return localStorage.getItem(SK); } catch(e) { return null; } })();
+    const userLocalExists = (() => { try { return !!localStorage.getItem(lsKey); } catch(e) { return false; } })();
+    userDoc(uid).get().then(snap => {
+      if (!snap.exists && !alreadyMigrated && !userLocalExists && legacyLocal) {
+        // Copy legacy local cache into this user's per-user slot, then
+        // write through to Firestore on the next save.
+        try {
+          localStorage.setItem(lsKey, legacyLocal);
+          localStorage.setItem(migrationFlag, "1");
+          const parsed = JSON.parse(legacyLocal);
+          setData(parsed);
+          latestData.current = parsed;
+          userDoc(uid).set(parsed).catch(() => {});
+        } catch (e) {}
+        setSyncState("synced");
+        return;
+      }
       if (snap.exists) {
         const d = snap.data();
         if (!d.habits || d.habits.length === 0) d.habits = SEED_HABITS;
@@ -1892,20 +2593,26 @@ function App() {
           if (!t.tripId) return { ...t, tripId: "t-" + t.date };
           return t;
         }).filter(Boolean);
+        if (Array.isArray(d.habits)) {
+          d.habits = d.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
+        }
         if (typeof d.onboardingComplete !== "boolean") {
           // Existing cloud user: don't force them through onboarding.
           d.onboardingComplete = (d.habits && d.habits.length > 0) || (d.goals && d.goals.length > 0);
         }
         setData(d);
         try {
-          localStorage.setItem(SK, JSON.stringify(d));
+          localStorage.setItem(lsKey, JSON.stringify(d));
         } catch (e) {}
+      } else {
+        // Brand-new account — no doc yet. Leave `data` at the blank
+        // default set above so the onboarding flow runs for them.
       }
       setSyncState("synced");
     }).catch(() => {
       setSyncState("offline");
     });
-  }, []);
+  }, [uid, demoMode]);
   const save = useCallback(d => {
     setData(d);
     latestData.current = d;
@@ -1917,23 +2624,115 @@ function App() {
       setSyncState("synced");
       return;
     }
-    // Write to localStorage immediately
+    // Write to localStorage immediately, scoped to the current user so
+    // account switching on the same device doesn't cross-contaminate.
     try {
-      localStorage.setItem(SK, JSON.stringify(d));
+      localStorage.setItem(lsKey, JSON.stringify(d));
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (e) {}
+    // No uid yet (auth still resolving) — skip the cloud write; the next
+    // save after sign-in will flush to the user's doc.
+    if (!uid) { setSyncState("offline"); return; }
     // Debounce Firestore writes — max 1 per 800ms
     setSyncState("saving");
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const writeUid = uid; // capture so a post-signout flush can't misroute
     saveTimerRef.current = setTimeout(() => {
-      DOC.set(latestData.current).then(() => {
+      userDoc(writeUid).set(latestData.current).then(() => {
         setSyncState("synced");
       }).catch(() => {
         setSyncState("offline");
       });
     }, 800);
-  }, [demoMode]);
+  }, [demoMode, uid, lsKey]);
+
+  /* ── Day-visit tracking ──
+     Append today's date key to data.dayVisits the first time the user
+     opens the app each calendar day. Only runs once data is loaded and
+     the user is actually in the app (not splash / login / onboarding /
+     demo mode). Idempotent — if tk() is already the last entry, noop. */
+  useEffect(() => {
+    if (demoMode) return;
+    if (!data || !data.onboardingComplete) return;
+    const today = tk();
+    const visits = Array.isArray(data.dayVisits) ? data.dayVisits : [];
+    if (visits[visits.length - 1] === today) return; // fast path
+    if (visits.indexOf(today) !== -1) return;
+    save({ ...data, dayVisits: [...visits, today] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data && data.onboardingComplete, demoMode]);
+
+  /* ── Achievement stat computation ──
+     Derives the numbers that unlock tiers. Streak computation uses
+     max(current streak across active habits, cached best-ever per
+     habit), so streaks earned and later reset still count. */
+  const achievementStats = useMemo(() => {
+    const habitsArr = (data && data.habits) || [];
+    const currentBest = habitsArr.length ? Math.max(0, ...habitsArr.map(h => getStreak(h))) : 0;
+    const cachedBest = Math.max(0, ...Object.values((data && data.bestStreaks) || {}), 0);
+    return {
+      visits: ((data && data.dayVisits) || []).length,
+      bestStreak: Math.max(currentBest, cachedBest),
+      goals: ((data && data.goalArchive) || []).length,
+      habitsActive: habitsArr.length,
+      xp: (data && data.xp) || 0
+    };
+  }, [data]);
+
+  // Run once per session after data loads: seed `collapsedSections` so
+  // the section matching the user's current time-of-day (per their own
+  // timeRanges if set, or defaults otherwise) is the only one expanded.
+  // Ref-guarded so subsequent data updates don't collapse sections the
+  // user has since manually expanded.
+  useEffect(() => {
+    if (didInitCollapseRef.current || !data) return;
+    didInitCollapseRef.current = true;
+    const cur = getCurrentSection(data);
+    setCollapsedSections(prev => ({
+      ...prev,
+      morning:   cur !== "morning",
+      afternoon: cur !== "afternoon",
+      evening:   cur !== "evening",
+      avoid:     false
+    }));
+  }, [data]);
+
+  /* ── Cache first-unlock timestamps ──
+     Whenever stats cross a threshold for the first time, record the
+     moment in data.achievementsUnlocked so the UI can show "Unlocked
+     on Apr 21, 2026" even if the underlying stat later regresses. */
+  useEffect(() => {
+    if (!data || !data.onboardingComplete) return;
+    const already = (data && data.achievementsUnlocked) || {};
+    const newly = {};
+    ACHIEVEMENTS.forEach(a => {
+      if (already[a.id]) return;
+      if ((achievementStats[a.stat] || 0) >= a.threshold) {
+        newly[a.id] = new Date().toISOString();
+      }
+    });
+    if (Object.keys(newly).length === 0) return;
+    save({ ...data, achievementsUnlocked: { ...already, ...newly } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [achievementStats.visits, achievementStats.bestStreak, achievementStats.goals, achievementStats.habitsActive, achievementStats.xp]);
+
+  /* Also keep data.bestStreaks up-to-date — whenever a habit's current
+     streak exceeds its cached best, bump the cache so the achievement
+     counter never regresses. */
+  useEffect(() => {
+    if (!data || !data.onboardingComplete) return;
+    const habitsArr = data.habits || [];
+    const cache = { ...(data.bestStreaks || {}) };
+    let changed = false;
+    habitsArr.forEach(h => {
+      const s = getStreak(h);
+      if (s > (cache[h.id] || 0)) { cache[h.id] = s; changed = true; }
+    });
+    if (changed) save({ ...data, bestStreaks: cache });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data && data.habits]);
+
   const exportData = () => {
     const b = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json"
@@ -1975,11 +2774,15 @@ function App() {
         text: nTodo.trim(),
         done: false,
         date: new Date().toDateString(),
-        dueDate: nTodoDue || null
+        dueDate: nTodoDue || null,
+        goalId: nTodoGoalId || null
       }]
     });
     sNTodo("");
     sNTodoDue("");
+    // Keep the goal selection sticky — users adding multiple to-dos for
+    // the same goal shouldn't have to re-pick it every time. Clear it
+    // explicitly via the picker's "No goal" option.
   };
   const sETodo = t => {
     sETodoId(t.id);
@@ -2201,6 +3004,14 @@ function App() {
         notes: nHNotes.trim() || null,
         goalId: nHGoal || null,
         location: "both",
+        startDate: nHStart || new Date().toISOString().slice(0, 10),
+        frequency: {
+          type: nHFreq.type,
+          days: Array.isArray(nHFreq.days) ? nHFreq.days.slice() : [],
+          day:      typeof nHFreq.day      === "number" ? nHFreq.day      : null,
+          monthDay: typeof nHFreq.monthDay === "number" ? nHFreq.monthDay : null,
+          month:    typeof nHFreq.month    === "number" ? nHFreq.month    : null
+        },
         completions: {}
       }]
     });
@@ -2209,6 +3020,8 @@ function App() {
     sNHType("");
     sNHNotes("");
     sNHGoal("");
+    sNHFreq({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
+    sNHStart(new Date().toISOString().slice(0, 10));
   };
   ;
   const togHabit = (id, fd, mode) => {
@@ -2272,6 +3085,8 @@ function App() {
     sEHNotes(h.notes || "");
     sEHGoal(h.goalId || "");
     sEHLoc(h.location || "both");
+    sEHFreq(getFreq(h));
+    sEHStart(h.startDate || new Date().toISOString().slice(0, 10));
     setEditHabitModal(h);
   };
   const svEHabit = id => {
@@ -2287,7 +3102,15 @@ function App() {
         section: eHSec,
         notes: eHNotes.trim() || null,
         goalId: eHGoal || null,
-        location: eHLoc || "both"
+        location: eHLoc || "both",
+        startDate: eHStart || h.startDate || new Date().toISOString().slice(0, 10),
+        frequency: {
+          type: eHFreq.type,
+          days: Array.isArray(eHFreq.days) ? eHFreq.days.slice() : [],
+          day:      typeof eHFreq.day      === "number" ? eHFreq.day      : null,
+          monthDay: typeof eHFreq.monthDay === "number" ? eHFreq.monthDay : null,
+          month:    typeof eHFreq.month    === "number" ? eHFreq.month    : null
+        }
       } : h)
     });
     sEHId(null);
@@ -2296,6 +3119,210 @@ function App() {
     ...data,
     habits: l
   });
+  /* Quick-add row for attaching a new one-off to-do to a goal, rendered
+     inside the goal's expanded details. Writes straight into `data.todos`
+     with the goalId link and clears the per-goal draft on commit. */
+  const addGoalTodo = (goalId) => {
+    const draft = (goalTodoDraft[goalId] || "").trim();
+    if (!draft) return;
+    save({
+      ...data,
+      todos: [...(data.todos || []), {
+        id: Date.now(),
+        text: draft,
+        done: false,
+        date: new Date().toDateString(),
+        dueDate: null,
+        goalId: goalId
+      }]
+    });
+    setGoalTodoDraft(prev => ({ ...prev, [goalId]: "" }));
+  };
+  const renderGoalTodoQuickAdd = (goal) => /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, alignItems: "center" }
+  },
+    /*#__PURE__*/React.createElement("input", {
+      value: goalTodoDraft[goal.id] || "",
+      onChange: e => setGoalTodoDraft(prev => ({ ...prev, [goal.id]: e.target.value })),
+      onKeyDown: e => { if (e.key === "Enter") addGoalTodo(goal.id); },
+      placeholder: "+ Add a to-do for this goal\u2026",
+      style: {
+        flex: 1, background: "#fff", border: "1px solid #e5e7eb",
+        borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none"
+      }
+    }),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: () => addGoalTodo(goal.id),
+      style: {
+        background: "#0891b2", color: "#fff", border: "none",
+        borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, "Add")
+  );
+  /* Shared schedule picker used by both the add-habit inline form and
+     the edit-habit modal. Renders (top-to-bottom):
+
+       1. A "Starts" row — date input + "Today" shortcut. `start` is an
+          ISO date string (YYYY-MM-DD). This anchors when the habit
+          becomes active; a future date delays activation.
+       2. A "Frequency" cadence <select>: Daily / Select Days / Weekly /
+          Monthly / Quarterly / Annual.
+       3. A cadence-specific sub-row:
+            weekdays  → Mon..Sun chips (multi-select)
+            weekly    → Mon..Sun chips (single-select; required)
+            monthly   → day-of-month input (1–31)
+            quarterly → month select + day-of-month input
+                        (anchor date; next occurrence every 3 months)
+            annual    → month select + day-of-month input (yearly)
+
+     `freq` is the full `{ type, days, day, monthDay, month }` object.
+     `start` is a string; `setStart` takes a string. */
+  const renderFreqPicker = (freq, setFreq, start, setStart) => {
+    // Small helper: does a given day-count make sense for the chosen
+    // month? Used to clamp monthDay so picking e.g. "Feb 30" snaps to
+    // a valid day.
+    const clampMonthDay = (n, monthIdx) => {
+      const maxByMonth = [31,29,31,30,31,30,31,31,30,31,30,31];
+      const m = Math.max(1, Math.min(31, parseInt(n) || 1));
+      if (monthIdx == null) return m;
+      return Math.min(m, maxByMonth[monthIdx] || 31);
+    };
+    const needsWeekChips = freq.type === "weekdays" || freq.type === "weekly";
+    const needsMonthDay  = freq.type === "monthly";
+    const needsDateAnchor = freq.type === "quarterly" || freq.type === "annual";
+    const todayISO = new Date().toISOString().slice(0, 10);
+    return /*#__PURE__*/React.createElement("div", {
+      style: { marginBottom: 8 }
+    },
+      // --- Starts row ---
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11, fontWeight: 600, color: "#6b7280",
+          marginBottom: 4, letterSpacing: .2
+        }
+      }, "Starts"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }
+      },
+        /*#__PURE__*/React.createElement("input", {
+          type: "date",
+          value: start || todayISO,
+          onChange: e => setStart(e.target.value || todayISO),
+          style: { ...S, flex: 1, color: "#374151" }
+        }),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => setStart(todayISO),
+          title: "Start today",
+          style: {
+            padding: "6px 11px", borderRadius: 10,
+            border: start === todayISO ? "1px solid var(--accent, #2d5a2d)" : "1px solid #d1d5db",
+            background: start === todayISO ? "var(--accent, #2d5a2d)" : "#fff",
+            color: start === todayISO ? "#fff" : "#374151",
+            fontSize: 11, fontWeight: 700, cursor: "pointer",
+            WebkitTapHighlightColor: "transparent", whiteSpace: "nowrap"
+          }
+        }, "Today")
+      ),
+      // --- Frequency row ---
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11, fontWeight: 600, color: "#6b7280",
+          marginBottom: 4, letterSpacing: .2
+        }
+      }, "Frequency"),
+      /*#__PURE__*/React.createElement("select", {
+        value: freq.type || "daily",
+        onChange: e => setFreq({ ...freq, type: e.target.value }),
+        style: { ...S, width: "100%", color: "#374151" }
+      },
+        FREQ.map(f => /*#__PURE__*/React.createElement("option", { key: f.value, value: f.value }, f.icon + "  " + f.label))
+      ),
+      // --- Cadence-specific sub-row ---
+      // Weekday chips (shared between `weekdays` multi-select and
+      // `weekly` single-select). Rendered in Mon…Sun order via DOW_ORDER
+      // so the first chip matches how most weekly planners are laid out.
+      // `dayVal` is the JS getDay() number (0=Sun..6=Sat); toggling
+      // "Mon" still writes freq.days[1] under the hood.
+      needsWeekChips && /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 3, marginTop: 6, flexWrap: "nowrap" }
+      },
+        DOW_ORDER.map(dayVal => {
+          const isSingle = freq.type === "weekly";
+          const selected = isSingle ? freq.day === dayVal : (freq.days || []).indexOf(dayVal) !== -1;
+          return /*#__PURE__*/React.createElement("button", {
+            key: dayVal,
+            type: "button",
+            onClick: () => {
+              if (isSingle) { setFreq({ ...freq, day: dayVal }); return; }
+              const cur = Array.isArray(freq.days) ? freq.days.slice() : [];
+              const at = cur.indexOf(dayVal);
+              if (at === -1) cur.push(dayVal); else cur.splice(at, 1);
+              setFreq({ ...freq, days: cur });
+            },
+            style: {
+              flex: "1 1 0", minWidth: 0, padding: "5px 2px",
+              borderRadius: 12,
+              border: selected ? "1px solid var(--accent, #2d5a2d)" : "1px solid #d1d5db",
+              background: selected ? "var(--accent, #2d5a2d)" : "#fff",
+              color: selected ? "#fff" : "#374151",
+              fontSize: 10, fontWeight: selected ? 700 : 500,
+              cursor: "pointer", WebkitTapHighlightColor: "transparent",
+              textAlign: "center", whiteSpace: "nowrap"
+            }
+          }, DOW_ABBR[dayVal]);
+        })
+      ),
+      // Monthly — just a day-of-month input (1..31). The next occurrence
+      // is wherever that day falls in the current month (then the next,
+      // then the next, …).
+      needsMonthDay && /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", gap: 8, marginTop: 6 }
+      },
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, color: "#6b7280" }
+        }, "Day of month"),
+        /*#__PURE__*/React.createElement("input", {
+          type: "number",
+          min: 1, max: 31, step: 1,
+          value: freq.monthDay || 1,
+          onChange: e => setFreq({ ...freq, monthDay: clampMonthDay(e.target.value, null) }),
+          style: { ...S, width: 72, textAlign: "center", color: "#374151" }
+        }),
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, color: "#9ca3af" }
+        }, "(e.g. 15 = the 15th of each month)")
+      ),
+      // Quarterly / Annual — anchor date (month + day). For quarterly
+      // the next occurrence repeats every 3 months from the anchor;
+      // for annual it repeats every year.
+      needsDateAnchor && /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", gap: 6, marginTop: 6 }
+      },
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, color: "#6b7280", whiteSpace: "nowrap" }
+        }, freq.type === "quarterly" ? "Anchor date" : "Date"),
+        /*#__PURE__*/React.createElement("select", {
+          value: freq.month == null ? 0 : freq.month,
+          onChange: e => {
+            const m = parseInt(e.target.value);
+            setFreq({ ...freq, month: m, monthDay: clampMonthDay(freq.monthDay || 1, m) });
+          },
+          style: { ...S, flex: 1, color: "#374151" }
+        },
+          MONTHS_LONG.map((m, i) => /*#__PURE__*/React.createElement("option", { key: m, value: i }, m))
+        ),
+        /*#__PURE__*/React.createElement("input", {
+          type: "number",
+          min: 1, max: 31, step: 1,
+          value: freq.monthDay || 1,
+          onChange: e => setFreq({ ...freq, monthDay: clampMonthDay(e.target.value, freq.month) }),
+          style: { ...S, width: 60, textAlign: "center", color: "#374151" }
+        })
+      )
+    );
+  };
   const setHabitOrder = (habit, groupHabits, val) => {
     const n = parseInt(val);
     if (isNaN(n) || n < 1 || n > groupHabits.length) return;
@@ -2709,8 +3736,28 @@ function App() {
 
   const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
-    if (impFilter !== "all" && h.importance !== impFilter) return false;
-    if (durFilter > 0 && (parseInt(h.duration) || 0) > durFilter) return false;
+    if (impFilter.length > 0 && !impFilter.includes(h.importance)) return false;
+    // Goal (Area-of-Life) filter — habit's `type` must match one of the
+    // currently selected area values (Physical, Mental, etc.).
+    if (habGoalFilter.length > 0 && !habGoalFilter.includes(h.type)) return false;
+    // Frequency filter — normalized via getFreq() so legacy habits with
+    // no frequency field still match "daily".
+    if (habFreqFilter.length > 0) {
+      const ft = getFreq(h).type;
+      if (!habFreqFilter.includes(ft)) return false;
+    }
+    // Two-thumb duration range: keep habits whose duration falls inside
+    // [durRange[0], durRange[1]]. Habits without a duration are treated
+    // as 0 minutes, so they're only excluded when the user has raised
+    // the low thumb above 0.
+    {
+      const [dMin, dMax] = durRange;
+      const any = dMin === DUR_MIN && dMax === DUR_MAX;
+      if (!any) {
+        const d = parseInt(h.duration) || 0;
+        if (d < dMin || d > dMax) return false;
+      }
+    }
     if (!matchesRoutine(h)) return false;
     return true;
   });
@@ -2824,7 +3871,7 @@ function App() {
   };
 
   /* GROUPED HABITS */
-  const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter === "all" || sec.value === secFilter).map(sec => ({
+  const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => ({
     ...sec,
     habits: filtH.filter(h => h.section === sec.value).sort((a, b) => (a._order ?? 999) - (b._order ?? 999))
   })).filter(g => g.habits.length > 0), [filtH, secFilter]);
@@ -2928,8 +3975,12 @@ function App() {
     if (splashPhase === "loading") {
       // Tagline shuffles in character-by-character, each char delayed
       // proportionally — see the matching charIn keyframe timing.
-      const TAGLINE_START = 10.2;
-      const CHAR_STAGGER  = 0.045;
+      // Tagline chars start materialising just after the leading A
+      // begins its fade-in (8.5s). A shorter overall cascade than the
+      // previous slide-and-join effect — the whole phrase now appears
+      // together rather than sequentially.
+      const TAGLINE_START = 8.65;
+      const CHAR_STAGGER  = 0.04;
       const taglineChars = [..."chieve Anything"].map((ch, i) =>
         React.createElement("span", {
           key: "c" + i,
@@ -2968,6 +4019,24 @@ function App() {
         React.createElement("line", { x1: 14, y1: 22.5, x2: 10, y2: 34 }),
         React.createElement("line", { x1: 14, y1: 22.5, x2: 18, y2: 34 })
       );
+      // Crawl pose — body flattened near the bottom of the 28×36 viewBox,
+      // head on the left, legs trailing right. Used during phase 1 of the
+      // climb (0→46%) to symbolise slow, effortful early progress.
+      const poseCrawl = React.createElement("g", { key: "crawl", className: "pose crawl" },
+        React.createElement("circle", { cx: 7, cy: 28, r: 3, stroke: "none" }),
+        // torso (head → hip)
+        React.createElement("line", { x1: 9.5, y1: 29, x2: 22, y2: 31.5 }),
+        // front (planted) arm reaching forward/down
+        React.createElement("line", { x1: 10, y1: 28.5, x2: 4, y2: 32 }),
+        // trailing arm pushing off
+        React.createElement("line", { x1: 14, y1: 29.5, x2: 12, y2: 34 }),
+        // back leg stretched
+        React.createElement("line", { x1: 22, y1: 31.5, x2: 26, y2: 34 }),
+        // front leg bent under body
+        React.createElement("line", { x1: 20, y1: 31, x2: 18, y2: 35 })
+      );
+      // Single canonical climb — no route randomisation.
+      const climberRouteCls = "climber";
       return React.createElement("div", { className: "splashv2" },
         React.createElement("div", { className: "stage" },
           React.createElement("div", { className: "pyramid" },
@@ -2976,8 +4045,18 @@ function App() {
             React.createElement("div", { className: "block b3" }),
             React.createElement("div", { className: "block b4" })
           ),
-          React.createElement("svg", { className: "climber", viewBox: "0 0 28 36", "aria-hidden": "true" },
-            poseMount, poseReach, poseVictory
+          React.createElement("svg", { className: climberRouteCls, viewBox: "0 0 28 36", "aria-hidden": "true" },
+            poseCrawl, poseMount, poseReach, poseVictory
+          ),
+          // Contrast overlay climber: identical animation + poses but
+          // painted white and clipped to the pyramid shape via the
+          // wrapper's clip-path. Only visible where the stick figure
+          // overlaps a green block; elsewhere the base green climber
+          // shows through.
+          React.createElement("div", { className: "climber-mask", "aria-hidden": "true" },
+            React.createElement("svg", { className: climberRouteCls + " white", viewBox: "0 0 28 36" },
+              poseCrawl, poseMount, poseReach, poseVictory
+            )
           ),
           React.createElement("div", { className: "brand-wordmark" }, "Verrocchio"),
           React.createElement("div", { className: "v-mark" }, "V"),
@@ -3094,6 +4173,13 @@ function App() {
         habits: [...newHabits, ...(data.habits || []).filter(h => h && h.text)],
         userIntent: onbIntent.trim(),
         homeLocation: onbHome.trim() || data.homeLocation || "",
+        // Capture the user's weekly-review appointment so a scheduler
+        // (or the Reflect tab) can prompt them at that moment. Shape
+        // mirrors `{ day: 0..6 (getDay), hour: 0..23 }`.
+        weeklyReview: { day: onbReviewDay, hour: onbReviewHour },
+        // Seed the default time-of-day ranges if not already present —
+        // keeps the data shape consistent for every new user.
+        timeRanges: data.timeRanges || DEFAULT_TIME_RANGES,
         onboardingComplete: true
       });
     };
@@ -3561,6 +4647,76 @@ function App() {
         React.createElement("div", { key: "hint", style: { fontSize: 12, color: "#6b7280", lineHeight: 1.55, textAlign: "center", marginBottom: 20, padding: "0 8px", fontStyle: "italic" } },
           "You can add more habits or sharpen this goal anytime from the Goals tab."
         ),
+
+        // Weekly Review picker — one moment a week to look back and adjust.
+        // The day/hour get saved on finishOnboarding as `weeklyReview`.
+        React.createElement("div", {
+          key: "wrv",
+          style: {
+            border: "1px solid #e5e7eb",
+            borderRadius: 10,
+            padding: "12px 12px 14px",
+            marginBottom: 18,
+            background: "#fafaf7"
+          }
+        },
+          React.createElement("div", { key: "wrv-ttl", style: { fontSize: 13, fontWeight: 700, color: "#1f2937", marginBottom: 4, textAlign: "center" } }, "Weekly Review"),
+          React.createElement("div", { key: "wrv-sub", style: { fontSize: 11, color: "#6b7280", lineHeight: 1.5, marginBottom: 10, textAlign: "center" } },
+            "Pick a day and time to look back on the week \u2014 what worked, what slipped, where to spend more energy."
+          ),
+
+          // Day-of-week chips (Mon..Sun via DOW_ORDER)
+          React.createElement("div", { key: "wrv-day-lbl", style: { fontSize: 11, color: "#6b7280", marginBottom: 6 } }, "Day"),
+          React.createElement("div", {
+            key: "wrv-days",
+            style: { display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }
+          },
+            DOW_ORDER.map(dayVal => {
+              const on = onbReviewDay === dayVal;
+              return React.createElement("button", {
+                key: "d" + dayVal,
+                onClick: () => setOnbReviewDay(dayVal),
+                style: {
+                  flex: 1,
+                  minWidth: 34,
+                  padding: "6px 0",
+                  fontSize: 11,
+                  fontWeight: on ? 700 : 500,
+                  border: "1px solid " + (on ? "#2d5a2d" : "#d1d5db"),
+                  borderRadius: 6,
+                  background: on ? "#2d5a2d" : "#fff",
+                  color: on ? "#fff" : "#374151",
+                  cursor: "pointer"
+                }
+              }, DOW_ABBR[dayVal]);
+            })
+          ),
+
+          // Hour selector — single 24-option select rendered as 12-hour labels.
+          React.createElement("div", { key: "wrv-hr-lbl", style: { fontSize: 11, color: "#6b7280", marginBottom: 6 } }, "Time"),
+          React.createElement("select", {
+            key: "wrv-hr",
+            value: onbReviewHour,
+            onChange: e => setOnbReviewHour(parseInt(e.target.value, 10)),
+            style: {
+              width: "100%",
+              padding: "7px 8px",
+              fontSize: 13,
+              border: "1px solid #d1d5db",
+              borderRadius: 6,
+              background: "#fff",
+              color: "#1f2937",
+              cursor: "pointer"
+            }
+          },
+            Array.from({ length: 24 }, (_, h) => {
+              const suffix = h < 12 ? "AM" : "PM";
+              const disp = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+              return React.createElement("option", { key: h, value: h }, disp + ":00 " + suffix);
+            })
+          )
+        ),
+
         React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
           secondaryBtn("Back", () => setOnboardStep(5)),
           primaryBtn("Enter Verrocchio", finishOnboarding)
@@ -3688,10 +4844,13 @@ function App() {
     );
   })(), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowProfile(true),
+    "data-brand": demoMode ? "1" : null,
     style: {
-      width: 34,
+      minWidth: 34,
       height: 34,
-      borderRadius: "50%",
+      padding: demoMode ? "0 10px" : 0,
+      width: demoMode ? "auto" : 34,
+      borderRadius: demoMode ? 17 : "50%",
       background: "#2d5a2d",
       border: "none",
       cursor: "pointer",
@@ -3700,7 +4859,14 @@ function App() {
       justifyContent: "center",
       flexShrink: 0
     }
-  }, profileName ? /*#__PURE__*/React.createElement("span", {
+  }, demoMode ? /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#fff",
+      fontSize: 12,
+      fontWeight: 700,
+      letterSpacing: .3
+    }
+  }, "Demo") : profileName ? /*#__PURE__*/React.createElement("span", {
     style: {
       color: "#fff",
       fontSize: 14,
@@ -3791,11 +4957,20 @@ function App() {
       const current = data.travelDays || [];
       const existing = current.find(t => t.date === selDate);
       if (existing) {
-        save({ ...data, travelDays: current.filter(t => t.date !== selDate) });
+        // Remove every day sharing this trip so cancelling one day of a
+        // multi-day trip cancels the whole trip (matches the calendar-grid
+        // toggle-off behaviour in commitTripRange).
+        const next = existing.tripId
+          ? current.filter(t => t.tripId !== existing.tripId)
+          : current.filter(t => t.date !== selDate);
+        save({ ...data, travelDays: next });
       } else {
         const loc = window.prompt("Where will you be on " + selDate + "?", data.homeLocation || "");
         if (loc === null) return;
-        const next = [...current, { date: selDate, location: loc.trim() }]
+        // Always tag with a unique tripId so trip-continuity detection,
+        // editTripLoc, and deleteTrip all operate on a well-formed entry.
+        const tripId = "t" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
+        const next = [...current, { date: selDate, location: loc.trim(), tripId }]
           .sort((a, b) => a.date.localeCompare(b.date));
         save({ ...data, travelDays: next });
       }
@@ -3824,6 +4999,13 @@ function App() {
     const xpInLevel = xpTotal % 500;
     const xpPct = Math.round(xpInLevel / 500 * 100);
     return /*#__PURE__*/React.createElement("div", {
+      onPointerDown: beginLevelPress,
+      onPointerUp: cancelLevelPress,
+      onPointerLeave: cancelLevelPress,
+      onPointerCancel: cancelLevelPress,
+      onClick: () => { /* short taps intentionally do nothing — long-press reveals achievements */ },
+      title: "Hold to view achievements",
+      role: "button",
       style: {
         flex: 1,
         display: "flex",
@@ -3833,7 +5015,10 @@ function App() {
         border: "1px solid #c6dfc6",
         borderRadius: 10,
         padding: "6px 12px",
-        minWidth: 0
+        minWidth: 0,
+        cursor: "pointer",
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent"
       }
     },
       /*#__PURE__*/React.createElement("span", { style: { fontSize: 16 } }, "\u26A1"),
@@ -3861,31 +5046,9 @@ function App() {
     // trip and render them as one continuous track shape instead of separate
     // circles.
     const tripIdByDate = new Map((data.travelDays || []).map(t => [t.date, t.tripId || null]));
-    const toggleTravel = val => {
-      const current = data.travelDays || [];
-      const existing = current.find(t => t.date === val);
-      if (existing) {
-        // Remove this travel day.
-        const next = current.filter(t => t.date !== val);
-        save({ ...data, travelDays: next });
-      } else {
-        // Add with a location, defaulting to home as a sensible starter.
-        const loc = window.prompt("Where will you be on " + val + "?", data.homeLocation || "");
-        if (loc === null) return; // user cancelled
-        const next = [...current, { date: val, location: loc.trim() }]
-          .sort((a, b) => a.date.localeCompare(b.date));
-        save({ ...data, travelDays: next });
-      }
-    };
-    const editTravelLoc = (val) => {
-      const current = data.travelDays || [];
-      const existing = current.find(t => t.date === val);
-      if (!existing) return;
-      const loc = window.prompt("Location for " + val + ":", existing.location || "");
-      if (loc === null) return;
-      const next = current.map(t => t.date === val ? { ...t, location: loc.trim() } : t);
-      save({ ...data, travelDays: next });
-    };
+    // (Single-day toggling and location edits now flow through the drag
+    // handler `commitTripRange` and the Trips list below — so the old
+    // per-cell `toggleTravel`/`editTravelLoc` helpers were removed.)
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in",
       style: {
@@ -4146,19 +5309,26 @@ function App() {
           current
         );
         if (loc === null) return;
-        const ids = new Set(trip.map(t => t.tripId));
+        // Match by tripId when it exists (covers multi-day trips cleanly),
+        // and fall back to matching by explicit date for any legacy entry
+        // that somehow still lacks a tripId. Guarding against a Set that
+        // contains `undefined` prevents accidentally bulk-editing unrelated
+        // entries that also happen to lack a tripId.
+        const ids = new Set(trip.map(t => t.tripId).filter(Boolean));
         const dates = new Set(trip.map(t => t.date));
         const next = (data.travelDays || []).map(t =>
-          (ids.has(t.tripId) && ids.has(t.tripId)) || dates.has(t.date)
+          (t.tripId && ids.has(t.tripId)) || dates.has(t.date)
             ? { ...t, location: loc.trim() }
             : t
         );
         save({ ...data, travelDays: next });
       };
       const deleteTrip = (trip) => {
-        const ids = new Set(trip.map(t => t.tripId));
+        const ids = new Set(trip.map(t => t.tripId).filter(Boolean));
         const dates = new Set(trip.map(t => t.date));
-        const next = (data.travelDays || []).filter(t => !ids.has(t.tripId) && !dates.has(t.date));
+        const next = (data.travelDays || []).filter(t =>
+          !((t.tripId && ids.has(t.tripId)) || dates.has(t.date))
+        );
         save({ ...data, travelDays: next });
       };
       return /*#__PURE__*/React.createElement("div", {
@@ -4709,7 +5879,12 @@ function App() {
       style: {
         display: "flex",
         alignItems: "center",
+        // Allow the main filter pill row to wrap onto a second line when
+        // the [+] button plus all five toggles (Time / Priority / Goal /
+        // Freq / Duration) would otherwise overflow on narrow screens.
+        flexWrap: "wrap",
         gap: 5,
+        rowGap: 6,
         marginBottom: 10
       }
     }, /*#__PURE__*/React.createElement("button", {
@@ -4733,85 +5908,178 @@ function App() {
         lineHeight: 1,
         fontWeight: 300
       }
-    }, "+")), /*#__PURE__*/React.createElement("div", {
+    }, "+")),
+      // NOTE: the "Time" compact filter pill has been intentionally
+      // removed — time-of-day filtering is now expressed by the section
+      // headers themselves (tap a header to expand/collapse its habits).
+      // `secFilter` state is retained but effectively unused on the
+      // habits page; left in place to preserve any callers outside this
+      // view and avoid a broader refactor.
+      // Compact "Priority" toggle.
+      (() => {
+        const active = impFilter.length > 0;
+        const expanded = impPillsOpen || active;
+        const count = impFilter.length;
+        return /*#__PURE__*/React.createElement("button", {
+          onClick: () => setImpPillsOpen(p => !p),
+          title: "Filter by priority",
+          style: {
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 9px",
+            borderRadius: 20,
+            border: `1px solid ${active ? "#fde68a" : expanded ? "#d1d5db" : "#e5e7eb"}`,
+            background: active ? "#fffbeb" : expanded ? "#f3f4f6" : "#fff",
+            color: active ? "#b45309" : "#6b7280",
+            fontSize: 11, fontWeight: active ? 700 : 500,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", userSelect: "none"
+          }
+        },
+          "Priority",
+          count > 0 && /*#__PURE__*/React.createElement("span", {
+            style: { background: "#b45309", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
+          }, count),
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { display: "inline-block", fontSize: 9, lineHeight: 1, marginLeft: 2, opacity: .7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }
+          }, "\u25BE")
+        );
+      })(),
+      // Compact "Goal" toggle — filters habits by Area-of-Life (habit.type).
+      // Mirrors the Time/Priority pill styling. The badge count shows how
+      // many area values are currently selected; tap expands the full pill
+      // row underneath.
+      (() => {
+        const active = habGoalFilter.length > 0;
+        const expanded = habGoalPillsOpen || active;
+        const count = habGoalFilter.length;
+        return /*#__PURE__*/React.createElement("button", {
+          onClick: () => setHabGoalPillsOpen(p => !p),
+          title: "Filter by goal / area of life",
+          style: {
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 9px",
+            borderRadius: 20,
+            border: `1px solid ${active ? "#c6dfc6" : expanded ? "#d1d5db" : "#e5e7eb"}`,
+            background: active ? "#f0f7f0" : expanded ? "#f3f4f6" : "#fff",
+            color: active ? "var(--accent, #2d5a2d)" : "#6b7280",
+            fontSize: 11, fontWeight: active ? 700 : 500,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", userSelect: "none"
+          }
+        },
+          "Goal",
+          count > 0 && /*#__PURE__*/React.createElement("span", {
+            style: { background: "var(--accent, #2d5a2d)", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
+          }, count),
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { display: "inline-block", fontSize: 9, lineHeight: 1, marginLeft: 2, opacity: .7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }
+          }, "\u25BE")
+        );
+      })(),
+      // Compact "Frequency" toggle — filters habits by freq.type (daily,
+      // weekdays, weekly, monthly, …). Uses a neutral/slate accent so it
+      // visually groups with Goal without clashing with the Time (amber)
+      // and Priority (amber) pills.
+      (() => {
+        const active = habFreqFilter.length > 0;
+        const expanded = habFreqPillsOpen || active;
+        const count = habFreqFilter.length;
+        return /*#__PURE__*/React.createElement("button", {
+          onClick: () => setHabFreqPillsOpen(p => !p),
+          title: "Filter by frequency",
+          style: {
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 9px",
+            borderRadius: 20,
+            border: `1px solid ${active ? "#bfdbfe" : expanded ? "#d1d5db" : "#e5e7eb"}`,
+            background: active ? "#eff6ff" : expanded ? "#f3f4f6" : "#fff",
+            color: active ? "#1d4ed8" : "#6b7280",
+            fontSize: 11, fontWeight: active ? 700 : 500,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", userSelect: "none"
+          }
+        },
+          "Frequency",
+          count > 0 && /*#__PURE__*/React.createElement("span", {
+            style: { background: "#1d4ed8", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
+          }, count),
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { display: "inline-block", fontSize: 9, lineHeight: 1, marginLeft: 2, opacity: .7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }
+          }, "\u25BE")
+        );
+      })(),
+      // Compact "Duration" toggle — just the pill in the top row now;
+      // the dual-thumb slider lives in its own expanded row below so the
+      // layout mirrors Time / Priority / Goal / Frequency. The pill shows
+      // the stopwatch glyph at full span and "min–max m" when narrowed;
+      // tapping toggles the expanded row open/closed.
+      (() => {
+        const [dMin, dMax] = durRange;
+        const any = dMin === DUR_MIN && dMax === DUR_MAX;
+        const active = !any;
+        const expanded = durPillsOpen || active;
+        return /*#__PURE__*/React.createElement("button", {
+          key: "dur-label",
+          type: "button",
+          onClick: () => setDurPillsOpen(p => !p),
+          title: active ? "Duration: " + (dMin === dMax ? `${dMin}m` : `${dMin}–${dMax}m`) : "Filter by duration",
+          "aria-label": active ? "Duration filter active" : "Open duration filter",
+          style: {
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 9px",
+            borderRadius: 20,
+            border: `1px solid ${active ? "#c6dfc6" : expanded ? "#d1d5db" : "#e5e7eb"}`,
+            background: active ? "#f0f7f0" : expanded ? "#f3f4f6" : "#fff",
+            color: active ? "var(--accent, #2d5a2d)" : "#6b7280",
+            fontSize: 11, fontWeight: active ? 700 : 500,
+            cursor: "pointer",
+            whiteSpace: "nowrap", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", userSelect: "none",
+            lineHeight: 1
+          }
+        },
+          // Bare U+23F1 stopwatch (no \uFE0F) to match the monochrome
+          // glyph shown next to each habit's duration (e.g. "⏱15m").
+          // When a range is active the pill shows ONLY the icon — the
+          // actual range is read off the expanded slider row below,
+          // which auto-opens whenever the range has been narrowed.
+          // Keeping the pill icon-only guarantees it fits on the same
+          // line as Priority / Goal / Frequency at all viewport widths.
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { fontSize: 12, lineHeight: 1 }
+          }, "\u23F1"),
+          // Chevron shown only in the inactive state so the pill is
+          // discoverable; dropped once a range is active, matching the
+          // icon-only compact treatment described above.
+          !active && /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { display: "inline-block", fontSize: 9, lineHeight: 1, marginLeft: 2, opacity: .7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }
+          }, "\u25BE")
+        );
+      })()
+    ),
+    // (Time of Day expanded pill row removed — see comment above about
+    // the Time compact toggle being removed in favor of collapsible
+    // section headers.)
+    // Expanded row: Priority pills.
+    (impPillsOpen || impFilter.length > 0) && /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
       style: {
-        flex: 1,
         display: "flex",
-        gap: 4,
-        overflowX: "auto",
-        scrollbarWidth: "none"
+        flexWrap: "wrap",
+        rowGap: 6,
+        columnGap: 5,
+        borderTop: "1px solid #f0f0ee",
+        paddingTop: 8,
+        marginBottom: 8
       }
     }, [{
       val: "all",
-      label: "All",
-      color: "#2d5a2d",
-      bg: "#f0f7f0",
-      border: "#c6dfc6"
-    }, {
-      val: "morning",
-      label: "Morning",
-      color: "#d97706",
-      bg: "#fffbeb",
-      border: "#fde68a"
-    }, {
-      val: "afternoon",
-      label: "Afternoon",
-      color: "#ea580c",
-      bg: "#fff7ed",
-      border: "#fed7aa"
-    }, {
-      val: "evening",
-      label: "Evening",
-      color: "#7c3aed",
-      bg: "#f5f3ff",
-      border: "#ddd6fe"
-    }, {
-      val: "avoid",
-      label: "Avoid",
-      color: "#dc2626",
-      bg: "#fef2f2",
-      border: "#fecaca"
-    }].map(f => {
-      const on = secFilter === f.val;
-      return /*#__PURE__*/React.createElement("button", {
-        key: f.val,
-        onClick: () => setSecFilter(f.val),
-        style: {
-          display: "flex",
-          alignItems: "center",
-          padding: "5px 11px",
-          borderRadius: 20,
-          border: `1.5px solid ${on ? f.border : "#e5e7eb"}`,
-          background: on ? f.bg : "#fff",
-          color: on ? f.color : "#9ca3af",
-          fontSize: 10,
-          fontWeight: on ? 700 : 500,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-          flexShrink: 0,
-          transition: "all .15s"
-        }
-      }, f.label);
-    }))), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 5,
-        marginBottom: 10,
-        overflowX: "auto",
-        paddingBottom: 2,
-        alignItems: "center"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 9,
-        fontWeight: 600,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        flexShrink: 0
-      }
-    }, "Priority:"), [{
-      val: "all",
-      label: "All",
+      label: "All Importance",
       color: "#2d5a2d",
       border: "#c6dfc6",
       bg: "#f0f7f0"
@@ -4822,11 +6090,12 @@ function App() {
       border: i.border,
       bg: i.bg
     }))].map(f => {
-      const on = impFilter === f.val;
-      const isImp = f.val !== "all";
-      return /*#__PURE__*/React.createElement("button", {
+      const isAll = f.val === "all";
+      const on = isAll ? impFilter.length === 0 : impFilter.includes(f.val);
+      const press = filterPressProps(f.val, impFilter, setImpFilter, impLpRef, isAll);
+      return /*#__PURE__*/React.createElement("button", Object.assign({
         key: f.val,
-        onClick: () => setImpFilter(f.val),
+        title: isAll ? "Show all" : "Tap to show only " + f.label + " — hold to add/remove",
         style: {
           padding: "3px 9px",
           borderRadius: 20,
@@ -4838,42 +6107,194 @@ function App() {
           cursor: "pointer",
           whiteSpace: "nowrap",
           flexShrink: 0,
-          minWidth: isImp ? 92 : undefined,
-          textAlign: "center"
+          textAlign: "center",
+          WebkitTapHighlightColor: "transparent",
+          userSelect: "none"
         }
-      }, f.label);
-    }), /*#__PURE__*/React.createElement("span", {
+      }, press), f.label);
+    })),
+    // Expanded row: Goal / Area-of-Life pills. Built from HT so each
+    // area renders in its own themed color and stays in sync with the
+    // forms' Area-of-Life dropdown.
+    (habGoalPillsOpen || habGoalFilter.length > 0) && /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
       style: {
-        fontSize: 9,
-        fontWeight: 600,
-        color: "#9ca3af",
-        textTransform: "uppercase",
-        flexShrink: 0,
-        marginLeft: 4
+        display: "flex",
+        flexWrap: "wrap",
+        rowGap: 6,
+        columnGap: 5,
+        borderTop: "1px solid #f0f0ee",
+        paddingTop: 8,
+        marginBottom: 8
       }
-    }, "Max time:"), /*#__PURE__*/React.createElement("span", {
+    }, [{
+      val: "all",
+      label: "All Goals",
+      color: "#2d5a2d",
+      border: "#c6dfc6",
+      bg: "#f0f7f0"
+    }, ...HT.map(t => ({
+      val: t.value,
+      label: t.value,
+      color: t.color,
+      border: t.border,
+      bg: t.bg
+    }))].map(f => {
+      const isAll = f.val === "all";
+      const on = isAll ? habGoalFilter.length === 0 : habGoalFilter.includes(f.val);
+      const press = filterPressProps(f.val, habGoalFilter, setHabGoalFilter, habGoalLpRef, isAll);
+      return /*#__PURE__*/React.createElement("button", Object.assign({
+        key: f.val,
+        title: isAll ? "Show all" : "Tap to show only " + f.label + " — hold to add/remove",
+        style: {
+          padding: "3px 9px",
+          borderRadius: 20,
+          border: `1px solid ${on ? f.border : "#e5e7eb"}`,
+          background: on ? f.bg : "#fff",
+          color: on ? f.color : "#9ca3af",
+          fontSize: 10,
+          fontWeight: on ? 700 : 400,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          textAlign: "center",
+          WebkitTapHighlightColor: "transparent",
+          userSelect: "none"
+        }
+      }, press), f.label);
+    })),
+    // Expanded row: Frequency pills. Shares a single blue accent (matches
+    // the compact Frequency toggle) since FREQ values don't have their
+    // own palette; the "All" pill keeps the Verrocchio-green treatment
+    // used across the other expanded rows.
+    (habFreqPillsOpen || habFreqFilter.length > 0) && /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
       style: {
-        fontSize: 10,
-        color: durFilter === 0 ? "#9ca3af" : "#0891b2",
-        fontWeight: 600,
-        flexShrink: 0,
-        minWidth: 28
+        display: "flex",
+        flexWrap: "wrap",
+        rowGap: 6,
+        columnGap: 5,
+        borderTop: "1px solid #f0f0ee",
+        paddingTop: 8,
+        marginBottom: 8
       }
-    }, durFilter === 0 ? "Any" : `${durFilter}m`), /*#__PURE__*/React.createElement("input", {
-      type: "range",
-      min: 0,
-      max: 120,
-      step: 5,
-      value: durFilter,
-      onChange: e => setDurFilter(Number(e.target.value)),
-      style: {
-        flex: 1,
-        minWidth: 60,
-        maxWidth: 100,
-        accentColor: "#0891b2",
-        cursor: "pointer"
-      }
-    })), /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), /*#__PURE__*/React.createElement("div", {
+    }, [{
+      val: "all",
+      label: "All Frequency",
+      color: "#2d5a2d",
+      border: "#c6dfc6",
+      bg: "#f0f7f0"
+    }, ...FREQ.map(fr => ({
+      val: fr.value,
+      label: fr.label,
+      color: "#1d4ed8",
+      border: "#bfdbfe",
+      bg: "#eff6ff"
+    }))].map(f => {
+      const isAll = f.val === "all";
+      const on = isAll ? habFreqFilter.length === 0 : habFreqFilter.includes(f.val);
+      const press = filterPressProps(f.val, habFreqFilter, setHabFreqFilter, habFreqLpRef, isAll);
+      return /*#__PURE__*/React.createElement("button", Object.assign({
+        key: f.val,
+        title: isAll ? "Show all" : "Tap to show only " + f.label + " — hold to add/remove",
+        style: {
+          padding: "3px 9px",
+          borderRadius: 20,
+          border: `1px solid ${on ? f.border : "#e5e7eb"}`,
+          background: on ? f.bg : "#fff",
+          color: on ? f.color : "#9ca3af",
+          fontSize: 10,
+          fontWeight: on ? 700 : 400,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          textAlign: "center",
+          WebkitTapHighlightColor: "transparent",
+          userSelect: "none"
+        }
+      }, press), f.label);
+    })),
+    // Expanded row: Duration slider. Shown when the user taps the
+    // Duration pill or whenever the range has been narrowed. Layout
+    // mirrors the pill rows above: an "All Duration" reset pill on
+    // the left acts as the sub-row's left-hand label + reset affordance,
+    // then the dual-thumb slider fills the remaining width.
+    (() => {
+      const [dMin, dMax] = durRange;
+      const any = dMin === DUR_MIN && dMax === DUR_MAX;
+      if (!durPillsOpen && any) return null;
+      const pctLo = ((dMin - DUR_MIN) / (DUR_MAX - DUR_MIN)) * 100;
+      const pctHi = ((dMax - DUR_MIN) / (DUR_MAX - DUR_MIN)) * 100;
+      return /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: {
+          display: "flex",
+          alignItems: "center",
+          rowGap: 6,
+          columnGap: 8,
+          borderTop: "1px solid #f0f0ee",
+          paddingTop: 8,
+          marginBottom: 8
+        }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => setDurRange([DUR_MIN, DUR_MAX]),
+          title: "Reset duration range",
+          style: {
+            padding: "3px 9px",
+            borderRadius: 20,
+            border: `1px solid ${any ? "#c6dfc6" : "#e5e7eb"}`,
+            background: any ? "#f0f7f0" : "#fff",
+            color: any ? "#2d5a2d" : "#9ca3af",
+            fontSize: 10,
+            fontWeight: any ? 700 : 400,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+            textAlign: "center",
+            WebkitTapHighlightColor: "transparent",
+            userSelect: "none"
+          }
+        }, "All Duration"),
+        /*#__PURE__*/React.createElement("div", {
+          className: "dur-slider-wrap",
+          title: "Duration range"
+        },
+          /*#__PURE__*/React.createElement("div", { className: "dur-track" }),
+          /*#__PURE__*/React.createElement("div", {
+            className: "dur-fill",
+            style: { left: pctLo + "%", right: (100 - pctHi) + "%" }
+          }),
+          /*#__PURE__*/React.createElement("input", {
+            type: "range",
+            className: "dur-slider",
+            min: DUR_MIN, max: DUR_MAX, step: DUR_STEP,
+            value: dMin,
+            onChange: e => {
+              const v = Math.min(Number(e.target.value), dMax - DUR_STEP < DUR_MIN ? dMax : dMax - DUR_STEP);
+              setDurRange([Math.max(DUR_MIN, Math.min(v, dMax)), dMax]);
+            },
+            "aria-label": "Minimum duration"
+          }),
+          /*#__PURE__*/React.createElement("input", {
+            type: "range",
+            className: "dur-slider",
+            min: DUR_MIN, max: DUR_MAX, step: DUR_STEP,
+            value: dMax,
+            onChange: e => {
+              const v = Math.max(Number(e.target.value), dMin + DUR_STEP > DUR_MAX ? dMin : dMin + DUR_STEP);
+              setDurRange([dMin, Math.min(DUR_MAX, Math.max(v, dMin))]);
+            },
+            "aria-label": "Maximum duration"
+          })
+        ),
+        !any && /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, fontWeight: 700, color: "var(--accent, #2d5a2d)", flexShrink: 0, minWidth: 46, textAlign: "right" }
+        }, dMin === dMax ? `${dMin}m` : `${dMin}\u2013${dMax}m`)
+      );
+    })(),
+    /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), /*#__PURE__*/React.createElement("div", {
       style: {
         marginBottom: 16
       }
@@ -4960,7 +6381,12 @@ function App() {
     }, "\u2605 Importance"), IMP.map(i => /*#__PURE__*/React.createElement("option", {
       key: i.value,
       value: i.value
-    }, i.value)))), /*#__PURE__*/React.createElement("select", {
+    }, i.value)))),
+    // Schedule block: start date + frequency cadence + cadence-specific
+    // sub-picker (weekday chips, day-of-month, or month+day anchor).
+    // See `renderFreqPicker` for the per-cadence field layout.
+    renderFreqPicker(nHFreq, sNHFreq, nHStart, sNHStart),
+    /*#__PURE__*/React.createElement("select", {
       value: nHGoal,
       onChange: e => {
         if (e.target.value === "__new__") {
@@ -5050,14 +6476,37 @@ function App() {
           return /*#__PURE__*/React.createElement("div", {
             key: habit.id,
             className: "hrow",
-            onClick: () => { if (habit.goalId) setExpHabitGoals(p => ({...p, [habit.id]: !p[habit.id]})); },
-            onDoubleClick: () => sEHabit(habit),
+            // Same expansion pattern as the non-avoid card: tap toggles
+            // the metadata row; press-and-hold opens the edit dialog.
+            // habitHoldRef's fired flag suppresses the synthetic click
+            // that fires on mobile right after a long-press.
+            onClick: e => {
+              const s = habitHoldRef.current[habit.id];
+              if (s && s.fired) { delete habitHoldRef.current[habit.id]; return; }
+              setExpHabitGoals(p => ({ ...p, [habit.id]: !p[habit.id] }));
+            },
+            onMouseDown: e => {
+              if (e.button !== 0) return;
+              habitHoldRef.current[habit.id] = {
+                fired: false,
+                timer: setTimeout(() => {
+                  const cur = habitHoldRef.current[habit.id];
+                  if (cur) cur.fired = true;
+                  sEHabit(habit);
+                }, 520)
+              };
+            },
+            onMouseUp: () => { const s = habitHoldRef.current[habit.id]; if (s && !s.fired) clearTimeout(s.timer); },
+            onMouseLeave: () => { const s = habitHoldRef.current[habit.id]; if (s) { clearTimeout(s.timer); delete habitHoldRef.current[habit.id]; } },
             onTouchStart: e => {
               const t = e.touches[0];
               swipeRef.current[habit.id] = {
                 x: t.clientX,
                 y: t.clientY,
-                holdTimer: setTimeout(() => sEHabit(habit), 600)
+                holdTimer: setTimeout(() => {
+                  habitHoldRef.current[habit.id] = { fired: true };
+                  sEHabit(habit);
+                }, 600)
               };
             },
             onTouchMove: e => {
@@ -5105,14 +6554,17 @@ function App() {
               background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff5f5",
               border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : "#fecaca"}`,
               borderRadius: 12,
-              padding: "12px 12px",
+              padding: expHabitGoals[habit.id] ? "10px 12px" : "7px 12px",
               paddingRight: ht ? "30px" : "12px",
               transform: animState === "done" ? "translateX(110%)" : animState === "missed" ? "translateX(-110%)" : "translateX(0)",
-              transition: "transform 0.32s ease, background 0.2s, border-color 0.2s",
+              transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s",
               boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : "0 1px 3px rgba(220,38,38,.06)",
               position: "relative",
               overflow: "hidden",
-              marginBottom: 8
+              marginBottom: 8,
+              cursor: "pointer",
+              userSelect: "none",
+              WebkitTapHighlightColor: "transparent"
             }
           }, /*#__PURE__*/React.createElement("div", {
             onClick: e => { e.stopPropagation(); if (d || missed) togHabit(habit.id, selDate, undefined); },
@@ -5140,7 +6592,7 @@ function App() {
           habit.notes && /*#__PURE__*/React.createElement("div", {
             style: {fontSize: 11, color: "#6b7280", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
           }, habit.notes),
-          /*#__PURE__*/React.createElement("div", {
+          expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
             style: {display: "flex", alignItems: "center", gap: 3, flexWrap: "nowrap", overflow: "hidden", marginTop: 2}
           }, fmtDur(habit.duration) && /*#__PURE__*/React.createElement("div", {
             style: {height: 16, paddingLeft: 5, paddingRight: 5, background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
@@ -5148,15 +6600,26 @@ function App() {
           imp && /*#__PURE__*/React.createElement("div", {
             style: {height: 16, paddingLeft: 5, paddingRight: 5, background: imp.bg, border: `1px solid ${imp.border}`, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
           }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: imp.color, textTransform: "uppercase", whiteSpace: "nowrap"}}, imp.value)),
-          /*#__PURE__*/React.createElement("div", {
-            style: {display: "flex", alignItems: "center", gap: 2, height: 16, paddingLeft: 4, paddingRight: 4, background: "#fafafa", border: "1px solid #e5e7eb", borderRadius: 4, flexShrink: 0}
-          }, /*#__PURE__*/React.createElement("div", {style: {display: "flex", gap: 1}},
-            l14.slice(-7).map((x, i) => /*#__PURE__*/React.createElement("div", {key: i, style: {width: 4, height: 4, borderRadius: 1, background: x.done ? "#22c55e" : "#e5e7eb"}}))
-          ), /*#__PURE__*/React.createElement("span", {
-            style: {fontSize: 8, fontWeight: 600, color: rate.pct >= 80 ? "#16a34a" : rate.pct >= 50 ? "#d97706" : "#dc2626", marginLeft: 2}
-          }, rate.pct, "%"), /*#__PURE__*/React.createElement("span", {
-            style: {fontSize: 8, fontWeight: 700, color: streak >= 7 ? "#d97706" : "#22c55e", marginLeft: 3}
-          }, streak >= 7 ? "🔥" : "", streak, streak === 1 ? " Day Streak" : " Days Streak"))),
+          // Frequency pill (e.g. "Daily", "Weekly") — replaces the
+          // old dots+percent+streak-text cluster. The cadence anchor
+          // (e.g. "— Tue") is trimmed off; just the bucket name shows.
+          (() => { const fqRow = FREQ.find(f => f.value === getFreq(habit).type); return fqRow ? /*#__PURE__*/React.createElement("div", {
+            style: {height: 16, paddingLeft: 5, paddingRight: 5, background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#475569", textTransform: "uppercase", whiteSpace: "nowrap"}}, fqRow.label)) : null; })(),
+          // Compact streak indicator — fire emoji with day-count when
+          // there's an active streak, ice emoji with days-since when
+          // the habit has gone cold. Hidden entirely for brand-new
+          // habits with no history.
+          (() => {
+            if (streak > 0) return /*#__PURE__*/React.createElement("div", {
+              style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
+            }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83D\uDD25"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#c2410c"}}, streak));
+            const cold = daysSinceLast(habit);
+            if (cold != null) return /*#__PURE__*/React.createElement("div", {
+              style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
+            }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#1d4ed8"}}, cold));
+            return null;
+          })()),
           habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
             style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb"}
           }, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}},"Goal: "),
@@ -5169,14 +6632,47 @@ function App() {
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
           className: "hrow",
-          onClick: () => { if (habit.goalId) setExpHabitGoals(p => ({...p, [habit.id]: !p[habit.id]})); },
-          onDoubleClick: () => sEHabit(habit),
+          // Tap = toggle expanded metadata row; press-and-hold = edit.
+          // The click path checks habitHoldRef so a hold-fired synthetic
+          // click (common on mobile after a long press) doesn't also
+          // toggle the card. Mouse hold lives in mouseDown/Up/Leave;
+          // touch hold is still kicked off inside onTouchStart so it
+          // coexists with the swipe handlers.
+          onClick: e => {
+            const s = habitHoldRef.current[habit.id];
+            if (s && s.fired) { delete habitHoldRef.current[habit.id]; return; }
+            setExpHabitGoals(p => ({ ...p, [habit.id]: !p[habit.id] }));
+          },
+          onMouseDown: e => {
+            if (e.button !== 0) return;
+            habitHoldRef.current[habit.id] = {
+              fired: false,
+              timer: setTimeout(() => {
+                const cur = habitHoldRef.current[habit.id];
+                if (cur) cur.fired = true;
+                sEHabit(habit);
+              }, 520)
+            };
+          },
+          onMouseUp: () => {
+            const s = habitHoldRef.current[habit.id];
+            if (s && !s.fired) clearTimeout(s.timer);
+          },
+          onMouseLeave: () => {
+            const s = habitHoldRef.current[habit.id];
+            if (s) { clearTimeout(s.timer); delete habitHoldRef.current[habit.id]; }
+          },
           onTouchStart: e => {
             const t = e.touches[0];
             swipeRef.current[habit.id] = {
               x: t.clientX,
               y: t.clientY,
-              holdTimer: setTimeout(() => sEHabit(habit), 600)
+              holdTimer: setTimeout(() => {
+                // Flag the hold so the synthetic click that follows
+                // touchend doesn't also toggle the card expansion.
+                habitHoldRef.current[habit.id] = { fired: true };
+                sEHabit(habit);
+              }, 600)
             };
           },
           onTouchMove: e => {
@@ -5248,14 +6744,20 @@ function App() {
             background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
             border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : "#e5e7eb"}`,
             borderRadius: 12,
-            padding: "12px 12px",
+            // Compact height by default (matches goal-card density);
+            // when the user taps to expand, vertical padding grows so
+            // the metadata row has breathing room.
+            padding: expHabitGoals[habit.id] ? "10px 12px" : "7px 12px",
             paddingRight: ht ? "30px" : "12px",
             transform: animState === "done" ? "translateX(110%)" : animState === "missed" ? "translateX(-110%)" : "translateX(0)",
-            transition: "transform 0.32s ease, background 0.2s, border-color 0.2s",
+            transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s",
             boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : missed || animState === "missed" ? "0 1px 3px rgba(220,38,38,.08)" : "0 1px 2px rgba(0,0,0,.04)",
             position: "relative",
             overflow: "hidden",
-            marginBottom: 8
+            marginBottom: 8,
+            cursor: "pointer",
+            userSelect: "none",
+            WebkitTapHighlightColor: "transparent"
           }
         }, /*#__PURE__*/React.createElement("div", {
           onClick: e => {
@@ -5340,7 +6842,7 @@ function App() {
             overflow: "hidden",
             textOverflow: "ellipsis"
           }
-        }, habit.notes), /*#__PURE__*/React.createElement("div", {
+        }, habit.notes), expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
           style: {
             display: "flex",
             alignItems: "center",
@@ -5390,47 +6892,24 @@ function App() {
             textTransform: "uppercase",
             whiteSpace: "nowrap"
           }
-        }, imp.value)), /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-            height: 16,
-            paddingLeft: 4,
-            paddingRight: 4,
-            background: "#fafafa",
-            border: "1px solid #e5e7eb",
-            borderRadius: 4,
-            flexShrink: 0
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: "flex",
-            gap: 1
-          }
-        }, l14.slice(-7).map((x, i) => /*#__PURE__*/React.createElement("div", {
-          key: i,
-          style: {
-            width: 4,
-            height: 4,
-            borderRadius: 1,
-            background: x.done ? "#2d5a2d" : "#e5e7eb"
-          }
-        }))), /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 8,
-            fontWeight: 600,
-            color: rate.pct >= 80 ? "#16a34a" : rate.pct >= 50 ? "#d97706" : "#dc2626",
-            marginLeft: 2
-          }
-        }, rate.pct, "%"), /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 8,
-            fontWeight: 700,
-            color: streak >= 7 ? "#d97706" : "#2d5a2d",
-            marginLeft: 3
-          }
-        }, streak >= 7 ? "🔥" : "", streak, streak === 1 ? " Day Streak" : " Days Streak"))), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb"}}, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}},"Goal: "), /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},data.goals.find(g=>String(g.id)===String(habit.goalId))?.text||"")), ht && /*#__PURE__*/React.createElement("div", {
+        }, imp.value)),
+        // Frequency pill — replaces the streak graphic (dots + % + day
+        // count). Just the cadence bucket name, uppercase.
+        (() => { const fqRow = FREQ.find(f => f.value === getFreq(habit).type); return fqRow ? /*#__PURE__*/React.createElement("div", {
+          style: {height: 16, paddingLeft: 5, paddingRight: 5, background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
+        }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#475569", textTransform: "uppercase", whiteSpace: "nowrap"}}, fqRow.label)) : null; })(),
+        // Fire/ice streak indicator: 🔥N for an active streak, 🧊N
+        // for days since the habit went cold; nothing for brand-new.
+        (() => {
+          if (streak > 0) return /*#__PURE__*/React.createElement("div", {
+            style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83D\uDD25"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#c2410c"}}, streak));
+          const cold = daysSinceLast(habit);
+          if (cold != null) return /*#__PURE__*/React.createElement("div", {
+            style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#1d4ed8"}}, cold));
+          return null;
+        })()), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb"}}, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}},"Goal: "), /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},data.goals.find(g=>String(g.id)===String(habit.goalId))?.text||"")), ht && /*#__PURE__*/React.createElement("div", {
           style: {
             position: "absolute",
             right: 0,
@@ -5456,18 +6935,27 @@ function App() {
           }
         }, ht.value))));
       };
+      // All four sections (morning/afternoon/evening/avoid) collapse
+      // when their map value is true. Tapping the header toggles
+      // collapse. Avoid defaults to expanded from the init effect.
+      const collapsed = !!collapsedSections[group.value];
       return /*#__PURE__*/React.createElement("div", {
         key: group.value,
         style: {
           marginBottom: 22
         }
       }, /*#__PURE__*/React.createElement("div", {
+        onClick: () => setCollapsedSections(p => ({ ...p, [group.value]: !p[group.value] })),
         style: {
           display: "flex",
           alignItems: "center",
           gap: 6,
-          marginBottom: 8
-        }
+          marginBottom: 8,
+          cursor: "pointer",
+          userSelect: "none",
+          WebkitTapHighlightColor: "transparent"
+        },
+        title: collapsed ? "Expand " + group.label : "Collapse " + group.label
       }, /*#__PURE__*/React.createElement("span", null, group.icon), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 11,
@@ -5497,7 +6985,23 @@ function App() {
           fontSize: 11,
           color: "#9ca3af"
         }
-      }, doneCount, "/", group.habits.length)), /*#__PURE__*/React.createElement("div", null, group.habits.map(h => renderCard(h))));
+      }, doneCount, "/", group.habits.length),
+      // Chevron indicator — rotates 180° when the section is collapsed
+      // (down arrow = "tap to expand", up arrow = "tap to collapse").
+      /*#__PURE__*/React.createElement("span", {
+        "aria-hidden": true,
+        style: {
+          display: "inline-block",
+          fontSize: 10,
+          lineHeight: 1,
+          color: group.color,
+          opacity: .7,
+          transform: collapsed ? "rotate(0deg)" : "rotate(180deg)",
+          transition: "transform .15s"
+        }
+      }, "\u25BE")),
+      // Body: hidden when the section is collapsed.
+      !collapsed && /*#__PURE__*/React.createElement("div", null, group.habits.map(h => renderCard(h))));
     }), filtH.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
@@ -5626,7 +7130,25 @@ function App() {
           color: "#374151",
           wordBreak: "break-word"
         }
-      }, todo.text), ds && /*#__PURE__*/React.createElement("span", {
+      }, todo.text,
+        // Goal link chip — shows which goal this to-do is attached to (if
+        // any). Clicking jumps to the Goals tab so the user can see the
+        // full context.
+        todo.goalId && (() => {
+          const g = (data.goals || []).find(x => String(x.id) === String(todo.goalId));
+          if (!g) return null;
+          return /*#__PURE__*/React.createElement("button", {
+            onClick: () => { setTab("goals"); setExpGoalHabits(p => ({ ...p, [g.id]: true })); },
+            title: "Open goal",
+            style: {
+              marginLeft: 8, fontSize: 10, fontWeight: 600,
+              color: "#2d5a2d", background: "#f0f7f0",
+              border: "1px solid #c6dfc6", borderRadius: 10,
+              padding: "1px 8px", cursor: "pointer", verticalAlign: "middle"
+            }
+          }, "\uD83C\uDFAF ", g.text.length > 24 ? g.text.slice(0, 22) + "\u2026" : g.text);
+        })()
+      ), ds && /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 10,
           fontWeight: 600,
@@ -5663,51 +7185,162 @@ function App() {
         }
       }, "\xD7")));
     };
+    // Collapsed header (matches the Habits/Goals pattern):
+    //   [+ button] [All pill] [Today] [This Week] [This Month] [Later] [No Due]
+    // The + button toggles the inline add-task form. When any section
+    // filter is active, only that section renders below. An "All" pill
+    // collapses the filter back to the full list.
+    const secFilterOn = (key) => todoSecFilter.length === 0 || todoSecFilter.includes(key);
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in"
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 6,
-        marginBottom: 14,
-        flexWrap: "wrap"
-      }
-    }, /*#__PURE__*/React.createElement("input", {
-      value: nTodo,
-      onChange: e => sNTodo(e.target.value),
-      onKeyDown: e => e.key === "Enter" && addTodo(),
-      placeholder: "Add a new task...",
-      style: {
-        ...IS,
-        flex: 1,
-        minWidth: 160
-      }
-    }), /*#__PURE__*/React.createElement("input", {
-      type: "date",
-      value: nTodoDue,
-      onChange: e => sNTodoDue(e.target.value),
-      style: {
-        ...IS,
-        fontSize: 12,
-        cursor: "pointer",
-        color: "#7c3aed"
-      }
-    }), /*#__PURE__*/React.createElement("button", {
-      className: "add-btn",
-      onClick: addTodo,
-      style: {
-        ...AB,
-        padding: "9px 16px",
-        fontSize: 13
-      }
-    }, "Add")), data.todos.length === 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        color: "#d1d5db",
-        fontSize: 13,
-        padding: "40px 0"
-      }
-    }, "No tasks yet"), SECS.map(sec => {
+    },
+      // Header row: + button + filter pills.
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, marginBottom: 8 }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => setExpTodoForm(p => !p),
+          "aria-label": "New task",
+          title: "New task",
+          style: {
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 28, height: 28, borderRadius: "50%",
+            border: "none",
+            background: expTodoForm ? "#234a23" : "#2d5a2d",
+            color: "#fff", cursor: "pointer", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent"
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            color: "#fff", fontSize: 18, lineHeight: 1, fontWeight: 300,
+            transform: expTodoForm ? "rotate(45deg)" : "none",
+            transition: "transform .18s ease", display: "inline-block"
+          }
+        }, "+")),
+        // "All Tasks" pill — expands / collapses the section-filter row.
+        (() => {
+          const active = todoSecFilter.length > 0;
+          const expanded = todoPillsOpen || active;
+          const count = todoSecFilter.length;
+          return /*#__PURE__*/React.createElement("button", {
+            onClick: () => {
+              if (active) { setTodoSecFilter([]); setTodoPillsOpen(true); return; }
+              setTodoPillsOpen(p => !p);
+            },
+            title: "All Tasks \u2014 tap to expand section filters",
+            style: {
+              display: "flex", alignItems: "center", gap: 4,
+              padding: "4px 10px",
+              borderRadius: 20,
+              border: `1px solid ${active ? "#fde68a" : expanded ? "#c6dfc6" : "#e5e7eb"}`,
+              background: active ? "#fffbeb" : expanded ? "#f0f7f0" : "#fff",
+              color: active ? "#d97706" : expanded ? "#2d5a2d" : "#6b7280",
+              fontSize: 11, fontWeight: expanded || active ? 700 : 500,
+              cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+              WebkitTapHighlightColor: "transparent", userSelect: "none"
+            }
+          },
+            "All Tasks",
+            count > 0 && /*#__PURE__*/React.createElement("span", {
+              style: { background: "#d97706", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
+            }, count),
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 8, opacity: 0.7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .18s ease", display: "inline-block", marginLeft: 2 }
+            }, "\u25BC")
+          );
+        })()
+      ),
+      // Section-filter pill row — each pill corresponds to one of SECS,
+      // letting the user narrow to Today / This Week / etc. Visible
+      // whenever the user has opened the filter row OR when a filter
+      // is already active, so they can always see / clear it.
+      (todoPillsOpen || todoSecFilter.length > 0) && /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: { display: "flex", flexWrap: "wrap", rowGap: 6, columnGap: 5, marginBottom: 8 }
+      },
+        [{ val: "all", label: "All", color: "#2d5a2d", border: "#c6dfc6", bg: "#f0f7f0" },
+         ...SECS.map(s => ({ val: s.key, label: s.label, color: s.color, border: s.bc, bg: s.bg }))
+        ].map(f => {
+          const isAll = f.val === "all";
+          const on = isAll ? todoSecFilter.length === 0 : todoSecFilter.includes(f.val);
+          return /*#__PURE__*/React.createElement("button", {
+            key: f.val,
+            onClick: () => {
+              if (isAll) { setTodoSecFilter([]); return; }
+              setTodoSecFilter(p => p.includes(f.val) ? p.filter(x => x !== f.val) : [...p, f.val]);
+            },
+            style: { padding:"4px 10px", borderRadius:20, border:`1px solid ${on?f.border:"#e5e7eb"}`, background:on?f.bg:"#fff", color:on?f.color:"#9ca3af", fontSize:10, fontWeight:on?700:400, cursor:"pointer", whiteSpace:"nowrap", WebkitTapHighlightColor:"transparent", userSelect:"none", flexShrink:0 }
+          }, f.label);
+        })
+      ),
+      // Inline add-task form — only mounted when the + button is open.
+      // This is where goal-link + due-date get assigned; the main list
+      // stays clean until the user actually commits to adding a task.
+      expTodoForm && /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: {
+          background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10,
+          padding: 10, marginBottom: 12,
+          display: "flex", flexDirection: "column", gap: 8
+        }
+      },
+        /*#__PURE__*/React.createElement("input", {
+          value: nTodo,
+          onChange: e => sNTodo(e.target.value),
+          onKeyDown: e => { if (e.key === "Enter") { addTodo(); setExpTodoForm(false); } if (e.key === "Escape") setExpTodoForm(false); },
+          placeholder: "What do you need to get done?",
+          autoFocus: true,
+          style: { ...IS, width: "100%" }
+        }),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 6, flexWrap: "wrap" }
+        },
+          /*#__PURE__*/React.createElement("input", {
+            type: "date",
+            value: nTodoDue,
+            onChange: e => sNTodoDue(e.target.value),
+            title: "Due date",
+            style: { ...IS, fontSize: 12, cursor: "pointer", color: nTodoDue ? "#7c3aed" : "#9ca3af", flex: "1 1 140px", minWidth: 140 }
+          }),
+          /*#__PURE__*/React.createElement("select", {
+            value: nTodoGoalId,
+            onChange: e => sNTodoGoalId(e.target.value),
+            title: "Link to a goal",
+            style: { ...S, fontSize: 12, flex: "2 1 180px", minWidth: 160, color: nTodoGoalId ? "#2d5a2d" : "#9ca3af" }
+          },
+            /*#__PURE__*/React.createElement("option", { value: "" }, "\uD83C\uDFAF No goal"),
+            HT.map(ht => {
+              const tg = (data.goals || []).filter(g => g.type === ht.value);
+              if (!tg.length) return null;
+              return /*#__PURE__*/React.createElement("optgroup", { key: ht.value, label: ht.value },
+                tg.map(g => /*#__PURE__*/React.createElement("option", { key: g.id, value: g.id }, g.text)));
+            }),
+            (data.goals || []).filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("optgroup", { label: "General" },
+              (data.goals || []).filter(g => !g.type).map(g => /*#__PURE__*/React.createElement("option", { key: g.id, value: g.id }, g.text)))
+          )
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 6, justifyContent: "flex-end" }
+        },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { sNTodo(""); sNTodoDue(""); sNTodoGoalId(""); setExpTodoForm(false); },
+            style: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "7px 14px", fontSize: 12, color: "#6b7280", cursor: "pointer" }
+          }, "Cancel"),
+          /*#__PURE__*/React.createElement("button", {
+            className: "add-btn",
+            onClick: () => { if (!nTodo.trim()) return; addTodo(); setExpTodoForm(false); },
+            style: { ...AB, padding: "7px 18px", fontSize: 13 }
+          }, "Add Task")
+        )
+      ),
+      data.todos.length === 0 && /*#__PURE__*/React.createElement("div", {
+        style: {
+          textAlign: "center",
+          color: "#d1d5db",
+          fontSize: 13,
+          padding: "40px 0"
+        }
+      }, "No tasks yet"), SECS.filter(s => secFilterOn(s.key)).map(sec => {
       const st = pending.filter(t => getSec(t) === sec.key);
       if (!st.length) return null;
       return /*#__PURE__*/React.createElement("div", {
@@ -6287,25 +7920,89 @@ function App() {
       flexWrap: "wrap",
       alignItems: "center",
       gap: 5,
-      marginBottom: 12
+      marginBottom: 8
+    }
+  },
+    // Compact "+" button — opens the new-goal form directly. (Category
+    // management moved to Profile → My Account, since it's a settings
+    // concern, not a per-session action.)
+    /*#__PURE__*/React.createElement("button", {
+      onClick: () => setExpGForm(p => !p),
+      "aria-label": "New goal",
+      title: "New goal",
+      style: {
+        display: "flex", alignItems: "center", justifyContent: "center",
+        width: 28, height: 28, borderRadius: "50%",
+        border: "none",
+        background: expGForm ? "#234a23" : "#2d5a2d",
+        color: "#fff", cursor: "pointer", flexShrink: 0,
+        WebkitTapHighlightColor: "transparent"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: "#fff", fontSize: 18, lineHeight: 1, fontWeight: 300,
+        transform: expGForm ? "rotate(45deg)" : "none",
+        transition: "transform .18s ease", display: "inline-block"
+      }
+    }, "+")),
+    // Compact "All Goals" pill — tap expands the goal-type pill row below.
+    (() => {
+      const active = goalTypeFilter.length > 0;
+      const expanded = goalPillsOpen || active;
+      const count = goalTypeFilter.length;
+      return /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          // If an active selection exists, first tap just clears (restoring "all"),
+          // keeping the pill row open so the user can pick a new type.
+          if (active) { setGoalTypeFilter([]); setGoalPillsOpen(true); return; }
+          setGoalPillsOpen(p => !p);
+        },
+        title: "All Goals — tap to expand goal-type filters",
+        style: {
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "4px 10px",
+          borderRadius: 20,
+          border: `1px solid ${active ? "#fde68a" : expanded ? "#c6dfc6" : "#e5e7eb"}`,
+          background: active ? "#fffbeb" : expanded ? "#f0f7f0" : "#fff",
+          color: active ? "#d97706" : expanded ? "#2d5a2d" : "#6b7280",
+          fontSize: 11, fontWeight: expanded || active ? 700 : 500,
+          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          WebkitTapHighlightColor: "transparent", userSelect: "none"
+        }
+      },
+        "All Goals",
+        count > 0 && /*#__PURE__*/React.createElement("span", {
+          style: { background: "#d97706", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
+        }, count),
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 8, opacity: 0.7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .18s ease", display: "inline-block", marginLeft: 2 }
+        }, "\u25BC")
+      );
+    })()
+  ),
+  // Expanded row: goal-type pills. Auto-shown whenever a selection is active.
+  (goalPillsOpen || goalTypeFilter.length > 0) && /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      rowGap: 6,
+      columnGap: 5,
+      marginBottom: 8
     }
   }, (() => {
     const allHT = [...HT, ...(data.customGoalTypes || [])];
     const filters = [{val:"all",label:"All",color:"#2d5a2d",border:"#c6dfc6",bg:"#f0f7f0"}, ...allHT.map(t => ({val:t.value,label:t.value,color:t.color,border:t.border,bg:t.bg}))];
-    return /*#__PURE__*/React.createElement(React.Fragment, null,
-      filters.map(f => {
-        const on = goalTypeFilter === f.val;
-        return /*#__PURE__*/React.createElement("button", {key:f.val, onClick:()=>setGoalTypeFilter(f.val), style:{padding:"4px 10px",borderRadius:20,border:`1px solid ${on?f.border:"#e5e7eb"}`,background:on?f.bg:"#fff",color:on?f.color:"#9ca3af",fontSize:10,fontWeight:on?700:400,cursor:"pointer",whiteSpace:"nowrap"}}, f.label);
-      }),
-      /*#__PURE__*/React.createElement("button", {
-        onClick: () => setExpGForm(p => !p),
-        style: {display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:20,border:"1px solid #2d5a2d",background:"#2d5a2d",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}
-      },
-        /*#__PURE__*/React.createElement("svg", { width: "10", height: "10", viewBox: "0 0 12 12", fill: "none" },
-          /*#__PURE__*/React.createElement("path", { d: "M6 1v10M1 6h10", stroke: "white", strokeWidth: "2", strokeLinecap: "round" })),
-        "Add Goal"),
-      /*#__PURE__*/React.createElement("button", {onClick:()=>{setAddCatModal(true);setNewCatName("");setNewCatColor("#6366f1");}, style:{padding:"4px 10px",borderRadius:20,border:"1px dashed #d1d5db",background:"#fafafa",color:"#9ca3af",fontSize:10,cursor:"pointer",whiteSpace:"nowrap"}}, "+ Category")
-    );
+    return filters.map(f => {
+      const isAll = f.val === "all";
+      const on = isAll ? goalTypeFilter.length === 0 : goalTypeFilter.includes(f.val);
+      const press = filterPressProps(f.val, goalTypeFilter, setGoalTypeFilter, goalLpRef, isAll);
+      return /*#__PURE__*/React.createElement("button", Object.assign({
+        key: f.val,
+        title: isAll ? "Show all" : "Tap to show only " + f.label + " \u2014 hold to add/remove",
+        style: {padding:"4px 10px",borderRadius:20,border:`1px solid ${on?f.border:"#e5e7eb"}`,background:on?f.bg:"#fff",color:on?f.color:"#9ca3af",fontSize:10,fontWeight:on?700:400,cursor:"pointer",whiteSpace:"nowrap", WebkitTapHighlightColor:"transparent", userSelect:"none", flexShrink:0}
+      }, press), f.label);
+    });
   })()), /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), expGForm && /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
     style: {
@@ -6398,7 +8095,7 @@ function App() {
       padding: "8px 18px",
       fontSize: 12
     }
-  }, "Add Goal"))), data.goals.filter(g => goalTypeFilter === "all" || g.type === goalTypeFilter).length === 0 && data.goals.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }, "Add Goal"))), data.goals.filter(g => goalTypeFilter.length === 0 || goalTypeFilter.includes(g.type)).length === 0 && data.goals.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       color: "#d1d5db",
@@ -6406,8 +8103,8 @@ function App() {
       padding: "40px 0"
     }
   }, "No goals yet \u2014 tap + to add one"), HT.map(ht => {
-    const typeGoals = data.goals.filter(g => g.type === ht.value && (goalTypeFilter === "all" || goalTypeFilter === ht.value));
-    if (!typeGoals.length || goalTypeFilter !== "all" && goalTypeFilter !== ht.value) return null;
+    const typeGoals = data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value)));
+    if (!typeGoals.length || (goalTypeFilter.length > 0 && !goalTypeFilter.includes(ht.value))) return null;
     return /*#__PURE__*/React.createElement("div", {
       key: ht.value,
       style: {
@@ -6731,14 +8428,23 @@ function App() {
           lineHeight: 1.6
         }
       }, goal.smart[f.key])) : null))), expGoalHabits[goal.id] && !isE && (() => {
-        const linked = habits.filter(h => String(h.goalId) === String(goal.id));
-        return linked.length > 0 ? /*#__PURE__*/React.createElement("div", {
+        // Habits linked to this goal, ordered by how often they fire
+        // (daily > select-days > weekly > monthly > quarterly > annual).
+        // Below the habits we list linked one-off to-dos. A quick-add row
+        // at the bottom lets the user attach a new to-do directly from
+        // here without leaving the goal view.
+        const linked = habits
+          .filter(h => String(h.goalId) === String(goal.id))
+          .slice()
+          .sort((a, b) => freqRank(a) - freqRank(b));
+        const linkedTodos = (data.todos || []).filter(t => String(t.goalId) === String(goal.id));
+        return (linked.length > 0 || linkedTodos.length > 0) ? /*#__PURE__*/React.createElement("div", {
           style: {
             borderTop: "1px solid #f3f4f6",
             padding: "10px 14px",
             background: "#f9fafb"
           }
-        }, /*#__PURE__*/React.createElement("div", {
+        }, linked.length > 0 && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 10,
             fontWeight: 700,
@@ -6746,11 +8452,12 @@ function App() {
             textTransform: "uppercase",
             marginBottom: 6
           }
-        }, "Linked Habits"), /*#__PURE__*/React.createElement("div", {
+        }, "Linked Habits"), linked.length > 0 && /*#__PURE__*/React.createElement("div", {
           style: {
             display: "flex",
             flexDirection: "column",
-            gap: 5
+            gap: 5,
+            marginBottom: linkedTodos.length > 0 ? 10 : 0
           }
         }, linked.map(h => {
           const d = isDone(h, selDate);
@@ -6814,8 +8521,50 @@ function App() {
               fontSize: 9,
               color: "#9ca3af"
             }
-          }, SECTIONS.find(s => s.value === h.section)?.icon || ""));
-        }))) : /*#__PURE__*/React.createElement("div", {
+          }, SECTIONS.find(s => s.value === h.section)?.icon || ""),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 9, color: "#9ca3af", marginLeft: 4 }
+          }, freqLabel(h)));
+        })),
+        // Linked to-dos list (one-off, not recurring).
+        linkedTodos.length > 0 && /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 10, fontWeight: 700, color: "#0891b2", textTransform: "uppercase", marginBottom: 6 }
+        }, "Linked To-Dos"),
+        linkedTodos.length > 0 && /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }
+        }, linkedTodos.map(t => /*#__PURE__*/React.createElement("div", {
+          key: t.id,
+          style: {
+            display: "flex", alignItems: "center", gap: 8,
+            background: "#fff", borderRadius: 8, padding: "7px 10px",
+            border: "1px solid #e5e7eb"
+          }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            onClick: () => chkTodo(t.id),
+            title: "Mark done",
+            style: {
+              width: 16, height: 16, borderRadius: 4,
+              border: "1.5px solid #d1d5db", background: "#fff",
+              cursor: "pointer", flexShrink: 0
+            }
+          }),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 12, color: "#374151", fontWeight: 500, flex: 1 }
+          }, t.text),
+          t.dueDate && /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 10, color: "#6b7280" }
+          }, t.dueDate),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => delTodo(t.id),
+            title: "Remove",
+            style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 14, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
+          }, "\u00D7")
+        ))),
+        // Quick-add row: always visible so the user can attach a new
+        // to-do to this specific goal without switching tabs.
+        renderGoalTodoQuickAdd(goal)
+        ) : /*#__PURE__*/React.createElement("div", {
           style: {
             borderTop: "1px solid #f3f4f6",
             padding: "10px 14px",
@@ -6824,12 +8573,15 @@ function App() {
         }, /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 12,
-            color: "#9ca3af"
+            color: "#9ca3af",
+            marginBottom: 8
           }
-        }, "No habits linked to this goal yet."));
+        }, "No habits or to-dos linked to this goal yet."),
+          renderGoalTodoQuickAdd(goal)
+        );
       })());
     })));
-  }), goalTypeFilter === "all" && data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("div", {
+  }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -6921,7 +8673,7 @@ function App() {
         opacity: 0
       }
     }, "\xD7")));
-  })))), tab === "social" && /*#__PURE__*/React.createElement("div", {
+  })))), false && tab === "social" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8210,7 +9962,8 @@ function App() {
       { val: "account", label: "My Account", icon: "\uD83D\uDC64" },
       { val: "inspiration", label: "My Inspiration", icon: "\uD83D\uDCA1" },
       { val: "history", label: "Goal History", icon: "\uD83D\uDCDC" },
-      { val: "reports", label: "Habit Reports", icon: "\uD83D\uDCCA" }
+      { val: "reports", label: "Habit Reports", icon: "\uD83D\uDCCA" },
+      { val: "settings", label: "App Settings", icon: "\u2699\uFE0F" }
     ];
     const navBtn = (item, on) => /*#__PURE__*/React.createElement("button", {
       key: item.val,
@@ -8236,8 +9989,9 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 18 }
       }, /*#__PURE__*/React.createElement("div", {
+        "data-brand": demoMode ? "1" : null,
         style: { width: 64, height: 64, borderRadius: "50%", background: "#2d5a2d", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }
-      }, profileName ? /*#__PURE__*/React.createElement("span", { style: { color: "#fff", fontSize: 28, fontWeight: 700 } }, profileName.charAt(0).toUpperCase()) : /*#__PURE__*/React.createElement("svg", { width: "32", height: "32", viewBox: "0 0 24 24", fill: "none", stroke: "white", strokeWidth: "2" }, /*#__PURE__*/React.createElement("path", { d: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" }), /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "7", r: "4" }))),
+      }, demoMode ? /*#__PURE__*/React.createElement("span", { style: { color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: .4 } }, "Demo") : profileName ? /*#__PURE__*/React.createElement("span", { style: { color: "#fff", fontSize: 28, fontWeight: 700 } }, profileName.charAt(0).toUpperCase()) : /*#__PURE__*/React.createElement("svg", { width: "32", height: "32", viewBox: "0 0 24 24", fill: "none", stroke: "white", strokeWidth: "2" }, /*#__PURE__*/React.createElement("path", { d: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" }), /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "7", r: "4" }))),
       authUser ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280" } }, authUser.email) : null),
       /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Your Name"),
@@ -8255,6 +10009,9 @@ function App() {
           placeholder: "What are you working toward?",
           style: inputS
         })),
+      // Goal categories are managed in App Settings → Custom. See
+      // appSettingsPanel below. My Account stays identity-only (name,
+      // email, primary goal, stats).
       /*#__PURE__*/React.createElement("div", {
         style: { padding: "14px", background: "#f0f7f0", borderRadius: 10, marginBottom: 4 }
       }, /*#__PURE__*/React.createElement("div", {
@@ -8455,7 +10212,343 @@ function App() {
           }))
       )
     );
-    const panels = { account: accountPanel, inspiration: inspirationPanel, history: historyPanel, reports: reportsPanel };
+    // ── App Settings panel ──
+    // Two modes: "default" (Verrocchio green accent + built-in
+    // categories/importance/time-of-day only) and "custom" (user-picked
+    // accent + can add their own entries alongside the built-ins).
+    // Dark Mode is a third, orthogonal toggle that works in either mode.
+    const appSettingsPanel = (() => {
+      const isCustom = settingsMode === "custom";
+      const swatch = (color) => /*#__PURE__*/React.createElement("span", {
+        style: { width: 10, height: 10, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }
+      });
+      const modeBtn = (val, title, subtitle) => /*#__PURE__*/React.createElement("button", {
+        key: val,
+        onClick: () => setSettingsMode(val),
+        style: {
+          flex: 1, padding: "12px 10px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+          background: settingsMode === val ? "#f0f7f0" : "#f9fafb",
+          border: settingsMode === val ? "2px solid #2d5a2d" : "1px solid #e5e7eb",
+          color: "#111827"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 2 } }, title),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280" } }, subtitle)
+      );
+      // Toggle switch helper (reusable pill-switch for Dark Mode)
+      const toggleSwitch = (on, onToggle, label, sub) => /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#111827", marginBottom: 2 } }, label),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280" } }, sub)
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          "aria-pressed": on,
+          onClick: onToggle,
+          style: {
+            width: 42, height: 24, borderRadius: 12, border: "none", cursor: "pointer",
+            background: on ? "#2d5a2d" : "#d1d5db", position: "relative", flexShrink: 0,
+            transition: "background .15s"
+          }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: {
+              position: "absolute", top: 2, left: on ? 20 : 2, width: 20, height: 20,
+              borderRadius: "50%", background: "#fff", transition: "left .15s",
+              boxShadow: "0 1px 3px rgba(0,0,0,.2)"
+            }
+          })
+        )
+      );
+      // Descriptions of the built-in defaults — shown when a default
+      // row is tapped. Gives the user concrete example habits and
+      // goals so they know what content belongs under each bucket.
+      const DEFAULT_DESCRIPTIONS = {
+        "cat:Physical": "Body-first goals. e.g. Run a half-marathon, lift 3x/week, sleep 8 hrs/night, meal prep on Sundays, drink 2L water daily.",
+        "cat:Mental": "Mind and learning. e.g. Read 2 books/month, meditate 10 min/day, learn Spanish, therapy weekly, journal before bed.",
+        "cat:Career": "Work and professional growth. e.g. Earn a promotion, ship a side project, network 1x/month, learn SQL, 90-min deep-work block daily.",
+        "cat:Spiritual": "Meaning, purpose, reflection. e.g. Morning gratitude, weekly service, silent retreat, reread a sacred text, 15-min evening reflection.",
+        "cat:Social": "Relationships. e.g. Call parents weekly, date night every Friday, host dinner monthly, remember friends' birthdays, 1:1 with a mentor.",
+        "cat:Wealth": "Money and finances. e.g. Save 20% of income, max 401k, pay off car loan, weekly budget review, $0 on impulse buys this month.",
+        "cat:Creative": "Making things. e.g. Write 500 words/day, paint weekly, learn guitar, launch a podcast, one photo a day.",
+        "imp:Non-Negotiable": "The habits you'd feel broken without. Miss these and the day is off. Keep this list SHORT. e.g. Brush teeth, take meds, drink water, 20-min walk.",
+        "imp:Important": "High-value but flexible. Hit them most days, skip them on hard ones without guilt. e.g. Workout, 30-min reading, journal, meal prep.",
+        "imp:Additive": "Bonus momentum. Nice when you get to them, no damage when you don't. e.g. Clean desk, try a new recipe, extra cardio, long-form writing.",
+        "sec:Morning": "Sets the tone for the day. e.g. Hydrate, stretch, write today's intention, make the bed, meditate, no-phone first hour.",
+        "sec:Afternoon": "Mid-day push. e.g. Gym, 90-min deep-work block, lunch walk, 15-min creative practice, protein-rich lunch.",
+        "sec:Evening": "Wind down and review. e.g. Dinner with family, screen-off hour, journal, plan tomorrow, read before bed.",
+        "sec:Avoid": "Anti-habits — things you want to NOT do. Tracked as days-avoided streaks. e.g. No phone after 10pm, no sugar weekdays, no doom-scrolling, no work on Saturdays."
+      };
+      // Generic "manage list of categorized items" section (goal
+      // categories, importance levels, time-of-day groups). Built-in
+      // rows are tap-to-expand with a description; custom rows have
+      // a × delete button. The header button label is "Edit <thing>"
+      // since it both adds new items and hosts the delete affordances
+      // on the custom rows below.
+      const manageList = ({ listKey, titleLabel, builtIn, custom, onDelete, onAddClick, editLabel, keyField = "value", labelField = "value", iconField, subLabel }) => {
+        const renderRow = (c, isBuiltIn) => {
+          const label = c[labelField];
+          const rowKey = listKey + ":" + label;
+          const expanded = !!expandedDefault[rowKey];
+          const desc = DEFAULT_DESCRIPTIONS[rowKey];
+          return /*#__PURE__*/React.createElement("div", {
+            key: (isBuiltIn ? "b-" : "c-") + c[keyField],
+            style: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              onClick: isBuiltIn && desc ? () => setExpandedDefault(p => ({ ...p, [rowKey]: !p[rowKey] })) : undefined,
+              style: {
+                display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+                cursor: isBuiltIn && desc ? "pointer" : "default"
+              }
+            },
+              iconField && c[iconField] ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 14 } }, c[iconField]) : swatch(c.color),
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#111827", fontWeight: 500, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, label),
+              isBuiltIn
+                ? /*#__PURE__*/React.createElement("span", { title: "Built-in (read-only)", style: { fontSize: 11, color: "#9ca3af", flexShrink: 0, transition: "transform .15s", transform: expanded ? "rotate(90deg)" : "none" } }, desc ? "\u203A" : "\uD83D\uDD12")
+                : /*#__PURE__*/React.createElement("button", {
+                    onClick: (e) => { e.stopPropagation(); onDelete(c); },
+                    "aria-label": "Delete",
+                    style: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 2 }
+                  }, "\u00D7")
+            ),
+            expanded && desc ? /*#__PURE__*/React.createElement("div", {
+              style: { padding: "0 12px 10px 30px", fontSize: 11, lineHeight: 1.55, color: "#6b7280" }
+            }, desc) : null
+          );
+        };
+        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }
+          },
+            /*#__PURE__*/React.createElement("div", null,
+              /*#__PURE__*/React.createElement("div", { style: labelS }, titleLabel),
+              subLabel ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 2 } }, subLabel) : null
+            ),
+            isCustom ? /*#__PURE__*/React.createElement("button", {
+              onClick: onAddClick,
+              style: { background: "transparent", border: "1px dashed #d1d5db", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "#6b7280", cursor: "pointer", fontWeight: 600 }
+            }, editLabel) : null
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5 } },
+            builtIn.map(c => renderRow(c, true)),
+            isCustom ? custom.map(c => renderRow(c, false)) : null
+          )
+        );
+      };
+      // Palette swatches for pickers
+      const palette = ["#2d5a2d","#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#14b8a6","#f97316","#db2777","#0891b2"];
+      return /*#__PURE__*/React.createElement("div", null,
+        sectionTitle("App Settings"),
+        // Mode selector
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Theme"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
+          modeBtn("default", "Default", "Green accent + built-in categories"),
+          modeBtn("custom", "Custom", "Your accent + your own categories")
+        ),
+        // Dark mode toggle
+        toggleSwitch(darkMode, () => setDarkMode(d => !d), "Dark Mode", darkMode ? "Low-light theme active" : "Classic light theme"),
+        // Accent color picker (only visible in custom mode)
+        isCustom ? /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+          /*#__PURE__*/React.createElement("div", { style: labelS }, "Accent Color"),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 10, padding: "12px 14px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10 } },
+            palette.map(c => /*#__PURE__*/React.createElement("button", {
+              key: c,
+              onClick: () => setAccentColor(c),
+              "aria-label": "Set accent " + c,
+              style: { width: 32, height: 32, borderRadius: "50%", background: c, cursor: "pointer", border: accentColor === c ? "3px solid #111" : "3px solid transparent", padding: 0, boxSizing: "border-box" }
+            })),
+            /*#__PURE__*/React.createElement("label", {
+              style: { width: 32, height: 32, borderRadius: "50%", border: "1px dashed #d1d5db", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" },
+              title: "Pick any color"
+            },
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 16, color: "#9ca3af" } }, "\uD83C\uDFA8"),
+              /*#__PURE__*/React.createElement("input", {
+                type: "color",
+                value: accentColor,
+                onChange: e => setAccentColor(e.target.value),
+                style: { position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }
+              })
+            )
+          )
+        ) : null,
+        // Custom goal categories
+        manageList({
+          listKey: "cat",
+          titleLabel: "Goal Categories",
+          subLabel: isCustom ? "Tap a row to read what belongs in it" : "Tap a row to read what belongs in it · Switch to Custom to add your own",
+          builtIn: HT,
+          custom: data.customGoalTypes || [],
+          onDelete: (cat) => {
+            if (!window.confirm(`Delete category "${cat.value}"? Goals tagged with it will remain but their category will be cleared.`)) return;
+            const nextCustom = (data.customGoalTypes || []).filter(t => t.value !== cat.value);
+            const nextGoals = (data.goals || []).map(g => g.type === cat.value ? { ...g, type: "" } : g);
+            save({ ...data, customGoalTypes: nextCustom, goals: nextGoals });
+            setGoalTypeFilter(prev => (Array.isArray(prev) ? prev.filter(v => v !== cat.value) : []));
+          },
+          onAddClick: () => { setNewCatName(""); setNewCatColor("#6366f1"); setAddCatModal(true); },
+          editLabel: "Edit Categories"
+        }),
+        // Custom importance levels
+        manageList({
+          listKey: "imp",
+          titleLabel: "Habit Importance",
+          subLabel: isCustom ? "Tap a row to see example habits" : "Tap a row to see example habits · Switch to Custom to add your own",
+          builtIn: IMP,
+          custom: data.customImportance || [],
+          onDelete: (lvl) => {
+            if (!window.confirm(`Delete importance level "${lvl.value}"? Habits using it will keep the label but it won't appear in the picker.`)) return;
+            const next = (data.customImportance || []).filter(t => t.value !== lvl.value);
+            save({ ...data, customImportance: next });
+          },
+          onAddClick: () => {
+            const name = window.prompt("New importance level name (e.g. Critical, Optional):", "");
+            if (!name || !name.trim()) return;
+            const v = name.trim();
+            if (IMP.some(i => i.value === v) || (data.customImportance || []).some(i => i.value === v)) {
+              window.alert("That importance level already exists.");
+              return;
+            }
+            const c = newImpColor;
+            save({ ...data, customImportance: [...(data.customImportance || []), { value: v, color: c, bg: c + "22", border: c + "66" }] });
+          },
+          editLabel: "Edit Importance"
+        }),
+        // Custom time-of-day groups
+        manageList({
+          listKey: "sec",
+          titleLabel: "Time of Day",
+          subLabel: isCustom ? "Tap a row to see example habits" : "Tap a row to see example habits · Switch to Custom to add your own",
+          builtIn: SECTIONS.map(s => ({ ...s, value: s.label || s.value })),
+          custom: (data.customSections || []).map(s => ({ ...s, value: s.label || s.value })),
+          iconField: "icon",
+          onDelete: (sec) => {
+            const key = sec.label || sec.value;
+            if (!window.confirm(`Delete time-of-day group "${key}"? Habits in this group will need to be reassigned.`)) return;
+            const next = (data.customSections || []).filter(t => (t.label || t.value) !== key);
+            save({ ...data, customSections: next });
+          },
+          onAddClick: () => {
+            const label = window.prompt("New time-of-day group name (e.g. Late Night, Commute):", "");
+            if (!label || !label.trim()) return;
+            const v = label.trim();
+            const value = v.toLowerCase().replace(/\s+/g, "-");
+            if (SECTIONS.some(s => s.label === v) || (data.customSections || []).some(s => s.label === v)) {
+              window.alert("That time-of-day group already exists.");
+              return;
+            }
+            const icon = window.prompt("Pick an emoji icon for this group:", "\u2B50") || "\u2B50";
+            const c = newSecColor;
+            save({ ...data, customSections: [...(data.customSections || []), { value, label: v, icon, color: c, bg: c + "22", border: c + "66" }] });
+          },
+          editLabel: "Edit Time of Day"
+        }),
+        // Time-of-day hour boundaries. The morning/afternoon/evening
+        // sections on the Habits tab auto-expand the block you're
+        // currently in, and these ranges decide which block "now" is.
+        // Evening wraps past midnight when end < start (e.g. 18→6).
+        (() => {
+          const ranges = (data && data.timeRanges && data.timeRanges.morning) ? data.timeRanges : DEFAULT_TIME_RANGES;
+          const fmtHr = h => {
+            const suf = h < 12 ? "AM" : "PM";
+            const disp = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+            return disp + ":00 " + suf;
+          };
+          const setHour = (section, field, val) => {
+            const next = {
+              morning:   { ...ranges.morning },
+              afternoon: { ...ranges.afternoon },
+              evening:   { ...ranges.evening }
+            };
+            next[section][field] = val;
+            save({ ...data, timeRanges: next });
+          };
+          const hourSelect = (section, field) => /*#__PURE__*/React.createElement("select", {
+            value: ranges[section][field],
+            onChange: e => setHour(section, field, parseInt(e.target.value, 10)),
+            style: { flex: 1, padding: "6px 8px", fontSize: 12, border: "1px solid #d1d5db", borderRadius: 6, background: "#fff", color: "#1f2937", cursor: "pointer", minWidth: 0 }
+          },
+            Array.from({ length: 24 }, (_, h) => /*#__PURE__*/React.createElement("option", { key: h, value: h }, fmtHr(h)))
+          );
+          const row = (section, icon, label) => /*#__PURE__*/React.createElement("div", {
+            key: section,
+            style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 6 }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, icon),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "#111827", width: 76, flexShrink: 0 } }, label),
+            hourSelect(section, "start"),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", flexShrink: 0 } }, "to"),
+            hourSelect(section, "end")
+          );
+          return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+            /*#__PURE__*/React.createElement("div", { style: labelS }, "Time-of-Day Hours"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "When \"Morning\", \"Afternoon\", and \"Evening\" start and end \u2014 evening can wrap past midnight."),
+            row("morning",   "\uD83C\uDF05", "Morning"),
+            row("afternoon", "\u2600\uFE0F", "Afternoon"),
+            row("evening",   "\uD83C\uDF19", "Evening")
+          );
+        })(),
+        // Weekly Review — day + hour to be prompted to reflect on
+        // the week. Captured in onboarding; editable here after.
+        (() => {
+          const wr = (data && data.weeklyReview) || { day: 0, hour: 18 };
+          const setWR = (patch) => save({ ...data, weeklyReview: { ...wr, ...patch } });
+          const fmtHr = h => {
+            const suf = h < 12 ? "AM" : "PM";
+            const disp = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+            return disp + ":00 " + suf;
+          };
+          return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+            /*#__PURE__*/React.createElement("div", { style: labelS }, "Weekly Review"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "One moment a week to look back on progress, slips, and what to sharpen next."),
+            /*#__PURE__*/React.createElement("div", {
+              style: { padding: "10px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8 }
+            },
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginBottom: 6 } }, "Day"),
+              /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", gap: 4, marginBottom: 10, flexWrap: "wrap" }
+              },
+                DOW_ORDER.map(dayVal => {
+                  const on = wr.day === dayVal;
+                  return /*#__PURE__*/React.createElement("button", {
+                    key: "wr-d" + dayVal,
+                    onClick: () => setWR({ day: dayVal }),
+                    style: {
+                      flex: 1, minWidth: 32, padding: "6px 0", fontSize: 11,
+                      fontWeight: on ? 700 : 500,
+                      border: "1px solid " + (on ? "#2d5a2d" : "#d1d5db"),
+                      borderRadius: 6,
+                      background: on ? "#2d5a2d" : "#fff",
+                      color: on ? "#fff" : "#374151",
+                      cursor: "pointer"
+                    }
+                  }, DOW_ABBR[dayVal]);
+                })
+              ),
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginBottom: 6 } }, "Time"),
+              /*#__PURE__*/React.createElement("select", {
+                value: wr.hour,
+                onChange: e => setWR({ hour: parseInt(e.target.value, 10) }),
+                style: { width: "100%", padding: "6px 8px", fontSize: 12, border: "1px solid #d1d5db", borderRadius: 6, background: "#fff", color: "#1f2937", cursor: "pointer" }
+              },
+                Array.from({ length: 24 }, (_, h) => /*#__PURE__*/React.createElement("option", { key: h, value: h }, fmtHr(h)))
+              )
+            )
+          );
+        })(),
+        // Reset to defaults escape hatch
+        isCustom ? /*#__PURE__*/React.createElement("button", {
+          onClick: () => {
+            if (!window.confirm("Reset theme + accent back to the Verrocchio defaults? Your custom categories will be kept.")) return;
+            setSettingsMode("default");
+            setAccentColor("#2d5a2d");
+          },
+          style: { width: "100%", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer", marginTop: 4 }
+        }, "Reset to Verrocchio Defaults") : null
+      );
+    })();
+    const panels = { account: accountPanel, inspiration: inspirationPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
     return /*#__PURE__*/React.createElement("div", {
       style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
       onClick: e => { if (e.target === e.currentTarget) setShowProfile(false); }
@@ -8547,6 +10640,118 @@ function App() {
       },
       style:{marginTop:12,width:"100%",background:"#2d5a2d",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:600,cursor:"pointer"}
     }, "Save Entry")
+  )), showAchievements && /*#__PURE__*/React.createElement("div", {
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 320, display: "flex", alignItems: "flex-end", justifyContent: "center" },
+    onClick: e => { if (e.target === e.currentTarget) setShowAchievements(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: { background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 720, height: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden" }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", flexShrink: 0 }
+    },
+      /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "#111827" } }, "Achievements"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, (() => {
+          const earned = ACHIEVEMENTS.filter(a => (achievementStats[a.stat] || 0) >= a.threshold).length;
+          return earned + " of " + ACHIEVEMENTS.length + " unlocked";
+        })())
+      ),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setShowAchievements(false),
+        "aria-label": "Close",
+        style: { background: "#f3f4f6", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 16, color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center" }
+      }, "\xD7")
+    ),
+    /*#__PURE__*/React.createElement("div", {
+      style: { flex: 1, overflowY: "auto", padding: "16px 18px 80px", display: "flex", flexDirection: "column", gap: 18 }
+    },
+      ACHIEVEMENT_CATEGORIES.map(cat => {
+        const catAchievements = ACHIEVEMENTS.filter(a => a.cat === cat);
+        if (catAchievements.length === 0) return null;
+        const earnedInCat = catAchievements.filter(a => (achievementStats[a.stat] || 0) >= a.threshold).length;
+        // Stat label for the header (e.g., "17 days · Current: 32")
+        const statLabel = (() => {
+          const s = catAchievements[0].stat;
+          if (s === "visits") return achievementStats.visits + (achievementStats.visits === 1 ? " day opened" : " days opened");
+          if (s === "bestStreak") return "Best streak: " + achievementStats.bestStreak + "d";
+          if (s === "goals") return achievementStats.goals + " goal" + (achievementStats.goals === 1 ? "" : "s") + " completed";
+          if (s === "habitsActive") return achievementStats.habitsActive + " active habit" + (achievementStats.habitsActive === 1 ? "" : "s");
+          if (s === "xp") return achievementStats.xp.toLocaleString() + " XP earned";
+          return "";
+        })();
+        return /*#__PURE__*/React.createElement("div", { key: cat },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 10 }
+          },
+            /*#__PURE__*/React.createElement("div", null,
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#111827", textTransform: "uppercase", letterSpacing: .5 } }, cat),
+              /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, statLabel)
+            ),
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 11, fontWeight: 700, color: earnedInCat === catAchievements.length ? "#2d5a2d" : "#9ca3af" }
+            }, earnedInCat + "/" + catAchievements.length)
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+            catAchievements.map(a => {
+              const statVal = achievementStats[a.stat] || 0;
+              const earned = statVal >= a.threshold;
+              const tier = ACHIEVEMENT_TIERS[a.tier] || ACHIEVEMENT_TIERS.Bronze;
+              const pct = Math.min(100, Math.round((statVal / a.threshold) * 100));
+              const unlockedAt = (data && data.achievementsUnlocked && data.achievementsUnlocked[a.id]) || null;
+              return /*#__PURE__*/React.createElement("div", {
+                key: a.id,
+                style: {
+                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                  background: earned ? tier.bg : "#f9fafb",
+                  border: "1px solid " + (earned ? tier.border : "#e5e7eb"),
+                  borderRadius: 12,
+                  opacity: earned ? 1 : .75
+                }
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: {
+                    width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                    background: earned ? "#fff" : "#f3f4f6",
+                    border: "2px solid " + (earned ? tier.color : "#d1d5db"),
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 22, filter: earned ? "none" : "grayscale(1) opacity(.55)"
+                  }
+                }, a.icon),
+                /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } },
+                    /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "#111827" } }, a.name),
+                    /*#__PURE__*/React.createElement("span", {
+                      style: { fontSize: 9, fontWeight: 700, color: tier.color, background: tier.bg, border: "1px solid " + tier.border, padding: "1px 6px", borderRadius: 8, textTransform: "uppercase", letterSpacing: .3 }
+                    }, a.tier)
+                  ),
+                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginBottom: 4, lineHeight: 1.4 } }, a.desc),
+                  earned
+                    ? /*#__PURE__*/React.createElement("div", {
+                        style: { fontSize: 10, color: tier.color, fontWeight: 600 }
+                      },
+                        "\u2713 Unlocked",
+                        unlockedAt ? " \u00B7 " + new Date(unlockedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""
+                      )
+                    : /*#__PURE__*/React.createElement("div", null,
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { height: 4, background: "#e5e7eb", borderRadius: 2, overflow: "hidden", marginBottom: 3 }
+                        },
+                          /*#__PURE__*/React.createElement("div", {
+                            style: { height: "100%", width: pct + "%", background: tier.color, borderRadius: 2, transition: "width .4s ease" }
+                          })
+                        ),
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 10, color: "#9ca3af", fontWeight: 600 }
+                        }, statVal + " / " + a.threshold)
+                      )
+                )
+              );
+            })
+          )
+        );
+      })
+    )
   )), addCatModal && /*#__PURE__*/React.createElement("div", {
     style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24},
     onClick:e=>{if(e.target===e.currentTarget)setAddCatModal(false);}
@@ -8580,7 +10785,10 @@ function App() {
           const newType = {value:name,color:c,bg:hex2,border:c+"66"};
           const customGoalTypes = [...(data.customGoalTypes||[]).filter(t=>t.value!==name), newType];
           save({...data,customGoalTypes});
-          setGoalTypeFilter(name);
+          // goalTypeFilter is a multi-select array now — replace the
+          // selection with the newly-created category so the user
+          // lands filtered to it on the Goals page.
+          setGoalTypeFilter([name]);
           setAddCatModal(false);
         },
         style:{flex:2,background:"#2d5a2d",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer"}
@@ -8712,7 +10920,10 @@ function App() {
   }, "\u2605 Importance"), IMP.map(i => /*#__PURE__*/React.createElement("option", {
     key: i.value,
     value: i.value
-  }, i.value)))), /*#__PURE__*/React.createElement("select", {
+  }, i.value)))),
+  // Frequency picker (edit modal mirror of the add-habit flow).
+  renderFreqPicker(eHFreq, sEHFreq, eHStart, sEHStart),
+  /*#__PURE__*/React.createElement("select", {
     value: eHLoc,
     onChange: e => sEHLoc(e.target.value),
     style: { ...S, width: "100%", marginBottom: 10, color: eHLoc === "home" ? "#2d5a2d" : eHLoc === "travel" ? "#0891b2" : "#374151" }
@@ -8972,6 +11183,10 @@ function App() {
       r: "2"
     }))
   }, {
+    // HABITS — daily-rhythm glyph (sun). Habits are the things you do
+    // every day / repeatedly, so the sun reads as "the day's cadence"
+    // rather than a generic checkmark. Feather "sun" shape: a central
+    // disk plus eight rays.
     key: "habits",
     label: "Habits",
     icon: a => /*#__PURE__*/React.createElement("svg", {
@@ -8983,11 +11198,42 @@ function App() {
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M22 11.08V12a10 10 0 11-5.93-9.14"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: "22 4 12 14.01 9 11.01"
-    }))
+    },
+      /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "12", r: "4" }),
+      /*#__PURE__*/React.createElement("line", { x1: "12", y1: "2", x2: "12", y2: "4" }),
+      /*#__PURE__*/React.createElement("line", { x1: "12", y1: "20", x2: "12", y2: "22" }),
+      /*#__PURE__*/React.createElement("line", { x1: "2", y1: "12", x2: "4", y2: "12" }),
+      /*#__PURE__*/React.createElement("line", { x1: "20", y1: "12", x2: "22", y2: "12" }),
+      /*#__PURE__*/React.createElement("line", { x1: "4.93", y1: "4.93", x2: "6.34", y2: "6.34" }),
+      /*#__PURE__*/React.createElement("line", { x1: "17.66", y1: "17.66", x2: "19.07", y2: "19.07" }),
+      /*#__PURE__*/React.createElement("line", { x1: "4.93", y1: "19.07", x2: "6.34", y2: "17.66" }),
+      /*#__PURE__*/React.createElement("line", { x1: "17.66", y1: "6.34", x2: "19.07", y2: "4.93" })
+    )
+  }, {
+    // TO-DOS — one-off tasks that can be linked to a goal (e.g. "get
+    // physical from the doctor" linked to a weight-loss goal). Proper
+    // clipboard: body rect + little clip tab at the top + two check
+    // marks inside to read as "list of checkboxes" at a glance.
+    key: "todos",
+    label: "To-Dos",
+    icon: a => /*#__PURE__*/React.createElement("svg", {
+      width: "22",
+      height: "22",
+      viewBox: "0 0 24 24",
+      fill: "none",
+      stroke: a ? "#2d5a2d" : "#9ca3af",
+      strokeWidth: "2",
+      strokeLinecap: "round",
+      strokeLinejoin: "round"
+    },
+      // Clipboard body with a gap at the top for the clip to sit in.
+      /*#__PURE__*/React.createElement("path", { d: "M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" }),
+      // Clip tab.
+      /*#__PURE__*/React.createElement("rect", { x: "8", y: "2", width: "8", height: "4", rx: "1" }),
+      // Two check marks, one per list row.
+      /*#__PURE__*/React.createElement("path", { d: "M8.5 12l1.5 1.5L13 10.5" }),
+      /*#__PURE__*/React.createElement("path", { d: "M8.5 17l1.5 1.5L13 15.5" })
+    )
   }, {
     key: "reflection",
     label: "Reflect",
@@ -9005,29 +11251,9 @@ function App() {
     }), /*#__PURE__*/React.createElement("path", {
       d: "M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"
     }))
-  }, {
-    key: "social",
-    label: "Social",
-    icon: a => /*#__PURE__*/React.createElement("svg", {
-      width: "22",
-      height: "22",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: a ? "#2d5a2d" : "#9ca3af",
-      strokeWidth: "2",
-      strokeLinecap: "round",
-      strokeLinejoin: "round"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: "9",
-      cy: "7",
-      r: "4"
-    }), /*#__PURE__*/React.createElement("path", {
-      d: "M23 21v-2a4 4 0 00-3-3.87"
-    }), /*#__PURE__*/React.createElement("path", {
-      d: "M16 3.13a4 4 0 010 7.75"
-    }))
+  // NOTE: the "social" tab was removed from the bottom nav. Its rendering
+  // block below is guarded with `false &&` so the JSX is preserved for a
+  // future rewire, but it's unreachable in the current build.
   }].map(t => {
     const active = tab === t.key;
     return /*#__PURE__*/React.createElement("button", {
