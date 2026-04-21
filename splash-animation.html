@@ -57,13 +57,13 @@
       inset 0 1px 0 rgba(255,255,255,.18);
     transform:translate(-50%,-44px);
     opacity:0;
-    animation:blockStack .62s cubic-bezier(.34,1.35,.64,1) forwards;
+    animation:blockStack .75s cubic-bezier(.34,1.35,.64,1) forwards;
     will-change:transform,opacity,filter;
   }
-  .b1{bottom:0;  width:200px;animation-delay:.05s}
-  .b2{bottom:28px;width:150px;animation-delay:.22s}
-  .b3{bottom:56px;width:100px;animation-delay:.39s}
-  .b4{bottom:84px;width:50px; animation-delay:.56s}
+  .b1{bottom:0;  width:200px;animation-delay:.08s}
+  .b2{bottom:28px;width:150px;animation-delay:.30s}
+  .b3{bottom:56px;width:100px;animation-delay:.52s}
+  .b4{bottom:84px;width:50px; animation-delay:.74s}
 
   @keyframes blockStack{
     0%  {transform:translate(-50%,-44px);opacity:0;filter:blur(3px)}
@@ -109,14 +109,14 @@
     stroke-linecap:round;
     stroke-linejoin:round;
     opacity:0;
-    /* Climb is 3.4s — slower than before so each pull reads as real
+    /* Climb is 4.2s — slower than before so each pull reads as real
        effort. `climb` also handles entrance fade-in; `climberOff`
        fades him out after the victory beat so the brand wordmark can
-       take his place above the pyramid. Climb starts at 1.25s, after
+       take his place above the pyramid. Climb starts at 1.7s, after
        the last block has settled into the pyramid. */
     animation:
-      climb 3.4s cubic-bezier(.5,.05,.5,.95) 1.25s forwards,
-      climberOff .4s ease-out 4.9s forwards;
+      climb 4.2s cubic-bezier(.5,.05,.5,.95) 1.7s forwards,
+      climberOff .5s ease-out 6.15s forwards;
     will-change:transform,opacity;
     z-index:3;
     pointer-events:none;
@@ -177,9 +177,9 @@
      1s delay so their keyframes line up with the position keyframes
      above.  */
   .climber .pose{opacity:0}
-  .climber .pose.mount   {animation:mountCycle 3.4s linear 1.25s forwards}
-  .climber .pose.reach   {animation:reachCycle 3.4s linear 1.25s forwards}
-  .climber .pose.victory {animation:victoryCycle 3.4s linear 1.25s forwards}
+  .climber .pose.mount   {animation:mountCycle 4.2s linear 1.7s forwards}
+  .climber .pose.reach   {animation:reachCycle 4.2s linear 1.7s forwards}
+  .climber .pose.victory {animation:victoryCycle 4.2s linear 1.7s forwards}
 
   /* Rests:    0–5%, 20–25%, 45–51%, 68–74%
      Pulls:    6–20%, 26–45% (slip stays in reach pose), 52–68%, 75–93%
@@ -230,9 +230,10 @@
   }
 
   /* ─── "Verrocchio" brand wordmark ─────────────────────────────────
-     Takes the climber's place above the pyramid after he fades out.
-     Non-italic (the brand name) to contrast with the italic tagline
-     below. Sized to fit within the pyramid's base (200px).
+     Takes the climber's place above the pyramid after the V has
+     appeared on the pyramid face. Non-italic (the brand name) to
+     contrast with the italic tagline below. Sized to fit within the
+     pyramid's base (200px).
   */
   /* Sized so the wordmark spans the full 200px width of the bottom
      pyramid block. Moved up from top:44 → top:30 to keep clear of
@@ -251,7 +252,7 @@
     white-space:nowrap;
     opacity:0;
     transform:translate(-50%,6px);
-    animation:brandIn .7s cubic-bezier(.22,1,.36,1) 5.1s forwards;
+    animation:brandIn .75s cubic-bezier(.22,1,.36,1) 7.4s forwards;
     will-change:transform,opacity,filter;
     pointer-events:none;
   }
@@ -279,8 +280,9 @@
     color:#f4efe4;
     text-shadow:0 2px 10px rgba(0,0,0,.28);
     opacity:0;
-    /* Delayed until Verrocchio has arrived above the pyramid. */
-    animation:vFade .7s cubic-bezier(.22,1,.36,1) 5.95s forwards;
+    /* V appears first after the climber reaches the top, before the
+       Verrocchio wordmark slides in above. */
+    animation:vFade .75s cubic-bezier(.22,1,.36,1) 6.35s forwards;
     will-change:transform,opacity,filter;
     pointer-events:none;
   }
@@ -290,11 +292,11 @@
     100%{opacity:1;transform:translate(-50%,-4px);filter:blur(0)}
   }
 
-  /* ─── "Achieve Anything" wordmark (italic, green, under pyramid) ──
-     Italic Playfair Display 900 at 22px. The phrase is sized to fit
-     within the bottom block's 200px width. Positioned just below the
-     pyramid (pyramid bottom at stage-y 192; wordmark top at 198 =
-     6px gap).
+  /* ─── "Achieve Anything" tagline (italic system sans, under pyramid) ─
+     The tagline uses the app's standard UI font (system sans) rather
+     than Playfair so it reads like product chrome rather than brand
+     typography. Positioned just below the pyramid (pyramid bottom at
+     stage-y 192; tagline top at 198 = 6px gap).
 
      Final layout: the A sits at the wordmark's leading position; its
      center is at (stage-center − 82px). The tagline is anchored so
@@ -309,15 +311,15 @@
     display:flex;
     align-items:center;
     justify-content:center;
-    font-family:'Playfair Display',Georgia,'Times New Roman',serif;
+    font-family:system-ui,-apple-system,sans-serif;
     font-style:italic;
-    font-weight:700;
+    font-weight:600;
     font-size:22px;
     line-height:1;
     color:#111;
     opacity:0;
     transform:translate(-50%,6px) scale(.82);
-    animation:aMove 2.4s cubic-bezier(.65,0,.35,1) 6.75s forwards;
+    animation:aMove 2.8s cubic-bezier(.65,0,.35,1) 8.5s forwards;
     will-change:transform,opacity,filter;
   }
   @keyframes aMove{
@@ -336,10 +338,10 @@
     height:28px;
     display:flex;
     align-items:center;
-    font-family:'Playfair Display',Georgia,'Times New Roman',serif;
+    font-family:system-ui,-apple-system,sans-serif;
     font-style:italic;
     font-size:22px;
-    font-weight:700;
+    font-weight:600;
     color:#111;
     letter-spacing:0;
     white-space:nowrap;
@@ -377,7 +379,7 @@
   .replay:hover{color:#1f2937;border-color:#d1d5db;box-shadow:0 2px 6px rgba(0,0,0,.04)}
 
   @media (prefers-reduced-motion: reduce){
-    .block,.climber,.climber .pose,.v-mark,.a-mark,.tagline .char{
+    .block,.climber,.climber .pose,.v-mark,.a-mark,.tagline .char,.brand-wordmark{
       animation-duration:.01s!important
     }
   }
@@ -450,10 +452,10 @@
 
 <script>
   const TAGLINE_TEXT  = 'chieve Anything';
-  /* A's slide completes at 70% of a 2.4s animation starting at 6.75s →
-     6.75 + 1.68 = 8.43s. Begin the shuffle just before that (8.25s) so
+  /* A's slide completes at 70% of a 2.8s animation starting at 8.5s →
+     8.5 + 1.96 = 10.46s. Begin the shuffle just before that (10.2s) so
      the tagline arrives while the A is settling. */
-  const TAGLINE_START = 8.25;  /* seconds */
+  const TAGLINE_START = 10.2;  /* seconds */
   const CHAR_STAGGER  = 0.045; /* seconds between characters */
 
   function buildTagline(){

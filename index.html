@@ -7,8 +7,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Verrocchio">
 <title>Verrocchio</title>
-<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAABmJLR0QA/wD/AP+gvaeTAAACGUlEQVRIiWP8+vUFAy0BE01NH7VgUFjAQlDFh88ff/78hVWKnZ1NgJefUgsmLpp5/MJprFKWBqb12WX4tQ/9OGDElZP//fu398QhIk1xtrBjYsLuVpxx8Ofv3975U4m0wN7Umo1UC6CAUdTUxUGd49+TC5sPPIanJWYZQx8HWfZfT4+uO/v0D14DCMXB/y/Mcu5RfmGZrnqcCFepeIVExfj46nJ+/UtAPxFxwCygbq0pyfbnxcWzN17/Y2BgYGDiU7bUluX69/ry2asv/jAw4I0DLBbsPnYAJfRZtbOa6/yEvu6bnt11/jsDA4tO+IQuF9GvJ/sT5pz4iqSxODHb1coBzTQikunvmwfOvfrHyG1qosfFwMDAomJjIMr0//OJUxe+EtRLXD74c/PksSd/mbi1LYw4GVmVLS2FmP59OLnvxg8i9BKX0f4+PnLg2R8mLgNrTR5NQ1NRpn8vzx6+gr18QgdY4uDZqxdX79xAU8YtZWihwPv71YMXvAryHD8eXD59+8s/NI3aKhpSYhJogij5oHpC69mrF7A6hEnEq7MpQZtTUICd8e/TzV3TVt/DkUKNtQ1aC6oRGnH4DB38e3ty/+1fjLwC/Ix/7p46+oBg+ocBwsU1FPx/d3jzfIG7Qkz/P189/gI9dKhgAcP/z3f2LrtDtHIYQInk89cuvfnwjmQzUIGIgJChlh52C2gBhn6NNmrBwFsAAPfozWvZqTUYAAAAAElFTkSuQmCC">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='6' y='46' width='52' height='10' rx='2' fill='url(%23g)'/><rect x='12' y='34' width='40' height='10' rx='2' fill='url(%23g)'/><rect x='18' y='22' width='28' height='10' rx='2' fill='url(%23g)'/><rect x='24' y='10' width='16' height='10' rx='2' fill='url(%23g)'/><path d='M14 22 L32 54 L50 22 L44 22 L32 42 L20 22 Z' fill='%23f4efe4'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='18' y='130' width='144' height='28' rx='5' fill='url(%23g)'/><rect x='36' y='96' width='108' height='28' rx='5' fill='url(%23g)'/><rect x='54' y='62' width='72' height='28' rx='5' fill='url(%23g)'/><rect x='72' y='28' width='36' height='28' rx='5' fill='url(%23g)'/><path d='M42 62 L90 152 L138 62 L124 62 L90 120 L56 62 Z' fill='%23f4efe4'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -38,37 +38,45 @@ textarea{resize:vertical}
 .splashv2{position:fixed;inset:0;background:#faf8f3;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;overflow:hidden;z-index:9999}
 .splashv2 .stage{position:relative;flex:0 0 auto;width:360px;height:340px}
 .splashv2 .pyramid{position:absolute;top:80px;left:50%;width:200px;height:112px;transform:translateX(-50%)}
-.splashv2 .block{position:absolute;left:50%;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);transform:translate(-50%,-44px);opacity:0;animation:splashv2Stack .62s cubic-bezier(.34,1.35,.64,1) forwards;will-change:transform,opacity,filter}
-.splashv2 .b1{bottom:0;width:200px;animation-delay:.05s}
-.splashv2 .b2{bottom:28px;width:150px;animation-delay:.22s}
-.splashv2 .b3{bottom:56px;width:100px;animation-delay:.39s}
-.splashv2 .b4{bottom:84px;width:50px;animation-delay:.56s}
+.splashv2 .block{position:absolute;left:50%;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);transform:translate(-50%,-44px);opacity:0;animation:splashv2Stack .75s cubic-bezier(.34,1.35,.64,1) forwards;will-change:transform,opacity,filter}
+.splashv2 .b1{bottom:0;width:200px;animation-delay:.08s}
+.splashv2 .b2{bottom:28px;width:150px;animation-delay:.30s}
+.splashv2 .b3{bottom:56px;width:100px;animation-delay:.52s}
+.splashv2 .b4{bottom:84px;width:50px;animation-delay:.74s}
 @keyframes splashv2Stack{0%{transform:translate(-50%,-44px);opacity:0;filter:blur(3px)}55%{opacity:1;filter:blur(.4px)}100%{transform:translate(-50%,0);opacity:1;filter:blur(0)}}
-.splashv2 .climber{position:absolute;left:48px;top:156px;width:28px;height:36px;overflow:visible;stroke:#2d5a2d;fill:#2d5a2d;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:splashv2Climb 3.4s cubic-bezier(.5,.05,.5,.95) 1.25s forwards,splashv2ClimberOff .4s ease-out 4.9s forwards;will-change:transform,opacity;z-index:3;pointer-events:none}
+.splashv2 .climber{position:absolute;left:48px;top:156px;width:28px;height:36px;overflow:visible;stroke:#2d5a2d;fill:#2d5a2d;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation:splashv2Climb 4.2s cubic-bezier(.5,.05,.5,.95) 1.7s forwards,splashv2ClimberOff .5s ease-out 6.15s forwards;will-change:transform,opacity;z-index:3;pointer-events:none}
 @keyframes splashv2ClimberOff{0%{opacity:1}100%{opacity:0}}
 @keyframes splashv2Climb{0%{opacity:0;transform:translate(0,0)}3%{opacity:1;transform:translate(0,0)}6%{transform:translate(0,0)}9%{transform:translate(2px,-5px)}13%{transform:translate(8px,-20px)}17%{transform:translate(24px,-28px)}20%{transform:translate(38px,-26px)}25%{transform:translate(38px,-26px)}28%{transform:translate(40px,-32px)}32%{transform:translate(46px,-44px)}35%{transform:translate(44px,-38px)}38%{transform:translate(45px,-42px)}42%{transform:translate(52px,-54px)}45%{transform:translate(63px,-54px)}51%{transform:translate(63px,-54px)}54%{transform:translate(65px,-60px)}59%{transform:translate(71px,-72px)}64%{transform:translate(80px,-82px)}68%{transform:translate(88px,-82px)}74%{transform:translate(88px,-82px)}77%{transform:translate(90px,-88px)}83%{transform:translate(96px,-104px)}89%{transform:translate(108px,-112px)}93%{transform:translate(118px,-110px)}100%{opacity:1;transform:translate(118px,-110px)}}
 .splashv2 .climber .pose{opacity:0}
-.splashv2 .climber .pose.mount{animation:splashv2Mount 3.4s linear 1.25s forwards}
-.splashv2 .climber .pose.reach{animation:splashv2Reach 3.4s linear 1.25s forwards}
-.splashv2 .climber .pose.victory{animation:splashv2Victory 3.4s linear 1.25s forwards}
+.splashv2 .climber .pose.mount{animation:splashv2Mount 4.2s linear 1.7s forwards}
+.splashv2 .climber .pose.reach{animation:splashv2Reach 4.2s linear 1.7s forwards}
+.splashv2 .climber .pose.victory{animation:splashv2Victory 4.2s linear 1.7s forwards}
 @keyframes splashv2Mount{0%{opacity:1}5%{opacity:1}6%{opacity:0}19%{opacity:0}21%{opacity:1}25%{opacity:1}26%{opacity:0}44%{opacity:0}46%{opacity:1}51%{opacity:1}52%{opacity:0}67%{opacity:0}69%{opacity:1}74%{opacity:1}75%{opacity:0}100%{opacity:0}}
 @keyframes splashv2Reach{0%{opacity:0}5%{opacity:0}6%{opacity:1}19%{opacity:1}20%{opacity:0}25%{opacity:0}26%{opacity:1}44%{opacity:1}45%{opacity:0}51%{opacity:0}52%{opacity:1}67%{opacity:1}68%{opacity:0}74%{opacity:0}75%{opacity:1}93%{opacity:1}94%{opacity:0}100%{opacity:0}}
 @keyframes splashv2Victory{0%{opacity:0}92%{opacity:0}95%{opacity:1}100%{opacity:1}}
-.splashv2 .brand-wordmark{position:absolute;top:30px;left:50%;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-style:normal;font-size:39px;line-height:1;color:#2d5a2d;letter-spacing:.005em;white-space:nowrap;opacity:0;transform:translate(-50%,6px);animation:splashv2BrandIn .7s cubic-bezier(.22,1,.36,1) 5.1s forwards;will-change:transform,opacity,filter;pointer-events:none}
+.splashv2 .brand-wordmark{position:absolute;top:30px;left:50%;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-style:normal;font-size:39px;line-height:1;color:#2d5a2d;letter-spacing:.005em;white-space:nowrap;opacity:0;transform:translate(-50%,6px);animation:splashv2BrandIn .75s cubic-bezier(.22,1,.36,1) 7.4s forwards;will-change:transform,opacity,filter;pointer-events:none}
 @keyframes splashv2BrandIn{0%{opacity:0;transform:translate(-50%,6px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,0);filter:blur(0)}}
-.splashv2 .v-mark{position:absolute;top:112px;left:50%;transform:translate(-50%,-4px);width:100px;height:78px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:88px;line-height:1;color:#f4efe4;text-shadow:0 2px 10px rgba(0,0,0,.28);opacity:0;animation:splashv2VFade .7s cubic-bezier(.22,1,.36,1) 5.95s forwards;will-change:transform,opacity,filter;pointer-events:none}
+.splashv2 .v-mark{position:absolute;top:112px;left:50%;transform:translate(-50%,-4px);width:100px;height:78px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:88px;line-height:1;color:#f4efe4;text-shadow:0 2px 10px rgba(0,0,0,.28);opacity:0;animation:splashv2VFade .75s cubic-bezier(.22,1,.36,1) 6.35s forwards;will-change:transform,opacity,filter;pointer-events:none}
 @keyframes splashv2VFade{0%{opacity:0;transform:translate(-50%,4px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,-4px);filter:blur(0)}}
-.splashv2 .a-mark{position:absolute;top:198px;left:50%;width:14px;height:28px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;font-size:22px;line-height:1;color:#111;opacity:0;transform:translate(-50%,6px) scale(.82);animation:splashv2AMove 2.4s cubic-bezier(.65,0,.35,1) 6.75s forwards;will-change:transform,opacity,filter}
+.splashv2 .a-mark{position:absolute;top:198px;left:50%;width:14px;height:28px;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-weight:600;font-size:22px;line-height:1;color:#111;opacity:0;transform:translate(-50%,6px) scale(.82);animation:splashv2AMove 2.8s cubic-bezier(.65,0,.35,1) 8.5s forwards;will-change:transform,opacity,filter}
 @keyframes splashv2AMove{0%{opacity:0;transform:translate(-50%,6px) scale(.82);filter:blur(2px)}18%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}40%{opacity:1;transform:translate(-50%,0) scale(1);filter:blur(0)}55%{filter:blur(.5px)}70%{opacity:1;transform:translate(calc(-50% - 82px),0) scale(1);filter:blur(0)}100%{opacity:1;transform:translate(calc(-50% - 82px),0) scale(1);filter:blur(0)}}
-.splashv2 .tagline{position:absolute;top:198px;left:calc(50% - 75px);height:28px;display:flex;align-items:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-style:italic;font-size:22px;font-weight:700;color:#111;letter-spacing:0;white-space:nowrap;pointer-events:none}
+.splashv2 .tagline{position:absolute;top:198px;left:calc(50% - 75px);height:28px;display:flex;align-items:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-size:22px;font-weight:600;color:#111;letter-spacing:0;white-space:nowrap;pointer-events:none}
 .splashv2 .tagline .char{display:inline-block;opacity:0;transform:translate(6px,0);filter:blur(2px);animation:splashv2CharIn .5s cubic-bezier(.22,1,.36,1) forwards;will-change:transform,opacity,filter}
 .splashv2 .tagline .char.space{width:.26em}
 @keyframes splashv2CharIn{0%{opacity:0;transform:translate(6px,0);filter:blur(2px)}100%{opacity:1;transform:translate(0,0);filter:blur(0)}}
 @media (prefers-reduced-motion: reduce){.splashv2 .block,.splashv2 .climber,.splashv2 .climber .pose,.splashv2 .v-mark,.splashv2 .a-mark,.splashv2 .tagline .char,.splashv2 .brand-wordmark{animation-duration:.01s!important}}
+/* Compact pyramid + V brand mark — static lockup used on the quote card. */
+.brand-mark{position:relative;width:140px;height:78px;margin:0 auto 22px}
+.brand-mark .bm-block{position:absolute;left:50%;height:18px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:3px;box-shadow:0 4px 10px rgba(45,90,45,.2),inset 0 1px 0 rgba(255,255,255,.18);transform:translateX(-50%)}
+.brand-mark .bm-b1{bottom:0;width:140px}
+.brand-mark .bm-b2{bottom:20px;width:105px}
+.brand-mark .bm-b3{bottom:40px;width:70px}
+.brand-mark .bm-b4{bottom:60px;width:35px}
+.brand-mark .bm-v{position:absolute;top:20px;left:50%;transform:translate(-50%,-2px);width:70px;height:58px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:62px;line-height:1;color:#f4efe4;text-shadow:0 2px 8px rgba(0,0,0,.25);pointer-events:none}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 .hrow:hover .del-btn,.hrow:hover .edit-btn,.ecard:hover .e-del,.ecard:hover .e-edit{opacity:1!important}
-.sf{width:100%;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-family:system-ui,sans-serif;font-size:13px;color:#374151;outline:none;resize:none}
+.sf{width:100%;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.45;color:#374151;outline:none;resize:none;min-height:62px}
 .sf:focus{border-color:#2d5a2d}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
 input[type=number]{-moz-appearance:textfield}
@@ -1419,12 +1427,17 @@ function loadData() {
       if (typeof p.xp !== "number") p.xp = 0;
       if (!p.dailyRitual) p.dailyRitual = {};
       if (typeof p.homeLocation !== "string") p.homeLocation = "";
-      // Migrate legacy travelDays: string[] -> {date, location}[] so each
-      // travel day can carry its own location.
+      // Migrate legacy travelDays: string[] -> {date, location, tripId}[] so
+      // each travel day carries its own location, and days can be grouped
+      // into trips (contiguous trip = shared tripId; single-tap day = its
+      // own trip).
       if (!Array.isArray(p.travelDays)) p.travelDays = [];
-      p.travelDays = p.travelDays.map(t =>
-        typeof t === "string" ? { date: t, location: "" } : t
-      ).filter(t => t && typeof t.date === "string");
+      p.travelDays = p.travelDays.map(t => {
+        if (typeof t === "string") return { date: t, location: "", tripId: "t-" + t };
+        if (!t || typeof t.date !== "string") return null;
+        if (!t.tripId) return { ...t, tripId: "t-" + t.date };
+        return t;
+      }).filter(Boolean);
       // Any pre-existing user (has habits/goals or has completed it before)
       // should skip onboarding so we don't force the new flow on them.
       if (typeof p.onboardingComplete !== "boolean") {
@@ -1799,7 +1812,17 @@ function App() {
   const [nextGoalTxt, setNextGoalTxt] = useState("");
   const [goalTypeFilter, setGoalTypeFilter] = useState("all");
   const [headerExpanded, setHeaderExpanded] = useState(false);
+  // When the user scrolls down past a small threshold, collapse the sub-row
+  // (calendar icon + At Home/Traveling pill + XP bar) so the top-most
+  // Verrocchio / Achieve Anything / Today / streak / profile row stays
+  // pinned without hogging vertical space.
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const [calTravelMode, setCalTravelMode] = useState(false);
+  // Drag-to-create-trip: while the user drags across the calendar grid in
+  // travel-assign mode, we track the anchor + current-hover dates here.
+  // On pointerup, all days in the range are committed as ONE trip (shared
+  // tripId). A single tap (anchor === hover) still produces a one-day trip.
+  const [tripDrag, setTripDrag] = useState(null); // null | { start, end }
 
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
@@ -1863,9 +1886,12 @@ function App() {
         if (!d.dailyRitual) d.dailyRitual = {};
         if (typeof d.homeLocation !== "string") d.homeLocation = "";
         if (!Array.isArray(d.travelDays)) d.travelDays = [];
-        d.travelDays = d.travelDays.map(t =>
-          typeof t === "string" ? { date: t, location: "" } : t
-        ).filter(t => t && typeof t.date === "string");
+        d.travelDays = d.travelDays.map(t => {
+          if (typeof t === "string") return { date: t, location: "", tripId: "t-" + t };
+          if (!t || typeof t.date !== "string") return null;
+          if (!t.tripId) return { ...t, tripId: "t-" + t.date };
+          return t;
+        }).filter(Boolean);
         if (typeof d.onboardingComplete !== "boolean") {
           // Existing cloud user: don't force them through onboarding.
           d.onboardingComplete = (d.habits && d.habits.length > 0) || (d.goals && d.goals.length > 0);
@@ -2557,13 +2583,14 @@ function App() {
       if (splashPhase !== "loading") setSplashPhase("loading");
       return;
     }
-    // Don't start the splash timer until the welcome screen is visible.
     const willShowWelcome = authUser !== undefined && (authUser !== null || demoMode);
     if (!willShowWelcome) return;
     if (splashPhase !== "loading") return;
-    // Splash animation runs ~9.4s (last tagline char lands at 9.42s).
-    // Transition to the quote once the full brand lockup has landed.
-    const t = setTimeout(() => setSplashPhase("quote"), 9400);
+    // Splash animation runs ~11.4s — tagline's last char (15 chars at 0.045s
+    // stagger starting at 10.2s, each char animates for 0.5s). Hold the
+    // completed lockup for ~1.6s so the moment lands before the quote
+    // page takes over.
+    const t = setTimeout(() => setSplashPhase("quote"), 13000);
     return () => clearTimeout(t);
   }, [hasSeenWelcome, splashPhase, authUser, demoMode]);
 
@@ -2578,6 +2605,108 @@ function App() {
   const travelDays = data.travelDays || [];
   const travelEntryFor = d => travelDays.find(t => t && t.date === d) || null;
   const routineMode = travelEntryFor(selDate) ? "travel" : "home";
+
+  // Commit a drag-selected date range as a single trip. If the range is one
+  // day and that day is already a travel day, the existing trip for that
+  // day is removed (i.e. single-tap toggles off). Otherwise all new dates
+  // in the range are added with a shared tripId + one shared location.
+  const commitTripRange = (startDate, endDate) => {
+    const lo = startDate <= endDate ? startDate : endDate;
+    const hi = startDate <= endDate ? endDate : startDate;
+    // Single-day toggle-off shortcut
+    if (lo === hi) {
+      const existing = (data.travelDays || []).find(t => t.date === lo);
+      if (existing) {
+        // Remove every day that shares this trip so cancelling one day of a
+        // multi-day trip cancels the whole trip.
+        const next = (data.travelDays || []).filter(t => t.tripId !== existing.tripId);
+        save({ ...data, travelDays: next });
+        return;
+      }
+    }
+    // Build full list of dates in range
+    const dates = [];
+    const d = new Date(lo + "T12:00:00");
+    const endD = new Date(hi + "T12:00:00");
+    while (d <= endD) {
+      dates.push(d.toISOString().split("T")[0]);
+      d.setDate(d.getDate() + 1);
+    }
+    const existingDates = new Set((data.travelDays || []).map(t => t.date));
+    const newDates = dates.filter(x => !existingDates.has(x));
+    if (newDates.length === 0) return;
+    const first = newDates[0], last = newDates[newDates.length - 1];
+    const promptMsg = newDates.length === 1
+      ? "Where will you be on " + first + "?"
+      : "Where will you be (" + first + " \u2192 " + last + ")?";
+    const loc = window.prompt(promptMsg, data.homeLocation || "");
+    if (loc === null) return;
+    const tripId = "t" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 6);
+    const next = [
+      ...(data.travelDays || []),
+      ...newDates.map(x => ({ date: x, location: loc.trim(), tripId }))
+    ].sort((a, b) => a.date.localeCompare(b.date));
+    save({ ...data, travelDays: next });
+  };
+
+  // Global pointer listeners: once a drag has started on a calendar day,
+  // track pointermove across the whole document so the user can sweep
+  // their finger (or mouse) across multiple day buttons. On pointerup the
+  // range is committed.
+  useEffect(() => {
+    if (!tripDrag) return;
+    const handleMove = e => {
+      const pt = e.touches && e.touches[0] ? e.touches[0] : e;
+      const el = document.elementFromPoint(pt.clientX, pt.clientY);
+      if (!el) return;
+      const dayEl = el.closest && el.closest("[data-travel-day]");
+      if (!dayEl) return;
+      const val = dayEl.getAttribute("data-travel-day");
+      if (val) {
+        setTripDrag(prev => prev && prev.end !== val ? { ...prev, end: val } : prev);
+      }
+    };
+    const handleUp = () => {
+      setTripDrag(prev => {
+        if (prev) {
+          // Use setTimeout so the state update flushes before prompt()
+          // blocks the UI thread (otherwise the pending re-render shows
+          // the drag highlight frozen under the modal).
+          setTimeout(() => commitTripRange(prev.start, prev.end), 0);
+        }
+        return null;
+      });
+    };
+    document.addEventListener("pointermove", handleMove, { passive: true });
+    document.addEventListener("touchmove", handleMove, { passive: true });
+    document.addEventListener("pointerup", handleUp);
+    document.addEventListener("pointercancel", handleUp);
+    document.addEventListener("touchend", handleUp);
+    return () => {
+      document.removeEventListener("pointermove", handleMove);
+      document.removeEventListener("touchmove", handleMove);
+      document.removeEventListener("pointerup", handleUp);
+      document.removeEventListener("pointercancel", handleUp);
+      document.removeEventListener("touchend", handleUp);
+    };
+  }, [tripDrag, data.travelDays, data.homeLocation]);
+
+  // Collapse the header sub-row (calendar icon + At Home/Traveling pill +
+  // XP/Level bar) once the user scrolls past a small threshold, so the
+  // top-most Verrocchio title strip stays pinned without hogging space.
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      setHeaderCollapsed(prev => {
+        const next = y > 24;
+        return prev === next ? prev : next;
+      });
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
     if (impFilter !== "all" && h.importance !== impFilter) return false;
@@ -2740,9 +2869,9 @@ function App() {
   if (authUser === null && !demoMode) {
     const isSignup = authMode === "signup";
     return onboardShell([
-      React.createElement("div", { key: "lg", style: { fontSize: 30, fontWeight: 800, letterSpacing: "0.08em", color: "#1f2937", marginBottom: 4 } }, "VERROCCHIO"),
+      React.createElement("div", { key: "lg", style: { fontFamily: "'Playfair Display',Georgia,'Times New Roman',serif", fontSize: 36, fontWeight: 700, letterSpacing: ".005em", color: "#2d5a2d", marginBottom: 4 } }, "Verrocchio"),
       React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 24, fontStyle: "italic" } }, "Achieve Anything"),
-      React.createElement("div", { key: "ttl", style: { fontSize: 18, fontWeight: 700, color: "#1f2937", marginBottom: 16 } }, isSignup ? "Create your account" : "Welcome back"),
+      React.createElement("div", { key: "ttl", style: { fontSize: 18, fontWeight: 700, color: "#1f2937", marginBottom: 16 } }, isSignup ? "Create your account" : "Welcome Back"),
       React.createElement("input", {
         key: "email",
         type: "email",
@@ -2768,7 +2897,7 @@ function App() {
         key: "sub",
         onClick: doAuth,
         disabled: authBusy,
-        style: { width: "100%", padding: "10px 12px", fontSize: 14, fontWeight: 600, color: "#fff", background: authBusy ? "#6b7280" : "#1f2937", border: "none", borderRadius: 8, cursor: authBusy ? "default" : "pointer", marginBottom: 12 }
+        style: { width: "100%", padding: "10px 12px", fontSize: 14, fontWeight: 600, color: "#fff", background: authBusy ? "#6b7280" : "#2d5a2d", border: "none", borderRadius: 8, cursor: authBusy ? "default" : "pointer", marginBottom: 12 }
       }, authBusy ? "Please wait..." : (isSignup ? "Create account" : "Log in")),
       React.createElement("div", { key: "tog", style: { fontSize: 12, color: "#6b7280" } },
         isSignup ? "Already have an account? " : "New here? ",
@@ -2799,7 +2928,7 @@ function App() {
     if (splashPhase === "loading") {
       // Tagline shuffles in character-by-character, each char delayed
       // proportionally — see the matching charIn keyframe timing.
-      const TAGLINE_START = 8.25;
+      const TAGLINE_START = 10.2;
       const CHAR_STAGGER  = 0.045;
       const taglineChars = [..."chieve Anything"].map((ch, i) =>
         React.createElement("span", {
@@ -2858,21 +2987,75 @@ function App() {
       );
     }
 
-    const allQuotes = (data.quotes && data.quotes.length ? data.quotes : PRESET_QUOTES);
+    const poolQuotes = (data.quotes && data.quotes.length ? data.quotes : PRESET_QUOTES);
     const dayIdx = Math.floor(Date.now() / 86400000);
-    const q = allQuotes[dayIdx % allQuotes.length] || { text: "", author: "" };
-    return onboardShell([
-      React.createElement("div", { key: "lg", style: { fontSize: 34, fontWeight: 800, letterSpacing: "0.10em", color: "#1f2937", marginBottom: 6 } }, "VERROCCHIO"),
-      React.createElement("div", { key: "tag", style: { fontSize: 14, color: "#6b7280", marginBottom: 28, fontStyle: "italic" } }, "Achieve Anything"),
-      React.createElement("div", { key: "qm", style: { fontSize: 40, color: "#d1d5db", lineHeight: 1, marginBottom: 4 } }, "\u201C"),
-      React.createElement("div", { key: "qt", style: { fontSize: 15, color: "#374151", lineHeight: 1.6, fontStyle: "italic", marginBottom: 10, padding: "0 4px" } }, q.text),
-      q.author ? React.createElement("div", { key: "qa", style: { fontSize: 12, color: "#6b7280", marginBottom: 28 } }, "\u2014 " + q.author) : React.createElement("div", { key: "qa", style: { marginBottom: 28 } }),
+    const q = poolQuotes[dayIdx % poolQuotes.length] || { text: "", author: "" };
+    const qKey = (x) => (x.text || "") + "|" + (x.author || "");
+    const likedList = data.likedQuotes || [];
+    const dislikedList = data.dislikedQuotes || [];
+    const isLiked = likedList.some(x => qKey(x) === qKey(q));
+    const isDisliked = dislikedList.some(x => qKey(x) === qKey(q));
+    const rateQuote = (verdict) => {
+      const stripped = { text: q.text, author: q.author || "" };
+      const liked = (data.likedQuotes || []).filter(x => qKey(x) !== qKey(q));
+      const disliked = (data.dislikedQuotes || []).filter(x => qKey(x) !== qKey(q));
+      if (verdict === "like" && !isLiked) liked.push(stripped);
+      if (verdict === "dislike" && !isDisliked) disliked.push(stripped);
+      save({ ...data, likedQuotes: liked, dislikedQuotes: disliked });
+    };
+    const rateBtn = (verdict, on, symbol, label) => React.createElement("button", {
+      key: "rate-" + verdict,
+      "aria-label": label,
+      "aria-pressed": on,
+      onClick: () => rateQuote(verdict),
+      style: {
+        width: 30, height: 30, borderRadius: "50%", border: "1px solid " + (on ? "#2d5a2d" : "#e5e7eb"),
+        background: on ? "#e9f2e9" : "#fff",
+        cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center",
+        fontSize: 14, lineHeight: 1, transition: "background .15s, border-color .15s",
+        fontFamily: "system-ui,-apple-system,sans-serif", padding: 0, flexShrink: 0
+      }
+    }, symbol);
+    return React.createElement("div", {
+      style: { position: "fixed", inset: 0, background: "#faf8f3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }
+    }, React.createElement("div", {
+      style: { width: "100%", maxWidth: 380, textAlign: "center" }
+    },
+      // Compact pyramid + V lockup
+      React.createElement("div", { className: "brand-mark" },
+        React.createElement("div", { className: "bm-block bm-b1" }),
+        React.createElement("div", { className: "bm-block bm-b2" }),
+        React.createElement("div", { className: "bm-block bm-b3" }),
+        React.createElement("div", { className: "bm-block bm-b4" }),
+        React.createElement("div", { className: "bm-v" }, "V")
+      ),
+      // Quote — wrapped in curly quotation marks in the same Lora italic
+      // face as the quote text, so the punctuation feels like part of the
+      // sentence rather than ornamentation.
+      React.createElement("div", {
+        style: { fontFamily: "'Lora',serif", fontSize: 17, color: "#1f2937", lineHeight: 1.55, fontStyle: "italic", marginBottom: 14, padding: "0 6px" }
+      }, "\u201C" + q.text + "\u201D"),
+      // Author line centered; thumbs anchored to the far right so the
+      // author's name stays truly centered within the app width.
+      React.createElement("div", {
+        style: { position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 30, marginBottom: 28 }
+      },
+        q.author ? React.createElement("span", {
+          style: { fontSize: 12, color: "#6b7280", letterSpacing: ".02em" }
+        }, "\u2014 " + q.author) : null,
+        React.createElement("div", {
+          style: { position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 6 }
+        },
+          rateBtn("like", isLiked, "\uD83D\uDC4D", "Like quote"),
+          rateBtn("dislike", isDisliked, "\uD83D\uDC4E", "Dislike quote")
+        )
+      ),
+      // Continue — full app-width button in brand dark green.
       React.createElement("button", {
-        key: "cont",
         onClick: () => setHasSeenWelcome(true),
-        style: { width: "100%", padding: "12px 16px", fontSize: 15, fontWeight: 600, color: "#fff", background: "#1f2937", border: "none", borderRadius: 10, cursor: "pointer", letterSpacing: "0.02em" }
+        style: { width: "100%", padding: "12px 16px", fontSize: 15, fontWeight: 600, color: "#fff", background: "#2d5a2d", border: "none", borderRadius: 10, cursor: "pointer", letterSpacing: "0.02em" }
       }, "Continue")
-    ]);
+    ));
   }
 
   /* ── NEW-USER ONBOARDING FLOW ──
@@ -2971,7 +3154,7 @@ function App() {
         fontSize: 15,
         fontWeight: 600,
         color: "#fff",
-        background: (opts && opts.disabled) ? "#9ca3af" : "#1f2937",
+        background: (opts && opts.disabled) ? "#9ca3af" : "#2d5a2d",
         border: "none",
         borderRadius: 10,
         cursor: (opts && opts.disabled) ? "default" : "pointer"
@@ -3203,14 +3386,14 @@ function App() {
             { k: "a", label: "Achievable", val: onbGoalAchievable, setter: setOnbGoalAchievable, placeholder: "Why is this realistic? e.g. I've run a half before" },
             { k: "r", label: "Relevant", val: onbGoalRelevant, setter: setOnbGoalRelevant, placeholder: "Why does it matter? e.g. longevity, mental clarity" },
             { k: "t", label: "Time-bound", val: onbGoalTimebound, setter: setOnbGoalTimebound, placeholder: "By when? e.g. October 2026" }
-          ].map(f => React.createElement("div", { key: f.k, style: { marginBottom: 8 } },
+          ].map(f => React.createElement("div", { key: f.k, style: { marginBottom: 10 } },
             React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 } }, f.label),
-            React.createElement("input", {
-              type: "text",
+            React.createElement("textarea", {
+              rows: 3,
               value: f.val,
               onChange: e => f.setter(e.target.value),
               placeholder: f.placeholder,
-              style: { width: "100%", padding: "8px 10px", fontSize: 12.5, border: "1px solid #e5e7eb", borderRadius: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
+              style: { width: "100%", padding: "8px 10px", fontSize: 12.5, lineHeight: 1.45, border: "1px solid #e5e7eb", borderRadius: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937", fontFamily: "inherit", resize: "none", minHeight: 62 }
             })
           ))
         ) : null,
@@ -3259,8 +3442,8 @@ function App() {
           key: "kinds",
           style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }
         }, [
-          { val: "do", label: "\u2705 Do daily", sub: "Something I want to build.", color: "#2d5a2d", bg: "#f0f7f0", border: "#c6dfc6" },
-          { val: "avoid", label: "\uD83D\uDEAB Avoid", sub: "Something I want to cut out.", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" }
+          { val: "do", label: "Do daily", sub: "Something I want to build.", color: "#2d5a2d", bg: "#f0f7f0", border: "#c6dfc6" },
+          { val: "avoid", label: "Avoid", sub: "Something I want to cut out.", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" }
         ].map(k => {
           const on = onbHabitKind === k.val;
           return React.createElement("button", {
@@ -3315,7 +3498,7 @@ function App() {
               fontSize: 12, fontWeight: 600,
               cursor: "pointer"
             }
-          }, sec.icon + " " + sec.label))),
+          }, sec.label))),
 
           // Time estimate for a positive habit.
           React.createElement("div", { key: "durLbl", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Roughly how long? (optional)"),
@@ -3540,7 +3723,12 @@ function App() {
     r: "4"
   }))))), /*#__PURE__*/React.createElement("div", {
     style: {
-      padding: "2px 8px 10px"
+      padding: headerCollapsed ? "0 8px" : "2px 8px 10px",
+      maxHeight: headerCollapsed ? 0 : 600,
+      opacity: headerCollapsed ? 0 : 1,
+      overflow: "hidden",
+      pointerEvents: headerCollapsed ? "none" : "auto",
+      transition: "max-height .22s ease, opacity .18s ease, padding .22s ease"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -3594,6 +3782,43 @@ function App() {
     x2: "21",
     y2: "10"
   }))), (() => {
+    // Quick At Home / Traveling toggle for the selected day. Mirrors the
+    // calendar-grid toggleTravel flow but targets selDate directly so the
+    // user doesn't have to open the calendar to flip the day's routine.
+    const entry = travelEntryFor(selDate);
+    const isTravel = !!entry;
+    const quickToggleTravel = () => {
+      const current = data.travelDays || [];
+      const existing = current.find(t => t.date === selDate);
+      if (existing) {
+        save({ ...data, travelDays: current.filter(t => t.date !== selDate) });
+      } else {
+        const loc = window.prompt("Where will you be on " + selDate + "?", data.homeLocation || "");
+        if (loc === null) return;
+        const next = [...current, { date: selDate, location: loc.trim() }]
+          .sort((a, b) => a.date.localeCompare(b.date));
+        save({ ...data, travelDays: next });
+      }
+    };
+    return /*#__PURE__*/React.createElement("button", {
+      onClick: quickToggleTravel,
+      title: isTravel && entry && entry.location ? "Traveling \u2014 " + entry.location : (isTravel ? "Traveling" : "At Home"),
+      style: {
+        background: isTravel ? "#fff7ed" : "#f0f7f0",
+        border: "1px solid " + (isTravel ? "#fdba74" : "#c6dfc6"),
+        borderRadius: 14,
+        padding: "5px 10px",
+        fontSize: 11,
+        fontWeight: 700,
+        color: isTravel ? "#c2410c" : "#2d5a2d",
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        letterSpacing: .2,
+        WebkitTapHighlightColor: "transparent"
+      }
+    }, isTravel ? "Traveling" : "At Home");
+  })(), (() => {
     const xpTotal = data.xp || 0;
     const level = Math.floor(xpTotal / 500) + 1;
     const xpInLevel = xpTotal % 500;
@@ -3629,9 +3854,13 @@ function App() {
     const mo = sd.getMonth();
     const first = new Date(yr, mo, 1).getDay();
     const dim = new Date(yr, mo + 1, 0).getDate();
-    // travelDays is now [{date, location}]. Build a map for quick lookup.
+    // travelDays is now [{date, location, tripId}]. Build maps for quick lookup.
     const tdMap = new Map((data.travelDays || []).map(t => [t.date, t.location || ""]));
     const tdSet = tdMap; // alias for the grid renderer (checks .has(val))
+    // Per-date tripId map: lets the grid detect consecutive cells of the same
+    // trip and render them as one continuous track shape instead of separate
+    // circles.
+    const tripIdByDate = new Map((data.travelDays || []).map(t => [t.date, t.tripId || null]));
     const toggleTravel = val => {
       const current = data.travelDays || [];
       const existing = current.find(t => t.date === val);
@@ -3759,40 +3988,121 @@ function App() {
       const isFut = val > tk();
       const isTrav = tdSet.has(val);
       const hasDone = habits.some(h => isDone(h, val));
+      // In-drag highlight: this day falls inside the user's current drag
+      // range (from anchor to the day currently under their finger).
+      let inDrag = false;
+      if (tripDrag) {
+        const lo = tripDrag.start <= tripDrag.end ? tripDrag.start : tripDrag.end;
+        const hi = tripDrag.start <= tripDrag.end ? tripDrag.end : tripDrag.start;
+        inDrag = val >= lo && val <= hi;
+      }
+      // Trip-continuity detection: is the PREVIOUS / NEXT calendar day part
+      // of the same tripId AND on the same calendar row (week)? If so we
+      // render a track-shaped pill instead of a circle.
+      const col = (first + i) % 7;
+      const myTrip = tripIdByDate.get(val) || null;
+      const prevVal = new Date(yr, mo, day - 1).toISOString().split("T")[0];
+      const nextVal = new Date(yr, mo, day + 1).toISOString().split("T")[0];
+      const trackLeft  = !!(myTrip && col !== 0 && tripIdByDate.get(prevVal) === myTrip);
+      const trackRight = !!(myTrip && col !== 6 && tripIdByDate.get(nextVal) === myTrip);
+      const isContinuous = trackLeft || trackRight;
       // Selected day color adapts to its mode (Travel = cyan, Home = green)
       const selColor = isTrav ? "#0891b2" : "#2d5a2d";
       const todayBg  = isTrav ? "#f0f9ff" : "#f0f7f0";
       const todayFg  = isTrav ? "#0891b2" : "#2d5a2d";
       const travBg   = "#ecfeff";
+      const dragBg   = "#cffafe"; // slightly darker cyan for provisional drag selection
+      // Shape fill (the colored body of the cell / track).
+      const fill = inDrag ? dragBg : (isSel ? selColor : isT ? todayBg : isTrav ? travBg : "transparent");
+      // Pill corners: a continuous trip becomes "0 pill pill 0" on the start,
+      // "pill 0 0 pill" on the end, "0" in the middle, "50%" for a lone day.
+      let borderRadius = "50%";
+      if (isContinuous) {
+        if (trackLeft && trackRight) borderRadius = 0;
+        else if (trackLeft) borderRadius = "0 999px 999px 0";
+        else borderRadius = "999px 0 0 999px";
+      }
+      // Dashed outline on trip cells: top/bottom always, left only if this
+      // is the START of the track, right only if this is the END.
+      const shapeBorder = {};
+      if (inDrag) {
+        const c = "1.5px solid #0891b2";
+        if (isContinuous) {
+          shapeBorder.borderTop = c; shapeBorder.borderBottom = c;
+          if (!trackLeft)  shapeBorder.borderLeft  = c;
+          if (!trackRight) shapeBorder.borderRight = c;
+        } else {
+          shapeBorder.border = c;
+        }
+      } else if (isTrav && !isSel) {
+        const c = "1px dashed #67e8f9";
+        if (isContinuous) {
+          shapeBorder.borderTop = c; shapeBorder.borderBottom = c;
+          if (!trackLeft)  shapeBorder.borderLeft  = c;
+          if (!trackRight) shapeBorder.borderRight = c;
+        } else {
+          shapeBorder.border = c;
+        }
+      }
       return /*#__PURE__*/React.createElement("button", {
         key: day,
+        "data-travel-day": calTravelMode ? val : null,
+        onPointerDown: calTravelMode ? (e) => {
+          // Start a drag. If the pointer is released on the same day the
+          // range commits as a single-day (or toggle-off) action.
+          setTripDrag({ start: val, end: val });
+          e.preventDefault();
+        } : undefined,
         onClick: () => {
-          if (calTravelMode) {
-            toggleTravel(val);
-          } else {
+          // In travel-mode we rely entirely on pointerdown/pointerup; the
+          // onClick fallback is only for pure-mouse environments that
+          // don't fire pointerdown (rare). In date-select mode this just
+          // picks the day.
+          if (!calTravelMode) {
             setSelDate(val);
             setHeaderExpanded(false);
           }
         },
         style: {
           aspectRatio: "1",
-          borderRadius: "50%",
-          border: isTrav && !isSel ? "1px dashed #67e8f9" : "none",
-          background: isSel ? selColor : isT ? todayBg : isTrav ? travBg : "transparent",
-          cursor: "pointer",
+          background: "transparent",
+          border: "none",
+          padding: 0,
+          cursor: calTravelMode ? "crosshair" : "pointer",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           position: "relative",
-          opacity: isFut && !calTravelMode ? .7 : 1
+          opacity: isFut && !calTravelMode ? .7 : 1,
+          touchAction: calTravelMode ? "none" : "auto",
+          userSelect: "none",
+          overflow: "visible"
         }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          fontWeight: isSel || isT || isTrav ? 700 : 400,
-          color: isSel ? "#fff" : isT ? todayFg : isTrav ? "#0e7490" : "#374151"
-        }
-      }, day), hasDone && !isSel && /*#__PURE__*/React.createElement("div", {
+      },
+        // Shape layer — extends horizontally 3px into the grid gap when this
+        // cell is part of a continuous trip so adjacent cells visually fuse
+        // into one pill without affecting the centered day number above.
+        /*#__PURE__*/React.createElement("div", {
+          style: Object.assign({
+            position: "absolute",
+            top: 0, bottom: 0,
+            left:  trackLeft  ? -3 : 0,
+            right: trackRight ? -3 : 0,
+            borderRadius: borderRadius,
+            background: fill,
+            boxSizing: "border-box",
+            pointerEvents: "none"
+          }, shapeBorder)
+        }),
+        /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 11,
+            fontWeight: isSel || isT || isTrav ? 700 : 400,
+            color: isSel ? "#fff" : isT ? todayFg : isTrav ? "#0e7490" : "#374151",
+            position: "relative",
+            zIndex: 1
+          }
+        }, day), hasDone && !isSel && /*#__PURE__*/React.createElement("div", {
         style: {
           position: "absolute",
           bottom: 1,
@@ -3801,7 +4111,8 @@ function App() {
           width: 3,
           height: 3,
           borderRadius: "50%",
-          background: "#22c55e"
+          background: "#22c55e",
+          zIndex: 1
         }
       }));
     })),
@@ -3813,32 +4124,77 @@ function App() {
         (data.homeLocation ? "Home \u2014 " + data.homeLocation : "Home")),
       /*#__PURE__*/React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 4 } },
         /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: "#ecfeff", border: "1px dashed #67e8f9" } }), "Travel")),
-    // Travel-day location list: tap a row to edit its location, × to remove.
-    (data.travelDays && data.travelDays.length > 0) ? /*#__PURE__*/React.createElement("div", {
-      style: { marginTop: 10, paddingTop: 8, borderTop: "1px solid #e5e7eb" }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }
-      }, "Travel locations"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 160, overflowY: "auto" }
+    // Travel-day location list, grouped by tripId. Each row represents a
+    // trip: a single date, or a date range if the trip spans multiple
+    // consecutive days. Tap the location to edit it for the whole trip;
+    // × removes every day in the trip.
+    (data.travelDays && data.travelDays.length > 0) ? (() => {
+      // Group by tripId. Preserve date order within each trip.
+      const groupMap = new Map();
+      for (const t of (data.travelDays || []).slice().sort((a, b) => a.date.localeCompare(b.date))) {
+        const key = t.tripId || ("solo-" + t.date);
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key).push(t);
+      }
+      const trips = Array.from(groupMap.values()).sort((a, b) => a[0].date.localeCompare(b[0].date));
+      const editTripLoc = (trip) => {
+        const current = trip[0].location || "";
+        const loc = window.prompt(
+          trip.length === 1
+            ? "Location for " + trip[0].date + ":"
+            : "Location for trip (" + trip[0].date + " \u2192 " + trip[trip.length - 1].date + "):",
+          current
+        );
+        if (loc === null) return;
+        const ids = new Set(trip.map(t => t.tripId));
+        const dates = new Set(trip.map(t => t.date));
+        const next = (data.travelDays || []).map(t =>
+          (ids.has(t.tripId) && ids.has(t.tripId)) || dates.has(t.date)
+            ? { ...t, location: loc.trim() }
+            : t
+        );
+        save({ ...data, travelDays: next });
+      };
+      const deleteTrip = (trip) => {
+        const ids = new Set(trip.map(t => t.tripId));
+        const dates = new Set(trip.map(t => t.date));
+        const next = (data.travelDays || []).filter(t => !ids.has(t.tripId) && !dates.has(t.date));
+        save({ ...data, travelDays: next });
+      };
+      return /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 10, paddingTop: 8, borderTop: "1px solid #e5e7eb" }
       },
-        (data.travelDays || []).slice().sort((a, b) => a.date.localeCompare(b.date)).map(t => /*#__PURE__*/React.createElement("div", {
-          key: "tr-" + t.date,
-          style: { display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }
+        }, "Trips"),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 4, maxHeight: 180, overflowY: "auto" }
         },
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#0891b2", minWidth: 72 } }, t.date),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => editTravelLoc(t.date),
-            style: { flex: 1, textAlign: "left", background: "transparent", border: "none", fontSize: 11, color: t.location ? "#1f2937" : "#9ca3af", fontStyle: t.location ? "normal" : "italic", cursor: "pointer", padding: "2px 0" }
-          }, t.location || "Tap to set location"),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => toggleTravel(t.date),
-            style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
-          }, "\u00D7")
-        ))
-      )
-    ) : null);
+          trips.map(trip => {
+            const first = trip[0].date, last = trip[trip.length - 1].date;
+            const rangeLabel = first === last ? first : first + " \u2192 " + last;
+            const loc = trip[0].location;
+            return /*#__PURE__*/React.createElement("div", {
+              key: "trip-" + (trip[0].tripId || first),
+              style: { display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }
+            },
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 11, fontWeight: 700, color: "#0891b2", minWidth: 130, whiteSpace: "nowrap" }
+              }, rangeLabel),
+              /*#__PURE__*/React.createElement("button", {
+                onClick: () => editTripLoc(trip),
+                style: { flex: 1, textAlign: "left", background: "transparent", border: "none", fontSize: 11, color: loc ? "#1f2937" : "#9ca3af", fontStyle: loc ? "normal" : "italic", cursor: "pointer", padding: "2px 0" }
+              }, loc || "Tap to set location"),
+              /*#__PURE__*/React.createElement("button", {
+                onClick: () => deleteTrip(trip),
+                style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 },
+                title: "Remove trip"
+              }, "\u00D7")
+            );
+          })
+        )
+      );
+    })() : null);
   })())), swipeFeedback && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
@@ -4048,15 +4404,8 @@ function App() {
       ? null
       : /*#__PURE__*/React.createElement("div", { key: "brief", style: cardStyle },
           /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }
-          },
-            /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "#111827" } }, "Your Daily Briefing"),
-            /*#__PURE__*/React.createElement("button", {
-              onClick: genBrief,
-              disabled: briefing,
-              style: { background: briefing ? "#9ca3af" : "#2d5a2d", border: "none", borderRadius: 8, padding: "7px 14px", color: "#fff", fontSize: 12, fontWeight: 600, cursor: briefing ? "default" : "pointer" }
-            }, briefing ? "\u2026" : (briefTxt ? "Regenerate" : "Generate"))
-          ),
+            style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "#111827", marginBottom: 12 }
+          }, "Your Daily Briefing"),
           briefing && /*#__PURE__*/React.createElement("div", {
             className: "pulsing",
             style: { textAlign: "center", padding: "28px 0", color: "#9ca3af", fontSize: 13 }
@@ -4066,7 +4415,7 @@ function App() {
           }, briefTxt),
           !briefing && !briefTxt && /*#__PURE__*/React.createElement("div", {
             style: { textAlign: "center", padding: "28px 0", color: "#d1d5db", fontSize: 13 }
-          }, "Tap Generate for a personalized morning briefing"),
+          }, "Your briefing will appear here once you add your first goal or habit."),
           !briefing && briefTxt && /*#__PURE__*/React.createElement("button", {
             onClick: () => updateRitual({ briefingReviewed: true }),
             style: { ...AB, width: "100%", padding: "9px" }
@@ -4395,35 +4744,30 @@ function App() {
     }, [{
       val: "all",
       label: "All",
-      icon: "✦",
       color: "#2d5a2d",
       bg: "#f0f7f0",
       border: "#c6dfc6"
     }, {
       val: "morning",
       label: "Morning",
-      icon: "🌅",
       color: "#d97706",
       bg: "#fffbeb",
       border: "#fde68a"
     }, {
       val: "afternoon",
       label: "Afternoon",
-      icon: "☀️",
       color: "#ea580c",
       bg: "#fff7ed",
       border: "#fed7aa"
     }, {
       val: "evening",
       label: "Evening",
-      icon: "🌙",
       color: "#7c3aed",
       bg: "#f5f3ff",
       border: "#ddd6fe"
     }, {
       val: "avoid",
       label: "Avoid",
-      icon: "🚫",
       color: "#dc2626",
       bg: "#fef2f2",
       border: "#fecaca"
@@ -4435,8 +4779,7 @@ function App() {
         style: {
           display: "flex",
           alignItems: "center",
-          gap: 3,
-          padding: "5px 9px",
+          padding: "5px 11px",
           borderRadius: 20,
           border: `1.5px solid ${on ? f.border : "#e5e7eb"}`,
           background: on ? f.bg : "#fff",
@@ -4448,11 +4791,7 @@ function App() {
           flexShrink: 0,
           transition: "all .15s"
         }
-      }, /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10
-        }
-      }, f.icon), f.label);
+      }, f.label);
     }))), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
@@ -6027,7 +6366,7 @@ function App() {
     }
   }, f.label), /*#__PURE__*/React.createElement("textarea", {
     className: "sf",
-    rows: 2,
+    rows: 3,
     value: nGSmart[f.key],
     onChange: e => sNGSmart(p => ({
       ...p,
@@ -6242,7 +6581,7 @@ function App() {
         }
       }, f.label), /*#__PURE__*/React.createElement("textarea", {
         className: "sf",
-        rows: 2,
+        rows: 3,
         value: eGSmart[f.key] || "",
         onChange: e => sEGSmart(p => ({
           ...p,
@@ -7931,9 +8270,50 @@ function App() {
           /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#2d5a2d" } }, (data.xp || 0).toLocaleString()),
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, "XP"))))
     );
+    const qKeyP = (x) => (x.text || "") + "|" + (x.author || "");
+    const likedQuotesList = data.likedQuotes || [];
+    const dislikedQuotesList = data.dislikedQuotes || [];
+    const removeFromList = (bucket, q) => {
+      const next = (data[bucket] || []).filter(x => qKeyP(x) !== qKeyP(q));
+      save({ ...data, [bucket]: next });
+    };
+    const quoteGroup = (title, bucket, list, accent) => {
+      if (!list.length) return null;
+      return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: .5, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 13 } }, accent),
+          /*#__PURE__*/React.createElement("span", null, title),
+          /*#__PURE__*/React.createElement("span", { style: { color: "#d1d5db", fontWeight: 500 } }, "(" + list.length + ")")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+          list.map((q, i) => /*#__PURE__*/React.createElement("div", {
+            key: bucket + "-" + i,
+            style: { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "flex-start", gap: 8 }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 12, fontStyle: "italic", color: "#374151", lineHeight: 1.5, marginBottom: q.author ? 4 : 0 }
+              }, "\"", q.text, "\""),
+              q.author ? /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 11, color: "#2d5a2d", fontWeight: 600 }
+              }, "\u2014 ", q.author) : null
+            ),
+            /*#__PURE__*/React.createElement("button", {
+              "aria-label": "Remove",
+              onClick: () => removeFromList(bucket, q),
+              style: { background: "none", border: "none", cursor: "pointer", color: "#d1d5db", fontSize: 18, padding: 0, lineHeight: 1, flexShrink: 0 }
+            }, "\xD7")
+          ))
+        )
+      );
+    };
     const inspirationPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("My Inspiration"),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", marginBottom: 12 } }, "Your personal quote collection."),
+      quoteGroup("Liked", "likedQuotes", likedQuotesList, "\uD83D\uDC4D"),
+      quoteGroup("Disliked", "dislikedQuotes", dislikedQuotesList, "\uD83D\uDC4E"),
       /*#__PURE__*/React.createElement("div", {
         style: { background: "#f9fafb", borderRadius: 10, padding: "12px", marginBottom: 12 }
       },
@@ -8552,20 +8932,20 @@ function App() {
   }, [{
     key: "brief",
     label: "Home",
+    // Verrocchio pyramid logo — four stacked blocks forming a "V"-shaped
+    // silhouette. Filled with the nav state color; the top block sits in
+    // for the apex of the V at this small size.
     icon: a => /*#__PURE__*/React.createElement("svg", {
       width: "22",
       height: "22",
       viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: a ? "#2d5a2d" : "#9ca3af",
-      strokeWidth: "2",
-      strokeLinecap: "round",
-      strokeLinejoin: "round"
-    }, /*#__PURE__*/React.createElement("path", {
-      d: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-    }), /*#__PURE__*/React.createElement("polyline", {
-      points: "9 22 9 12 15 12 15 22"
-    }))
+      fill: a ? "#2d5a2d" : "#9ca3af"
+    },
+      /*#__PURE__*/React.createElement("rect", { x: "1", y: "19", width: "22", height: "3.5", rx: "1" }),
+      /*#__PURE__*/React.createElement("rect", { x: "4", y: "14.5", width: "16", height: "3.5", rx: "1" }),
+      /*#__PURE__*/React.createElement("rect", { x: "6.5", y: "10", width: "11", height: "3.5", rx: "1" }),
+      /*#__PURE__*/React.createElement("rect", { x: "9", y: "5.5", width: "6", height: "3.5", rx: "1" })
+    )
   }, {
     key: "goals",
     label: "Goals",
@@ -8653,26 +9033,21 @@ function App() {
     return /*#__PURE__*/React.createElement("button", {
       key: t.key,
       onClick: () => setTab(t.key),
+      "aria-label": t.label,
+      title: t.label,
       style: {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 3,
+        justifyContent: "center",
         background: "none",
         border: "none",
         cursor: "pointer",
-        padding: "4px 8px",
+        padding: "6px 10px",
         minWidth: 52,
         WebkitTapHighlightColor: "transparent"
       }
-    }, t.icon(active), /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 10,
-        fontWeight: active ? 700 : 500,
-        color: active ? "#2d5a2d" : "#9ca3af",
-        letterSpacing: .2
-      }
-    }, t.label));
+    }, t.icon(active));
   }))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
