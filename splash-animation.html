@@ -6,7 +6,7 @@
 <title>Verrocchio — Splash Animation</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,800;0,900;1,800;1,900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
@@ -42,6 +42,10 @@
     height:112px;
     transform:translateX(-50%);
   }
+  /* Blocks stack bottom-to-top: the widest base block drops into place
+     first; each subsequent block falls onto the one below it, like
+     building a stack of pancakes. Each block enters from above and
+     settles with a small overshoot bounce. */
   .block{
     position:absolute;
     left:50%;
@@ -51,83 +55,208 @@
     box-shadow:
       0 6px 14px rgba(45,90,45,.22),
       inset 0 1px 0 rgba(255,255,255,.18);
-    transform:translateX(-600px);
+    transform:translate(-50%,-44px);
     opacity:0;
-    animation:slideIn .72s cubic-bezier(.22,1,.36,1) forwards;
+    animation:blockStack .62s cubic-bezier(.34,1.35,.64,1) forwards;
     will-change:transform,opacity,filter;
   }
   .b1{bottom:0;  width:200px;animation-delay:.05s}
-  .b2{bottom:28px;width:150px;animation-delay:.20s}
-  .b3{bottom:56px;width:100px;animation-delay:.35s}
-  .b4{bottom:84px;width:50px; animation-delay:.50s}
+  .b2{bottom:28px;width:150px;animation-delay:.22s}
+  .b3{bottom:56px;width:100px;animation-delay:.39s}
+  .b4{bottom:84px;width:50px; animation-delay:.56s}
 
-  @keyframes slideIn{
-    0%  {transform:translate(-600px,0);opacity:0;filter:blur(3px)}
-    55% {opacity:1;                    filter:blur(.5px)}
-    100%{transform:translate(-50%,0);  opacity:1;filter:blur(0)}
+  @keyframes blockStack{
+    0%  {transform:translate(-50%,-44px);opacity:0;filter:blur(3px)}
+    55% {                                opacity:1;filter:blur(.4px)}
+    100%{transform:translate(-50%,0);    opacity:1;filter:blur(0)}
   }
 
   /* ─── Stick-figure climber ────────────────────────────────────────
-     Starts at ground level to the left of the pyramid; hops up each
-     step (top of b1 → b2 → b3 → b4) and switches to a victory pose
-     at the summit.
+     Starts at ground level to the left of the pyramid. He doesn't
+     leap up each step — he pulls himself up with his arms:
+       1. Stands on the current step (mount pose).
+       2. Reaches up to grab the edge of the next step (reach pose).
+       3. Pulls his body up and over onto the next step.
+       4. Briefly rests before the next pull.
+     At the summit he throws both arms up in a victory V.
 
-     Start: left:60, top:168 → feet land at stage-y 192 (ground).
-     Keyframes target the left-ish portion of each block top, except
-     the summit which is centered on b4.
-
+     Start: left:48, top:156 → feet land at stage-y 192 (ground).
      Block tops in stage-y:  b1=166, b2=138, b3=110, b4=82
-     Target (x, y) per step in stage coords  (x = climber CENTER):
-       b1:   (100, 166)   (climber.left = 91,  top = 142)
-       b2:   (125, 138)   (climber.left = 116, top = 114)
-       b3:   (150, 110)   (climber.left = 141, top = 86)
-       b4:   (180, 82)    (climber.left = 171, top = 58)
-     Deltas from start (left:60, top:168):
-       b1: dx=+31, dy=-26
-       b2: dx=+56, dy=-54
-       b3: dx=+81, dy=-82
-       b4: dx=+111, dy=-110
+     Translate deltas from start per step (feet end up on block top):
+       b1  dx=+38, dy=-26
+       b2  dx=+63, dy=-54
+       b3  dx=+88, dy=-82
+       b4  dx=+118, dy=-110
+
+     The climb path for each step is:
+       rest → arms-up reach (still at rest x/y)
+            → body rises mostly vertically (small sideways shift)
+            → body swings over the edge (mostly sideways shift)
+            → settles on the new step.
+     The rise is more vertical than parabolic so it reads as "pulling
+     up" rather than "jumping over."
   */
   .climber{
     position:absolute;
-    left:60px;
-    top:168px;
-    width:18px;
-    height:24px;
+    left:48px;
+    top:156px;
+    width:28px;
+    height:36px;
     overflow:visible;
     stroke:#2d5a2d;
     fill:#2d5a2d;
-    stroke-width:1.3;
+    stroke-width:1.5;
     stroke-linecap:round;
     stroke-linejoin:round;
     opacity:0;
-    animation:climb 1.4s cubic-bezier(.35,.05,.4,1) 1.1s forwards;
+    /* Climb is 3.4s — slower than before so each pull reads as real
+       effort. `climb` also handles entrance fade-in; `climberOff`
+       fades him out after the victory beat so the brand wordmark can
+       take his place above the pyramid. Climb starts at 1.25s, after
+       the last block has settled into the pyramid. */
+    animation:
+      climb 3.4s cubic-bezier(.5,.05,.5,.95) 1.25s forwards,
+      climberOff .4s ease-out 4.9s forwards;
     will-change:transform,opacity;
     z-index:3;
     pointer-events:none;
   }
+  @keyframes climberOff{
+    0%  {opacity:1}
+    100%{opacity:0}
+  }
+  /* Four pulls up the pyramid, with a slip on Pull #2 so the climb
+     reads as genuinely challenging:
+       Pull 1 → clean
+       Pull 2 → slips back partway, regroups, muscles up
+       Pull 3 → slow, labored
+       Pull 4 → summit
+     Rests are longer than before — catching his breath between pulls. */
   @keyframes climb{
     0%   {opacity:0;transform:translate(0,0)}
-    5%   {opacity:1;transform:translate(0,0)}
-    /* Little "hops" — peak slightly above each step before landing. */
-    15%  {transform:translate(16px,-32px)}
-    20%  {transform:translate(31px,-26px)}
-    35%  {transform:translate(44px,-60px)}
-    40%  {transform:translate(56px,-54px)}
-    53%  {transform:translate(69px,-88px)}
-    58%  {transform:translate(81px,-82px)}
-    73%  {transform:translate(96px,-116px)}
-    78%  {transform:translate(111px,-110px)}
-    100% {opacity:1;transform:translate(111px,-110px)}
+    3%   {opacity:1;transform:translate(0,0)}
+
+    /* Pull #1 → b1 ------------------------------------------------- */
+    6%   {transform:translate(0,0)}              /* stand, plant feet */
+    9%   {transform:translate(2px,-5px)}         /* reach for edge */
+    13%  {transform:translate(8px,-20px)}        /* body pulling up */
+    17%  {transform:translate(24px,-28px)}       /* swing over the edge */
+    20%  {transform:translate(38px,-26px)}       /* land on b1 */
+    25%  {transform:translate(38px,-26px)}       /* rest — catch breath */
+
+    /* Pull #2 → b2 (with a slip + recovery) ----------------------- */
+    28%  {transform:translate(40px,-32px)}       /* grasp edge */
+    32%  {transform:translate(46px,-44px)}       /* start pulling up */
+    35%  {transform:translate(44px,-38px)}       /* SLIP — grip gives */
+    38%  {transform:translate(45px,-42px)}       /* dangling, regrouping */
+    42%  {transform:translate(52px,-54px)}       /* stronger pull */
+    45%  {transform:translate(63px,-54px)}       /* finally onto b2 */
+    51%  {transform:translate(63px,-54px)}       /* long rest */
+
+    /* Pull #3 → b3 ------------------------------------------------- */
+    54%  {transform:translate(65px,-60px)}       /* grasp */
+    59%  {transform:translate(71px,-72px)}       /* slow pull */
+    64%  {transform:translate(80px,-82px)}       /* haul over */
+    68%  {transform:translate(88px,-82px)}       /* land on b3 */
+    74%  {transform:translate(88px,-82px)}       /* rest */
+
+    /* Pull #4 → summit (b4) --------------------------------------- */
+    77%  {transform:translate(90px,-88px)}
+    83%  {transform:translate(96px,-104px)}
+    89%  {transform:translate(108px,-112px)}
+    93%  {transform:translate(118px,-110px)}
+    100% {opacity:1;transform:translate(118px,-110px)}
   }
 
-  /* Two poses share the SVG. Running pose visible during climb;
-     victory pose crossfades in at the summit (~78% of climb → 2.2s). */
+  /* Three poses share the SVG, cycled in lockstep with the climb.
+     The mount pose (standing on a step) is visible during rests; the
+     reach pose (arms up, body stretched) is visible during the pulls;
+     the victory pose takes over once he's on top.
+
+     All three opacity animations share the climb's 2.6s duration and
+     1s delay so their keyframes line up with the position keyframes
+     above.  */
   .climber .pose{opacity:0}
-  .climber .pose.run{opacity:1;animation:runOff .18s 2.3s forwards}
-  .climber .pose.victory{animation:victoryOn .22s 2.3s forwards}
-  @keyframes runOff    {to{opacity:0}}
-  @keyframes victoryOn {to{opacity:1}}
+  .climber .pose.mount   {animation:mountCycle 3.4s linear 1.25s forwards}
+  .climber .pose.reach   {animation:reachCycle 3.4s linear 1.25s forwards}
+  .climber .pose.victory {animation:victoryCycle 3.4s linear 1.25s forwards}
+
+  /* Rests:    0–5%, 20–25%, 45–51%, 68–74%
+     Pulls:    6–20%, 26–45% (slip stays in reach pose), 52–68%, 75–93%
+     Summit:   94%+ */
+  @keyframes mountCycle{
+    0%  {opacity:1}
+    5%  {opacity:1}
+    6%  {opacity:0}
+    19% {opacity:0}
+    21% {opacity:1}
+    25% {opacity:1}
+    26% {opacity:0}
+    44% {opacity:0}
+    46% {opacity:1}
+    51% {opacity:1}
+    52% {opacity:0}
+    67% {opacity:0}
+    69% {opacity:1}
+    74% {opacity:1}
+    75% {opacity:0}
+    100%{opacity:0}
+  }
+  @keyframes reachCycle{
+    0%  {opacity:0}
+    5%  {opacity:0}
+    6%  {opacity:1}
+    19% {opacity:1}
+    20% {opacity:0}
+    25% {opacity:0}
+    26% {opacity:1}
+    44% {opacity:1}
+    45% {opacity:0}
+    51% {opacity:0}
+    52% {opacity:1}
+    67% {opacity:1}
+    68% {opacity:0}
+    74% {opacity:0}
+    75% {opacity:1}
+    93% {opacity:1}
+    94% {opacity:0}
+    100%{opacity:0}
+  }
+  @keyframes victoryCycle{
+    0%  {opacity:0}
+    92% {opacity:0}
+    95% {opacity:1}
+    100%{opacity:1}
+  }
+
+  /* ─── "Verrocchio" brand wordmark ─────────────────────────────────
+     Takes the climber's place above the pyramid after he fades out.
+     Non-italic (the brand name) to contrast with the italic tagline
+     below. Sized to fit within the pyramid's base (200px).
+  */
+  .brand-wordmark{
+    position:absolute;
+    top:44px;
+    left:50%;
+    font-family:'Playfair Display',Georgia,'Times New Roman',serif;
+    font-weight:700;
+    font-style:normal;
+    font-size:24px;
+    line-height:1;
+    color:#2d5a2d;
+    letter-spacing:.005em;
+    white-space:nowrap;
+    opacity:0;
+    transform:translate(-50%,6px);
+    animation:brandIn .7s cubic-bezier(.22,1,.36,1) 5.1s forwards;
+    will-change:transform,opacity,filter;
+    pointer-events:none;
+  }
+  @keyframes brandIn{
+    0%  {opacity:0;transform:translate(-50%,6px);filter:blur(3px)}
+    60% {opacity:1;                               filter:blur(.4px)}
+    100%{opacity:1;transform:translate(-50%,0);  filter:blur(0)}
+  }
 
   /* ─── "V" imposed over the bottom 3 blocks ──────────────────────── */
   .v-mark{
@@ -147,8 +276,8 @@
     color:#f4efe4;
     text-shadow:0 2px 10px rgba(0,0,0,.28);
     opacity:0;
-    /* Delayed until the climber has reached the summit + settled. */
-    animation:vFade .7s cubic-bezier(.22,1,.36,1) 2.6s forwards;
+    /* Delayed until Verrocchio has arrived above the pyramid. */
+    animation:vFade .7s cubic-bezier(.22,1,.36,1) 5.95s forwards;
     will-change:transform,opacity,filter;
     pointer-events:none;
   }
@@ -179,13 +308,13 @@
     justify-content:center;
     font-family:'Playfair Display',Georgia,'Times New Roman',serif;
     font-style:italic;
-    font-weight:900;
+    font-weight:700;
     font-size:22px;
     line-height:1;
     color:#2d5a2d;
     opacity:0;
     transform:translate(-50%,6px) scale(.82);
-    animation:aMove 2.4s cubic-bezier(.65,0,.35,1) 3.4s forwards;
+    animation:aMove 2.4s cubic-bezier(.65,0,.35,1) 6.75s forwards;
     will-change:transform,opacity,filter;
   }
   @keyframes aMove{
@@ -207,7 +336,7 @@
     font-family:'Playfair Display',Georgia,'Times New Roman',serif;
     font-style:italic;
     font-size:22px;
-    font-weight:900;
+    font-weight:700;
     color:#2d5a2d;
     letter-spacing:0;
     white-space:nowrap;
@@ -260,28 +389,49 @@
       <div class="block b4"></div>
     </div>
 
-    <!-- Stick-figure climber -->
-    <svg class="climber" viewBox="0 0 18 24" aria-hidden="true">
-      <!-- Running pose: mid-stride with arms and legs swung -->
-      <g class="pose run">
-        <circle cx="9" cy="3.5" r="2.2" stroke="none"/>
-        <line x1="9" y1="5.7" x2="8.5" y2="14.5"/>
-        <line x1="9" y1="8.5" x2="14" y2="6.5"/>
-        <line x1="9" y1="8.5" x2="4" y2="10.5"/>
-        <line x1="8.5" y1="14.5" x2="4.5" y2="19"/>
-        <line x1="4.5" y1="19" x2="6" y2="22.5"/>
-        <line x1="8.5" y1="14.5" x2="12" y2="21.5"/>
+    <!-- Stick-figure climber (28×36 viewBox) -->
+    <svg class="climber" viewBox="0 0 28 36" aria-hidden="true">
+      <!-- Mount pose: standing on a step, arms at sides. Shown during
+           the brief rests between pulls and right after landing. -->
+      <g class="pose mount">
+        <circle cx="14" cy="5.5" r="3.4" stroke="none"/>
+        <line x1="14" y1="8.9" x2="14" y2="22"/>
+        <line x1="14" y1="12" x2="9.5" y2="20"/>
+        <line x1="14" y1="12" x2="18.5" y2="20"/>
+        <line x1="14" y1="22" x2="11" y2="34"/>
+        <line x1="14" y1="22" x2="17" y2="34"/>
       </g>
-      <!-- Victory pose: standing tall, arms up in a V -->
+      <!-- Reach/pull pose: one arm reaching up high to grab the next
+           step's edge, the other arm bent pulling, legs bent/scrambling
+           to push off. Reads as "pulling himself up." -->
+      <g class="pose reach">
+        <circle cx="14" cy="5.5" r="3.4" stroke="none"/>
+        <line x1="14" y1="8.9" x2="13" y2="21.5"/>
+        <!-- right arm reaching up high -->
+        <line x1="14" y1="11.5" x2="19" y2="3"/>
+        <line x1="19" y1="3" x2="22" y2="-2"/>
+        <!-- left arm bent, pulling back -->
+        <line x1="14" y1="11.5" x2="8.5" y2="14"/>
+        <line x1="8.5" y1="14" x2="11" y2="19"/>
+        <!-- bent/scrambling legs -->
+        <line x1="13" y1="21.5" x2="8.5" y2="26"/>
+        <line x1="8.5" y1="26" x2="11" y2="33"/>
+        <line x1="13" y1="21.5" x2="17" y2="28"/>
+        <line x1="17" y1="28" x2="19" y2="34"/>
+      </g>
+      <!-- Victory pose: standing tall, arms raised in a V. -->
       <g class="pose victory">
-        <circle cx="9" cy="3.5" r="2.2" stroke="none"/>
-        <line x1="9" y1="5.7" x2="9" y2="15"/>
-        <line x1="9" y1="7.5" x2="4.5" y2="1"/>
-        <line x1="9" y1="7.5" x2="13.5" y2="1"/>
-        <line x1="9" y1="15" x2="6.5" y2="22.5"/>
-        <line x1="9" y1="15" x2="11.5" y2="22.5"/>
+        <circle cx="14" cy="5.5" r="3.4" stroke="none"/>
+        <line x1="14" y1="8.9" x2="14" y2="22.5"/>
+        <line x1="14" y1="12" x2="6" y2="1"/>
+        <line x1="14" y1="12" x2="22" y2="1"/>
+        <line x1="14" y1="22.5" x2="10" y2="34"/>
+        <line x1="14" y1="22.5" x2="18" y2="34"/>
       </g>
     </svg>
+
+    <!-- Brand wordmark that takes the climber's place above the pyramid -->
+    <div class="brand-wordmark">Verrocchio</div>
 
     <!-- V imposed on the bottom 3 blocks; never moves -->
     <div class="v-mark">V</div>
@@ -297,9 +447,10 @@
 
 <script>
   const TAGLINE_TEXT  = 'chieve Anything';
-  /* A's slide completes at 70% of a 2.4s animation starting at 3.4s →
-     3.4 + 1.68 = 5.08s. Begin the shuffle just before that (4.9s). */
-  const TAGLINE_START = 4.9;   /* seconds */
+  /* A's slide completes at 70% of a 2.4s animation starting at 6.75s →
+     6.75 + 1.68 = 8.43s. Begin the shuffle just before that (8.25s) so
+     the tagline arrives while the A is settling. */
+  const TAGLINE_START = 8.25;  /* seconds */
   const CHAR_STAGGER  = 0.045; /* seconds between characters */
 
   function buildTagline(){
@@ -326,25 +477,37 @@
         <div class="block b3"></div>
         <div class="block b4"></div>
       </div>
-      <svg class="climber" viewBox="0 0 18 24" aria-hidden="true">
-        <g class="pose run">
-          <circle cx="9" cy="3.5" r="2.2" stroke="none"/>
-          <line x1="9" y1="5.7" x2="8.5" y2="14.5"/>
-          <line x1="9" y1="8.5" x2="14" y2="6.5"/>
-          <line x1="9" y1="8.5" x2="4" y2="10.5"/>
-          <line x1="8.5" y1="14.5" x2="4.5" y2="19"/>
-          <line x1="4.5" y1="19" x2="6" y2="22.5"/>
-          <line x1="8.5" y1="14.5" x2="12" y2="21.5"/>
+      <svg class="climber" viewBox="0 0 28 36" aria-hidden="true">
+        <g class="pose mount">
+          <circle cx="14" cy="5.5" r="3.4" stroke="none"/>
+          <line x1="14" y1="8.9" x2="14" y2="22"/>
+          <line x1="14" y1="12" x2="9.5" y2="20"/>
+          <line x1="14" y1="12" x2="18.5" y2="20"/>
+          <line x1="14" y1="22" x2="11" y2="34"/>
+          <line x1="14" y1="22" x2="17" y2="34"/>
+        </g>
+        <g class="pose reach">
+          <circle cx="14" cy="5.5" r="3.4" stroke="none"/>
+          <line x1="14" y1="8.9" x2="13" y2="21.5"/>
+          <line x1="14" y1="11.5" x2="19" y2="3"/>
+          <line x1="19" y1="3" x2="22" y2="-2"/>
+          <line x1="14" y1="11.5" x2="8.5" y2="14"/>
+          <line x1="8.5" y1="14" x2="11" y2="19"/>
+          <line x1="13" y1="21.5" x2="8.5" y2="26"/>
+          <line x1="8.5" y1="26" x2="11" y2="33"/>
+          <line x1="13" y1="21.5" x2="17" y2="28"/>
+          <line x1="17" y1="28" x2="19" y2="34"/>
         </g>
         <g class="pose victory">
-          <circle cx="9" cy="3.5" r="2.2" stroke="none"/>
-          <line x1="9" y1="5.7" x2="9" y2="15"/>
-          <line x1="9" y1="7.5" x2="4.5" y2="1"/>
-          <line x1="9" y1="7.5" x2="13.5" y2="1"/>
-          <line x1="9" y1="15" x2="6.5" y2="22.5"/>
-          <line x1="9" y1="15" x2="11.5" y2="22.5"/>
+          <circle cx="14" cy="5.5" r="3.4" stroke="none"/>
+          <line x1="14" y1="8.9" x2="14" y2="22.5"/>
+          <line x1="14" y1="12" x2="6" y2="1"/>
+          <line x1="14" y1="12" x2="22" y2="1"/>
+          <line x1="14" y1="22.5" x2="10" y2="34"/>
+          <line x1="14" y1="22.5" x2="18" y2="34"/>
         </g>
       </svg>
+      <div class="brand-wordmark">Verrocchio</div>
       <div class="v-mark">V</div>
       <div class="a-mark">A</div>
       <div class="tagline" id="tagline" aria-label="chieve Anything"></div>
