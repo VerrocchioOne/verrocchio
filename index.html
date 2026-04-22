@@ -49,6 +49,15 @@ body.dark [style*="background: rgb(254, 249, 195)"]{background:#332e0f!important
 /* ── red / danger tints ── */
 body.dark [style*="background: rgb(254, 242, 242)"]{background:#2a1414!important}
 body.dark [style*="background: rgb(254, 226, 226)"]{background:#3a1a1a!important}
+/* Avoid-habit card tints: the default card bg (#fff5f5), the
+   transient "missed" bg (#fff1f1), and the success/miss border
+   colors (#86efac / #fca5a5). Without these the whole avoid list
+   stays stubbornly pink in dark mode. */
+body.dark [style*="background: rgb(255, 245, 245)"]{background:#241414!important}
+body.dark [style*="background: rgb(255, 241, 241)"]{background:#2a1414!important}
+body.dark [style*="solid rgb(254, 202, 202)"]{border-color:#4d1a1a!important}
+body.dark [style*="solid rgb(252, 165, 165)"]{border-color:#5a2020!important}
+body.dark [style*="solid rgb(134, 239, 172)"]{border-color:#2a3d2a!important}
 /* ── cyan / travel tints ── */
 body.dark [style*="background: rgb(240, 249, 255)"]{background:#0f2231!important}
 body.dark [style*="background: rgb(236, 254, 255)"]{background:#0f2631!important}
@@ -95,6 +104,7 @@ body.dark [style*="color: rgb(45, 90, 45)"]:not([data-brand]){color:#9fdf9f!impo
 body.dark [style*="color: rgb(8, 145, 178)"]{color:#7dd3fc!important}
 body.dark [style*="color: rgb(120, 53, 15)"]{color:#fcd34d!important}
 body.dark [style*="color: rgb(153, 27, 27)"]{color:#fca5a5!important}
+body.dark [style*="color: rgb(21, 128, 61)"]{color:#86efac!important}
 body.dark [style*="color: rgb(194, 65, 12)"]{color:#fdba74!important}
 body.dark [style*="color: rgb(217, 119, 6)"]{color:#fbbf24!important}
 /* ── dashed travel-day outlines: stay visible on dark calendar ── */
@@ -103,12 +113,35 @@ body.dark [style*="dashed rgb(103, 232, 249)"]{border-color:#67e8f9!important}
    colors to the user's chosen --accent value. Uses inline-style
    attribute substring matching because most components hard-code
    "#2d5a2d" as inline style. Anything marked `data-brand="1"`
-   stays on the canonical Verrocchio green — the demo badge and
-   splash/brand artwork explicitly opt out of recoloring. */
+   stays on the canonical Verrocchio green — the demo badge, the
+   "pick Verrocchio green" palette swatch, and the splash/brand
+   artwork explicitly opt out of recoloring. */
 body.accent-custom [style*="background: rgb(45, 90, 45)"]:not([data-brand]){background:var(--accent)!important}
 body.accent-custom [style*="color: rgb(45, 90, 45)"]:not([data-brand]){color:var(--accent)!important}
 body.accent-custom [style*="stroke: rgb(45, 90, 45)"]:not([data-brand]){stroke:var(--accent)!important}
-body.accent-custom [style*="border: 1px solid rgb(45, 90, 45)"]:not([data-brand]){border-color:var(--accent)!important}
+body.accent-custom [style*="fill: rgb(45, 90, 45)"]:not([data-brand]){fill:var(--accent)!important}
+/* Borders: match any width so `2px solid #2d5a2d` and `1.5px solid
+   #2d5a2d` both remap, plus the shorthand `border-color`, plus each
+   side-specific variant (borderTop/Bottom/Left/Right). */
+body.accent-custom [style*="solid rgb(45, 90, 45)"]:not([data-brand]){border-color:var(--accent)!important}
+body.accent-custom [style*="border-color: rgb(45, 90, 45)"]:not([data-brand]){border-color:var(--accent)!important}
+body.accent-custom [style*="border-top-color: rgb(45, 90, 45)"]:not([data-brand]){border-top-color:var(--accent)!important}
+body.accent-custom [style*="border-bottom-color: rgb(45, 90, 45)"]:not([data-brand]){border-bottom-color:var(--accent)!important}
+/* SVG presentation attributes (the bottom-nav icons and some chart
+   marks set `fill="#2d5a2d"` / `stroke="#2d5a2d"` rather than inline
+   style). Attribute selectors catch both the hex and normalized forms. */
+body.accent-custom svg [fill="#2d5a2d"]:not([data-brand]),
+body.accent-custom [fill="#2d5a2d"]:not([data-brand]){fill:var(--accent)!important}
+body.accent-custom svg [stroke="#2d5a2d"]:not([data-brand]),
+body.accent-custom [stroke="#2d5a2d"]:not([data-brand]){stroke:var(--accent)!important}
+/* Guided-tour highlight ring: gently pulse the brand-green glow around
+   the spotlighted target so the eye lands on it even before reading the
+   tooltip. Ring itself is drawn inline in renderTour(); this just
+   animates the box-shadow radius/alpha. */
+@keyframes tourPulse{
+  0%,100%{box-shadow:0 0 0 4px rgba(45,90,45,.25),0 8px 24px rgba(0,0,0,.3)}
+  50%{box-shadow:0 0 0 8px rgba(45,90,45,.15),0 8px 28px rgba(0,0,0,.32)}
+}
 ::placeholder{color:#9ca3af}
 input,select,textarea{outline:none;font-family:inherit;-webkit-appearance:none;border-radius:0}
 /* ── Duration filter slider (Habits tab "Max time" control) ──
@@ -2254,6 +2287,17 @@ function App() {
   const [profileName, setProfileName] = useState(() => localStorage.getItem("v-profile-name") || "");
   const [profileGoal, setProfileGoal] = useState(() => localStorage.getItem("v-profile-goal") || "");
 
+  /* GUIDED TOUR — Appcues-style first-login walkthrough. `tourStep` is
+     0 when inactive, 1..TOUR_STEPS.length when showing that step. Auto-
+     starts once the user has cleared the splash + onboarding; persists
+     the "don't nag me again" decision in localStorage. Users can replay
+     from App Settings at any time. */
+  const [tourStep, setTourStep] = useState(0);
+  const [tourDone, setTourDone] = useState(() => localStorage.getItem("v-tour-done") === "1");
+  // Forces a re-render when the viewport resizes (tooltip anchors use
+  // getBoundingClientRect on each render, so they'd otherwise go stale).
+  const [, setTourResizeTick] = useState(0);
+
   /* APP SETTINGS
      - settingsMode: "default" vs "custom". In default, accent is the
        Verrocchio green and all category/importance/section edits are
@@ -2326,6 +2370,51 @@ function App() {
     localStorage.setItem("v-settings-mode", settingsMode);
     localStorage.setItem("v-accent-color", accentColor);
   }, [settingsMode, accentColor, themeLocked]);
+
+  // Auto-start the guided tour once the user is past onboarding and
+  // hasn't seen it before. demoMode users skip — they'll see it the
+  // first time they sign in with a real account. Placed above all the
+  // conditional early-returns for onboarding / auth screens so React's
+  // hook order stays stable across renders.
+  useEffect(() => {
+    if (tourDone) return;
+    if (inPreApp) return;
+    if (demoMode) return;
+    if (tourStep !== 0) return;
+    // Defer a beat so the nav + render tree have landed in the DOM
+    // before the tour tries to anchor to nav-button selectors.
+    const t = setTimeout(() => setTourStep(1), 400);
+    return () => clearTimeout(t);
+  }, [tourDone, inPreApp, demoMode, tourStep]);
+  // Re-render when the window resizes — tooltip anchors use live
+  // getBoundingClientRect, which would otherwise go stale.
+  useEffect(() => {
+    if (tourStep === 0) return;
+    const onR = () => setTourResizeTick(t => t + 1);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, [tourStep]);
+  // Auto-switch the active tab as the tour advances. Any step can
+  // declare a `tab` field in TOUR_STEPS and this effect flips setTab
+  // to match, so the page the step describes is actually on screen
+  // (not just hinted at by the bottom-nav icon). Header/centered
+  // steps leave the tab alone.
+  useEffect(() => {
+    if (tourStep === 0) return;
+    // TOUR_STEPS isn't declared yet at this line (it's below, in
+    // render body) — so we read it lazily off the component's own
+    // closure at effect time. Safe because the array is a module-level
+    // constant shape with no state dependencies.
+    const stepIdx = tourStep - 1;
+    // Inline mini-mirror of TOUR_STEPS tabs to avoid a forward-ref
+    // dependency. Update alongside TOUR_STEPS whenever tabs change.
+    const TOUR_TAB_BY_STEP = {
+      8: "brief", 9: "goals", 10: "habits", 11: "todos", 12: "reflection"
+    };
+    const wantTab = TOUR_TAB_BY_STEP[tourStep];
+    if (wantTab && tab !== wantTab) setTab(wantTab);
+    void stepIdx; // suppress unused warning in static analyzers
+  }, [tourStep]);
 
   /* SECTION FILTER (habits tab) — array of selected values. Empty = "All".
      Tap a pill = single-select (replace). Long-press (hold) = toggle in
@@ -2411,6 +2500,12 @@ function App() {
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
   const [expHabitGoals, setExpHabitGoals] = useState({});
+  // Version-history accordions on the goal detail view. `expGoalHistory`
+  // tracks whether the goal's own history panel is open; `expHabitHistory`
+  // tracks each linked habit's history panel independently, so opening one
+  // habit's history doesn't reveal every sibling habit's history too.
+  const [expGoalHistory, setExpGoalHistory] = useState({});
+  const [expHabitHistory, setExpHabitHistory] = useState({});
   const goalHoldRef = useRef({});
 
   /* Long-press tracking for filter pills (shared per filter group —
@@ -2909,15 +3004,32 @@ function App() {
   };
   const svEGoal = id => {
     if (!eGTxt.trim()) return;
+    const prev = data.goals.find(g => g.id === id);
+    if (!prev) return;
+    const nextText = eGTxt.trim();
+    const nextType = eGType || null;
+    const nextSmart = { ...eGSmart };
+    // Snapshot the OLD state if anything tracked actually changed.
+    // `history` is the trail of prior versions; the live goal is the tip.
+    const smartSame = JSON.stringify(prev.smart || {}) === JSON.stringify(nextSmart);
+    const changed = prev.text !== nextText
+      || (prev.type || null) !== nextType
+      || !smartSame;
+    const snapshot = changed ? {
+      ts: Date.now(),
+      text: prev.text,
+      type: prev.type || null,
+      smart: prev.smart || {},
+      icon: prev.icon || null
+    } : null;
     save({
       ...data,
       goals: data.goals.map(g => g.id === id ? {
         ...g,
-        text: eGTxt.trim(),
-        type: eGType || null,
-        smart: {
-          ...eGSmart
-        }
+        text: nextText,
+        type: nextType,
+        smart: nextSmart,
+        history: snapshot ? [...(g.history || []), snapshot] : (g.history || [])
       } : g)
     });
     sEGId(null);
@@ -3091,26 +3203,61 @@ function App() {
   };
   const svEHabit = id => {
     if (!eHTxt.trim()) return;
+    const prev = (data.habits || []).find(h => h.id === id);
+    if (!prev) return;
+    const nextText = eHTxt.trim();
+    const nextDur = eHDur || null;
+    const nextType = eHType || null;
+    const nextImp = eHImp;
+    const nextSec = eHSec;
+    const nextNotes = eHNotes.trim() || null;
+    const nextFreq = {
+      type: eHFreq.type,
+      days: Array.isArray(eHFreq.days) ? eHFreq.days.slice() : [],
+      day:      typeof eHFreq.day      === "number" ? eHFreq.day      : null,
+      monthDay: typeof eHFreq.monthDay === "number" ? eHFreq.monthDay : null,
+      month:    typeof eHFreq.month    === "number" ? eHFreq.month    : null
+    };
+    // Snapshot the OLD state if anything the user would care about
+    // (text / duration / importance / section / notes / frequency /
+    // category) actually changed. goalId, location and startDate are
+    // intentionally excluded — they aren't part of the "how did this
+    // habit evolve" story.
+    const prevFreqStr = JSON.stringify(prev.frequency || {});
+    const nextFreqStr = JSON.stringify(nextFreq);
+    const changed = prev.text !== nextText
+      || (prev.duration || null) !== nextDur
+      || (prev.type || null) !== nextType
+      || (prev.importance || "Important") !== nextImp
+      || (prev.section || "morning") !== nextSec
+      || (prev.notes || null) !== nextNotes
+      || prevFreqStr !== nextFreqStr;
+    const snapshot = changed ? {
+      ts: Date.now(),
+      text: prev.text,
+      duration: prev.duration || null,
+      type: prev.type || null,
+      importance: prev.importance || "Important",
+      section: prev.section || "morning",
+      notes: prev.notes || null,
+      frequency: prev.frequency || null,
+      icon: prev.icon || null
+    } : null;
     save({
       ...data,
       habits: (data.habits || []).map(h => h.id === id ? {
         ...h,
-        text: eHTxt.trim(),
-        duration: eHDur || null,
-        type: eHType || null,
-        importance: eHImp,
-        section: eHSec,
-        notes: eHNotes.trim() || null,
+        text: nextText,
+        duration: nextDur,
+        type: nextType,
+        importance: nextImp,
+        section: nextSec,
+        notes: nextNotes,
         goalId: eHGoal || null,
         location: eHLoc || "both",
         startDate: eHStart || h.startDate || new Date().toISOString().slice(0, 10),
-        frequency: {
-          type: eHFreq.type,
-          days: Array.isArray(eHFreq.days) ? eHFreq.days.slice() : [],
-          day:      typeof eHFreq.day      === "number" ? eHFreq.day      : null,
-          monthDay: typeof eHFreq.monthDay === "number" ? eHFreq.monthDay : null,
-          month:    typeof eHFreq.month    === "number" ? eHFreq.month    : null
-        }
+        frequency: nextFreq,
+        history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
       } : h)
     });
     sEHId(null);
@@ -4732,6 +4879,280 @@ function App() {
     ]);
   }
 
+  /* ── GUIDED TOUR ──────────────────────────────────────────────────
+     Semi-automatic first-login walkthrough. Each step either anchors
+     to a DOM element (via `selector`) and dims everything except that
+     element, or is centered with no target. User advances with Next;
+     can Skip at any time. Inspired by Appcues-style coach marks.
+
+     Fields:
+       title    — tooltip heading
+       body     — explanation shown underneath
+       selector — CSS selector for the anchor element (omit to center)
+       placement — "top" or "bottom" relative to anchor (default top)
+       tab      — if set, the tour switches to this tab when the step
+                  becomes active. Lets each page step actually SHOW the
+                  page it's describing instead of just pointing at the
+                  nav button.
+
+     Adding a new step? Append here. The selector should match a stable
+     aria-label or data-tour attribute so we don't depend on class names
+     that churn.                                                          */
+  const TOUR_STEPS = [
+    {
+      title: "Welcome to Verrocchio",
+      body: "A 90-second tour of the pieces that matter most — the header, the five pages, and how they fit together. You can skip anytime.",
+      center: true
+    },
+    // ── Header row ───────────────────────────────────────────────────
+    {
+      title: "The date you're viewing",
+      body: "The top strip always reflects the day you're on. Tap the badge to jump back to today — handy after scrolling through history.",
+      selector: "[data-tour='header-date']",
+      placement: "bottom"
+    },
+    {
+      title: "Calendar & travel",
+      body: "Open the calendar to pick any date, or switch to travel mode to mark trips on the grid. Habits adapt to your travel routine automatically.",
+      selector: "[data-tour='header-calendar']",
+      placement: "bottom"
+    },
+    {
+      title: "At Home vs Traveling",
+      body: "Flip the selected day between home and travel in one tap. Travel days only show habits tagged to run while away.",
+      selector: "[data-tour='header-travel']",
+      placement: "bottom"
+    },
+    {
+      title: "Level & XP",
+      body: "You earn XP every time you log a habit. Each level is 500 XP. Press and hold to pop open your achievements shelf.",
+      selector: "[data-tour='header-xp']",
+      placement: "bottom"
+    },
+    {
+      title: "Your streak",
+      body: "The flame counts consecutive days where you logged at least one habit — complete or missed, both count. Don't break the chain.",
+      selector: "[data-tour='header-streak']",
+      placement: "bottom"
+    },
+    {
+      title: "Profile & settings",
+      body: "Your profile holds themes, custom categories, importance levels, time-of-day groups, and the Replay Tour button.",
+      selector: "button[aria-label='Profile']",
+      placement: "bottom"
+    },
+    // ── The five pages. `tab` switches the view so the user actually
+    //    sees the page while reading about it. The selector stays on
+    //    the bottom-nav button so it's always a stable anchor. ───────
+    {
+      title: "Home — your daily briefing",
+      body: "Set today's intention, see yesterday vs today at a glance, check your 7-day rate and streak, and open a generated daily briefing that pulls in your goals and habits.",
+      selector: "button[aria-label='Home']",
+      placement: "top",
+      tab: "brief"
+    },
+    {
+      title: "Goals — the long arc",
+      body: "Goals are long-term outcomes, grouped by area of life (Physical, Career, Relationships…). Each goal carries its own SMART fields, linked habits, to-dos, journal entries, and full edit history.",
+      selector: "button[aria-label='Goals']",
+      placement: "top",
+      tab: "goals"
+    },
+    {
+      title: "Habits — daily rhythm",
+      body: "Swipe right to complete, left to mark missed. Long-press to open a habit's detail sheet. Filter by time of day, priority, goal, or duration — and flip between Do and Avoid habits.",
+      selector: "button[aria-label='Habits']",
+      placement: "top",
+      tab: "habits"
+    },
+    {
+      title: "To-Dos — one-offs",
+      body: "For tasks that don't repeat. Link any to-do to a goal and it also shows up inside that goal's detail view, keeping moving parts in one place.",
+      selector: "button[aria-label='To-Dos']",
+      placement: "top",
+      tab: "todos"
+    },
+    {
+      title: "Reflect — look back",
+      body: "Journal by day or tag, save favorite quotes, and revisit past reflections. Also where weekly reviews and mood notes land.",
+      selector: "button[aria-label='Reflect']",
+      placement: "top",
+      tab: "reflection"
+    },
+    {
+      title: "You're all set",
+      body: "Start with your first goal, then link a couple of habits to it. Replay this tour anytime from Profile → App Settings → Guided Tour.",
+      center: true
+    }
+  ];
+
+  const finishTour = () => {
+    localStorage.setItem("v-tour-done", "1");
+    setTourDone(true);
+    setTourStep(0);
+  };
+
+  const renderTour = () => {
+    if (tourStep === 0) return null;
+    const step = TOUR_STEPS[tourStep - 1];
+    if (!step) return null;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const pad = 8;       // padding around the highlighted target
+    const tipW = Math.min(300, vw - 32);
+    const tipGap = 12;   // space between target and tooltip
+
+    let target = null;
+    if (step.selector) {
+      target = document.querySelector(step.selector);
+    }
+
+    let rect = null;
+    if (target) {
+      const r = target.getBoundingClientRect();
+      rect = { top: r.top, left: r.left, width: r.width, height: r.height,
+               bottom: r.bottom, right: r.right };
+    }
+
+    // Decide tooltip position: if anchored, place above (default) or
+    // below depending on room + step.placement hint. If not anchored,
+    // center the tooltip in the viewport.
+    let tipStyle = {};
+    if (rect) {
+      const wantTop = step.placement === "top";
+      const fitsTop = rect.top - tipGap - 140 > 20;
+      const fitsBottom = rect.bottom + tipGap + 140 < vh - 20;
+      const placeTop = wantTop ? fitsTop : (fitsBottom ? false : fitsTop);
+      const centerX = rect.left + rect.width / 2;
+      const left = Math.max(12, Math.min(vw - tipW - 12, centerX - tipW / 2));
+      tipStyle = placeTop
+        ? { position: "fixed", left, bottom: vh - rect.top + tipGap, width: tipW }
+        : { position: "fixed", left, top: rect.bottom + tipGap, width: tipW };
+    } else {
+      tipStyle = {
+        position: "fixed",
+        left: "50%",
+        top: "50%",
+        transform: "translate(-50%,-50%)",
+        width: tipW
+      };
+    }
+
+    // Build the dim panels. When a rect is known we carve four panels
+    // around it so the target stays lit. When not, a single full-screen
+    // dim panel covers everything.
+    const panels = [];
+    if (rect) {
+      const tR = { top: rect.top - pad, left: rect.left - pad,
+                   right: rect.right + pad, bottom: rect.bottom + pad };
+      // top
+      panels.push({ left: 0, top: 0, width: vw, height: Math.max(0, tR.top) });
+      // bottom
+      panels.push({ left: 0, top: tR.bottom, width: vw, height: Math.max(0, vh - tR.bottom) });
+      // left strip
+      panels.push({ left: 0, top: tR.top, width: Math.max(0, tR.left), height: Math.max(0, tR.bottom - tR.top) });
+      // right strip
+      panels.push({ left: tR.right, top: tR.top, width: Math.max(0, vw - tR.right), height: Math.max(0, tR.bottom - tR.top) });
+    } else {
+      panels.push({ left: 0, top: 0, width: vw, height: vh });
+    }
+
+    const dimColor = "rgba(0,0,0,0.58)";
+
+    const dots = TOUR_STEPS.map((_, i) => /*#__PURE__*/React.createElement("span", {
+      key: i,
+      style: {
+        width: 6, height: 6, borderRadius: "50%", margin: "0 3px",
+        background: i === tourStep - 1 ? "#2d5a2d" : "#d1d5db",
+        display: "inline-block"
+      }
+    }));
+
+    const isLast = tourStep === TOUR_STEPS.length;
+    const advance = () => {
+      if (isLast) finishTour();
+      else setTourStep(tourStep + 1);
+    };
+
+    return /*#__PURE__*/React.createElement("div", {
+      "data-tour-overlay": "1",
+      style: { position: "fixed", inset: 0, zIndex: 9999, pointerEvents: "none" }
+    },
+      // Dim panels (clickable — absorb taps so the user can't interact
+      // with the rest of the UI while the tour is active, but the
+      // spotlight hole remains clickable because no panel covers it).
+      ...panels.map((p, i) => /*#__PURE__*/React.createElement("div", {
+        key: "p" + i,
+        style: {
+          position: "fixed",
+          left: p.left, top: p.top, width: p.width, height: p.height,
+          background: dimColor,
+          pointerEvents: "auto",
+          transition: "all 0.2s ease"
+        }
+      })),
+      // Highlight ring
+      rect && /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "fixed",
+          left: rect.left - pad, top: rect.top - pad,
+          width: rect.width + pad * 2, height: rect.height + pad * 2,
+          border: "2px solid #2d5a2d",
+          borderRadius: 12,
+          boxShadow: "0 0 0 4px rgba(45,90,45,.25), 0 8px 24px rgba(0,0,0,.3)",
+          pointerEvents: "none",
+          animation: "tourPulse 1.6s ease-in-out infinite"
+        }
+      }),
+      // Tooltip
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          ...tipStyle,
+          background: "#fff",
+          color: "#1f2937",
+          borderRadius: 14,
+          padding: "16px 18px 14px 18px",
+          boxShadow: "0 12px 40px rgba(0,0,0,.28)",
+          pointerEvents: "auto",
+          zIndex: 10000
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }
+        }, "Step " + tourStep + " of " + TOUR_STEPS.length),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 17, fontWeight: 700, marginBottom: 6, color: "#111" }
+        }, step.title),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 13, lineHeight: 1.5, color: "#4b5563", marginBottom: 14 }
+        }, step.body),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between" }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center" } }, dots),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
+            !isLast && /*#__PURE__*/React.createElement("button", {
+              onClick: finishTour,
+              style: {
+                background: "transparent", border: "none", cursor: "pointer",
+                padding: "6px 10px", fontSize: 12, color: "#6b7280", fontWeight: 600
+              }
+            }, "Skip"),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: advance,
+              style: {
+                background: "#2d5a2d", color: "#fff", border: "none",
+                borderRadius: 8, padding: "8px 16px", fontSize: 13,
+                fontWeight: 600, cursor: "pointer"
+              }
+            }, isLast ? "Got it" : "Next")
+          )
+        )
+      )
+    );
+  };
+
   /* ── RENDER ── */
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -4792,6 +5213,7 @@ function App() {
     return /*#__PURE__*/React.createElement("button", {
       onClick: () => setSelDate(tk()),
       title: isTodaySel ? "Showing today" : "Jump to today",
+      "data-tour": "header-date",
       style: {
         background: isTodaySel ? "#2d5a2d" : "#f0f7f0",
         border: "1px solid #c6dfc6",
@@ -4829,6 +5251,7 @@ function App() {
     const active = appStreak > 0;
     return /*#__PURE__*/React.createElement("div", {
       title: active ? `${appStreak}-day streak` : "No streak yet — log a habit to start one!",
+      "data-tour": "header-streak",
       style: {
         display: "flex",
         alignItems: "center",
@@ -4844,6 +5267,8 @@ function App() {
     );
   })(), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowProfile(true),
+    "aria-label": "Profile",
+    "data-tour": "profile",
     "data-brand": demoMode ? "1" : null,
     style: {
       minWidth: 34,
@@ -4904,6 +5329,8 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setHeaderExpanded(p => !p),
+    "data-tour": "header-calendar",
+    "aria-label": "Open calendar",
     style: {
       background: "none",
       border: "none",
@@ -4978,6 +5405,7 @@ function App() {
     return /*#__PURE__*/React.createElement("button", {
       onClick: quickToggleTravel,
       title: isTravel && entry && entry.location ? "Traveling \u2014 " + entry.location : (isTravel ? "Traveling" : "At Home"),
+      "data-tour": "header-travel",
       style: {
         background: isTravel ? "#fff7ed" : "#f0f7f0",
         border: "1px solid " + (isTravel ? "#fdba74" : "#c6dfc6"),
@@ -5006,6 +5434,7 @@ function App() {
       onClick: () => { /* short taps intentionally do nothing — long-press reveals achievements */ },
       title: "Hold to view achievements",
       role: "button",
+      "data-tour": "header-xp",
       style: {
         flex: 1,
         display: "flex",
@@ -6569,7 +6998,7 @@ function App() {
           }, /*#__PURE__*/React.createElement("div", {
             onClick: e => { e.stopPropagation(); if (d || missed) togHabit(habit.id, selDate, undefined); },
             style: {
-              width: 36, height: 36, borderRadius: "50%",
+              width: 28, height: 28, borderRadius: "50%",
               background: d ? "#22c55e" : "#ef4444",
               cursor: d || missed ? "pointer" : "default", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -6577,11 +7006,11 @@ function App() {
               boxShadow: d ? "0 2px 8px rgba(34,197,94,.4)" : "0 2px 8px rgba(239,68,68,.3)"
             }
           }, d ? /*#__PURE__*/React.createElement("svg", {
-            width: "18", height: "18", viewBox: "0 0 18 18", fill: "none"
+            width: "14", height: "14", viewBox: "0 0 18 18", fill: "none"
           }, /*#__PURE__*/React.createElement("path", {
             d: "M3.5 9L7.5 13L14.5 5", stroke: "white", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round"
           })) : /*#__PURE__*/React.createElement("svg", {
-            width: "16", height: "16", viewBox: "0 0 16 16", fill: "none"
+            width: "13", height: "13", viewBox: "0 0 16 16", fill: "none"
           }, /*#__PURE__*/React.createElement("path", {
             d: "M4.5 4.5L11.5 11.5M11.5 4.5L4.5 11.5", stroke: "white", strokeWidth: "2", strokeLinecap: "round"
           }))), /*#__PURE__*/React.createElement("div", {
@@ -6765,8 +7194,8 @@ function App() {
             if (d || missed) togHabit(habit.id, selDate, undefined);
           },
           style: {
-            width: 36,
-            height: 36,
+            width: 28,
+            height: 28,
             borderRadius: "50%",
             border: "none",
             background: d ? "#22c55e" : missed ? "#ef4444" : "#e5e7eb",
@@ -6780,8 +7209,8 @@ function App() {
             boxShadow: d ? "0 2px 8px rgba(34,197,94,.4)" : missed ? "0 2px 8px rgba(239,68,68,.3)" : "none"
           }
         }, d ? /*#__PURE__*/React.createElement("svg", {
-          width: "18",
-          height: "18",
+          width: "14",
+          height: "14",
           viewBox: "0 0 18 18",
           fill: "none"
         }, /*#__PURE__*/React.createElement("path", {
@@ -6791,8 +7220,8 @@ function App() {
           strokeLinecap: "round",
           strokeLinejoin: "round"
         })) : missed ? /*#__PURE__*/React.createElement("svg", {
-          width: "16",
-          height: "16",
+          width: "13",
+          height: "13",
           viewBox: "0 0 16 16",
           fill: "none"
         }, /*#__PURE__*/React.createElement("path", {
@@ -6801,8 +7230,8 @@ function App() {
           strokeWidth: "2",
           strokeLinecap: "round"
         })) : /*#__PURE__*/React.createElement("svg", {
-          width: "16",
-          height: "16",
+          width: "14",
+          height: "14",
           viewBox: "0 0 16 16",
           fill: "none"
         }, /*#__PURE__*/React.createElement("circle", {
@@ -8214,7 +8643,7 @@ function App() {
           position: "relative"
         }
       }), /*#__PURE__*/React.createElement("svg", {
-        width: 20, height: 20, viewBox: "0 0 12 12", style: {flexShrink: 0}
+        width: 28, height: 28, viewBox: "0 0 12 12", style: {flexShrink: 0}
       }, /*#__PURE__*/React.createElement("circle", {
         cx: 6, cy: 6, r: 4, fill: "none", stroke: "#e5e7eb", strokeWidth: 2
       }), smartCount > 0 && /*#__PURE__*/React.createElement("circle", {
@@ -8579,7 +9008,185 @@ function App() {
         }, "No habits or to-dos linked to this goal yet."),
           renderGoalTodoQuickAdd(goal)
         );
-      })());
+      })(),
+      /* ─── Version History ─────────────────────────────────────────
+         Collapsible timeline of prior goal + habit states. Renders only
+         when the goal itself has been edited at least once OR any linked
+         habit has been edited. Each row shows the fields that changed
+         against the *next* (newer) version so the diff reads as a story:
+         what was tweaked, when. Newest-first.
+      */
+      expGoalHabits[goal.id] && !isE && (() => {
+        const goalHist = Array.isArray(goal.history) ? goal.history : [];
+        const linkedWithHist = data.habits
+          .filter(h => String(h.goalId) === String(goal.id) && Array.isArray(h.history) && h.history.length > 0);
+        if (goalHist.length === 0 && linkedWithHist.length === 0) return null;
+        const open = !!expGoalHistory[goal.id];
+        const fmtDate = ts => {
+          const d = new Date(ts);
+          return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+        };
+        // Reverse-chronological list of prior goal versions zipped with
+        // the next (newer) state, so each row can show "X → Y".
+        const goalRows = [];
+        if (goalHist.length > 0) {
+          // The "newer" value for the latest snapshot is the current live
+          // goal; for earlier snapshots it's the next snapshot in the array.
+          const live = { text: goal.text, type: goal.type || null, smart: goal.smart || {}, icon: goal.icon || null };
+          for (let i = goalHist.length - 1; i >= 0; i--) {
+            const prevState = goalHist[i];
+            const nextState = i === goalHist.length - 1 ? live : goalHist[i + 1];
+            // The change happened at `prevState.ts` — that's the save
+            // timestamp captured at the moment the old state ended.
+            goalRows.push({ prev: prevState, next: nextState, ts: prevState.ts });
+          }
+        }
+        const diffGoal = (prev, next) => {
+          const out = [];
+          if (prev.text !== next.text) out.push({ label: "Text", from: prev.text, to: next.text });
+          if ((prev.type || null) !== (next.type || null)) out.push({ label: "Category", from: prev.type || "—", to: next.type || "—" });
+          const keys = ["specific","measurable","achievable","relevant","timebound"];
+          keys.forEach(k => {
+            const a = (prev.smart && prev.smart[k]) || "";
+            const b = (next.smart && next.smart[k]) || "";
+            if (a !== b) out.push({ label: k[0].toUpperCase() + k.slice(1), from: a || "—", to: b || "—" });
+          });
+          if ((prev.icon || null) !== (next.icon || null)) out.push({ label: "Icon", from: prev.icon || "—", to: next.icon || "—" });
+          return out;
+        };
+        const diffHabit = (prev, next) => {
+          const out = [];
+          if (prev.text !== next.text) out.push({ label: "Text", from: prev.text, to: next.text });
+          if ((prev.duration || null) !== (next.duration || null)) out.push({ label: "Duration", from: prev.duration || "—", to: next.duration || "—" });
+          if ((prev.importance || "") !== (next.importance || "")) out.push({ label: "Importance", from: prev.importance || "—", to: next.importance || "—" });
+          if ((prev.section || "") !== (next.section || "")) out.push({ label: "Time", from: prev.section || "—", to: next.section || "—" });
+          if ((prev.notes || null) !== (next.notes || null)) out.push({ label: "Notes", from: prev.notes || "—", to: next.notes || "—" });
+          const pf = JSON.stringify(prev.frequency || {});
+          const nf = JSON.stringify(next.frequency || {});
+          if (pf !== nf) {
+            const fl = f => {
+              const row = FREQ.find(r => r.value === (f && f.type));
+              return row ? row.label : (f && f.type) || "—";
+            };
+            out.push({ label: "Frequency", from: fl(prev.frequency), to: fl(next.frequency) });
+          }
+          if ((prev.type || null) !== (next.type || null)) out.push({ label: "Category", from: prev.type || "—", to: next.type || "—" });
+          return out;
+        };
+        const rowStyle = {
+          fontSize: 11, color: "#374151", lineHeight: 1.5,
+          display: "flex", flexDirection: "column", gap: 2,
+          paddingLeft: 10, borderLeft: "2px solid #e5e7eb",
+          marginBottom: 8
+        };
+        const diffLine = d => /*#__PURE__*/React.createElement("div", {
+          key: d.label,
+          style: { fontSize: 11, color: "#4b5563", lineHeight: 1.45 }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontWeight: 600, color: "#6b7280", marginRight: 6 }
+          }, d.label + ":"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { color: "#9ca3af", textDecoration: "line-through" }
+          }, String(d.from).slice(0, 60)),
+          /*#__PURE__*/React.createElement("span", { style: { color: "#6b7280", margin: "0 6px" } }, "→"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { color: "#15803d", fontWeight: 500 }
+          }, String(d.to).slice(0, 60))
+        );
+        return /*#__PURE__*/React.createElement("div", {
+          style: {
+            borderTop: "1px solid #f3f4f6",
+            background: "#fafafa"
+          }
+        },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: e => {
+              e.stopPropagation();
+              setExpGoalHistory(p => ({ ...p, [goal.id]: !p[goal.id] }));
+            },
+            style: {
+              width: "100%", background: "none", border: "none",
+              padding: "10px 14px", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              textAlign: "left"
+            }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: .5 }
+            }, "History",
+              /*#__PURE__*/React.createElement("span", {
+                style: { marginLeft: 6, color: "#9ca3af", fontWeight: 500 }
+              }, "(" + (goalHist.length + linkedWithHist.reduce((s, h) => s + h.history.length, 0)) + ")")
+            ),
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 11, color: "#9ca3af" }
+            }, open ? "▼" : "▶")
+          ),
+          open && /*#__PURE__*/React.createElement("div", {
+            style: { padding: "0 14px 12px 14px" }
+          },
+            // Goal's own evolution
+            goalRows.length > 0 && /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 9, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", marginBottom: 6 }
+            }, "Goal"),
+            goalRows.map((r, i) => {
+              const diffs = diffGoal(r.prev, r.next);
+              return /*#__PURE__*/React.createElement("div", {
+                key: "gh" + i,
+                style: rowStyle
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 10, color: "#6b7280", fontWeight: 600, marginBottom: 2 }
+                }, fmtDate(r.ts)),
+                diffs.length === 0
+                  ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", fontStyle: "italic" } }, "(minor edit)")
+                  : diffs.map(diffLine)
+              );
+            }),
+            // Per-habit evolution (under the parent goal)
+            linkedWithHist.length > 0 && /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 9, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", margin: "10px 0 6px 0" }
+            }, "Habits"),
+            linkedWithHist.map(h => {
+              const hist = h.history;
+              const live = { text: h.text, duration: h.duration || null, type: h.type || null, importance: h.importance, section: h.section, notes: h.notes || null, frequency: h.frequency, icon: h.icon || null };
+              const rows = [];
+              for (let i = hist.length - 1; i >= 0; i--) {
+                const prevState = hist[i];
+                const nextState = i === hist.length - 1 ? live : hist[i + 1];
+                rows.push({ prev: prevState, next: nextState, ts: prevState.ts });
+              }
+              return /*#__PURE__*/React.createElement("div", {
+                key: "hh" + h.id,
+                style: { marginBottom: 10 }
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 11, fontWeight: 600, color: "#374151", marginBottom: 4 }
+                }, h.icon ? h.icon + " " : "", h.text, " ",
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 9, color: "#9ca3af", fontWeight: 500 }
+                  }, "(" + hist.length + ")")),
+                rows.map((r, i) => {
+                  const diffs = diffHabit(r.prev, r.next);
+                  return /*#__PURE__*/React.createElement("div", {
+                    key: "hr" + i,
+                    style: rowStyle
+                  },
+                    /*#__PURE__*/React.createElement("div", {
+                      style: { fontSize: 10, color: "#6b7280", fontWeight: 600, marginBottom: 2 }
+                    }, fmtDate(r.ts)),
+                    diffs.length === 0
+                      ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", fontStyle: "italic" } }, "(minor edit)")
+                      : diffs.map(diffLine)
+                  );
+                })
+              );
+            })
+          )
+        );
+      })()
+      );
     })));
   }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10357,7 +10964,15 @@ function App() {
               key: c,
               onClick: () => setAccentColor(c),
               "aria-label": "Set accent " + c,
-              style: { width: 32, height: 32, borderRadius: "50%", background: c, cursor: "pointer", border: accentColor === c ? "3px solid #111" : "3px solid transparent", padding: 0, boxSizing: "border-box" }
+              // `data-brand` on the Verrocchio-green swatch exempts it
+              // from the .accent-custom remap, so it stays visibly green
+              // even when the current accent is pink/blue/etc. — users
+              // always have a visible way to return to the default.
+              // Selected-ring uses a contrast color that works against
+              // both a light background (dark mode off) and a dark one
+              // (dark mode on): darkMode flips it white, otherwise dark.
+              ...(c === "#2d5a2d" ? { "data-brand": "1" } : {}),
+              style: { width: 32, height: 32, borderRadius: "50%", background: c, cursor: "pointer", border: accentColor === c ? ("3px solid " + (darkMode ? "#fff" : "#111")) : "3px solid transparent", padding: 0, boxSizing: "border-box" }
             })),
             /*#__PURE__*/React.createElement("label", {
               style: { width: 32, height: 32, borderRadius: "50%", border: "1px dashed #d1d5db", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" },
@@ -10537,6 +11152,24 @@ function App() {
             )
           );
         })(),
+        // Replay guided tour — clears the "seen" flag and re-opens the
+        // onboarding walkthrough from step 1. Available in all modes
+        // (default + custom) so users who skipped on first login can
+        // always come back to it.
+        /*#__PURE__*/React.createElement("div", { style: { marginTop: 18, paddingTop: 16, borderTop: "1px solid #f3f4f6" } },
+          /*#__PURE__*/React.createElement("div", { style: labelS }, "Guided Tour"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => {
+              localStorage.removeItem("v-tour-done");
+              setTourDone(false);
+              setShowProfile(false);
+              // Defer so the profile sheet has time to unmount before
+              // the tour tries to anchor to the (now visible) nav.
+              setTimeout(() => setTourStep(1), 350);
+            },
+            style: { width: "100%", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 600, color: "#2d5a2d", cursor: "pointer" }
+          }, "Replay Welcome Tour")
+        ),
         // Reset to defaults escape hatch
         isCustom ? /*#__PURE__*/React.createElement("button", {
           onClick: () => {
@@ -10544,7 +11177,7 @@ function App() {
             setSettingsMode("default");
             setAccentColor("#2d5a2d");
           },
-          style: { width: "100%", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer", marginTop: 4 }
+          style: { width: "100%", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px", fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer", marginTop: 16 }
         }, "Reset to Verrocchio Defaults") : null
       );
     })();
@@ -11150,7 +11783,7 @@ function App() {
       width: "22",
       height: "22",
       viewBox: "0 0 24 24",
-      fill: a ? "#2d5a2d" : "#9ca3af"
+      fill: a ? accentColor : "#9ca3af"
     },
       /*#__PURE__*/React.createElement("rect", { x: "1", y: "19", width: "22", height: "3.5", rx: "1" }),
       /*#__PURE__*/React.createElement("rect", { x: "4", y: "14.5", width: "16", height: "3.5", rx: "1" }),
@@ -11165,7 +11798,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? "#2d5a2d" : "#9ca3af",
+      stroke: a ? accentColor : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11194,7 +11827,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? "#2d5a2d" : "#9ca3af",
+      stroke: a ? accentColor : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11221,7 +11854,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? "#2d5a2d" : "#9ca3af",
+      stroke: a ? accentColor : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11242,7 +11875,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? "#2d5a2d" : "#9ca3af",
+      stroke: a ? accentColor : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11274,7 +11907,7 @@ function App() {
         WebkitTapHighlightColor: "transparent"
       }
     }, t.icon(active));
-  }))));
+  }))), renderTour());
 }
 ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
 
