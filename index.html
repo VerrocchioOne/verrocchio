@@ -1947,38 +1947,23 @@ function App() {
   // future "replay splash" affordance still has a handle.
   const [splashAnimKey, setSplashAnimKey] = useState(0);
   const [demoMode, setDemoMode] = useState(false);
-  /* ── ONBOARDING STATE ── */
-  // Which step of the onboarding we're on. Steps:
-  //   0 = app walkthrough (multi-slide carousel)
-  //   1 = balanced-life framework primer
-  //   2 = intent capture ("why are you here?")
-  //   3 = first goal (area + text + basic SMART)
-  //   4 = first habits (1-3 habits tied to that goal)
-  //   5 = ready / you're all set
-  const [onboardStep, setOnboardStep] = useState(0);
-  const [walkSlide, setWalkSlide] = useState(0);
-  const [onbIntent, setOnbIntent] = useState("");
-  const [onbHome, setOnbHome] = useState("");
-  const [onbGoalArea, setOnbGoalArea] = useState("Physical");
-  const [onbGoalText, setOnbGoalText] = useState("");
-  const [onbGoalSpecific, setOnbGoalSpecific] = useState("");
-  const [onbGoalMeasurable, setOnbGoalMeasurable] = useState("");
-  const [onbGoalAchievable, setOnbGoalAchievable] = useState("");
-  const [onbGoalRelevant, setOnbGoalRelevant] = useState("");
-  const [onbGoalTimebound, setOnbGoalTimebound] = useState("");
-  const [onbShowSmart, setOnbShowSmart] = useState(false); // collapsible SMART fields
-  const [onbHabits, setOnbHabits] = useState([]); // [{text, section, importance, duration}]
-  const [onbHabitDraft, setOnbHabitDraft] = useState("");
-  const [onbHabitKind, setOnbHabitKind] = useState("do"); // "do" = positive habit, "avoid" = negative
-  const [onbHabitSec, setOnbHabitSec] = useState("morning");
-  const [onbHabitImp, setOnbHabitImp] = useState("Non-Negotiable");
-  const [onbHabitDuration, setOnbHabitDuration] = useState(""); // time estimate (mins)
-  // Weekly review capture — asked on the final onboarding screen. Day is
-  // JS getDay() (0 = Sun, 6 = Sat); hour is 0..23. Defaults: Sunday 6pm.
-  // Stored on `data.weeklyReview` so a future scheduler can surface the
-  // prompt at that moment.
-  const [onbReviewDay,  setOnbReviewDay]  = useState(0);
-  const [onbReviewHour, setOnbReviewHour] = useState(18);
+  /* ── ONBOARDING STATE ──
+     Pre-app onboarding is now just three screens: a walkthrough carousel,
+     the Areas-of-Life primer, and an intent-capture textarea. Everything
+     else that used to live here (home location, first goal, first habit,
+     weekly review) has moved into the in-app GUIDED TOUR so the user sets
+     those pieces up directly on the real UI — see TOUR_STEPS below. */
+  const [onboardStep, setOnboardStep] = useState(0); // 0 carousel, 1 balanced-life, 2 intent
+  const [walkSlide, setWalkSlide] = useState(0);     // sub-slide inside the carousel
+  const [onbIntent, setOnbIntent] = useState("");    // saved to data.userIntent on "Enter Verrocchio"
+  /* Tour-form state. Home location + weekly review are captured INSIDE
+     the guided tour (on tour-step forms) and saved straight to `data`
+     when the user advances past those steps. Kept separate from the
+     onboarding state above so the two stages don't tangle. Weekly
+     review defaults: Sunday 6pm. */
+  const [tourHome, setTourHome] = useState("");
+  const [tourReviewDay, setTourReviewDay] = useState(0);
+  const [tourReviewHour, setTourReviewHour] = useState(18);
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(u => {
       setAuthUser(u || null);
@@ -2032,25 +2017,17 @@ function App() {
       homeLocation: "",
       onboardingComplete: false
     });
-    // Reset onboarding state so reruns of the demo start from step 0.
+    // Reset onboarding + tour-form state so reruns of the demo start
+    // fresh. Only the three surviving pre-app fields + the two pieces of
+    // in-tour form state need to be wiped — everything else (first goal,
+    // first habit, weekly review, etc.) is collected inside the guided
+    // tour on the live UI, not here.
     setOnboardStep(0);
     setWalkSlide(0);
     setOnbIntent("");
-    setOnbHome("");
-    setOnbGoalArea("Physical");
-    setOnbGoalText("");
-    setOnbGoalSpecific("");
-    setOnbGoalMeasurable("");
-    setOnbGoalAchievable("");
-    setOnbGoalRelevant("");
-    setOnbGoalTimebound("");
-    setOnbShowSmart(false);
-    setOnbHabits([]);
-    setOnbHabitDraft("");
-    setOnbHabitKind("do");
-    setOnbHabitSec("morning");
-    setOnbHabitImp("Non-Negotiable");
-    setOnbHabitDuration("");
+    setTourHome("");
+    setTourReviewDay(0);
+    setTourReviewHour(18);
     setHasSeenWelcome(false);
     setSplashPhase("loading");
     setDemoMode(true);
@@ -2243,6 +2220,10 @@ function App() {
   // Forces a re-render when the viewport resizes (tooltip anchors use
   // getBoundingClientRect on each render, so they'd otherwise go stale).
   const [, setTourResizeTick] = useState(0);
+  // Swipe-gesture tracking for the tour. Replaces explicit Back/Next
+  // buttons: swipe right-to-left = advance, left-to-right = back.
+  // Lives in a ref so re-renders mid-gesture don't reset the start point.
+  const tourSwipeRef = useRef({ x: 0, y: 0, t: 0, active: false });
 
   /* APP SETTINGS
      - settingsMode: "default" vs "custom". In default, accent is the
@@ -2332,6 +2313,26 @@ function App() {
     const t = setTimeout(() => setTourStep(1), 400);
     return () => clearTimeout(t);
   }, [tourDone, inPreApp, demoMode, tourStep]);
+  // Seed the tour's form state from whatever is already saved on the
+  // user's data doc when the tour first fires. Matters for the Replay
+  // Tour flow (user ran the tour before, edited home/weekly review,
+  // then replayed): the form controls should show their current values
+  // rather than defaulting back to "" and Sunday 6pm and silently
+  // overwriting saved data on Next. Runs once, at the 0 → 1 transition.
+  useEffect(() => {
+    if (tourStep !== 1) return;
+    if (data && typeof data.homeLocation === "string" && data.homeLocation) {
+      setTourHome(data.homeLocation);
+    }
+    if (data && data.weeklyReview) {
+      if (typeof data.weeklyReview.day === "number") setTourReviewDay(data.weeklyReview.day);
+      if (typeof data.weeklyReview.hour === "number") setTourReviewHour(data.weeklyReview.hour);
+    }
+    // Intentionally [tourStep] only — don't re-seed if `data` changes
+    // mid-tour (e.g. user edited weekly review on step 8 form) because
+    // that would yank the value back to the saved snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourStep]);
   // Re-render when the window resizes OR anything scrolls — tooltip
   // anchors use live getBoundingClientRect, which would otherwise go
   // stale and leave the spotlight ring / dim panels / tooltip pinned
@@ -2363,8 +2364,10 @@ function App() {
     const stepIdx = tourStep - 1;
     // Inline mini-mirror of TOUR_STEPS tabs to avoid a forward-ref
     // dependency. Update alongside TOUR_STEPS whenever tabs change.
+    // Current shape (1-indexed): 2=Goals, 3=Habits, 4=To-Dos, 5=Reflect,
+    // 14=Home (final "you're all set" screen lands on brief).
     const TOUR_TAB_BY_STEP = {
-      8: "brief", 9: "goals", 10: "habits", 11: "todos", 12: "reflection"
+      2: "goals", 3: "habits", 4: "todos", 5: "reflection", 14: "brief"
     };
     const wantTab = TOUR_TAB_BY_STEP[tourStep];
     if (wantTab && tab !== wantTab) setTab(wantTab);
@@ -3716,11 +3719,13 @@ function App() {
     if (!willShowWelcome) return;
     if (splashPhase !== "loading") return;
     // Splash runtime: ~3.4s of V-draw motion + wordmark/tagline landings,
-    // then hold the completed lockup for ~1.2s before advancing to the
-    // quote page. Pyramid stacks (≤0.98s) → left stroke (1.15–2.45s) →
-    // right stroke (2.45–3.40s) → wordmark (3.30s) → tagline (3.90s).
+    // then hold the completed lockup for a beat before handing off to
+    // onboarding (no intermediate quote page — the splash lands the user
+    // straight into the 3-screen intro). Pyramid stacks (≤0.98s) → left
+    // stroke (1.15–2.45s) → right stroke (2.45–3.40s) → wordmark (3.30s)
+    // → tagline (3.90s).
     const SPLASH_HOLD = 5800;
-    const t = setTimeout(() => setSplashPhase("quote"), SPLASH_HOLD);
+    const t = setTimeout(() => setHasSeenWelcome(true), SPLASH_HOLD);
     return () => clearTimeout(t);
   }, [hasSeenWelcome, splashPhase, authUser, demoMode, splashAnimKey]);
 
@@ -4074,11 +4079,10 @@ function App() {
     ]);
   }
 
-  // Welcome / loading page — shown after auth until user clicks Continue.
-  // Phase 1: full-bleed Verrocchio "Ink" splash — pyramid stacks, then the
-  //          Playfair V is drawn by two pen strokes (thick left arm, then
-  //          thin upward right arm), wordmark + tagline land at the end.
-  // Phase 2: daily quote card.
+  // Welcome / loading page — a single full-bleed Verrocchio "Ink"
+  // splash (pyramid stacks → Playfair V drawn by two pen strokes →
+  // wordmark + tagline land). After the hold, the splash hands off
+  // straight to the 3-screen onboarding. No intermediate quote card.
   if (!hasSeenWelcome) {
     if (splashPhase === "loading") {
       // Ink splash: pyramid blocks stack, then the Playfair Display "V"
@@ -4138,126 +4142,79 @@ function App() {
       );
     }
 
-    const poolQuotes = (data.quotes && data.quotes.length ? data.quotes : PRESET_QUOTES);
-    const dayIdx = Math.floor(Date.now() / 86400000);
-    const q = poolQuotes[dayIdx % poolQuotes.length] || { text: "", author: "" };
-    const qKey = (x) => (x.text || "") + "|" + (x.author || "");
-    const likedList = data.likedQuotes || [];
-    const dislikedList = data.dislikedQuotes || [];
-    const isLiked = likedList.some(x => qKey(x) === qKey(q));
-    const isDisliked = dislikedList.some(x => qKey(x) === qKey(q));
-    const rateQuote = (verdict) => {
-      const stripped = { text: q.text, author: q.author || "" };
-      const liked = (data.likedQuotes || []).filter(x => qKey(x) !== qKey(q));
-      const disliked = (data.dislikedQuotes || []).filter(x => qKey(x) !== qKey(q));
-      if (verdict === "like" && !isLiked) liked.push(stripped);
-      if (verdict === "dislike" && !isDisliked) disliked.push(stripped);
-      save({ ...data, likedQuotes: liked, dislikedQuotes: disliked });
-    };
-    const rateBtn = (verdict, on, symbol, label) => React.createElement("button", {
-      key: "rate-" + verdict,
-      "aria-label": label,
-      "aria-pressed": on,
-      onClick: () => rateQuote(verdict),
-      style: {
-        width: 30, height: 30, borderRadius: "50%", border: "1px solid " + (on ? "#2d5a2d" : "#e5e7eb"),
-        background: on ? "#e9f2e9" : "#fff",
-        cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center",
-        fontSize: 14, lineHeight: 1, transition: "background .15s, border-color .15s",
-        fontFamily: "system-ui,-apple-system,sans-serif", padding: 0, flexShrink: 0
-      }
-    }, symbol);
-    return React.createElement("div", {
-      style: { position: "fixed", inset: 0, background: "#faf8f3", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }
-    }, React.createElement("div", {
-      style: { width: "100%", maxWidth: 380, textAlign: "center" }
-    },
-      // Compact pyramid + V lockup
-      React.createElement("div", { className: "brand-mark" },
-        React.createElement("div", { className: "bm-block bm-b1" }),
-        React.createElement("div", { className: "bm-block bm-b2" }),
-        React.createElement("div", { className: "bm-block bm-b3" }),
-        React.createElement("div", { className: "bm-block bm-b4" }),
-        React.createElement("div", { className: "bm-v" }, "V")
-      ),
-      // Quote — wrapped in curly quotation marks in the same Lora italic
-      // face as the quote text, so the punctuation feels like part of the
-      // sentence rather than ornamentation.
-      React.createElement("div", {
-        style: { fontFamily: "'Lora',serif", fontSize: 17, color: "#1f2937", lineHeight: 1.55, fontStyle: "italic", marginBottom: 14, padding: "0 6px" }
-      }, "\u201C" + q.text + "\u201D"),
-      // Author line centered; thumbs anchored to the far right so the
-      // author's name stays truly centered within the app width.
-      React.createElement("div", {
-        style: { position: "relative", display: "flex", alignItems: "center", justifyContent: "center", minHeight: 30, marginBottom: 28 }
-      },
-        q.author ? React.createElement("span", {
-          style: { fontSize: 12, color: "#6b7280", letterSpacing: ".02em" }
-        }, "\u2014 " + q.author) : null,
-        React.createElement("div", {
-          style: { position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 6 }
-        },
-          rateBtn("like", isLiked, "\uD83D\uDC4D", "Like quote"),
-          rateBtn("dislike", isDisliked, "\uD83D\uDC4E", "Dislike quote")
-        )
-      ),
-      // Continue — full app-width button in brand dark green.
-      React.createElement("button", {
-        onClick: () => setHasSeenWelcome(true),
-        style: { width: "100%", padding: "12px 16px", fontSize: 15, fontWeight: 600, color: "#fff", background: "#2d5a2d", border: "none", borderRadius: 10, cursor: "pointer", letterSpacing: "0.02em" }
-      }, "Continue")
-    ));
+    // No "quote" splash phase anymore — the loading splash auto-advances
+    // by flipping hasSeenWelcome=true (see SPLASH_HOLD effect above).
+    // Keeping this guard so any race that lands here still renders
+    // *something* instead of crashing on an unknown phase.
+    return null;
   }
 
   /* ── NEW-USER ONBOARDING FLOW ──
-     Runs once per user, after welcome, before main app. Has 7 steps:
-       0 walkthrough, 1 balanced-life, 2 home location, 3 intent,
-       4 first goal (SMART optional), 5 first habit (single), 6 ready */
+     Runs once per user, after welcome, before main app. Three screens:
+       0 walkthrough carousel, 1 balanced-life primer, 2 intent capture.
+     Everything concrete (home location, first goal, first habit, weekly
+     review) has moved INTO the guided tour so the user does those steps
+     on the real UI rather than in an onboarding form. Pressing "Enter
+     Verrocchio" on step 2 flips onboardingComplete=true and the tour
+     auto-starts on top of the now-visible app shell (see the auto-start
+     effect near line 2310). */
   if (!data.onboardingComplete) {
+    // Flip onboardingComplete so the app shell renders underneath — the
+    // guided tour takes over from here and walks the user through actually
+    // setting up their first goal, habit, weekly review, and home
+    // location directly on the real UI. Intent is captured on this last
+    // onboarding screen (the tour doesn't re-ask). Seed timeRanges for
+    // data-shape consistency.
     const finishOnboarding = () => {
-      const nowId = Date.now();
-      const goalId = "g_ob_" + nowId;
-      const newGoal = {
-        id: goalId,
-        text: onbGoalText.trim() || "My first goal",
-        type: onbGoalArea,
-        smart: {
-          specific: onbGoalSpecific.trim(),
-          measurable: onbGoalMeasurable.trim(),
-          achievable: onbGoalAchievable.trim(),
-          relevant: onbGoalRelevant.trim(),
-          timebound: onbGoalTimebound.trim()
-        }
-      };
-      const newHabits = onbHabits.map((h, i) => ({
-        id: "h_ob_" + nowId + "_" + i,
-        text: h.text,
-        section: h.section,
-        importance: h.importance,
-        type: onbGoalArea,
-        duration: h.duration || "",
-        goalId: goalId,
-        completions: {}
-      }));
       save({
         ...data,
-        goals: [newGoal, ...(data.goals || []).filter(g => g && g.text)],
-        habits: [...newHabits, ...(data.habits || []).filter(h => h && h.text)],
         userIntent: onbIntent.trim(),
-        homeLocation: onbHome.trim() || data.homeLocation || "",
-        // Capture the user's weekly-review appointment so a scheduler
-        // (or the Reflect tab) can prompt them at that moment. Shape
-        // mirrors `{ day: 0..6 (getDay), hour: 0..23 }`.
-        weeklyReview: { day: onbReviewDay, hour: onbReviewHour },
-        // Seed the default time-of-day ranges if not already present —
-        // keeps the data shape consistent for every new user.
         timeRanges: data.timeRanges || DEFAULT_TIME_RANGES,
         onboardingComplete: true
       });
     };
 
+    /* Swipe nav for onboarding (mirrors the in-app tour):
+       swipe ← advances, swipe → goes back. The shell wires the handlers
+       onto the card so a swipe anywhere on the panel navigates. Form
+       widgets inside the children should spread `onbStopSwipe` to keep
+       text selection / typing from registering as swipes. */
+    const ONB_SWIPE_MIN = 45;
+    const onbSwipeStart = (x, y) => {
+      tourSwipeRef.current = { x, y, t: Date.now(), active: true };
+    };
+    const onbSwipeEnd = (x, y, onAdvance, onBack) => {
+      const s = tourSwipeRef.current;
+      if (!s || !s.active) return;
+      tourSwipeRef.current.active = false;
+      const dx = x - s.x;
+      const dy = y - s.y;
+      if (Math.abs(dx) < ONB_SWIPE_MIN) return;
+      if (Math.abs(dx) < Math.abs(dy)) return;
+      if (dx < 0 && onAdvance) onAdvance();
+      else if (dx > 0 && onBack) onBack();
+    };
+    const onbSwipeHandlers = (onAdvance, onBack) => ({
+      onTouchStart: e => {
+        const t = e.touches && e.touches[0];
+        if (t) onbSwipeStart(t.clientX, t.clientY);
+      },
+      onTouchEnd: e => {
+        const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+        if (t) onbSwipeEnd(t.clientX, t.clientY, onAdvance, onBack);
+      },
+      onMouseDown: e => onbSwipeStart(e.clientX, e.clientY),
+      onMouseUp: e => onbSwipeEnd(e.clientX, e.clientY, onAdvance, onBack)
+    });
+    const onbStopSwipe = {
+      onTouchStart: e => e.stopPropagation(),
+      onMouseDown: e => e.stopPropagation()
+    };
+
     // Wider shell for the onboarding — form-heavy screens need more room.
-    const onbShell = (children) => React.createElement("div", {
+    // `swipe` is `{ onAdvance, onBack }` — when present the inner card
+    // becomes swipe-navigable.
+    const onbShell = (children, swipe) => React.createElement("div", {
       style: {
         background: "linear-gradient(180deg, #f8f7f4 0%, #efece5 100%)",
         minHeight: "100vh",
@@ -4268,7 +4225,7 @@ function App() {
         padding: "24px 16px",
         fontFamily: "system-ui,-apple-system,sans-serif"
       }
-    }, React.createElement("div", {
+    }, React.createElement("div", Object.assign({
       style: {
         width: "100%",
         maxWidth: 440,
@@ -4278,15 +4235,30 @@ function App() {
         boxShadow: "0 10px 30px rgba(0,0,0,.08)",
         padding: "24px 22px 20px",
         display: "flex",
-        flexDirection: "column"
+        flexDirection: "column",
+        touchAction: "pan-y",
+        userSelect: "none",
+        WebkitUserSelect: "none"
       }
-    }, children));
+    }, swipe ? onbSwipeHandlers(swipe.onAdvance, swipe.onBack) : null), children));
 
-    // Progress dots for steps 0..6 (7 total)
+    // Centered "Swipe ← to continue / Swipe → to go back" hint, used in
+    // place of the Continue / Back buttons on the three onboarding cards.
+    const swipeHint = (canBack) => React.createElement("div", {
+      key: "swipehint",
+      style: {
+        fontSize: 11.5, color: "#9ca3af", textAlign: "center",
+        fontWeight: 500, letterSpacing: .2, marginTop: 4
+      }
+    }, canBack
+      ? "Swipe \u2190 to continue   \u00B7   Swipe \u2192 to go back"
+      : "Swipe \u2190 to continue");
+
+    // Progress dots for steps 0..2 (3 screens: carousel, balanced-life, intent).
     const progressBar = React.createElement("div", {
       key: "prog",
       style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 18 }
-    }, [0,1,2,3,4,5,6].map(i => React.createElement("div", {
+    }, [0,1,2].map(i => React.createElement("div", {
       key: "d" + i,
       style: {
         width: i === onboardStep ? 22 : 8,
@@ -4297,12 +4269,11 @@ function App() {
       }
     })));
 
-    const skipBtn = React.createElement("button", {
-      key: "skip",
-      onClick: () => save({ ...data, onboardingComplete: true, userIntent: onbIntent.trim(), homeLocation: onbHome.trim() || data.homeLocation || "" }),
-      style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 12, cursor: "pointer", padding: "6px 10px" }
-    }, "Skip for now");
-
+    // No "Skip for now" on the three pre-app screens — the carousel +
+    // balanced-life primer + intent textarea together are only a handful
+    // of taps, and the guided tour itself has its own Skip. If a user
+    // really wants to bail early they can still skip from the tour
+    // overlay the moment they land in the app.
     const primaryBtn = (label, onClick, opts) => React.createElement("button", {
       onClick,
       disabled: opts && opts.disabled,
@@ -4319,19 +4290,8 @@ function App() {
       }
     }, label);
 
-    const secondaryBtn = (label, onClick) => React.createElement("button", {
-      onClick,
-      style: {
-        padding: "12px 14px",
-        fontSize: 14,
-        fontWeight: 600,
-        color: "#1f2937",
-        background: "#fff",
-        border: "1px solid #d1d5db",
-        borderRadius: 10,
-        cursor: "pointer"
-      }
-    }, label);
+    // (secondaryBtn removed — Continue/Back buttons are gone from the
+    // three onboarding screens; navigation is by swipe via onbShell.)
 
     // STEP 0 — App walkthrough (3 sub-slides)
     if (onboardStep === 0) {
@@ -4342,26 +4302,15 @@ function App() {
       ];
       const s = slides[walkSlide];
       const last = walkSlide === slides.length - 1;
+      const advance = () => { if (last) setOnboardStep(1); else setWalkSlide(walkSlide + 1); };
+      const back = walkSlide > 0 ? () => setWalkSlide(walkSlide - 1) : null;
       return onbShell([
         progressBar,
         React.createElement("div", { key: "ico", style: { fontSize: 44, textAlign: "center", marginBottom: 10 } }, s.icon),
         React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 10 } }, s.ttl),
         React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 22, padding: "0 6px" } }, s.body),
-        React.createElement("div", { key: "dots", style: { display: "flex", gap: 5, justifyContent: "center", marginBottom: 20 } },
-          slides.map((_, i) => React.createElement("div", {
-            key: "sd" + i,
-            style: { width: 7, height: 7, borderRadius: "50%", background: i === walkSlide ? "#1f2937" : "#e5e7eb" }
-          }))
-        ),
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          walkSlide > 0 ? secondaryBtn("Back", () => setWalkSlide(walkSlide - 1)) : null,
-          primaryBtn(last ? "Next" : "Continue", () => {
-            if (last) setOnboardStep(1);
-            else setWalkSlide(walkSlide + 1);
-          })
-        ),
-        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
-      ]);
+        swipeHint(!!back)
+      ], { onAdvance: advance, onBack: back });
     }
 
     // STEP 1 — Balanced-life framework primer
@@ -4387,59 +4336,22 @@ function App() {
             textAlign: "center"
           }
         }, t.value))),
-        React.createElement("div", { key: "hint", style: { fontSize: 11.5, color: "#6b7280", textAlign: "center", marginBottom: 18, fontStyle: "italic" } }, "You can rename or customize these later in Profile."),
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(0)),
-          primaryBtn("Continue", () => setOnboardStep(2))
-        ),
-        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
-      ]);
+        React.createElement("div", { key: "hint", style: { fontSize: 11.5, color: "#6b7280", textAlign: "center", marginBottom: 14, fontStyle: "italic" } }, "You can rename or customize these later in Profile."),
+        swipeHint(true)
+      ], { onAdvance: () => setOnboardStep(2), onBack: () => setOnboardStep(0) });
     }
 
-    // STEP 2 — Where is home? (location anchor for travel-day routines)
+    // STEP 2 — Intent capture. Last pre-app screen; swipe ← hands off to
+    // the in-app guided tour (which covers first goal, first habit,
+    // weekly review, home location, and the header). The textarea spreads
+    // `onbStopSwipe` so typing or selecting text doesn't seed a swipe.
     if (onboardStep === 2) {
-      const homeReady = onbHome.trim().length > 0;
-      return onbShell([
-        progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "🏠"),
-        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Where is home?"),
-        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } }, "Your baseline location. We'll use it to tailor your routine and split home vs. travel-day habits."),
-        React.createElement("input", {
-          key: "hin",
-          type: "text",
-          value: onbHome,
-          onChange: e => setOnbHome(e.target.value),
-          placeholder: "City, neighborhood, or address",
-          style: {
-            width: "100%",
-            padding: "11px 12px",
-            fontSize: 14,
-            border: "1px solid #e5e7eb",
-            borderRadius: 10,
-            marginBottom: 14,
-            outline: "none",
-            boxSizing: "border-box",
-            background: "#fff",
-            color: "#1f2937"
-          }
-        }),
-        React.createElement("div", { key: "hint", style: { fontSize: 11.5, color: "#6b7280", textAlign: "center", marginBottom: 18, fontStyle: "italic" } }, "You can change this later and assign a location to each travel day on the calendar."),
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(1)),
-          primaryBtn("Continue", () => setOnboardStep(3), { disabled: !homeReady })
-        ),
-        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
-      ]);
-    }
-
-    // STEP 3 — Intent capture
-    if (onboardStep === 3) {
       return onbShell([
         progressBar,
         React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "✨"),
         React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Why are you here?"),
         React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } }, "One sentence on what you want to accomplish. We'll show it back to you on the hard days."),
-        React.createElement("textarea", {
+        React.createElement("textarea", Object.assign({
           key: "ta",
           value: onbIntent,
           onChange: e => setOnbIntent(e.target.value),
@@ -4451,349 +4363,23 @@ function App() {
             fontSize: 14,
             border: "1px solid #e5e7eb",
             borderRadius: 10,
-            marginBottom: 20,
+            marginBottom: 16,
             outline: "none",
             boxSizing: "border-box",
             background: "#fff",
             color: "#1f2937",
             resize: "vertical",
             fontFamily: "inherit",
-            lineHeight: 1.5
+            lineHeight: 1.5,
+            // Re-enable text selection inside the textarea — the shell
+            // turns it off globally so a drag on the card surface doesn't
+            // start a selection mid-swipe.
+            userSelect: "text",
+            WebkitUserSelect: "text"
           }
-        }),
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(2)),
-          primaryBtn("Continue", () => setOnboardStep(4))
-        ),
-        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
-      ]);
-    }
-
-    // STEP 4 — First goal
-    if (onboardStep === 4) {
-      const goalReady = onbGoalText.trim().length > 0;
-      return onbShell([
-        progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "🎯"),
-        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Your first goal"),
-        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 18, padding: "0 6px" } }, "Start with one. Small beats zero."),
-
-        React.createElement("div", { key: "alabel", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Area of Life"),
-        React.createElement("div", {
-          key: "areas",
-          style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }
-        }, HT.map(t => React.createElement("button", {
-          key: t.value,
-          onClick: () => setOnbGoalArea(t.value),
-          style: {
-            padding: "6px 10px",
-            borderRadius: 999,
-            background: onbGoalArea === t.value ? t.color : t.bg,
-            color: onbGoalArea === t.value ? "#fff" : t.color,
-            border: "1px solid " + (onbGoalArea === t.value ? t.color : t.border),
-            fontSize: 12,
-            fontWeight: 600,
-            cursor: "pointer"
-          }
-        }, t.value))),
-
-        React.createElement("div", { key: "glabel", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Goal"),
-        React.createElement("input", {
-          key: "gtxt",
-          type: "text",
-          value: onbGoalText,
-          onChange: e => setOnbGoalText(e.target.value),
-          placeholder: "e.g. Run a marathon",
-          style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 14, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
-        }),
-
-        // Collapsible SMART details — all five fields, all optional.
-        React.createElement("button", {
-          key: "smartTog",
-          onClick: () => setOnbShowSmart(!onbShowSmart),
-          style: {
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "10px 12px",
-            background: onbShowSmart ? "#f9fafb" : "#fff",
-            border: "1px dashed #d1d5db",
-            borderRadius: 10,
-            marginBottom: onbShowSmart ? 10 : 14,
-            cursor: "pointer",
-            color: "#1f2937",
-            fontSize: 12.5,
-            fontWeight: 600,
-            textAlign: "left"
-          }
-        },
-          React.createElement("span", null, onbShowSmart ? "Hide S.M.A.R.T. details" : "+ Make it S.M.A.R.T. (optional)"),
-          React.createElement("span", { style: { fontSize: 11, color: "#6b7280", fontWeight: 500 } }, onbShowSmart ? "\u25B2" : "\u25BC")
-        ),
-        onbShowSmart ? React.createElement("div", {
-          key: "smartBox",
-          style: { marginBottom: 14, padding: "12px", background: "#f9fafb", borderRadius: 10, border: "1px solid #e5e7eb" }
-        },
-          React.createElement("div", { style: { fontSize: 10.5, color: "#6b7280", marginBottom: 10, lineHeight: 1.5, fontStyle: "italic" } },
-            "S.M.A.R.T. goals are sharper and more actionable. All fields are optional — you can fill these in later from the Goals tab."
-          ),
-          [
-            { k: "s", label: "Specific", val: onbGoalSpecific, setter: setOnbGoalSpecific, placeholder: "What exactly will you do? e.g. Train for and finish the NYC Marathon" },
-            { k: "m", label: "Measurable", val: onbGoalMeasurable, setter: setOnbGoalMeasurable, placeholder: "How will you measure success? e.g. finish under 4:00" },
-            { k: "a", label: "Achievable", val: onbGoalAchievable, setter: setOnbGoalAchievable, placeholder: "Why is this realistic? e.g. I've run a half before" },
-            { k: "r", label: "Relevant", val: onbGoalRelevant, setter: setOnbGoalRelevant, placeholder: "Why does it matter? e.g. longevity, mental clarity" },
-            { k: "t", label: "Time-bound", val: onbGoalTimebound, setter: setOnbGoalTimebound, placeholder: "By when? e.g. October 2026" }
-          ].map(f => React.createElement("div", { key: f.k, style: { marginBottom: 10 } },
-            React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 } }, f.label),
-            React.createElement("textarea", {
-              rows: 3,
-              value: f.val,
-              onChange: e => f.setter(e.target.value),
-              placeholder: f.placeholder,
-              style: { width: "100%", padding: "8px 10px", fontSize: 12.5, lineHeight: 1.45, border: "1px solid #e5e7eb", borderRadius: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937", fontFamily: "inherit", resize: "none", minHeight: 62 }
-            })
-          ))
-        ) : null,
-
-        React.createElement("div", { key: "hint", style: { fontSize: 11, color: "#9ca3af", textAlign: "center", marginBottom: 14, fontStyle: "italic" } },
-          onbShowSmart ? "Leave fields blank to skip — you can add them anytime." : "You can review and sharpen this goal anytime from the Goals tab."),
-
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10, marginBottom: 20 } },
-          secondaryBtn("Back", () => setOnboardStep(3)),
-          primaryBtn("Continue", () => setOnboardStep(5), { disabled: !goalReady })
-        ),
-        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
-      ]);
-    }
-
-    // STEP 5 — First habit (single habit, do-vs-avoid first, routine + time estimate)
-    if (onboardStep === 5) {
-      const isAvoid = onbHabitKind === "avoid";
-      const effectiveSection = isAvoid ? "avoid" : onbHabitSec;
-      const textReady = onbHabitDraft.trim().length > 0;
-      const saveHabit = () => {
-        if (!textReady) return;
-        setOnbHabits([{
-          text: onbHabitDraft.trim(),
-          section: effectiveSection,
-          importance: onbHabitImp,
-          duration: isAvoid ? "" : onbHabitDuration.trim()
-        }]);
-        setOnboardStep(6);
-      };
-      const importanceOpts = ["Non-Negotiable", "Priority", "Nice-to-have"];
-      const routineOpts = SECTIONS.filter(s => s.value !== "avoid");
-      return onbShell([
-        progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, isAvoid ? "🚫" : "🔁"),
-        React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 6 } }, "Your first habit"),
-        React.createElement("div", { key: "body", style: { fontSize: 13.5, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } },
-          "Pick one habit that moves you toward ",
-          React.createElement("span", { style: { fontWeight: 700, color: "#1f2937" } }, "\u201C" + (onbGoalText.trim() || "your goal") + "\u201D"),
-          ". One beats none — you'll add more as you review your goal."
-        ),
-
-        // Do vs Avoid — the first decision.
-        React.createElement("div", { key: "kindLbl", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Kind of habit"),
-        React.createElement("div", {
-          key: "kinds",
-          style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }
-        }, [
-          { val: "do", label: "Do daily", sub: "Something I want to build.", color: "#2d5a2d", bg: "#f0f7f0", border: "#c6dfc6" },
-          { val: "avoid", label: "Avoid", sub: "Something I want to cut out.", color: "#dc2626", bg: "#fef2f2", border: "#fecaca" }
-        ].map(k => {
-          const on = onbHabitKind === k.val;
-          return React.createElement("button", {
-            key: k.val,
-            onClick: () => setOnbHabitKind(k.val),
-            style: {
-              padding: "12px 10px",
-              borderRadius: 10,
-              background: on ? k.bg : "#fff",
-              color: on ? k.color : "#6b7280",
-              border: "1px solid " + (on ? k.border : "#e5e7eb"),
-              fontSize: 13, fontWeight: 700,
-              cursor: "pointer",
-              textAlign: "left",
-              lineHeight: 1.3
-            }
-          },
-            React.createElement("div", { style: { fontSize: 14, marginBottom: 2 } }, k.label),
-            React.createElement("div", { style: { fontSize: 10.5, fontWeight: 500, color: on ? k.color : "#9ca3af" } }, k.sub)
-          );
-        })),
-
-        // Habit text.
-        React.createElement("div", { key: "htLbl", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, isAvoid ? "What to avoid" : "Habit"),
-        React.createElement("input", {
-          key: "htxt",
-          type: "text",
-          value: onbHabitDraft,
-          onChange: e => setOnbHabitDraft(e.target.value),
-          placeholder: isAvoid ? "e.g. Scroll social media in bed" : "e.g. Morning 5k run",
-          style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 14, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
-        }),
-
-        // Routine — only for positive habits. Not shown for avoid habits.
-        !isAvoid ? React.createElement(React.Fragment, { key: "rgroup" },
-          React.createElement("div", { key: "rhdr", style: { fontSize: 12.5, fontWeight: 700, color: "#1f2937", marginBottom: 4 } }, "Build Your Routine"),
-          React.createElement("div", { key: "rbody", style: { fontSize: 11.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 8, fontStyle: "italic" } },
-            "Tying a habit to a specific time of day creates a routine \u2014 and routines dramatically boost follow-through."),
-          React.createElement("div", {
-            key: "secs",
-            style: { display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }
-          }, routineOpts.map(sec => React.createElement("button", {
-            key: sec.value,
-            onClick: () => setOnbHabitSec(sec.value),
-            style: {
-              flex: 1, minWidth: 0,
-              padding: "8px 10px",
-              borderRadius: 10,
-              background: onbHabitSec === sec.value ? sec.color : sec.bg,
-              color: onbHabitSec === sec.value ? "#fff" : sec.color,
-              border: "1px solid " + (onbHabitSec === sec.value ? sec.color : sec.border),
-              fontSize: 12, fontWeight: 600,
-              cursor: "pointer"
-            }
-          }, sec.label))),
-
-          // Time estimate for a positive habit.
-          React.createElement("div", { key: "durLbl", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Roughly how long? (optional)"),
-          React.createElement("input", {
-            key: "dur",
-            type: "text",
-            value: onbHabitDuration,
-            onChange: e => setOnbHabitDuration(e.target.value),
-            placeholder: "e.g. 30 min",
-            style: { width: "100%", padding: "9px 12px", fontSize: 13, border: "1px solid #e5e7eb", borderRadius: 10, marginBottom: 4, outline: "none", boxSizing: "border-box", background: "#fff", color: "#1f2937" }
-          }),
-          React.createElement("div", { key: "durHint", style: { fontSize: 10.5, color: "#9ca3af", marginBottom: 14, fontStyle: "italic" } },
-            "Time estimates help you plan your day and catch habits that quietly grow to eat an hour.")
-        ) : null,
-
-        // Importance.
-        React.createElement("div", { key: "impLbl", style: { fontSize: 11, fontWeight: 700, color: "#6b7280", letterSpacing: .4, marginBottom: 6, textTransform: "uppercase" } }, "Importance"),
-        React.createElement("div", {
-          key: "imps",
-          style: { display: "flex", gap: 6, marginBottom: 18, flexWrap: "wrap" }
-        }, importanceOpts.map(imp => React.createElement("button", {
-          key: imp,
-          onClick: () => setOnbHabitImp(imp),
-          style: {
-            flex: 1, minWidth: 0,
-            padding: "8px 10px",
-            borderRadius: 999,
-            background: onbHabitImp === imp ? "#1f2937" : "#f3f4f6",
-            color: onbHabitImp === imp ? "#fff" : "#4b5563",
-            border: "1px solid " + (onbHabitImp === imp ? "#1f2937" : "#e5e7eb"),
-            fontSize: 11.5, fontWeight: 600,
-            cursor: "pointer"
-          }
-        }, imp))),
-
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(4)),
-          primaryBtn("Continue", saveHabit, { disabled: !textReady })
-        ),
-        React.createElement("div", { key: "skw", style: { textAlign: "center", marginTop: 10 } }, skipBtn)
-      ]);
-    }
-
-    // STEP 6 — Ready
-    if (onboardStep === 6) {
-      const firstHabit = onbHabits[0];
-      return onbShell([
-        progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 52, textAlign: "center", marginBottom: 12 } }, "🚀"),
-        React.createElement("div", { key: "ttl", style: { fontSize: 22, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 10 } }, "You're all set"),
-        React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.6, textAlign: "center", marginBottom: 10, padding: "0 6px" } },
-          firstHabit ? /*@__PURE__*/React.createElement(React.Fragment, null,
-            React.createElement("span", null, "One habit \u2014 "),
-            React.createElement("span", { style: { fontWeight: 700, color: "#1f2937" } }, "\u201C" + firstHabit.text + "\u201D"),
-            React.createElement("span", null, " \u2014 tied to "),
-            React.createElement("span", { style: { fontWeight: 700, color: "#1f2937" } }, "\u201C" + (onbGoalText.trim() || "your goal") + "\u201D"),
-            React.createElement("span", null, ". Show up tomorrow.")
-          ) : "Show up tomorrow."
-        ),
-        React.createElement("div", { key: "hint", style: { fontSize: 12, color: "#6b7280", lineHeight: 1.55, textAlign: "center", marginBottom: 20, padding: "0 8px", fontStyle: "italic" } },
-          "You can add more habits or sharpen this goal anytime from the Goals tab."
-        ),
-
-        // Weekly Review picker — one moment a week to look back and adjust.
-        // The day/hour get saved on finishOnboarding as `weeklyReview`.
-        React.createElement("div", {
-          key: "wrv",
-          style: {
-            border: "1px solid #e5e7eb",
-            borderRadius: 10,
-            padding: "12px 12px 14px",
-            marginBottom: 18,
-            background: "#fafaf7"
-          }
-        },
-          React.createElement("div", { key: "wrv-ttl", style: { fontSize: 13, fontWeight: 700, color: "#1f2937", marginBottom: 4, textAlign: "center" } }, "Weekly Review"),
-          React.createElement("div", { key: "wrv-sub", style: { fontSize: 11, color: "#6b7280", lineHeight: 1.5, marginBottom: 10, textAlign: "center" } },
-            "Pick a day and time to look back on the week \u2014 what worked, what slipped, where to spend more energy."
-          ),
-
-          // Day-of-week chips (Mon..Sun via DOW_ORDER)
-          React.createElement("div", { key: "wrv-day-lbl", style: { fontSize: 11, color: "#6b7280", marginBottom: 6 } }, "Day"),
-          React.createElement("div", {
-            key: "wrv-days",
-            style: { display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }
-          },
-            DOW_ORDER.map(dayVal => {
-              const on = onbReviewDay === dayVal;
-              return React.createElement("button", {
-                key: "d" + dayVal,
-                onClick: () => setOnbReviewDay(dayVal),
-                style: {
-                  flex: 1,
-                  minWidth: 34,
-                  padding: "6px 0",
-                  fontSize: 11,
-                  fontWeight: on ? 700 : 500,
-                  border: "1px solid " + (on ? "#2d5a2d" : "#d1d5db"),
-                  borderRadius: 6,
-                  background: on ? "#2d5a2d" : "#fff",
-                  color: on ? "#fff" : "#374151",
-                  cursor: "pointer"
-                }
-              }, DOW_ABBR[dayVal]);
-            })
-          ),
-
-          // Hour selector — single 24-option select rendered as 12-hour labels.
-          React.createElement("div", { key: "wrv-hr-lbl", style: { fontSize: 11, color: "#6b7280", marginBottom: 6 } }, "Time"),
-          React.createElement("select", {
-            key: "wrv-hr",
-            value: onbReviewHour,
-            onChange: e => setOnbReviewHour(parseInt(e.target.value, 10)),
-            style: {
-              width: "100%",
-              padding: "7px 8px",
-              fontSize: 13,
-              border: "1px solid #d1d5db",
-              borderRadius: 6,
-              background: "#fff",
-              color: "#1f2937",
-              cursor: "pointer"
-            }
-          },
-            Array.from({ length: 24 }, (_, h) => {
-              const suffix = h < 12 ? "AM" : "PM";
-              const disp = h === 0 ? 12 : (h > 12 ? h - 12 : h);
-              return React.createElement("option", { key: h, value: h }, disp + ":00 " + suffix);
-            })
-          )
-        ),
-
-        React.createElement("div", { key: "nav", style: { display: "flex", gap: 10 } },
-          secondaryBtn("Back", () => setOnboardStep(5)),
-          primaryBtn("Enter Verrocchio", finishOnboarding)
-        )
-      ]);
+        }, onbStopSwipe)),
+        swipeHint(true)
+      ], { onAdvance: finishOnboarding, onBack: () => setOnboardStep(1) });
     }
 
     // Fallback — should never hit, but complete onboarding gracefully
@@ -4810,104 +4396,150 @@ function App() {
      element, or is centered with no target. User advances with Next;
      can Skip at any time. Inspired by Appcues-style coach marks.
 
-     Fields:
-       title    — tooltip heading
-       body     — explanation shown underneath
-       selector — CSS selector for the anchor element (omit to center)
-       placement — "top" or "bottom" relative to anchor (default top)
-       tab      — if set, the tour switches to this tab when the step
-                  becomes active. Lets each page step actually SHOW the
-                  page it's describing instead of just pointing at the
-                  nav button.
+     The tour auto-starts the moment pre-app onboarding flips
+     `onboardingComplete=true` (see the auto-start effect near line 2310)
+     and runs on top of the real app UI — so "add your first goal" is
+     literally tapping the + on the Goals tab, not a fake form. Steps
+     with a `gate` lock Next until the user actually does the thing.
 
-     Adding a new step? Append here. The selector should match a stable
-     aria-label or data-tour attribute so we don't depend on class names
-     that churn.                                                          */
+     Adding a new step? Append into TOUR_STEPS below. Selectors should
+     point at a stable `aria-label` or `data-tour` attribute so tours
+     don't depend on class names that churn. Field reference follows.  */
+  /* ── TOUR_STEPS (14 steps) ──
+     The in-app half of the merged onboarding+tour. The pre-app screens
+     (carousel, balanced-life, intent) land the user on the Goals tab
+     with an empty workspace, then this tour walks them through actually
+     building a first goal + habit on the real UI, and finally explains
+     the header, weekly review, travel + home, and settings.
+
+     Step fields:
+       title        – tooltip heading.
+       body         – tooltip copy.
+       selector     – CSS anchor for the spotlight ring. Omit + set
+                      `center: true` for a dialog-style centered tip.
+       placement    – "top" | "bottom" hint for tooltip side.
+       tab          – switches the active page when the step opens so the
+                      user sees what's being described (see TOUR_TAB_BY_STEP).
+       gate         – fn(data) → bool. When present, Next is disabled
+                      until it returns true. Used to force the user to
+                      actually create a goal (step 2) and a habit (step 3).
+       gateHint     – tiny italic nudge shown while gated.
+       form         – "weeklyReview" | "homeLocation". Renders inline form
+                      controls in the tooltip; advance saves to data.
+       optionalActionKey   – identifies an optional secondary button
+                             (openTodoForm | focusReflect). Handler lives
+                             in renderTour, not on the step, so closure
+                             state stays clean.
+       optionalActionLabel – button label for the optional action. */
   const TOUR_STEPS = [
+    // 1 — Intro
     {
-      title: "Welcome to Verrocchio",
-      body: "A 90-second tour of the pieces that matter most — the header, the five pages, and how they fit together. You can skip anytime.",
+      title: "A quick 90-second tour",
+      body: "You'll set your first goal, link a habit, and see how the pieces fit. We'll walk it together — swipe to continue.",
       center: true
     },
-    // ── Header row ───────────────────────────────────────────────────
+    // 2 — Goals: gated until a goal exists
+    {
+      title: "Goals \u2014 the long arc",
+      body: "Your goals live here, grouped by area of life. Tap the [+] to add your first one. SMART fields, linked habits, journal, and history all attach to each goal.",
+      selector: "button[aria-label='New goal']",
+      placement: "bottom",
+      tab: "goals",
+      gate: d => !!(d && Array.isArray(d.goals) && d.goals.length > 0),
+      gateHint: "Add a goal to continue."
+    },
+    // 3 — Habits: gated until a habit exists
+    {
+      title: "Habits \u2014 daily rhythm",
+      body: "Now link a daily habit to that goal. Swipe right to complete, left to mark missed. Long-press for details.",
+      selector: "button[aria-label='New habit']",
+      placement: "bottom",
+      tab: "habits",
+      gate: d => !!(d && Array.isArray(d.habits) && d.habits.length > 0),
+      gateHint: "Add a habit to continue."
+    },
+    // 4 — To-Dos: optional add button
+    {
+      title: "To-Dos \u2014 one-offs",
+      body: "For tasks that don't repeat. Link a to-do to a goal and it shows up inside that goal's detail view too.",
+      selector: "button[aria-label='New task']",
+      placement: "bottom",
+      tab: "todos",
+      optionalActionKey: "openTodoForm",
+      optionalActionLabel: "Add a to-do"
+    },
+    // 5 — Reflect: optional focus
+    {
+      title: "Reflect \u2014 look back",
+      body: "Journal by day, save favorite quotes, revisit past entries. Weekly reviews and mood notes land here too.",
+      selector: "[data-tour='reflect-input']",
+      placement: "bottom",
+      tab: "reflection",
+      optionalActionKey: "focusReflect",
+      optionalActionLabel: "Write a reflection"
+    },
+    // 6 — Date badge
     {
       title: "The date you're viewing",
-      body: "The top strip always reflects the day you're on. Tap the badge to jump back to today — handy after scrolling through history.",
+      body: "The top strip always reflects the day you're on. Tap the badge to jump back to today.",
       selector: "[data-tour='header-date']",
       placement: "bottom"
     },
+    // 7 — Calendar
     {
-      title: "Calendar & travel",
-      body: "Open the calendar to pick any date, or switch to travel mode to mark trips on the grid. Habits adapt to your travel routine automatically.",
+      title: "Calendar",
+      body: "Open the calendar to pick any date, scroll back through history, or plan ahead.",
       selector: "[data-tour='header-calendar']",
       placement: "bottom"
     },
+    // 8 — Weekly review picker (inline form)
+    {
+      title: "Pick your weekly review",
+      body: "Pick a day and time each week to zoom out and recap. We'll nudge you so it actually happens.",
+      center: true,
+      form: "weeklyReview"
+    },
+    // 9 — Travel mode
     {
       title: "At Home vs Traveling",
       body: "Flip the selected day between home and travel in one tap. Travel days only show habits tagged to run while away.",
       selector: "[data-tour='header-travel']",
       placement: "bottom"
     },
+    // 10 — Where is home? (inline form)
+    {
+      title: "Where is home?",
+      body: "Tell us where home base is. We'll keep your routines solid whether you're there or on the road.",
+      center: true,
+      form: "homeLocation"
+    },
+    // 11 — XP
     {
       title: "Level & XP",
-      body: "You earn XP every time you log a habit. Each level is 500 XP. Press and hold to pop open your achievements shelf.",
+      body: "You earn XP every time you log a habit. Each level is 500 XP. Press and hold for your achievements shelf.",
       selector: "[data-tour='header-xp']",
       placement: "bottom"
     },
+    // 12 — Streak
     {
       title: "Your streak",
-      body: "The flame counts consecutive days where you logged at least one habit — complete or missed, both count. Don't break the chain.",
+      body: "The flame counts consecutive days where you logged at least one habit \u2014 complete or missed, both count. Don't break the chain.",
       selector: "[data-tour='header-streak']",
       placement: "bottom"
     },
+    // 13 — Profile & settings
     {
       title: "Profile & settings",
-      body: "Your profile holds themes, custom categories, importance levels, time-of-day groups, and the Replay Tour button.",
+      body: "Themes, custom categories, priorities, time-of-day groups, and a Replay Tour button all live here.",
       selector: "button[aria-label='Profile']",
       placement: "bottom"
     },
-    // ── The five pages. `tab` switches the view so the user actually
-    //    sees the page while reading about it. The selector stays on
-    //    the bottom-nav button so it's always a stable anchor. ───────
-    {
-      title: "Home — your daily briefing",
-      body: "Set today's intention, see yesterday vs today at a glance, check your 7-day rate and streak, and open a generated daily briefing that pulls in your goals and habits.",
-      selector: "button[aria-label='Home']",
-      placement: "top",
-      tab: "brief"
-    },
-    {
-      title: "Goals — the long arc",
-      body: "Goals are long-term outcomes, grouped by area of life (Physical, Career, Relationships…). Each goal carries its own SMART fields, linked habits, to-dos, journal entries, and full edit history.",
-      selector: "button[aria-label='Goals']",
-      placement: "top",
-      tab: "goals"
-    },
-    {
-      title: "Habits — daily rhythm",
-      body: "Swipe right to complete, left to mark missed. Long-press to open a habit's detail sheet. Filter by time of day, priority, goal, or duration — and flip between Do and Avoid habits.",
-      selector: "button[aria-label='Habits']",
-      placement: "top",
-      tab: "habits"
-    },
-    {
-      title: "To-Dos — one-offs",
-      body: "For tasks that don't repeat. Link any to-do to a goal and it also shows up inside that goal's detail view, keeping moving parts in one place.",
-      selector: "button[aria-label='To-Dos']",
-      placement: "top",
-      tab: "todos"
-    },
-    {
-      title: "Reflect — look back",
-      body: "Journal by day or tag, save favorite quotes, and revisit past reflections. Also where weekly reviews and mood notes land.",
-      selector: "button[aria-label='Reflect']",
-      placement: "top",
-      tab: "reflection"
-    },
+    // 14 — Done
     {
       title: "You're all set",
-      body: "Start with your first goal, then link a couple of habits to it. Replay this tour anytime from Profile → App Settings → Guided Tour.",
-      center: true
+      body: "That's the whole app. Replay this tour anytime from Profile \u2192 App Settings \u2192 Guided Tour.",
+      center: true,
+      tab: "brief"
     }
   ];
 
@@ -4985,20 +4617,138 @@ function App() {
 
     const dimColor = "rgba(0,0,0,0.58)";
 
-    const dots = TOUR_STEPS.map((_, i) => /*#__PURE__*/React.createElement("span", {
-      key: i,
-      style: {
-        width: 6, height: 6, borderRadius: "50%", margin: "0 3px",
-        background: i === tourStep - 1 ? "#2d5a2d" : "#d1d5db",
-        display: "inline-block"
-      }
-    }));
-
     const isLast = tourStep === TOUR_STEPS.length;
+
+    // ── Gate: step.gate(data) must return true before advancing is allowed.
+    //    Used on steps 2/3 to force the user to actually create a goal
+    //    and a habit on the real UI before continuing.
+    const gateBlocked = typeof step.gate === "function" && !step.gate(data);
+
+    // ── Form steps save their value to `data` when the user advances.
+    //    Both pieces of state (tourHome, tourReviewDay/Hour) live at the
+    //    component top level so React preserves them across re-renders
+    //    triggered by the resize/scroll listener.
     const advance = () => {
+      if (gateBlocked) return;
+      if (step.form === "weeklyReview") {
+        save({
+          ...data,
+          weeklyReview: { day: tourReviewDay, hour: tourReviewHour }
+        });
+      } else if (step.form === "homeLocation") {
+        save({ ...data, homeLocation: tourHome.trim() });
+      }
       if (isLast) finishTour();
       else setTourStep(tourStep + 1);
     };
+    const goBack = () => {
+      if (tourStep > 1) setTourStep(tourStep - 1);
+    };
+
+    // ── Swipe handlers — attached to the tooltip and the dim panels so
+    //    a horizontal swipe anywhere off the spotlight area navigates the
+    //    tour. Threshold is 45px horizontal with a clamp that requires
+    //    |dx| > |dy| so vertical scrolls inside the tooltip body don't
+    //    accidentally trigger nav. Form inputs and buttons inside the
+    //    tooltip stop-propagate so dragging a select / typing in the
+    //    home-location input never registers as a swipe.
+    const SWIPE_MIN = 45;
+    const onSwipeStart = (clientX, clientY) => {
+      tourSwipeRef.current = { x: clientX, y: clientY, t: Date.now(), active: true };
+    };
+    const onSwipeEnd = (clientX, clientY) => {
+      const s = tourSwipeRef.current;
+      if (!s || !s.active) return;
+      tourSwipeRef.current.active = false;
+      const dx = clientX - s.x;
+      const dy = clientY - s.y;
+      if (Math.abs(dx) < SWIPE_MIN) return;
+      if (Math.abs(dx) < Math.abs(dy)) return; // mostly vertical → ignore
+      if (dx < 0) advance();        // swipe left → next
+      else goBack();                 // swipe right → back
+    };
+    const swipeHandlers = {
+      onTouchStart: e => {
+        const t = e.touches && e.touches[0];
+        if (t) onSwipeStart(t.clientX, t.clientY);
+      },
+      onTouchEnd: e => {
+        const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
+        if (t) onSwipeEnd(t.clientX, t.clientY);
+      },
+      onMouseDown: e => onSwipeStart(e.clientX, e.clientY),
+      onMouseUp: e => onSwipeEnd(e.clientX, e.clientY)
+    };
+    // For tooltip-internal interactive widgets (form inputs, buttons),
+    // swallow pointerdown/touchstart so they don't seed a swipe. Buttons
+    // still fire onClick normally because we only intercept the start.
+    const stopSwipeStart = {
+      onTouchStart: e => e.stopPropagation(),
+      onMouseDown: e => e.stopPropagation()
+    };
+
+    // ── Optional-action handlers. Keys are looked up here instead of
+    //    stored as closures on the step objects so the TOUR_STEPS array
+    //    stays a plain data literal and the handlers have fresh access
+    //    to component state/setters.
+    const runOptionalAction = () => {
+      if (step.optionalActionKey === "openTodoForm") {
+        setExpTodoForm(true);
+      } else if (step.optionalActionKey === "focusReflect") {
+        const ta = document.querySelector("[data-tour='reflect-input']");
+        if (ta && typeof ta.focus === "function") ta.focus();
+      }
+    };
+
+    // ── Inline form controls for form steps. Rendered between body and
+    //    footer so the tooltip stays scannable.
+    let formNode = null;
+    if (step.form === "weeklyReview") {
+      const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      formNode = /*#__PURE__*/React.createElement("div", {
+        key: "wrf",
+        style: { display: "flex", gap: 8, marginBottom: 14 }
+      },
+        /*#__PURE__*/React.createElement("select", Object.assign({
+          value: tourReviewDay,
+          onChange: e => setTourReviewDay(Number(e.target.value)),
+          style: {
+            flex: 1, padding: "8px 10px", borderRadius: 8,
+            border: "1px solid #e5e7eb", background: "#f9fafb",
+            fontSize: 13, color: "#1f2937"
+          }
+        }, stopSwipeStart), DAY_NAMES.map((n, i) => /*#__PURE__*/React.createElement("option", { key: i, value: i }, n))),
+        /*#__PURE__*/React.createElement("select", Object.assign({
+          value: tourReviewHour,
+          onChange: e => setTourReviewHour(Number(e.target.value)),
+          style: {
+            flex: 1, padding: "8px 10px", borderRadius: 8,
+            border: "1px solid #e5e7eb", background: "#f9fafb",
+            fontSize: 13, color: "#1f2937"
+          }
+        }, stopSwipeStart), Array.from({ length: 24 }, (_, h) => {
+          const label = h === 0 ? "12 AM"
+            : h < 12 ? h + " AM"
+            : h === 12 ? "12 PM"
+            : (h - 12) + " PM";
+          return /*#__PURE__*/React.createElement("option", { key: h, value: h }, label);
+        }))
+      );
+    } else if (step.form === "homeLocation") {
+      formNode = /*#__PURE__*/React.createElement("input", Object.assign({
+        key: "hlf",
+        type: "text",
+        value: tourHome,
+        onChange: e => setTourHome(e.target.value),
+        placeholder: "City, state, or neighborhood",
+        style: {
+          width: "100%", boxSizing: "border-box",
+          padding: "10px 12px", borderRadius: 8,
+          border: "1px solid #e5e7eb", background: "#f9fafb",
+          fontSize: 13, color: "#1f2937", marginBottom: 14
+        }
+      }, stopSwipeStart));
+    }
 
     return /*#__PURE__*/React.createElement("div", {
       "data-tour-overlay": "1",
@@ -5007,16 +4757,19 @@ function App() {
       // Dim panels (clickable — absorb taps so the user can't interact
       // with the rest of the UI while the tour is active, but the
       // spotlight hole remains clickable because no panel covers it).
-      ...panels.map((p, i) => /*#__PURE__*/React.createElement("div", {
+      // Each panel also receives the swipe handlers so the user can
+      // navigate by swiping anywhere on the dimmed area.
+      ...panels.map((p, i) => /*#__PURE__*/React.createElement("div", Object.assign({
         key: "p" + i,
         style: {
           position: "fixed",
           left: p.left, top: p.top, width: p.width, height: p.height,
           background: dimColor,
           pointerEvents: "auto",
+          touchAction: "pan-y",
           transition: "all 0.2s ease"
         }
-      })),
+      }, swipeHandlers))),
       // Highlight ring
       rect && /*#__PURE__*/React.createElement("div", {
         style: {
@@ -5030,8 +4783,11 @@ function App() {
           animation: "tourPulse 1.6s ease-in-out infinite"
         }
       }),
-      // Tooltip
-      /*#__PURE__*/React.createElement("div", {
+      // Tooltip — also accepts swipes (so the user doesn't have to aim
+      // for the dim area). Form steps with native inputs (select / text)
+      // have those inputs swallow pointer-start so a drag inside them
+      // doesn't get read as a swipe.
+      /*#__PURE__*/React.createElement("div", Object.assign({
         style: {
           ...tipStyle,
           background: "#fff",
@@ -5040,40 +4796,76 @@ function App() {
           padding: "16px 18px 14px 18px",
           boxShadow: "0 12px 40px rgba(0,0,0,.28)",
           pointerEvents: "auto",
+          touchAction: "pan-y",
           zIndex: 10000
         }
-      },
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: .6, marginBottom: 6 }
-        }, "Step " + tourStep + " of " + TOUR_STEPS.length),
+      }, swipeHandlers),
+        // No "Step X of Y" badge and no progress dots — the tour shouldn't
+        // feel like a numbered checklist. Title + body + swipe hint do all
+        // the navigation framing on their own.
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 17, fontWeight: 700, marginBottom: 6, color: "#111" }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 13, lineHeight: 1.5, color: "#4b5563", marginBottom: 14 }
+          style: { fontSize: 13, lineHeight: 1.5, color: "#4b5563", marginBottom: formNode || gateBlocked ? 10 : 14 }
         }, step.body),
-        /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "center", justifyContent: "space-between" }
-        },
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center" } }, dots),
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
-            !isLast && /*#__PURE__*/React.createElement("button", {
-              onClick: finishTour,
-              style: {
-                background: "transparent", border: "none", cursor: "pointer",
-                padding: "6px 10px", fontSize: 12, color: "#6b7280", fontWeight: 600
-              }
-            }, "Skip"),
-            /*#__PURE__*/React.createElement("button", {
-              onClick: advance,
-              style: {
-                background: "#2d5a2d", color: "#fff", border: "none",
-                borderRadius: 8, padding: "8px 16px", fontSize: 13,
-                fontWeight: 600, cursor: "pointer"
-              }
-            }, isLast ? "Got it" : "Next")
-          )
-        )
+        // Inline form (weekly review / home location).
+        formNode,
+        // Gate hint — shown while the step's gate is still false. Copy is
+        // a quiet nudge so the disabled Next button doesn't feel like a
+        // dead end ("oh, I have to add a goal first").
+        gateBlocked && step.gateHint && /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, color: "#9a6f2e", fontStyle: "italic", marginBottom: 12 }
+        }, step.gateHint),
+        // Footer — navigation is by swipe; there is no Skip. The tour
+        // is short and load-bearing (it's how the user actually creates
+        // their first goal, habit, weekly review, and home location), so
+        // bailing partway through would leave them on an empty workspace
+        // they don't yet know how to use.
+        //   • swipe ← (right-to-left) → next  (blocked while gate is open)
+        //   • swipe → (left-to-right) → back  (no-op on step 1)
+        // The optional secondary action (e.g. "Add a to-do") stays as a
+        // button because it triggers an in-app action rather than nav.
+        // The last step shows a centered "Got it" — only way out.
+        isLast
+          ? /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", justifyContent: "center" }
+            },
+              /*#__PURE__*/React.createElement("button", Object.assign({
+                onClick: advance,
+                style: {
+                  background: "#2d5a2d", color: "#fff", border: "none",
+                  borderRadius: 8, padding: "9px 22px", fontSize: 13,
+                  fontWeight: 600, cursor: "pointer"
+                }
+              }, stopSwipeStart), "Got it")
+            )
+          : /*#__PURE__*/React.createElement("div", null,
+              /*#__PURE__*/React.createElement("div", {
+                style: {
+                  fontSize: 11, color: gateBlocked ? "#c4a96a" : "#9ca3af",
+                  textAlign: "center", marginBottom: step.optionalActionKey ? 10 : 0,
+                  fontWeight: 500, letterSpacing: .2
+                }
+              }, gateBlocked
+                ? "Complete the action above to continue"
+                : (tourStep > 1
+                    ? "Swipe \u2190 to continue   \u00B7   Swipe \u2192 to go back"
+                    : "Swipe \u2190 to continue")),
+              // Optional secondary action only — Skip is intentionally absent.
+              step.optionalActionKey && /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", justifyContent: "center" }
+              },
+                /*#__PURE__*/React.createElement("button", Object.assign({
+                  onClick: runOptionalAction,
+                  style: {
+                    background: "#fff", color: "#2d5a2d", border: "1px solid #2d5a2d",
+                    borderRadius: 8, padding: "7px 14px", fontSize: 12,
+                    fontWeight: 600, cursor: "pointer"
+                  }
+                }, stopSwipeStart), step.optionalActionLabel || "Try it")
+              )
+            )
       )
     );
   };
@@ -5893,6 +5685,37 @@ function App() {
       );
     };
 
+    /* "Why are you here?" banner — echoes the answer captured in onboarding
+       so the user's reason for showing up sits at the very top of the home
+       page every time they open the app. Tap to edit; rendered only when a
+       non-empty intent exists. */
+    const whyBanner = (data.userIntent && data.userIntent.trim())
+      ? /*#__PURE__*/React.createElement("div", {
+          key: "why-banner",
+          onClick: () => {
+            const next = window.prompt("Why are you here?", data.userIntent || "");
+            if (next != null) save({ ...data, userIntent: next.trim() });
+          },
+          style: {
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderLeft: "3px solid #2d5a2d",
+            borderRadius: 10,
+            padding: "12px 14px",
+            marginBottom: 12,
+            cursor: "pointer",
+            boxShadow: "0 1px 2px rgba(0,0,0,.03)"
+          }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 9, fontWeight: 700, letterSpacing: 1.2, color: "#2d5a2d", marginBottom: 4, textTransform: "uppercase" }
+          }, "Why you're here"),
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontFamily: "'Lora',serif", fontStyle: "italic", fontSize: 15, lineHeight: 1.5, color: "#1f2937" }
+          }, "\u201C" + data.userIntent.trim() + "\u201D")
+        )
+      : null;
+
     // Pinned intention card — only when an intention is saved for today.
     const intentionPinned = intentionSet ? /*#__PURE__*/React.createElement("div", {
       key: "int-pin",
@@ -6209,6 +6032,7 @@ function App() {
     }, bottomPills) : null;
 
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
+      whyBanner,
       intentionPinned,
       briefingCard,
       yesterdayCard,
@@ -6243,6 +6067,7 @@ function App() {
       }
     }, /*#__PURE__*/React.createElement("button", {
       onClick: () => setShowAddHabit(p => !p),
+      "aria-label": "New habit",
       style: {
         width: 28,
         height: 28,
@@ -7827,6 +7652,7 @@ function App() {
     onChange: e => sJTxt(e.target.value),
     placeholder: "What happened today? What are you grateful for? What did you learn?",
     rows: 4,
+    "data-tour": "reflect-input",
     style: {
       width: "100%",
       background: "#f9fafb",
