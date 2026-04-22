@@ -141,6 +141,34 @@ body.accent-custom [stroke="#2d5a2d"]:not([data-brand]){stroke:var(--accent)!imp
   0%,100%{box-shadow:0 0 0 4px rgba(45,90,45,.25),0 8px 24px rgba(0,0,0,.3)}
   50%{box-shadow:0 0 0 8px rgba(45,90,45,.15),0 8px 28px rgba(0,0,0,.32)}
 }
+/* Gated-step + button emphasis. Applied to the real target button (the
+   "New goal" / "New habit" [+]) while the tour is waiting for the user to
+   tap it, so the button itself visibly wobbles — not just a ring around
+   it. Slight scale + rotation so it reads as "look here, tap me" rather
+   than a steady pulse the eye filters out. */
+@keyframes tourTargetBounce{
+  0%,100%{transform:scale(1) rotate(0deg)}
+  20%{transform:scale(1.18) rotate(-4deg)}
+  40%{transform:scale(1.18) rotate(4deg)}
+  60%{transform:scale(1.1) rotate(-2deg)}
+  80%{transform:scale(1.05) rotate(0deg)}
+}
+.tour-target-bounce{animation:tourTargetBounce 1.4s ease-in-out infinite;transform-origin:center center}
+@media (prefers-reduced-motion: reduce){
+  .tour-target-bounce{animation:none}
+}
+/* Gated-step callout bob — arrow + bubble below the spotlighted button,
+   pointing up at it. Separate from tourTargetBounce so the callout
+   motion reads as an independent "look up here" nudge rather than being
+   yoked to the button's jiggle. */
+@keyframes tourCalloutBob{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+.tour-callout{animation:tourCalloutBob 1.1s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .tour-callout{animation:none}
+}
 ::placeholder{color:#9ca3af}
 input,select,textarea{outline:none;font-family:inherit;-webkit-appearance:none;border-radius:0}
 /* ── Duration filter slider (Habits tab "Max time" control) ──
@@ -234,10 +262,11 @@ textarea{resize:vertical}
 @keyframes splashv4VRightDraw{to{stroke-dashoffset:0}}
 .splashv4 .brand-wordmark{position:absolute;top:22px;left:50%;font-family:'Lora',Georgia,'Times New Roman',serif;font-weight:700;font-size:34px;line-height:1;color:#2d5a2d;letter-spacing:.12em;white-space:nowrap;opacity:0;transform:translate(-50%,8px);animation:splashv4BrandIn .7s cubic-bezier(.22,1,.36,1) 3.3s forwards;will-change:transform,opacity,letter-spacing}
 @keyframes splashv4BrandIn{0%{opacity:0;transform:translate(-50%,8px);letter-spacing:.12em}60%{opacity:1}100%{opacity:1;transform:translate(-50%,0);letter-spacing:-.01em}}
-/* Tagline mirrors the in-app header: system-ui sans-serif, medium weight,
-   #9ca3af gray, no italic. Scaled up from the header's 10px so it reads
-   at splash size. */
-.splashv4 .tagline{position:absolute;top:204px;left:50%;transform:translateX(-50%);font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;color:#9ca3af;letter-spacing:.5px;white-space:nowrap;opacity:0;animation:splashv4TagIn .6s ease-out 3.9s forwards;will-change:opacity,transform}
+/* Tagline mirrors the LOGIN PAGE tagline: system-ui sans-serif, italic,
+   #6b7280 gray, 13px — same treatment as the "Achieve Anything" line
+   under the Verrocchio wordmark on the login/signup screen so the two
+   read as the same piece of typography across the launch flow. */
+.splashv4 .tagline{position:absolute;top:184px;left:50%;transform:translateX(-50%);font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:400;font-style:italic;color:#6b7280;letter-spacing:normal;white-space:nowrap;opacity:0;animation:splashv4TagIn .6s ease-out 3.9s forwards;will-change:opacity,transform}
 @keyframes splashv4TagIn{0%{opacity:0;transform:translate(-50%,6px)}100%{opacity:1;transform:translate(-50%,0)}}
 @media (prefers-reduced-motion: reduce){.splashv4 .block,.splashv4 .ink-v-svg .v-mask-left,.splashv4 .ink-v-svg .v-mask-right,.splashv4 .brand-wordmark,.splashv4 .tagline{animation-duration:.01s!important}}
 
@@ -252,7 +281,7 @@ textarea{resize:vertical}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 .hrow:hover .del-btn,.hrow:hover .edit-btn,.ecard:hover .e-del,.ecard:hover .e-edit{opacity:1!important}
-.sf{width:100%;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.45;color:#374151;outline:none;resize:none;min-height:62px}
+.sf{width:100%;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.35;color:#374151;outline:none;resize:none;min-height:34px}
 .sf:focus{border-color:#2d5a2d}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
 input[type=number]{-moz-appearance:textfield}
@@ -263,6 +292,44 @@ a{-webkit-tap-highlight-color:transparent}
 /* Safe area support for iPhone notch/home bar */
 .bottom-safe{padding-bottom:env(safe-area-inset-bottom,0px)}
 .top-safe{padding-top:env(safe-area-inset-top,0px)}
+
+/* ── iOS 26 "Liquid Glass" surfaces ────────────────────────────────
+   The header, bottom nav, onboarding cards, and tour tooltips all
+   carry the `.lg` class. The element itself gets a translucent fill
+   and heavy backdrop blur via inline styles (so variants can differ);
+   this class layers on the characteristic specular sheen — a bright
+   highlight at the top edge that fades to neutral, plus a very faint
+   bottom-edge darkening — via a ::before pseudo-element. Pointer
+   events pass through so the sheen never blocks a tap. */
+.lg{position:relative;isolation:isolate}
+.lg::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.55) 0%,rgba(255,255,255,.12) 28%,rgba(255,255,255,0) 55%,rgba(0,0,0,.03) 100%);z-index:0}
+.lg > *{position:relative;z-index:1}
+/* Dark mode — flip the sheen so the top edge still reads as a
+   highlight rather than a bright wash. */
+body.dark .lg::before{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.04) 35%,rgba(255,255,255,0) 60%,rgba(0,0,0,.18) 100%)}
+
+/* ── Swipe-hint animation ──────────────────────────────────────────
+   The onboarding cards and the tour tooltips show "← swipe →" as a
+   nav hint. The word "swipe" rocks side to side so users who've never
+   seen a swipe-based navigator register the affordance. Gentle amp +
+   slow period — this is a persistent hint, not a call-to-action. */
+@keyframes lgSwipeRock{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-5px)}
+  75%{transform:translateX(5px)}
+}
+.swipe-hint{display:inline-flex;align-items:center;gap:4px}
+.swipe-hint .swipe-word{display:inline-block;animation:lgSwipeRock 2.2s ease-in-out infinite;will-change:transform}
+@media (prefers-reduced-motion: reduce){.swipe-hint .swipe-word{animation:none}}
+
+/* ── Confetti burst keyframe ───────────────────────────────────────
+   Paired with the fireConfetti() DOM helper. Each particle element
+   sets --cf-x / --cf-y / --cf-rot inline; the keyframe applies them
+   uniformly so the whole burst shares one animation at GPU cost
+   roughly equivalent to a single transform per particle. */
+@keyframes confetti-fall{
+  to{transform:translate(var(--cf-x,0),var(--cf-y,80vh)) rotate(var(--cf-rot,720deg));opacity:0}
+}
 </style>
 </head>
 <body>
@@ -1838,10 +1905,75 @@ function loadData() {
       if (typeof p.onboardingComplete !== "boolean") {
         p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
       }
+      // Celebration flags — used to fire a one-time confetti burst when
+      // the user creates their first-ever goal / habit. For existing
+      // users who already have content, we assume they already got the
+      // "look at this, you made something" moment at signup and flip
+      // these to true so they don't see a misfire on next login. Flag
+      // lives on user data (not localStorage) so it follows the account
+      // across devices.
+      if (typeof p.celebratedFirstGoal !== "boolean") {
+        p.celebratedFirstGoal = !!(p.goals && p.goals.length > 0);
+      }
+      if (typeof p.celebratedFirstHabit !== "boolean") {
+        p.celebratedFirstHabit = !!(p.habits && p.habits.length > 0);
+      }
       return p;
     }
   } catch (e) {}
   return JSON.parse(JSON.stringify(DD));
+}
+
+/* ── CONFETTI BURST ───────────────────────────────────────────────
+   One-shot DOM-based confetti used on first-goal / first-habit. We
+   don't pull in a library — 100-ish absolutely-positioned divs driven
+   by one CSS keyframe keeps this feather-light and self-contained.
+   Each particle gets its own end translate / rotation via CSS custom
+   properties so the burst looks varied. The root container is removed
+   after the longest possible animation window, so nothing lingers in
+   the DOM. Respect prefers-reduced-motion by skipping entirely. */
+function fireConfetti() {
+  if (typeof document === "undefined") return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors = ["#2d5a2d", "#3d7a3d", "#fbbf24", "#f97316", "#3b82f6", "#ec4899", "#a855f7"];
+  const root = document.createElement("div");
+  root.className = "confetti-root";
+  root.setAttribute("aria-hidden", "true");
+  root.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:99999;overflow:hidden;contain:strict";
+  const N = 90;
+  for (let i = 0; i < N; i++) {
+    const p = document.createElement("div");
+    const color = colors[i % colors.length];
+    // Start clustered around the center-top of the viewport so the
+    // burst reads as coming from a single origin point rather than
+    // raining uniformly from the top.
+    const startX = 35 + Math.random() * 30; // center 30% band
+    const startY = 30 + Math.random() * 15;
+    const delay = Math.random() * 180;
+    const dur = 1700 + Math.random() * 1200;
+    const endX = (Math.random() - .5) * 140; // vw distance either side
+    const endY = 80 + Math.random() * 30;    // vh — well off the bottom
+    const rotStart = Math.random() * 360;
+    const rotDelta = 360 + Math.random() * 900;
+    const w = 6 + Math.random() * 6;
+    const h = 10 + Math.random() * 8;
+    p.style.cssText =
+      "position:absolute;" +
+      "left:" + startX + "%;top:" + startY + "%;" +
+      "width:" + w + "px;height:" + h + "px;" +
+      "background:" + color + ";" +
+      "border-radius:1px;" +
+      "opacity:.95;" +
+      "transform:rotate(" + rotStart + "deg);" +
+      "will-change:transform,opacity;" +
+      "animation:confetti-fall " + dur + "ms cubic-bezier(.2,.55,.4,1) " + delay + "ms forwards;" +
+      "--cf-x:" + endX + "vw;" +
+      "--cf-y:" + endY + "vh;" +
+      "--cf-rot:" + (rotStart + rotDelta) + "deg;";
+    root.appendChild(p);
+  }
+  document.body.appendChild(root);
+  setTimeout(() => { if (root.parentNode) root.parentNode.removeChild(root); }, 3400);
 }
 
 /* ── RADAR CHART COMPONENT ── */
@@ -2030,6 +2162,13 @@ function App() {
     setTourReviewHour(18);
     setHasSeenWelcome(false);
     setSplashPhase("loading");
+    // Demo is supposed to mirror the full new-user experience, so wipe
+    // the "tour already seen" flag too. We deliberately don't touch
+    // localStorage here — the real account's v-tour-done stays intact
+    // and gets restored on exitDemo. finishTour() also guards against
+    // writing to localStorage while demoMode is on.
+    setTourDone(false);
+    setTourStep(0);
     setDemoMode(true);
   };
   const exitDemo = () => {
@@ -2039,6 +2178,11 @@ function App() {
     // Reload real data from localStorage (or blank default) so the demo
     // state doesn't bleed into the next session.
     try { setData(loadData()); } catch (e) { setData(JSON.parse(JSON.stringify(DD))); }
+    // Restore the real account's tour-seen flag from localStorage — if
+    // they'd already completed the tour before trying demo, we don't
+    // want to force-replay it.
+    setTourDone(localStorage.getItem("v-tour-done") === "1");
+    setTourStep(0);
   };
 
   const [data, setData] = useState(() => loadData());
@@ -2225,6 +2369,17 @@ function App() {
   // Lives in a ref so re-renders mid-gesture don't reset the start point.
   const tourSwipeRef = useRef({ x: 0, y: 0, t: 0, active: false });
 
+  /* CONFETTI on first goal + first habit.
+     Refs seed to -1 so the first render (which may land with goals
+     already loaded from Firestore / localStorage) is treated as "seed
+     only" and doesn't fire a burst. A legitimate 0 → 1 transition in
+     a subsequent render — the user adding their first-ever goal —
+     does fire, once. `celebratedFirstGoal` / `celebratedFirstHabit`
+     on the data doc guard against a second fire across sessions or
+     if the user deletes and re-adds later. */
+  const prevGoalsCountRef = useRef(-1);
+  const prevHabitsCountRef = useRef(-1);
+
   /* APP SETTINGS
      - settingsMode: "default" vs "custom". In default, accent is the
        Verrocchio green and all category/importance/section edits are
@@ -2299,20 +2454,48 @@ function App() {
   }, [settingsMode, accentColor, themeLocked]);
 
   // Auto-start the guided tour once the user is past onboarding and
-  // hasn't seen it before. demoMode users skip — they'll see it the
-  // first time they sign in with a real account. Placed above all the
-  // conditional early-returns for onboarding / auth screens so React's
-  // hook order stays stable across renders.
+  // hasn't seen it before. demoMode deliberately runs the tour too:
+  // the whole point of demo mode is to preview what a brand-new user
+  // sees, and the tour IS part of that experience. Placed above all
+  // the conditional early-returns for onboarding / auth screens so
+  // React's hook order stays stable across renders.
   useEffect(() => {
     if (tourDone) return;
     if (inPreApp) return;
-    if (demoMode) return;
     if (tourStep !== 0) return;
     // Defer a beat so the nav + render tree have landed in the DOM
     // before the tour tries to anchor to nav-button selectors.
     const t = setTimeout(() => setTourStep(1), 400);
     return () => clearTimeout(t);
-  }, [tourDone, inPreApp, demoMode, tourStep]);
+  }, [tourDone, inPreApp, tourStep]);
+
+  /* Confetti — fire once the first time the user creates a goal or
+     habit. Watches the length of each array and fires on the 0 → 1
+     transition, guarded by a persisted flag on `data` so it never
+     misfires twice (across sessions, across delete-all + re-add
+     cycles, etc.). The -1 sentinel on the prev refs means the very
+     first render — which may land with the arrays already populated
+     from storage — is treated as seed-only and never fires. */
+  useEffect(() => {
+    const cur = (data && data.goals) ? data.goals.length : 0;
+    const prev = prevGoalsCountRef.current;
+    prevGoalsCountRef.current = cur;
+    if (prev === -1) return; // seed on first render
+    if (prev === 0 && cur >= 1 && !data.celebratedFirstGoal) {
+      fireConfetti();
+      save({ ...data, celebratedFirstGoal: true });
+    }
+  }, [data && data.goals && data.goals.length]);
+  useEffect(() => {
+    const cur = (data && data.habits) ? data.habits.length : 0;
+    const prev = prevHabitsCountRef.current;
+    prevHabitsCountRef.current = cur;
+    if (prev === -1) return; // seed on first render
+    if (prev === 0 && cur >= 1 && !data.celebratedFirstHabit) {
+      fireConfetti();
+      save({ ...data, celebratedFirstHabit: true });
+    }
+  }, [data && data.habits && data.habits.length]);
   // Seed the tour's form state from whatever is already saved on the
   // user's data doc when the tour first fires. Matters for the Replay
   // Tour flow (user ran the tour before, edited home/weekly review,
@@ -2364,15 +2547,132 @@ function App() {
     const stepIdx = tourStep - 1;
     // Inline mini-mirror of TOUR_STEPS tabs to avoid a forward-ref
     // dependency. Update alongside TOUR_STEPS whenever tabs change.
-    // Current shape (1-indexed): 2=Goals, 3=Habits, 4=To-Dos, 5=Reflect,
-    // 14=Home (final "you're all set" screen lands on brief).
+    // Current shape (1-indexed):
+    //   1        intro (no tab change)
+    //   2-6      Goals walkthrough (tap +, name, area, SMART, save)
+    //   7-11     Habits walkthrough (tap +, name, timing, link, save)
+    //   12       To-Dos
+    //   13       Reflect
+    //   14-21    header widgets / profile (no tab change)
+    //   22       final "you're all set" (lands on brief)
     const TOUR_TAB_BY_STEP = {
-      2: "goals", 3: "habits", 4: "todos", 5: "reflection", 14: "brief"
+      2: "goals", 3: "goals", 4: "goals", 5: "goals", 6: "goals",
+      7: "habits", 8: "habits", 9: "habits", 10: "habits", 11: "habits",
+      12: "todos", 13: "reflection", 22: "brief"
     };
     const wantTab = TOUR_TAB_BY_STEP[tourStep];
     if (wantTab && tab !== wantTab) setTab(wantTab);
     void stepIdx; // suppress unused warning in static analyzers
   }, [tourStep]);
+
+  /* Gated-step [+] button bounce. We only animate the PRIMARY action
+     target — the New-goal / New-habit [+] button — because it's the one
+     step where the user might not realize the app is waiting on them.
+     Once the form is open, the subsequent sub-steps (pick area, SMART,
+     save) use the standard pulsing spotlight ring + arrow callout
+     instead; physically wobbling each form field would read as visual
+     noise rather than a "tap me" cue.
+
+     Step indices track TOUR_STEPS:
+       2 — "Let's start by adding a goal" → New-goal [+]
+       7 — "Now add a habit"              → New-habit [+]
+     Re-run key includes goals.length / habits.length so the bounce stops
+     the instant the user creates the first goal / habit and the form
+     un-mounts (otherwise the class would stay stamped on a stale DOM
+     node if one ever came back via back-swipe). */
+  const goalsLen = (data && data.goals) ? data.goals.length : 0;
+  const habitsLen = (data && data.habits) ? data.habits.length : 0;
+  useEffect(() => {
+    if (tourStep === 0) return undefined;
+    const GATED = {
+      2: { sel: "button[aria-label='New goal']",  open: goalsLen  === 0 },
+      7: { sel: "button[aria-label='New habit']", open: habitsLen === 0 }
+    };
+    const info = GATED[tourStep];
+    if (!info || !info.open) return undefined;
+    const apply = () => {
+      const el = document.querySelector(info.sel);
+      if (el && !el.classList.contains("tour-target-bounce")) {
+        el.classList.add("tour-target-bounce");
+      }
+    };
+    apply();
+    const t1 = setTimeout(apply, 80);
+    const t2 = setTimeout(apply, 320);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      const el = document.querySelector(info.sel);
+      if (el) el.classList.remove("tour-target-bounce");
+    };
+  }, [tourStep, goalsLen, habitsLen]);
+
+  /* Auto-advance + DOM gate re-evaluation.
+
+     Two things this effect does:
+       1. While the tour is on a gated step whose gate depends on DOM
+          state (e.g. "is the goal form open?", "is the area-of-life
+          dropdown populated?"), we listen for input/change events and
+          DOM mutations so the render-driven gate check actually RUNS
+          again when those things flip. Without this, renderTour only
+          re-checks gates on resize/scroll/tourStep, and the tooltip
+          would sit stale until the user happened to trigger one.
+       2. When a step has `autoAdvance: true`, we advance as soon as
+          its gate passes — no swipe needed. This is what makes the
+          form walkthrough feel continuous: tap [+], form opens, the
+          tooltip jumps to "Pick an area of life"; pick one, it jumps
+          to "SMART details?"; etc. Steps without autoAdvance (pure
+          informational ones like SMART) still require a manual swipe.
+
+     The listeners are installed once per tour-step change, scoped to
+     the entire document so they catch any form interaction anywhere.
+     MutationObserver covers DOM additions (form appearing). The
+     per-step effect means cleanup runs before the next step's apply,
+     so we never accidentally double-advance. */
+  useEffect(() => {
+    if (tourStep === 0) return undefined;
+    let cancelled = false;
+    const check = () => {
+      if (cancelled) return;
+      const step = TOUR_STEPS[tourStep - 1];
+      if (!step || !step.gate) return;
+      if (step.autoAdvance !== true) return;
+      // Pass `data` so gates that are data-based (goals.length > 0,
+      // habits.length > 0) still work; DOM-based gates ignore the
+      // argument and query the document directly.
+      let passed = false;
+      try { passed = !!step.gate(data); } catch (_) { passed = false; }
+      if (passed) setTourStep(s => (s === tourStep ? s + 1 : s));
+    };
+    // Initial check — the gate might already be passing when the step
+    // mounts (e.g. user back-swipes into a step they've already
+    // satisfied). Skip a frame so this runs AFTER React has committed
+    // the render for this step; otherwise we can advance past a step
+    // the user hasn't actually seen.
+    const initial = setTimeout(check, 120);
+    const onTick = () => check();
+    document.addEventListener("input",  onTick, { capture: true });
+    document.addEventListener("change", onTick, { capture: true });
+    document.addEventListener("click",  onTick, { capture: true });
+    const mo = new MutationObserver(onTick);
+    mo.observe(document.body, { childList: true, subtree: true });
+    // Also re-check on resize/scroll ticks so we stay in sync with
+    // the tour's own re-render triggers (already wired in a separate
+    // effect; subscribing here keeps the two in step).
+    const onR = () => check();
+    window.addEventListener("resize", onR);
+    window.addEventListener("scroll", onR, { capture: true, passive: true });
+    return () => {
+      cancelled = true;
+      clearTimeout(initial);
+      document.removeEventListener("input",  onTick, { capture: true });
+      document.removeEventListener("change", onTick, { capture: true });
+      document.removeEventListener("click",  onTick, { capture: true });
+      window.removeEventListener("resize", onR);
+      window.removeEventListener("scroll", onR, { capture: true });
+      mo.disconnect();
+    };
+  }, [tourStep, goalsLen, habitsLen]);
 
   /* SECTION FILTER (habits tab) — array of selected values. Empty = "All".
      Tap a pill = single-select (replace). Long-press (hold) = toggle in
@@ -3092,6 +3392,11 @@ function App() {
     sNHGoal("");
     sNHFreq({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
     sNHStart(new Date().toISOString().slice(0, 10));
+    // Close the inline form on successful save (mirrors addGoal's
+    // setExpGForm(false) on its success path). The Add button's
+    // onClick used to do this unconditionally, which swallowed
+    // empty-name taps — that's now guarded by the early-return above.
+    setShowAddHabit(false);
   };
   ;
   const togHabit = (id, fd, mode) => {
@@ -4226,13 +4531,20 @@ function App() {
         fontFamily: "system-ui,-apple-system,sans-serif"
       }
     }, React.createElement("div", Object.assign({
+      className: "lg",
       style: {
         width: "100%",
         maxWidth: 440,
-        background: "#fff",
-        borderRadius: 16,
-        border: "1px solid #e5e7eb",
-        boxShadow: "0 10px 30px rgba(0,0,0,.08)",
+        // Liquid-glass card — translucent over the warm #f8f7f4→#efece5
+        // gradient the outer shell paints, so the page tint reads through
+        // the blur and the card feels like frosted glass sitting on the
+        // canvas rather than a flat white box.
+        background: "rgba(255,255,255,0.5)",
+        backdropFilter: "blur(28px) saturate(180%)",
+        WebkitBackdropFilter: "blur(28px) saturate(180%)",
+        borderRadius: 22,
+        border: "1px solid rgba(255,255,255,0.7)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.03), 0 18px 40px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.04)",
         padding: "24px 22px 20px",
         display: "flex",
         flexDirection: "column",
@@ -4242,17 +4554,26 @@ function App() {
       }
     }, swipe ? onbSwipeHandlers(swipe.onAdvance, swipe.onBack) : null), children));
 
-    // Centered "Swipe ← to continue / Swipe → to go back" hint, used in
-    // place of the Continue / Back buttons on the three onboarding cards.
-    const swipeHint = (canBack) => React.createElement("div", {
+    // Centered "← swipe →" hint, used in place of Continue / Back
+    // buttons on the three onboarding cards. The word "swipe" rocks
+    // side to side (CSS .swipe-hint .swipe-word) so users unfamiliar
+    // with swipe-nav register the affordance at a glance. `canBack`
+    // is kept as a signal even though we show both arrows either way —
+    // first slide still cues "swipe either direction, we'll handle it."
+    const swipeHint = (_canBack) => React.createElement("div", {
       key: "swipehint",
       style: {
-        fontSize: 11.5, color: "#9ca3af", textAlign: "center",
-        fontWeight: 500, letterSpacing: .2, marginTop: 4
+        fontSize: 12, color: "#9ca3af", textAlign: "center",
+        fontWeight: 500, letterSpacing: .3, marginTop: 4,
+        display: "flex", justifyContent: "center"
       }
-    }, canBack
-      ? "Swipe \u2190 to continue   \u00B7   Swipe \u2192 to go back"
-      : "Swipe \u2190 to continue");
+    },
+      React.createElement("span", { className: "swipe-hint" },
+        React.createElement("span", null, "\u2190"),
+        React.createElement("span", { className: "swipe-word" }, "swipe"),
+        React.createElement("span", null, "\u2192")
+      )
+    );
 
     // Progress dots for steps 0..2 (3 screens: carousel, balanced-life, intent).
     const progressBar = React.createElement("div", {
@@ -4434,41 +4755,156 @@ function App() {
   const TOUR_STEPS = [
     // 1 — Intro
     {
-      title: "A quick 90-second tour",
+      title: "Let's show you around!",
       body: "You'll set your first goal, link a habit, and see how the pieces fit. We'll walk it together — swipe to continue.",
       center: true
     },
-    // 2 — Goals: gated until a goal exists
+    // ── Goals walkthrough (2-5) ──────────────────────────────────────
+    // The flow used to be one giant "Goals — the long arc" step that
+    // dumped every goal concept at the user then waited for them to
+    // create one. It's now four field-level prompts that track the
+    // user's actual progress through the inline New-Goal form:
+    //   2. tap the [+]  → form opens
+    //   3. pick area    → Area-of-Life dropdown has a value
+    //   4. SMART fields → informational, user swipes or fills + swipes
+    //   5. save         → goals.length > 0
+    // Each form-walkthrough step sets `formStep: true` so renderTour
+    // lightens its dim panels (the user needs to SEE the form) and
+    // top-docks the tooltip (out of the way of whatever field it points
+    // at). `autoAdvance: true` on gated steps skips the manual swipe —
+    // the moment the gate passes (user picks an area, user saves),
+    // the tour jumps forward so the prompt never sits stale on screen
+    // after the user has already done what it asked.
+    // 2 — Goals: tap the [+] to open the new-goal form
     {
-      title: "Goals \u2014 the long arc",
-      body: "Your goals live here, grouped by area of life. Tap the [+] to add your first one. SMART fields, linked habits, journal, and history all attach to each goal.",
+      title: "Let's start by adding a goal",
+      body: "Tap the [+] above to open the new-goal form.",
       selector: "button[aria-label='New goal']",
       placement: "bottom",
       tab: "goals",
-      gate: d => !!(d && Array.isArray(d.goals) && d.goals.length > 0),
-      gateHint: "Add a goal to continue."
+      gate: () => !!document.querySelector("[data-tour-id='goal-form']"),
+      gateHint: "Tap + to start.",
+      autoAdvance: true
     },
-    // 3 — Habits: gated until a habit exists
+    // 3 — Goals: write the goal description
     {
-      title: "Habits \u2014 daily rhythm",
-      body: "Now link a daily habit to that goal. Swipe right to complete, left to mark missed. Long-press for details.",
+      title: "Write your goal",
+      body: "One short sentence on what you want to accomplish. Keep it concrete — e.g. \u201CRun a half-marathon\u201D, not \u201CGet fit\u201D.",
+      selector: "[data-tour-id='goal-name']",
+      placement: "bottom",
+      tab: "goals",
+      formStep: true,
+      gate: () => {
+        const inp = document.querySelector("[data-tour-id='goal-name']");
+        return !!(inp && inp.value && inp.value.trim().length > 0);
+      },
+      gateHint: "Type a goal to continue.",
+      autoAdvance: true
+    },
+    // 4 — Goals: pick an area of life
+    {
+      title: "Pick an area of life",
+      body: "Which part of life does this goal pertain to? Choose one so your goals stay organized.",
+      selector: "[data-tour-id='goal-area']",
+      placement: "top",
+      tab: "goals",
+      formStep: true,
+      gate: () => {
+        const sel = document.querySelector("[data-tour-id='goal-area']");
+        return !!(sel && sel.value && sel.value.length > 0);
+      },
+      gateHint: "Pick an area of life.",
+      autoAdvance: true
+    },
+    // 5 — Goals: SMART details (informational, no gate)
+    {
+      title: "Add SMART details (optional)",
+      body: "Specific, Measurable, Achievable, Relevant, Time-bound. Fill them in now or come back later. Swipe to continue.",
+      selector: "[data-tour-id='goal-smart']",
+      placement: "top",
+      tab: "goals",
+      formStep: true
+    },
+    // 6 — Goals: save
+    {
+      title: "Save your goal",
+      body: "Tap Add Goal to save it and move on to habits.",
+      selector: "[data-tour-id='goal-save']",
+      placement: "top",
+      tab: "goals",
+      formStep: true,
+      gate: d => !!(d && Array.isArray(d.goals) && d.goals.length > 0),
+      gateHint: "Tap Add Goal to continue.",
+      autoAdvance: true
+    },
+    // ── Habits walkthrough (7-11) ────────────────────────────────────
+    // Same shape as the goal walkthrough: tap +, name it, set timing,
+    // link to the goal we just created, save.
+    // 7 — Habits: tap the [+] to open the new-habit form
+    {
+      title: "Now add a habit",
+      body: "Habits are the daily reps that move your goal forward. Tap the [+] above to set one up.",
       selector: "button[aria-label='New habit']",
       placement: "bottom",
       tab: "habits",
-      gate: d => !!(d && Array.isArray(d.habits) && d.habits.length > 0),
-      gateHint: "Add a habit to continue."
+      gate: () => !!document.querySelector("[data-tour-id='habit-form']"),
+      gateHint: "Tap + to start.",
+      autoAdvance: true
     },
-    // 4 — To-Dos: optional add button
+    // 8 — Habits: name it
+    {
+      title: "Name your habit",
+      body: "What's the daily action? Keep it small and concrete — e.g. \u201CRun 20 minutes\u201D or \u201C10 pushups\u201D.",
+      selector: "[data-tour-id='habit-name']",
+      placement: "bottom",
+      tab: "habits",
+      formStep: true,
+      gate: () => {
+        const inp = document.querySelector("[data-tour-id='habit-name']");
+        return !!(inp && inp.value && inp.value.trim().length > 0);
+      },
+      gateHint: "Type a habit to continue.",
+      autoAdvance: true
+    },
+    // 9 — Habits: time of day + duration
+    {
+      title: "When & how long?",
+      body: "Pick a time of day and roughly how long it takes. These two slots drive how the habit groups on your daily view.",
+      selector: "[data-tour-id='habit-timing']",
+      placement: "top",
+      tab: "habits",
+      formStep: true
+    },
+    // 10 — Habits: link to the goal just created
+    {
+      title: "Link it to the goal you just set",
+      body: "Connect this habit to the goal you just added so progress rolls up. That link is what turns daily reps into real results.",
+      selector: "[data-tour-id='habit-goal']",
+      placement: "top",
+      tab: "habits",
+      formStep: true
+    },
+    // 11 — Habits: save
+    {
+      title: "Save your habit",
+      body: "Tap Add to save it. You can always edit later by long-pressing the habit card.",
+      selector: "[data-tour-id='habit-save']",
+      placement: "top",
+      tab: "habits",
+      formStep: true,
+      gate: d => !!(d && Array.isArray(d.habits) && d.habits.length > 0),
+      gateHint: "Tap Add to continue.",
+      autoAdvance: true
+    },
+    // 12 — To-Dos
     {
       title: "To-Dos \u2014 one-offs",
       body: "For tasks that don't repeat. Link a to-do to a goal and it shows up inside that goal's detail view too.",
       selector: "button[aria-label='New task']",
       placement: "bottom",
-      tab: "todos",
-      optionalActionKey: "openTodoForm",
-      optionalActionLabel: "Add a to-do"
+      tab: "todos"
     },
-    // 5 — Reflect: optional focus
+    // 13 — Reflect: optional focus
     {
       title: "Reflect \u2014 look back",
       body: "Journal by day, save favorite quotes, revisit past entries. Weekly reviews and mood notes land here too.",
@@ -4478,63 +4914,63 @@ function App() {
       optionalActionKey: "focusReflect",
       optionalActionLabel: "Write a reflection"
     },
-    // 6 — Date badge
+    // 14 — Date badge
     {
       title: "The date you're viewing",
       body: "The top strip always reflects the day you're on. Tap the badge to jump back to today.",
       selector: "[data-tour='header-date']",
       placement: "bottom"
     },
-    // 7 — Calendar
+    // 15 — Calendar
     {
       title: "Calendar",
       body: "Open the calendar to pick any date, scroll back through history, or plan ahead.",
       selector: "[data-tour='header-calendar']",
       placement: "bottom"
     },
-    // 8 — Weekly review picker (inline form)
+    // 16 — Weekly review picker (inline form)
     {
       title: "Pick your weekly review",
       body: "Pick a day and time each week to zoom out and recap. We'll nudge you so it actually happens.",
       center: true,
       form: "weeklyReview"
     },
-    // 9 — Travel mode
+    // 17 — Travel mode
     {
       title: "At Home vs Traveling",
       body: "Flip the selected day between home and travel in one tap. Travel days only show habits tagged to run while away.",
       selector: "[data-tour='header-travel']",
       placement: "bottom"
     },
-    // 10 — Where is home? (inline form)
+    // 18 — Where is home? (inline form)
     {
       title: "Where is home?",
       body: "Tell us where home base is. We'll keep your routines solid whether you're there or on the road.",
       center: true,
       form: "homeLocation"
     },
-    // 11 — XP
+    // 19 — XP
     {
       title: "Level & XP",
       body: "You earn XP every time you log a habit. Each level is 500 XP. Press and hold for your achievements shelf.",
       selector: "[data-tour='header-xp']",
       placement: "bottom"
     },
-    // 12 — Streak
+    // 20 — Streak
     {
       title: "Your streak",
       body: "The flame counts consecutive days where you logged at least one habit \u2014 complete or missed, both count. Don't break the chain.",
       selector: "[data-tour='header-streak']",
       placement: "bottom"
     },
-    // 13 — Profile & settings
+    // 21 — Profile & settings
     {
       title: "Profile & settings",
       body: "Themes, custom categories, priorities, time-of-day groups, and a Replay Tour button all live here.",
       selector: "button[aria-label='Profile']",
       placement: "bottom"
     },
-    // 14 — Done
+    // 22 — Done
     {
       title: "You're all set",
       body: "That's the whole app. Replay this tour anytime from Profile \u2192 App Settings \u2192 Guided Tour.",
@@ -4544,7 +4980,10 @@ function App() {
   ];
 
   const finishTour = () => {
-    localStorage.setItem("v-tour-done", "1");
+    // Don't persist "tour done" while in demo mode — demo is a preview
+    // of the new-user experience, so completing the tour in demo must
+    // not cause the real account's next login to skip the tour.
+    if (!demoMode) localStorage.setItem("v-tour-done", "1");
     setTourDone(true);
     setTourStep(0);
   };
@@ -4559,6 +4998,10 @@ function App() {
     const pad = 8;       // padding around the highlighted target
     const tipW = Math.min(300, vw - 32);
     const tipGap = 12;   // space between target and tooltip
+    // Gate check hoisted up here because tooltip placement depends on it —
+    // gated steps dock the tooltip to the bottom of the screen so the
+    // add-goal / add-habit form the user is about to open isn't covered.
+    const gateBlocked = typeof step.gate === "function" && !step.gate(data);
 
     let target = null;
     if (step.selector) {
@@ -4572,11 +5015,44 @@ function App() {
                bottom: r.bottom, right: r.right };
     }
 
+    // Form-walkthrough steps (pick area, SMART, save, etc.) dock at the
+    // top of the viewport just like the initial gated [+] step does, so
+    // the middle of the screen stays clear and the user can SEE + type
+    // into the form beneath. We treat any step flagged `formStep: true`
+    // as needing the top-dock treatment, not just gated ones.
+    const topDock = gateBlocked || step.formStep === true;
+
     // Decide tooltip position: if anchored, place above (default) or
     // below depending on room + step.placement hint. If not anchored,
     // center the tooltip in the viewport.
     let tipStyle = {};
-    if (rect) {
+    if (topDock) {
+      // Gated / form-walkthrough steps — dock the tooltip across the TOP
+      // of the viewport, above the spotlighted [+] button or form field.
+      // Typical phone stack:
+      //   ┌ top band: "Pick an area of life" (this tooltip)
+      //   │ ...
+      //   │ [target field]  ← spotlight ring
+      //   │ "Pick an area of life" (callout, if gated)
+      //   │ ... middle of screen stays free to see / type into the form
+      //   └ bottom nav
+      // maxHeight clamps the tooltip so it can't extend down and cover
+      // the spotlighted target — that's what broke the old bottom-docked
+      // version, and it's what would break here too if the tooltip
+      // grew past the space above the target.
+      const availTop = rect
+        ? Math.max(110, rect.top - tipGap - 12)
+        : 220;
+      tipStyle = {
+        position: "fixed",
+        left: 12,
+        right: 12,
+        top: "calc(12px + env(safe-area-inset-top, 0px))",
+        width: "auto",
+        maxHeight: availTop + "px",
+        overflow: "hidden"
+      };
+    } else if (rect) {
       const wantTop = step.placement === "top";
       const fitsTop = rect.top - tipGap - 140 > 20;
       const fitsBottom = rect.bottom + tipGap + 140 < vh - 20;
@@ -4615,14 +5091,22 @@ function App() {
       panels.push({ left: 0, top: 0, width: vw, height: vh });
     }
 
-    const dimColor = "rgba(0,0,0,0.58)";
+    // Dim opacity: the standard 0.58 dim reads as a strong "foreground
+    // spotlight" and was right for the initial [+] step (the user just
+    // needs to see WHERE to tap). But once the form is open and the
+    // user is reading / typing into fields, that same dim makes the
+    // form hard to read — the whole point of the walkthrough is that
+    // the background IS the content the user is operating on. So for
+    // form-walkthrough steps, drop to a much softer wash (0.22) that
+    // still separates layers visually but keeps the form legible.
+    const dimColor = step.formStep === true
+      ? "rgba(0,0,0,0.22)"
+      : "rgba(0,0,0,0.58)";
 
     const isLast = tourStep === TOUR_STEPS.length;
 
-    // ── Gate: step.gate(data) must return true before advancing is allowed.
-    //    Used on steps 2/3 to force the user to actually create a goal
-    //    and a habit on the real UI before continuing.
-    const gateBlocked = typeof step.gate === "function" && !step.gate(data);
+    // (gateBlocked is computed at the top of renderTour so it can drive
+    //  tooltip placement as well as advance() / dim-panel pointer events.)
 
     // ── Form steps save their value to `data` when the user advances.
     //    Both pieces of state (tourHome, tourReviewDay/Hour) live at the
@@ -4754,22 +5238,34 @@ function App() {
       "data-tour-overlay": "1",
       style: { position: "fixed", inset: 0, zIndex: 9999, pointerEvents: "none" }
     },
-      // Dim panels (clickable — absorb taps so the user can't interact
-      // with the rest of the UI while the tour is active, but the
-      // spotlight hole remains clickable because no panel covers it).
-      // Each panel also receives the swipe handlers so the user can
-      // navigate by swiping anywhere on the dimmed area.
+      // Dim panels. For non-gated steps they absorb taps so the user
+      // can't interact with the rest of the UI while the tour is
+      // active — the spotlight hole is the one exception because no
+      // panel covers it. For gated steps (the ones that require the
+      // user to tap a specific button to continue, e.g. "Add a goal
+      // to continue"), we switch the panels to `pointerEvents: none`
+      // so taps pass through to the underlying app. That guarantees
+      // the required button is always clickable even if its rect was
+      // computed slightly off, or the target wasn't in the DOM on the
+      // first render. Swipe navigation still works because the tooltip
+      // itself carries the same swipeHandlers.
       ...panels.map((p, i) => /*#__PURE__*/React.createElement("div", Object.assign({
         key: "p" + i,
         style: {
           position: "fixed",
           left: p.left, top: p.top, width: p.width, height: p.height,
           background: dimColor,
-          pointerEvents: "auto",
+          // Form-walkthrough steps (gated or not) let taps pass through
+          // so the user can interact with ANY field in the form, not
+          // just the spotlighted one. They might want to type the goal
+          // name, then the area, then the SMART fields — all without
+          // the dim panel blocking them. Swipe nav still works because
+          // the tooltip itself carries the swipeHandlers.
+          pointerEvents: (gateBlocked || step.formStep === true) ? "none" : "auto",
           touchAction: "pan-y",
           transition: "all 0.2s ease"
         }
-      }, swipeHandlers))),
+      }, (gateBlocked || step.formStep === true) ? null : swipeHandlers))),
       // Highlight ring
       rect && /*#__PURE__*/React.createElement("div", {
         style: {
@@ -4783,18 +5279,95 @@ function App() {
           animation: "tourPulse 1.6s ease-in-out infinite"
         }
       }),
+      // Gated-step callout: an upward-pointing arrow + small "Add a goal
+      // to continue" / "Add a habit to continue" bubble, parked just
+      // below the spotlighted [+] so the user's eye follows the bob up
+      // to the button. Sits at its own zIndex below the tooltip but
+      // above the dim panels; pointer-events:none so taps hit the [+]
+      // underneath. Only rendered when there's a rect to anchor to AND
+      // the step has a gateHint (i.e. the Goals / Habits gated steps).
+      gateBlocked && rect && step.gateHint && (() => {
+        const bubbleW = Math.min(220, vw - 24);
+        const centerX = rect.left + rect.width / 2;
+        const bubbleLeft = Math.max(12, Math.min(vw - bubbleW - 12, centerX - bubbleW / 2));
+        // Arrow is positioned RELATIVE to the bubble container so that
+        // if the bubble gets clamped against a screen edge, the arrow
+        // still points at the real button. Clamp keeps the arrow tip
+        // inside the bubble's rounded-corner-safe range.
+        const arrowLeft = Math.max(14, Math.min(bubbleW - 24, centerX - bubbleLeft - 10));
+        return /*#__PURE__*/React.createElement("div", {
+          key: "gatedCallout",
+          className: "tour-callout",
+          style: {
+            position: "fixed",
+            left: bubbleLeft,
+            top: rect.bottom + 16,
+            width: bubbleW,
+            pointerEvents: "none",
+            zIndex: 9998
+          }
+        },
+          // Upward chevron — layered triangles give a 1px white outline
+          // against the dim backdrop so the arrow reads cleanly over
+          // both the dark dim panels and any light content behind.
+          /*#__PURE__*/React.createElement("div", {
+            style: {
+              position: "absolute",
+              left: arrowLeft - 1, top: -13,
+              width: 0, height: 0,
+              borderLeft: "11px solid transparent",
+              borderRight: "11px solid transparent",
+              borderBottom: "13px solid rgba(255,255,255,0.9)"
+            }
+          }),
+          /*#__PURE__*/React.createElement("div", {
+            style: {
+              position: "absolute",
+              left: arrowLeft, top: -11,
+              width: 0, height: 0,
+              borderLeft: "10px solid transparent",
+              borderRight: "10px solid transparent",
+              borderBottom: "12px solid #2d5a2d"
+            }
+          }),
+          // Bubble — brand green, white text, drop shadow so it floats
+          // clearly over the dim backdrop.
+          /*#__PURE__*/React.createElement("div", {
+            style: {
+              padding: "10px 14px",
+              background: "#2d5a2d",
+              color: "#fff",
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 700,
+              textAlign: "center",
+              letterSpacing: 0.1,
+              boxShadow: "0 10px 24px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.2)",
+              border: "1px solid rgba(255,255,255,.35)"
+            }
+          }, step.gateHint)
+        );
+      })(),
       // Tooltip — also accepts swipes (so the user doesn't have to aim
       // for the dim area). Form steps with native inputs (select / text)
       // have those inputs swallow pointer-start so a drag inside them
       // doesn't get read as a swipe.
       /*#__PURE__*/React.createElement("div", Object.assign({
+        // Liquid-glass tour tooltip — the dim panels behind it are
+        // already semi-transparent black, so the backdrop blur picks up
+        // a soft grey wash. Slightly higher opacity than the onboarding
+        // card since the content needs to stay legible over dim.
+        className: "lg",
         style: {
           ...tipStyle,
-          background: "#fff",
+          background: "rgba(255,255,255,0.72)",
+          backdropFilter: "blur(28px) saturate(180%)",
+          WebkitBackdropFilter: "blur(28px) saturate(180%)",
           color: "#1f2937",
-          borderRadius: 14,
+          borderRadius: 18,
+          border: "1px solid rgba(255,255,255,0.7)",
           padding: "16px 18px 14px 18px",
-          boxShadow: "0 12px 40px rgba(0,0,0,.28)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.32), 0 2px 8px rgba(0,0,0,.08)",
           pointerEvents: "auto",
           touchAction: "pan-y",
           zIndex: 10000
@@ -4807,16 +5380,21 @@ function App() {
           style: { fontSize: 17, fontWeight: 700, marginBottom: 6, color: "#111" }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 13, lineHeight: 1.5, color: "#4b5563", marginBottom: formNode || gateBlocked ? 10 : 14 }
+          style: {
+            fontSize: 13, lineHeight: 1.5, color: "#4b5563",
+            // Gated steps drop the swipe-hint footer row (see below), so
+            // no bottom margin is needed under the body — the tooltip's
+            // own padding carries the final 14px of breathing room.
+            marginBottom: gateBlocked ? 0 : (formNode ? 10 : 14)
+          }
         }, step.body),
         // Inline form (weekly review / home location).
         formNode,
-        // Gate hint — shown while the step's gate is still false. Copy is
-        // a quiet nudge so the disabled Next button doesn't feel like a
-        // dead end ("oh, I have to add a goal first").
-        gateBlocked && step.gateHint && /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 12, color: "#9a6f2e", fontStyle: "italic", marginBottom: 12 }
-        }, step.gateHint),
+        // (The gateHint used to render here as an italic sub-line inside
+        //  the tooltip. It's now shown as a prominent arrow + bubble
+        //  callout anchored directly under the spotlighted [+] button —
+        //  see the `gatedCallout` block above in renderTour. Keeping the
+        //  hint in two places would be redundant.)
         // Footer — navigation is by swipe; there is no Skip. The tour
         // is short and load-bearing (it's how the user actually creates
         // their first goal, habit, weekly review, and home location), so
@@ -4841,17 +5419,27 @@ function App() {
               }, stopSwipeStart), "Got it")
             )
           : /*#__PURE__*/React.createElement("div", null,
-              /*#__PURE__*/React.createElement("div", {
+              // Hide the "← swipe →" hint while the step is gated — the
+              // top-docked tooltip has a tight height budget (it sits
+              // above the [+] button) so we don't want anything optional
+              // pushing content off the bottom. The arrow + bubble
+              // callout below the [+] button already says "Add a goal /
+              // habit to continue", so no additional prompt is needed
+              // here.
+              !gateBlocked && /*#__PURE__*/React.createElement("div", {
                 style: {
-                  fontSize: 11, color: gateBlocked ? "#c4a96a" : "#9ca3af",
+                  fontSize: 12, color: "#9ca3af",
                   textAlign: "center", marginBottom: step.optionalActionKey ? 10 : 0,
-                  fontWeight: 500, letterSpacing: .2
+                  fontWeight: 500, letterSpacing: .3,
+                  display: "flex", justifyContent: "center"
                 }
-              }, gateBlocked
-                ? "Complete the action above to continue"
-                : (tourStep > 1
-                    ? "Swipe \u2190 to continue   \u00B7   Swipe \u2192 to go back"
-                    : "Swipe \u2190 to continue")),
+              },
+                /*#__PURE__*/React.createElement("span", { className: "swipe-hint" },
+                  /*#__PURE__*/React.createElement("span", null, "\u2190"),
+                  /*#__PURE__*/React.createElement("span", { className: "swipe-word" }, "swipe"),
+                  /*#__PURE__*/React.createElement("span", null, "\u2192")
+                )
+              ),
               // Optional secondary action only — Skip is intentionally absent.
               step.optionalActionKey && /*#__PURE__*/React.createElement("div", {
                 style: { display: "flex", justifyContent: "center" }
@@ -4886,10 +5474,16 @@ function App() {
       style: { background: "#78350f", color: "#fff", border: "none", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }
     }, "Exit demo")),
   /*#__PURE__*/React.createElement("div", {
+    // Liquid-glass header — translucent fill with heavy backdrop blur so
+    // the scrolling content below shows through softly. The .lg class
+    // paints the specular top-edge sheen via ::before.
+    className: "lg",
     style: {
-      background: "#fff",
-      borderBottom: "1px solid #e5e7eb",
-      boxShadow: "0 1px 3px rgba(0,0,0,.05)",
+      background: "rgba(255,255,255,0.55)",
+      backdropFilter: "blur(24px) saturate(180%)",
+      WebkitBackdropFilter: "blur(24px) saturate(180%)",
+      borderBottom: "1px solid rgba(255,255,255,0.65)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 1px 8px rgba(0,0,0,.06)",
       position: "sticky",
       top: 0,
       zIndex: 50
@@ -6479,6 +7073,10 @@ function App() {
       }
     }, false && null, !showAddHabit && null, showAddHabit && /*#__PURE__*/React.createElement("div", {
       className: "fade-in",
+      // data-tour-id markers — same pattern as the goal form. The tour
+      // uses these selectors to walk the user through the habit fields
+      // (timing, area, link-to-goal, save) one prompt at a time.
+      "data-tour-id": "habit-form",
       style: {
         background: "#fff",
         border: "1px solid #e5e7eb",
@@ -6492,12 +7090,14 @@ function App() {
       onChange: e => sNHabit(e.target.value),
       onKeyDown: e => e.key === "Enter" && addHabit(),
       placeholder: "Habit name...",
+      "data-tour-id": "habit-name",
       style: {
         ...IS,
         width: "100%",
         marginBottom: 8
       }
     }), /*#__PURE__*/React.createElement("div", {
+      "data-tour-id": "habit-timing",
       style: {
         display: "flex",
         gap: 6,
@@ -6573,6 +7173,7 @@ function App() {
           setTab("goals");
         } else sNHGoal(e.target.value);
       },
+      "data-tour-id": "habit-goal",
       style: {
         ...S,
         width: "100%",
@@ -6627,10 +7228,12 @@ function App() {
       }
     }, "Cancel"), /*#__PURE__*/React.createElement("button", {
       className: "add-btn",
-      onClick: () => {
-        addHabit();
-        setShowAddHabit(false);
-      },
+      "data-tour-id": "habit-save",
+      // addHabit() closes the form internally on successful save; calling
+      // setShowAddHabit(false) unconditionally here was the old pattern
+      // but it silently ate empty-name taps (form closed without adding
+      // anything). Trust addHabit to handle its own close.
+      onClick: addHabit,
       style: {
         ...AB,
         padding: "8px 18px",
@@ -8185,6 +8788,13 @@ function App() {
     });
   })()), /*#__PURE__*/React.createElement("div", {style:{height:1,background:"#f0f0ee",margin:"4px 0 14px"}}), expGForm && /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
+    // data-tour-id markers let the guided tour (renderTour / TOUR_STEPS)
+    // walk the user through the form field-by-field. The selectors are
+    // referenced by the "Pick an area of life" / "SMART details (optional)"
+    // / "Save your goal" sub-steps, and presence of [data-tour-id='goal-form']
+    // in the DOM is also the gate that advances the tour from "tap + to
+    // start" to the first field-level prompt.
+    "data-tour-id": "goal-form",
     style: {
       background: "#fff",
       border: "1px solid #e5e7eb",
@@ -8198,6 +8808,7 @@ function App() {
     onChange: e => sNGoal(e.target.value),
     onKeyDown: e => e.key === "Enter" && addGoal(),
     placeholder: "Goal description...",
+    "data-tour-id": "goal-name",
     style: {
       ...IS,
       width: "100%",
@@ -8206,6 +8817,7 @@ function App() {
   }), /*#__PURE__*/React.createElement("select", {
     value: nGType,
     onChange: e => sNGType(e.target.value),
+    "data-tour-id": "goal-area",
     style: {
       ...S,
       width: "100%",
@@ -8218,6 +8830,7 @@ function App() {
     key: t.value,
     value: t.value
   }, t.value))), /*#__PURE__*/React.createElement("div", {
+    "data-tour-id": "goal-smart",
     style: {
       fontSize: 10,
       fontWeight: 700,
@@ -8243,7 +8856,7 @@ function App() {
     }
   }, f.label), /*#__PURE__*/React.createElement("textarea", {
     className: "sf",
-    rows: 3,
+    rows: 2,
     value: nGSmart[f.key],
     onChange: e => sNGSmart(p => ({
       ...p,
@@ -8266,10 +8879,15 @@ function App() {
       fontSize: 12
     }
   }, "Cancel"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      addGoal();
-      setExpGForm(false);
-    },
+    "data-tour-id": "goal-save",
+    // addGoal() is responsible for closing the form on success (via
+    // setExpGForm(false) inside the save path). The old wrapper closed
+    // the form unconditionally, which silently swallowed empty-name
+    // taps — the form shut without adding anything, leaving the user
+    // wondering why nothing happened. Just call addGoal and let it
+    // handle the close; if the name is empty it no-ops and the form
+    // stays open for the user to finish typing.
+    onClick: addGoal,
     style: {
       ...AB,
       padding: "8px 18px",
@@ -11503,15 +12121,21 @@ function App() {
       padding: "10px"
     }
   }, "Save Changes")))), /*#__PURE__*/React.createElement("div", {
+    // Liquid-glass bottom nav — matches the header treatment. The top
+    // highlight is inverted (inset top border) so the bar reads as
+    // floating above the content rather than pressed into it.
+    className: "lg",
     style: {
       position: "fixed",
       bottom: 0,
       left: 0,
       right: 0,
       zIndex: 100,
-      background: "#fff",
-      borderTop: "1px solid #e5e7eb",
-      boxShadow: "0 -2px 12px rgba(0,0,0,.06)",
+      background: "rgba(255,255,255,0.55)",
+      backdropFilter: "blur(24px) saturate(180%)",
+      WebkitBackdropFilter: "blur(24px) saturate(180%)",
+      borderTop: "1px solid rgba(255,255,255,0.65)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 -2px 16px rgba(0,0,0,.06)",
       paddingBottom: "env(safe-area-inset-bottom,0px)"
     }
   }, /*#__PURE__*/React.createElement("div", {
@@ -11534,7 +12158,7 @@ function App() {
       width: "22",
       height: "22",
       viewBox: "0 0 24 24",
-      fill: a ? accentColor : "#9ca3af"
+      fill: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af"
     },
       /*#__PURE__*/React.createElement("rect", { x: "1", y: "19", width: "22", height: "3.5", rx: "1" }),
       /*#__PURE__*/React.createElement("rect", { x: "4", y: "14.5", width: "16", height: "3.5", rx: "1" }),
@@ -11549,7 +12173,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? accentColor : "#9ca3af",
+      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11578,7 +12202,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? accentColor : "#9ca3af",
+      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11605,7 +12229,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? accentColor : "#9ca3af",
+      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
@@ -11626,7 +12250,7 @@ function App() {
       height: "22",
       viewBox: "0 0 24 24",
       fill: "none",
-      stroke: a ? accentColor : "#9ca3af",
+      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
       strokeWidth: "2",
       strokeLinecap: "round",
       strokeLinejoin: "round"
