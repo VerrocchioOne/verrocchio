@@ -308,6 +308,58 @@ a{-webkit-tap-highlight-color:transparent}
    highlight rather than a bright wash. */
 body.dark .lg::before{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.04) 35%,rgba(255,255,255,0) 60%,rgba(0,0,0,.18) 100%)}
 
+/* ── Guided-tour tooltip dark-mode overrides ───────────────────────
+   The tour tooltip renders with a translucent white fill and dark
+   grey text so it reads cleanly on the light dim overlay. In dark
+   mode the attribute-selector rules above (which target exact
+   `rgb(...)` strings) don't match `rgba(...)` values, so the tip
+   would stay bright-white with dark text — hard to scan against the
+   dim. These class-based overrides swap the surface to a dark
+   translucent panel with light text, and also re-color the tour's
+   "demo navigation cards" (the top-docked form-step header and the
+   gated bubble callout) so their copy stays legible. */
+.tour-tip{background:rgba(255,255,255,0.72);color:#1f2937;border:1px solid rgba(255,255,255,0.7)}
+.tour-tip-title{color:#111}
+.tour-tip-body{color:#4b5563}
+.tour-tip-swipe{color:#9ca3af}
+body.dark .tour-tip{background:rgba(22,24,27,0.82)!important;color:#e5e7eb!important;border-color:rgba(255,255,255,0.08)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(0,0,0,0.18),0 20px 48px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.24)!important}
+body.dark .tour-tip-title{color:#f3f4f6!important}
+body.dark .tour-tip-body{color:#d1d5db!important}
+body.dark .tour-tip-swipe{color:#6b7280!important}
+/* Gated callout bubble (the "Add a goal to continue" pointer below
+   the spotlighted [+] button) uses a dark translucent fill inline,
+   so only its text needs a touch more contrast in dark mode. */
+body.dark .tour-gate-bubble{background:rgba(0,0,0,0.78)!important;color:#fff!important;border-color:rgba(255,255,255,0.12)!important}
+/* Exit-Demo link inside the tour tooltip — subtle in light mode,
+   stays legible against the dark tip surface. */
+.tour-exit-demo{background:transparent;border:1px solid rgba(0,0,0,0.12);color:#6b7280;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.2px}
+.tour-exit-demo:hover{color:#111;border-color:rgba(0,0,0,0.25)}
+body.dark .tour-exit-demo{border-color:rgba(255,255,255,0.18);color:#9ca3af}
+body.dark .tour-exit-demo:hover{color:#fff;border-color:rgba(255,255,255,0.38)}
+
+/* ── Dark-mode overrides for the liquid-glass header + bottom nav ──
+   Both surfaces use inline `background: rgba(255,255,255,0.55)` with
+   a heavy backdrop blur. In dark mode that near-white fill makes the
+   bars read as a bright wash against the dark page — the content
+   below bleeds through but the chrome itself becomes hard to pick
+   out. Re-tint with a dark translucent fill, darker border, and a
+   deeper drop shadow so the bars regain their edge.
+
+   Targeting uses the browser-normalized form of the inline style
+   (spaces after commas) so the selector matches what React's style
+   serializer produces. */
+body.dark [style*="background: rgba(255, 255, 255, 0.55)"]{
+  background:rgba(18,20,23,0.78)!important;
+  border-color:rgba(255,255,255,0.08)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 1px 10px rgba(0,0,0,.5)!important
+}
+/* The onboarding splash and other shells occasionally use a slightly
+   lighter fill (0.5 alpha) — cover that too. */
+body.dark [style*="background: rgba(255, 255, 255, 0.5)"]{
+  background:rgba(18,20,23,0.74)!important;
+  border-color:rgba(255,255,255,0.08)!important
+}
+
 /* ── Swipe-hint animation ──────────────────────────────────────────
    The onboarding cards and the tour tooltips show "← swipe →" as a
    nav hint. The word "swipe" rocks side to side so users who've never
@@ -330,6 +382,69 @@ body.dark .lg::before{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%
 @keyframes confetti-fall{
   to{transform:translate(var(--cf-x,0),var(--cf-y,80vh)) rotate(var(--cf-rot,720deg));opacity:0}
 }
+
+/* ── Onboarding illustrations ──────────────────────────────────────
+   Replace the emoji header on each pre-app screen with a quiet SVG
+   animation. Same ~48px footprint as the old emoji. Each loop takes
+   a few seconds so the page feels alive without demanding attention.
+   All animations are GPU-friendly transform/opacity only. */
+.ob-illus{width:56px;height:56px;display:block;margin:0 auto 10px}
+.ob-illus *{transform-box:fill-box;transform-origin:center}
+
+/* Target: two rings pulse outward, the bullseye pulses on the spot. */
+@keyframes obTargetRing{
+  0%{transform:scale(.55);opacity:0}
+  35%{opacity:.9}
+  100%{transform:scale(1.25);opacity:0}
+}
+@keyframes obTargetDot{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.35)}
+}
+.ob-target-ring{animation:obTargetRing 2.4s ease-out infinite}
+.ob-target-ring.d2{animation-delay:1.2s}
+.ob-target-dot{animation:obTargetDot 2.4s ease-in-out infinite}
+
+/* Ladder: rungs climb in sequence, then fade together and restart. */
+@keyframes obLadderRung{
+  0%{transform:translateY(10px);opacity:0}
+  15%,80%{transform:translateY(0);opacity:1}
+  100%{transform:translateY(-10px);opacity:0}
+}
+.ob-ladder-rung{animation:obLadderRung 2.8s ease-in-out infinite}
+.ob-ladder-rung.r2{animation-delay:.25s}
+.ob-ladder-rung.r3{animation-delay:.5s}
+.ob-ladder-rung.r4{animation-delay:.75s}
+
+/* Compass: the needle swings, overshoots, settles on north, rests. */
+@keyframes obCompassNeedle{
+  0%{transform:rotate(-45deg)}
+  25%{transform:rotate(140deg)}
+  45%{transform:rotate(60deg)}
+  65%{transform:rotate(100deg)}
+  80%,100%{transform:rotate(90deg)}
+}
+.ob-compass-needle{animation:obCompassNeedle 3s ease-in-out infinite;transform-origin:center}
+
+/* Scale: beam wobbles like a real scale finding equilibrium. */
+@keyframes obScaleTilt{
+  0%,100%{transform:rotate(-8deg)}
+  50%{transform:rotate(8deg)}
+}
+.ob-scale-beam{animation:obScaleTilt 3.2s ease-in-out infinite;transform-origin:center}
+
+/* Sparkle: the core pulses; diagonal rays fade in and out on offset. */
+@keyframes obSparkleCore{
+  0%,100%{transform:scale(.85);opacity:.6}
+  50%{transform:scale(1.15);opacity:1}
+}
+@keyframes obSparkleRay{
+  0%,100%{opacity:.15}
+  50%{opacity:1}
+}
+.ob-sparkle-core{animation:obSparkleCore 2s ease-in-out infinite}
+.ob-sparkle-ray{animation:obSparkleRay 2s ease-in-out infinite}
+.ob-sparkle-ray.r2{animation-delay:1s}
 </style>
 </head>
 <body>
@@ -2214,9 +2329,16 @@ function App() {
   /* GOALS */
   const [nGoal, sNGoal] = useState("");
   const [nGType, sNGType] = useState("");
+  // SMART shape note: `measurable` now holds a numeric string (e.g. "10")
+  // paired with `measurableUnit` (e.g. "miles / week"). `timebound` now
+  // holds a YYYY-MM-DD date string from a date input rather than free
+  // text. Legacy user docs with the old free-text shape still render —
+  // the display path checks for the split fields and falls back to the
+  // old text if they're absent.
   const [nGSmart, sNGSmart] = useState({
     specific: "",
     measurable: "",
+    measurableUnit: "",
     achievable: "",
     relevant: "",
     timebound: ""
@@ -2227,12 +2349,20 @@ function App() {
   const [eGSmart, sEGSmart] = useState({
     specific: "",
     measurable: "",
+    measurableUnit: "",
     achievable: "",
     relevant: "",
     timebound: ""
   });
   const [expGoals, setExpGoals] = useState({});
   const [expGForm, setExpGForm] = useState(false);
+  // When the user tries to save a goal without picking an Area of Life,
+  // we flip this flag so the dropdown gets a red ring + hint. Cleared on
+  // successful add or when the user picks an area. "General" used to be
+  // the silent fallback when type was empty — it looked broken because
+  // "General" isn't actually in HT, so the card rendered unthemed. Now
+  // we just refuse to save until the user picks a real bucket.
+  const [goalAreaErr, setGoalAreaErr] = useState(false);
 
   /* HABITS */
   const [nHabit, sNHabit] = useState("");
@@ -2361,6 +2491,17 @@ function App() {
      from App Settings at any time. */
   const [tourStep, setTourStep] = useState(0);
   const [tourDone, setTourDone] = useState(() => localStorage.getItem("v-tour-done") === "1");
+  // Tour/demo control surfaces. `confirmExitDemo` drives a two-
+  // phase modal: phase 1 asks the user to confirm leaving demo
+  // mode; phase 2 shows them where the Replay Tour control lives
+  // before actually running exitDemo(). The hint is shown in-
+  // modal (not as a toast after exit) because exitDemo() kicks an
+  // unauthenticated user straight to the login screen, where a
+  // post-exit toast would feel orphaned and out of context.
+  //
+  // State values: null = modal closed, "confirm" = phase 1,
+  // "hint" = phase 2 (replay location).
+  const [confirmExitDemo, setConfirmExitDemo] = useState(null);
   // Forces a re-render when the viewport resizes (tooltip anchors use
   // getBoundingClientRect on each render, so they'd otherwise go stale).
   const [, setTourResizeTick] = useState(0);
@@ -3223,12 +3364,21 @@ function App() {
   /* GOALS */
   const addGoal = () => {
     if (!nGoal.trim()) return;
+    // Require an Area of Life. Without a bucket, the goal used to fall
+    // into a null-type "General" pile that wasn't in HT, so the card
+    // rendered with broken theme colors and the filter chips couldn't
+    // target it. Rather than add a real "General" bucket, we force the
+    // user to pick — that's the prompt the UI keeps making anyway.
+    if (!nGType) {
+      setGoalAreaErr(true);
+      return;
+    }
     save({
       ...data,
       goals: [...data.goals, {
         id: Date.now(),
         text: nGoal.trim(),
-        type: nGType || null,
+        type: nGType,
         smart: {
           ...nGSmart
         }
@@ -3239,10 +3389,12 @@ function App() {
     sNGSmart({
       specific: "",
       measurable: "",
+      measurableUnit: "",
       achievable: "",
       relevant: "",
       timebound: ""
     });
+    setGoalAreaErr(false);
     setExpGForm(false);
   };
   const sEGoal = g => {
@@ -3253,6 +3405,7 @@ function App() {
       ...{
         specific: "",
         measurable: "",
+        measurableUnit: "",
         achievable: "",
         relevant: "",
         timebound: ""
@@ -3262,10 +3415,16 @@ function App() {
   };
   const svEGoal = id => {
     if (!eGTxt.trim()) return;
+    // Same rule as addGoal — a saved goal must have an Area of Life.
+    // If the user clears it, we block the save and surface the error.
+    if (!eGType) {
+      setGoalAreaErr(true);
+      return;
+    }
     const prev = data.goals.find(g => g.id === id);
     if (!prev) return;
     const nextText = eGTxt.trim();
-    const nextType = eGType || null;
+    const nextType = eGType;
     const nextSmart = { ...eGSmart };
     // Snapshot the OLD state if anything tracked actually changed.
     // `history` is the trail of prior versions; the live goal is the tip.
@@ -3290,6 +3449,7 @@ function App() {
         history: snapshot ? [...(g.history || []), snapshot] : (g.history || [])
       } : g)
     });
+    setGoalAreaErr(false);
     sEGId(null);
   };
   const delGoal = id => {
@@ -3925,20 +4085,19 @@ function App() {
     return set.size;
   };
 
-  /* Friendly welcome briefing shown to new users before the AI briefing
-     unlocks (needs ~a week of data to say anything useful). */
+  /* Short placeholder briefing shown to new users before the real AI
+     briefing unlocks. Previously this was a three-paragraph welcome
+     message; users wanted something tighter — a one-liner that tells
+     them exactly how many more days they need to log before the
+     personalized briefing kicks in. Unlock threshold matches genBrief
+     (7 completion-days) so the two are in sync. */
   const welcomeBriefing = () => {
-    const name = (authUser && (authUser.displayName || authUser.email)) || "";
-    const first = name ? name.split(/[@\s]/)[0] : "";
-    const greet = first ? `Welcome, ${first}.` : "Welcome to Verrocchio.";
     const days = completionDayCount();
     const remaining = Math.max(0, 7 - days);
-    const progress = remaining === 7
-      ? "Your Daily Briefing unlocks after a week of data. Check back in 7 days \u2014 we'll have patterns to share."
-      : remaining === 0
-        ? "You've logged a full week. Your personalized briefing will generate the next time you open the app."
-        : `${days} day${days === 1 ? "" : "s"} logged so far. ${remaining} more day${remaining === 1 ? "" : "s"} and your personalized briefing unlocks.`;
-    return `${greet}\n\nFor now, focus on one thing: showing up today. Mark your habits, set an intention, and review yesterday. The rhythm matters more than the scale.\n\n${progress}`;
+    if (remaining === 0) {
+      return "You've logged a full week \u2014 your personalized briefing unlocks next time you open the app.";
+    }
+    return `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`;
   };
 
   const genBrief = async () => {
@@ -4471,9 +4630,22 @@ function App() {
     // onboarding screen (the tour doesn't re-ask). Seed timeRanges for
     // data-shape consistency.
     const finishOnboarding = () => {
+      // Backfill the onboarding intent into TODAY's dailyRitual.intention
+      // so the user's first-session Home screen already shows the pinned
+      // intention card at the top — no separate "Why you're here" banner
+      // needed, since intent and intention are the same answer. Subsequent
+      // days roll over to a fresh intention (dailyRitual is keyed by date)
+      // so the pin only sticks for the day they joined.
+      const intent = onbIntent.trim();
+      const todayKey = tk();
+      const existingRitual = (data.dailyRitual && data.dailyRitual[todayKey]) || {};
       save({
         ...data,
-        userIntent: onbIntent.trim(),
+        userIntent: intent,
+        dailyRitual: intent ? {
+          ...(data.dailyRitual || {}),
+          [todayKey]: { ...existingRitual, intention: existingRitual.intention || intent }
+        } : (data.dailyRitual || {}),
         timeRanges: data.timeRanges || DEFAULT_TIME_RANGES,
         onboardingComplete: true
       });
@@ -4614,12 +4786,78 @@ function App() {
     // (secondaryBtn removed — Continue/Back buttons are gone from the
     // three onboarding screens; navigation is by swipe via onbShell.)
 
+    // Onboarding illustrations — tiny inline SVGs that animate via the
+    // .ob-* classes defined at the top of <style>. Replaced the earlier
+    // emoji headers (🎯 🪜 🧭 ⚖️ ✨) because emoji rendering was
+    // OS-dependent (Windows served flat B&W glyphs, Android shipped
+    // whole-emoji art that clashed with the rest of the light UI) and
+    // didn't feel like part of the brand. Each factory returns a 56px
+    // box animated in Verrocchio green.
+    const GREEN = "#2d5a2d";
+    const illusTarget = () => React.createElement("svg", {
+      key: "ico", className: "ob-illus", viewBox: "0 0 56 56", "aria-hidden": true
+    },
+      React.createElement("circle", { className: "ob-target-ring", cx: 28, cy: 28, r: 22, fill: "none", stroke: GREEN, strokeWidth: 2, opacity: 0.0 }),
+      React.createElement("circle", { className: "ob-target-ring d2", cx: 28, cy: 28, r: 22, fill: "none", stroke: GREEN, strokeWidth: 2, opacity: 0.0 }),
+      React.createElement("circle", { cx: 28, cy: 28, r: 14, fill: "none", stroke: GREEN, strokeWidth: 2, opacity: 0.55 }),
+      React.createElement("circle", { cx: 28, cy: 28, r: 8, fill: "none", stroke: GREEN, strokeWidth: 2, opacity: 0.75 }),
+      React.createElement("circle", { className: "ob-target-dot", cx: 28, cy: 28, r: 3.5, fill: GREEN })
+    );
+    // "Goals + habits, linked" — ascending rungs climb in sequence.
+    const illusLadder = () => React.createElement("svg", {
+      key: "ico", className: "ob-illus", viewBox: "0 0 56 56", "aria-hidden": true
+    },
+      React.createElement("line", { x1: 14, y1: 8, x2: 14, y2: 50, stroke: GREEN, strokeWidth: 2, strokeLinecap: "round", opacity: 0.35 }),
+      React.createElement("line", { x1: 42, y1: 8, x2: 42, y2: 50, stroke: GREEN, strokeWidth: 2, strokeLinecap: "round", opacity: 0.35 }),
+      React.createElement("line", { className: "ob-ladder-rung r4", x1: 14, y1: 14, x2: 42, y2: 14, stroke: GREEN, strokeWidth: 3, strokeLinecap: "round" }),
+      React.createElement("line", { className: "ob-ladder-rung r3", x1: 14, y1: 26, x2: 42, y2: 26, stroke: GREEN, strokeWidth: 3, strokeLinecap: "round" }),
+      React.createElement("line", { className: "ob-ladder-rung r2", x1: 14, y1: 38, x2: 42, y2: 38, stroke: GREEN, strokeWidth: 3, strokeLinecap: "round" }),
+      React.createElement("line", { className: "ob-ladder-rung",    x1: 14, y1: 48, x2: 42, y2: 48, stroke: GREEN, strokeWidth: 3, strokeLinecap: "round" })
+    );
+    // "Reflect & adjust" — compass needle swings, overshoots, settles on N.
+    const illusCompass = () => React.createElement("svg", {
+      key: "ico", className: "ob-illus", viewBox: "0 0 56 56", "aria-hidden": true
+    },
+      React.createElement("circle", { cx: 28, cy: 28, r: 22, fill: "none", stroke: GREEN, strokeWidth: 2 }),
+      React.createElement("circle", { cx: 28, cy: 28, r: 17, fill: "none", stroke: GREEN, strokeWidth: 1, opacity: 0.35 }),
+      React.createElement("g", { className: "ob-compass-needle" },
+        React.createElement("polygon", { points: "28,10 32,28 28,26 24,28", fill: GREEN }),
+        React.createElement("polygon", { points: "28,46 32,28 28,30 24,28", fill: GREEN, opacity: 0.35 })
+      ),
+      React.createElement("circle", { cx: 28, cy: 28, r: 2.5, fill: "#fff", stroke: GREEN, strokeWidth: 1.5 })
+    );
+    // "A balanced life" — a scale beam rocks and settles.
+    const illusScale = () => React.createElement("svg", {
+      key: "ico", className: "ob-illus", viewBox: "0 0 56 56", "aria-hidden": true
+    },
+      React.createElement("line", { x1: 28, y1: 14, x2: 28, y2: 46, stroke: GREEN, strokeWidth: 2, strokeLinecap: "round", opacity: 0.45 }),
+      React.createElement("rect", { x: 22, y: 46, width: 12, height: 4, rx: 1.5, fill: GREEN, opacity: 0.55 }),
+      React.createElement("g", { className: "ob-scale-beam" },
+        React.createElement("line", { x1: 10, y1: 18, x2: 46, y2: 18, stroke: GREEN, strokeWidth: 2.5, strokeLinecap: "round" }),
+        React.createElement("line", { x1: 14, y1: 18, x2: 14, y2: 28, stroke: GREEN, strokeWidth: 1.5 }),
+        React.createElement("line", { x1: 42, y1: 18, x2: 42, y2: 28, stroke: GREEN, strokeWidth: 1.5 }),
+        React.createElement("path", { d: "M 8 28 Q 14 34 20 28 Z", fill: GREEN, opacity: 0.75 }),
+        React.createElement("path", { d: "M 36 28 Q 42 34 48 28 Z", fill: GREEN, opacity: 0.75 })
+      ),
+      React.createElement("circle", { cx: 28, cy: 14, r: 2.5, fill: GREEN })
+    );
+    // "Why are you here?" — a four-point sparkle with pulsing rays.
+    const illusSparkle = () => React.createElement("svg", {
+      key: "ico", className: "ob-illus", viewBox: "0 0 56 56", "aria-hidden": true
+    },
+      React.createElement("path", { className: "ob-sparkle-core", d: "M 28 10 L 31 25 L 46 28 L 31 31 L 28 46 L 25 31 L 10 28 L 25 25 Z", fill: GREEN }),
+      React.createElement("circle", { className: "ob-sparkle-ray",    cx: 12, cy: 12, r: 1.8, fill: GREEN }),
+      React.createElement("circle", { className: "ob-sparkle-ray r2", cx: 44, cy: 44, r: 1.8, fill: GREEN }),
+      React.createElement("circle", { className: "ob-sparkle-ray r2", cx: 46, cy: 12, r: 1.4, fill: GREEN }),
+      React.createElement("circle", { className: "ob-sparkle-ray",    cx: 10, cy: 44, r: 1.4, fill: GREEN })
+    );
+
     // STEP 0 — App walkthrough (3 sub-slides)
     if (onboardStep === 0) {
       const slides = [
-        { icon: "🎯", ttl: "Welcome to Verrocchio", body: "A habit tracker for people who are serious about becoming better. You'll set goals that matter, and build the daily habits that get you there." },
-        { icon: "🪜", ttl: "Goals + Habits, linked", body: "Every habit ladders up to a goal. Track compound progress over weeks and months — not just today's check-ins." },
-        { icon: "🧭", ttl: "Reflect & adjust", body: "Daily briefings, journals, and XP keep you honest. When life shifts, your habits shift with it — and history is preserved." }
+        { illus: illusTarget,  ttl: "Welcome to Verrocchio", body: "A habit tracker for people who are serious about becoming better. You'll set goals that matter, and build the daily habits that get you there." },
+        { illus: illusLadder,  ttl: "Goals + Habits, linked", body: "Every habit ladders up to a goal. Track compound progress over weeks and months — not just today's check-ins." },
+        { illus: illusCompass, ttl: "Reflect & adjust", body: "Daily briefings, journals, and XP keep you honest. When life shifts, your habits shift with it — and history is preserved." }
       ];
       const s = slides[walkSlide];
       const last = walkSlide === slides.length - 1;
@@ -4627,7 +4865,7 @@ function App() {
       const back = walkSlide > 0 ? () => setWalkSlide(walkSlide - 1) : null;
       return onbShell([
         progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 44, textAlign: "center", marginBottom: 10 } }, s.icon),
+        s.illus(),
         React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 10 } }, s.ttl),
         React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 22, padding: "0 6px" } }, s.body),
         swipeHint(!!back)
@@ -4638,7 +4876,7 @@ function App() {
     if (onboardStep === 1) {
       return onbShell([
         progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "⚖️"),
+        illusScale(),
         React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "A balanced life"),
         React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 18, padding: "0 6px" } }, "Verrocchio organizes your goals and habits into seven Areas of Life. Aim for breadth — not just grinding on one axis."),
         React.createElement("div", {
@@ -4669,7 +4907,7 @@ function App() {
     if (onboardStep === 2) {
       return onbShell([
         progressBar,
-        React.createElement("div", { key: "ico", style: { fontSize: 40, textAlign: "center", marginBottom: 6 } }, "✨"),
+        illusSparkle(),
         React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 8 } }, "Why are you here?"),
         React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 16, padding: "0 6px" } }, "One sentence on what you want to accomplish. We'll show it back to you on the hard days."),
         React.createElement("textarea", Object.assign({
@@ -4787,9 +5025,15 @@ function App() {
       autoAdvance: true
     },
     // 3 — Goals: write the goal description
+    // NOTE: no `autoAdvance` here. Auto-advancing on the first
+    // keystroke made the step feel like it vanished before the user
+    // finished typing — they'd hit "R" for "Run" and the tour would
+    // jump to "Pick an area" mid-word. The gate still blocks the
+    // manual swipe until there's at least one character, so the user
+    // can't skip forward empty — they just swipe when they're done.
     {
       title: "Write your goal",
-      body: "One short sentence on what you want to accomplish. Keep it concrete — e.g. \u201CRun a half-marathon\u201D, not \u201CGet fit\u201D.",
+      body: "One short sentence on what you want to accomplish. Keep it concrete — e.g. \u201CRun a half-marathon\u201D, not \u201CGet fit\u201D. Swipe when you're done.",
       selector: "[data-tour-id='goal-name']",
       placement: "bottom",
       tab: "goals",
@@ -4798,8 +5042,7 @@ function App() {
         const inp = document.querySelector("[data-tour-id='goal-name']");
         return !!(inp && inp.value && inp.value.trim().length > 0);
       },
-      gateHint: "Type a goal to continue.",
-      autoAdvance: true
+      gateHint: "Type a goal to continue."
     },
     // 4 — Goals: pick an area of life
     {
@@ -4852,9 +5095,12 @@ function App() {
       autoAdvance: true
     },
     // 8 — Habits: name it
+    // Same rationale as step 3 — no autoAdvance on text-name steps
+    // so the user isn't jumped mid-word. Gate still blocks swipe
+    // until there's text, so the user can't accidentally skip.
     {
       title: "Name your habit",
-      body: "What's the daily action? Keep it small and concrete — e.g. \u201CRun 20 minutes\u201D or \u201C10 pushups\u201D.",
+      body: "What's the daily action? Keep it small and concrete — e.g. \u201CRun 20 minutes\u201D or \u201C10 pushups\u201D. Swipe when you're done.",
       selector: "[data-tour-id='habit-name']",
       placement: "bottom",
       tab: "habits",
@@ -4863,8 +5109,7 @@ function App() {
         const inp = document.querySelector("[data-tour-id='habit-name']");
         return !!(inp && inp.value && inp.value.trim().length > 0);
       },
-      gateHint: "Type a habit to continue.",
-      autoAdvance: true
+      gateHint: "Type a habit to continue."
     },
     // 9 — Habits: time of day + duration
     {
@@ -5357,15 +5602,16 @@ function App() {
         // already semi-transparent black, so the backdrop blur picks up
         // a soft grey wash. Slightly higher opacity than the onboarding
         // card since the content needs to stay legible over dim.
-        className: "lg",
+        // The .tour-tip class carries the default light-mode fill/text
+        // AND the dark-mode overrides (the inline-style rgba() values
+        // don't match the attribute-selector rgb() rules that handle
+        // the rest of the app's dark mode).
+        className: "lg tour-tip",
         style: {
           ...tipStyle,
-          background: "rgba(255,255,255,0.72)",
           backdropFilter: "blur(28px) saturate(180%)",
           WebkitBackdropFilter: "blur(28px) saturate(180%)",
-          color: "#1f2937",
           borderRadius: 18,
-          border: "1px solid rgba(255,255,255,0.7)",
           padding: "16px 18px 14px 18px",
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.32), 0 2px 8px rgba(0,0,0,.08)",
           pointerEvents: "auto",
@@ -5373,15 +5619,35 @@ function App() {
           zIndex: 10000
         }
       }, swipeHandlers),
+        // Top-right "Exit Demo" pill — only in demo mode. The main
+        // yellow "Exit demo" bar sits behind the tour overlay (the
+        // overlay's zIndex:10000 covers the zIndex:60 sticky bar), so
+        // without this pill the user has no way to leave demo mode
+        // during the walkthrough. Tap fires a confirm modal; confirm
+        // runs exitDemo() and surfaces a hint pointing to the Replay
+        // Tour control in Profile settings.
+        demoMode && /*#__PURE__*/React.createElement("button", Object.assign({
+          className: "tour-exit-demo",
+          onClick: () => setConfirmExitDemo("confirm"),
+          style: {
+            position: "absolute",
+            top: 10, right: 12,
+            zIndex: 2
+          }
+        }, stopSwipeStart), "Exit Demo"),
         // No "Step X of Y" badge and no progress dots — the tour shouldn't
         // feel like a numbered checklist. Title + body + swipe hint do all
         // the navigation framing on their own.
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 17, fontWeight: 700, marginBottom: 6, color: "#111" }
+          className: "tour-tip-title",
+          // Reserve right-side room for the Exit Demo pill so the title
+          // doesn't collide with it on narrow viewports.
+          style: { fontSize: 17, fontWeight: 700, marginBottom: 6, paddingRight: demoMode ? 78 : 0 }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
+          className: "tour-tip-body",
           style: {
-            fontSize: 13, lineHeight: 1.5, color: "#4b5563",
+            fontSize: 13, lineHeight: 1.5,
             // Gated steps drop the swipe-hint footer row (see below), so
             // no bottom margin is needed under the body — the tooltip's
             // own padding carries the final 14px of breathing room.
@@ -5427,8 +5693,9 @@ function App() {
               // habit to continue", so no additional prompt is needed
               // here.
               !gateBlocked && /*#__PURE__*/React.createElement("div", {
+                className: "tour-tip-swipe",
                 style: {
-                  fontSize: 12, color: "#9ca3af",
+                  fontSize: 12,
                   textAlign: "center", marginBottom: step.optionalActionKey ? 10 : 0,
                   fontWeight: 500, letterSpacing: .3,
                   display: "flex", justifyContent: "center"
@@ -6279,36 +6546,10 @@ function App() {
       );
     };
 
-    /* "Why are you here?" banner — echoes the answer captured in onboarding
-       so the user's reason for showing up sits at the very top of the home
-       page every time they open the app. Tap to edit; rendered only when a
-       non-empty intent exists. */
-    const whyBanner = (data.userIntent && data.userIntent.trim())
-      ? /*#__PURE__*/React.createElement("div", {
-          key: "why-banner",
-          onClick: () => {
-            const next = window.prompt("Why are you here?", data.userIntent || "");
-            if (next != null) save({ ...data, userIntent: next.trim() });
-          },
-          style: {
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderLeft: "3px solid #2d5a2d",
-            borderRadius: 10,
-            padding: "12px 14px",
-            marginBottom: 12,
-            cursor: "pointer",
-            boxShadow: "0 1px 2px rgba(0,0,0,.03)"
-          }
-        },
-          /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 9, fontWeight: 700, letterSpacing: 1.2, color: "#2d5a2d", marginBottom: 4, textTransform: "uppercase" }
-          }, "Why you're here"),
-          /*#__PURE__*/React.createElement("div", {
-            style: { fontFamily: "'Lora',serif", fontStyle: "italic", fontSize: 15, lineHeight: 1.5, color: "#1f2937" }
-          }, "\u201C" + data.userIntent.trim() + "\u201D")
-        )
-      : null;
+    // ("Why you're here" banner was removed — it was the same answer as
+    // the daily intention. Onboarding now backfills the user's intent
+    // into dailyRitual[today].intention, so the pinned Today's Intention
+    // card at the top of Home already shows their why on day one.)
 
     // Pinned intention card — only when an intention is saved for today.
     const intentionPinned = intentionSet ? /*#__PURE__*/React.createElement("div", {
@@ -6354,9 +6595,24 @@ function App() {
           !briefing && briefTxt && /*#__PURE__*/React.createElement("div", {
             style: { fontSize: 14, lineHeight: 1.8, color: "#374151", whiteSpace: "pre-wrap", marginBottom: 14 }
           }, briefTxt),
-          !briefing && !briefTxt && /*#__PURE__*/React.createElement("div", {
-            style: { textAlign: "center", padding: "28px 0", color: "#d1d5db", fontSize: 13 }
-          }, "Your briefing will appear here once you add your first goal or habit."),
+          !briefing && !briefTxt && (() => {
+            // Gate the briefing on days-of-use so new users see a
+            // concrete countdown instead of a vague "add a goal" nag.
+            // `dayVisits` is the sorted de-duped list of dates the
+            // user has opened the app; threshold = 3 so the briefing
+            // unlocks on their third visit. Using Math.max guards
+            // against the rare case where dayVisits hasn't been
+            // populated yet for today.
+            const BRIEF_UNLOCK = 3;
+            const visits = Math.max(1, (data.dayVisits || []).length);
+            const remaining = Math.max(0, BRIEF_UNLOCK - visits);
+            const msg = remaining > 0
+              ? `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`
+              : "Add a goal or habit to see your first briefing.";
+            return /*#__PURE__*/React.createElement("div", {
+              style: { textAlign: "center", padding: "22px 0", color: "#9ca3af", fontSize: 13, lineHeight: 1.5 }
+            }, msg);
+          })(),
           !briefing && briefTxt && /*#__PURE__*/React.createElement("button", {
             onClick: () => updateRitual({ briefingReviewed: true }),
             style: { ...AB, width: "100%", padding: "9px" }
@@ -6626,7 +6882,6 @@ function App() {
     }, bottomPills) : null;
 
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
-      whyBanner,
       intentionPinned,
       briefingCard,
       yesterdayCard,
@@ -7136,11 +7391,19 @@ function App() {
       }
     }, /*#__PURE__*/React.createElement("select", {
       value: nHType,
-      onChange: e => sNHType(e.target.value),
+      // When a goal is linked, the habit's Area of Life is locked to
+      // match the goal's area — a habit can't sit in "Physical" while
+      // laddering up to a "Career" goal. The dropdown still renders
+      // (so the user sees which bucket they're in) but editing is
+      // disabled until the goal link is cleared.
+      onChange: e => { if (!nHGoal) sNHType(e.target.value); },
+      disabled: !!nHGoal,
       style: {
         ...S,
         flex: 1,
-        color: HT.find(t => t.value === nHType)?.color || "#9ca3af"
+        color: HT.find(t => t.value === nHType)?.color || "#9ca3af",
+        opacity: nHGoal ? 0.75 : 1,
+        cursor: nHGoal ? "not-allowed" : "pointer"
       }
     }, /*#__PURE__*/React.createElement("option", {
       value: ""
@@ -7171,7 +7434,17 @@ function App() {
         if (e.target.value === "__new__") {
           sNHGoal("");
           setTab("goals");
-        } else sNHGoal(e.target.value);
+        } else {
+          const v = e.target.value;
+          sNHGoal(v);
+          // Auto-sync the habit's Area of Life to the linked goal's
+          // area so the two never drift. Clearing the link leaves the
+          // current area alone — the user can then pick any bucket.
+          if (v) {
+            const g = data.goals.find(x => String(x.id) === String(v));
+            if (g && g.type) sNHType(g.type);
+          }
+        }
       },
       "data-tour-id": "habit-goal",
       style: {
@@ -8816,20 +9089,35 @@ function App() {
     }
   }), /*#__PURE__*/React.createElement("select", {
     value: nGType,
-    onChange: e => sNGType(e.target.value),
+    onChange: e => {
+      sNGType(e.target.value);
+      if (e.target.value) setGoalAreaErr(false);
+    },
     "data-tour-id": "goal-area",
     style: {
       ...S,
       width: "100%",
-      marginBottom: 8,
-      color: [...HT,...(data.customGoalTypes||[])].find(t => t.value === nGType)?.color || "#9ca3af"
+      marginBottom: goalAreaErr ? 2 : 8,
+      color: [...HT,...(data.customGoalTypes||[])].find(t => t.value === nGType)?.color || "#9ca3af",
+      // Red ring + tinted bg when the user tried to save without a pick.
+      // Cleared the moment they pick anything (see onChange above) or
+      // the goal saves successfully.
+      border: goalAreaErr ? "1px solid #dc2626" : (S.border || "1px solid #e5e7eb"),
+      background: goalAreaErr ? "#fef2f2" : (S.background || "#fff")
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
   }, "\uD83C\uDFF7 Area of Life"), [...HT,...(data.customGoalTypes||[])].map(t => /*#__PURE__*/React.createElement("option", {
     key: t.value,
     value: t.value
-  }, t.value))), /*#__PURE__*/React.createElement("div", {
+  }, t.value))), goalAreaErr && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#dc2626",
+      marginBottom: 8,
+      marginTop: 2
+    }
+  }, "Pick an area of life to save this goal."), /*#__PURE__*/React.createElement("div", {
     "data-tour-id": "goal-smart",
     style: {
       fontSize: 10,
@@ -8845,32 +9133,84 @@ function App() {
       gap: 6,
       marginBottom: 10
     }
-  }, SF_FIELDS.map(f => /*#__PURE__*/React.createElement("div", {
-    key: f.key
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      fontWeight: 600,
-      color: "#6b7280",
-      marginBottom: 2
+  }, SF_FIELDS.map(f => {
+    // See the edit-goal variant for the rationale on splitting M into
+    // (number, unit) and turning T into a native date picker.
+    if (f.key === "measurable") {
+      return /*#__PURE__*/React.createElement("div", {
+        key: f.key
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          fontWeight: 600,
+          color: "#6b7280",
+          marginBottom: 2
+        }
+      }, f.label), /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6 }
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        inputMode: "decimal",
+        className: "sf",
+        value: nGSmart.measurable,
+        onChange: e => sNGSmart(p => ({ ...p, measurable: e.target.value })),
+        placeholder: "Amount",
+        style: { width: 110 }
+      }), /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        className: "sf",
+        value: nGSmart.measurableUnit || "",
+        onChange: e => sNGSmart(p => ({ ...p, measurableUnit: e.target.value })),
+        placeholder: "Unit (e.g. miles / week)",
+        style: { flex: 1 }
+      })));
     }
-  }, f.label), /*#__PURE__*/React.createElement("textarea", {
-    className: "sf",
-    rows: 2,
-    value: nGSmart[f.key],
-    onChange: e => sNGSmart(p => ({
-      ...p,
-      [f.key]: e.target.value
-    })),
-    placeholder: f.ph
-  })))), /*#__PURE__*/React.createElement("div", {
+    if (f.key === "timebound") {
+      return /*#__PURE__*/React.createElement("div", {
+        key: f.key
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          fontWeight: 600,
+          color: "#6b7280",
+          marginBottom: 2
+        }
+      }, f.label), /*#__PURE__*/React.createElement("input", {
+        type: "date",
+        className: "sf",
+        value: /^\d{4}-\d{2}-\d{2}$/.test(nGSmart.timebound) ? nGSmart.timebound : "",
+        onChange: e => sNGSmart(p => ({ ...p, timebound: e.target.value })),
+        placeholder: "Target date",
+        style: { width: "100%" }
+      }));
+    }
+    return /*#__PURE__*/React.createElement("div", {
+      key: f.key
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        fontWeight: 600,
+        color: "#6b7280",
+        marginBottom: 2
+      }
+    }, f.label), /*#__PURE__*/React.createElement("textarea", {
+      className: "sf",
+      rows: 2,
+      value: nGSmart[f.key],
+      onChange: e => sNGSmart(p => ({
+        ...p,
+        [f.key]: e.target.value
+      })),
+      placeholder: f.ph
+    }));
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
       justifyContent: "flex-end"
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setExpGForm(false),
+    onClick: () => { setExpGForm(false); setGoalAreaErr(false); },
     style: {
       ...AB,
       background: "#f3f4f6",
@@ -8946,8 +9286,19 @@ function App() {
       const isE = eGId === goal.id;
       const isExp = expGoals[goal.id];
       const gt = HT.find(t => t.value === goal.type);
-      const hasSm = goal.smart && Object.values(goal.smart).some(v => v && v.trim());
-      const smartCount = goal.smart ? Object.values(goal.smart).filter(v => v && v.trim()).length : 0;
+      // Count only the 5 SMART letters (S, M, A, R, T). `measurableUnit`
+      // is a sidecar to M and shouldn't inflate the completion ring.
+      // Treat M as filled if either `measurable` or `measurableUnit`
+      // has a value (unit alone is still useful info).
+      const _sm = goal.smart || {};
+      const _hasVal = v => v != null && String(v).trim().length > 0;
+      const _mFilled = _hasVal(_sm.measurable) || _hasVal(_sm.measurableUnit);
+      const hasSm = _hasVal(_sm.specific) || _mFilled || _hasVal(_sm.achievable) || _hasVal(_sm.relevant) || _hasVal(_sm.timebound);
+      const smartCount = (_hasVal(_sm.specific) ? 1 : 0)
+        + (_mFilled ? 1 : 0)
+        + (_hasVal(_sm.achievable) ? 1 : 0)
+        + (_hasVal(_sm.relevant) ? 1 : 0)
+        + (_hasVal(_sm.timebound) ? 1 : 0);
       const linkedHabits = data.habits.filter(h => String(h.goalId) === String(goal.id));
       const linkedDone = linkedHabits.filter(h => isDone(h, selDate)).length;
       const linkedTotal = linkedHabits.length;
@@ -9046,44 +9397,111 @@ function App() {
         }
       }), /*#__PURE__*/React.createElement("select", {
         value: eGType,
-        onChange: e => sEGType(e.target.value),
+        onChange: e => {
+          sEGType(e.target.value);
+          if (e.target.value) setGoalAreaErr(false);
+        },
         style: {
           ...S,
           padding: "5px 8px",
-          fontSize: 11
+          fontSize: 11,
+          border: goalAreaErr ? "1px solid #dc2626" : (S.border || "1px solid #e5e7eb"),
+          background: goalAreaErr ? "#fef2f2" : (S.background || "#fff")
         }
       }, /*#__PURE__*/React.createElement("option", {
         value: ""
       }, "\uD83C\uDFF7"), HT.map(t => /*#__PURE__*/React.createElement("option", {
         key: t.value,
         value: t.value
-      }, t.value)))), /*#__PURE__*/React.createElement("div", {
+      }, t.value)))), goalAreaErr && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: "#dc2626",
+          marginBottom: 6
+        }
+      }, "Pick an area of life to save."), /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           flexDirection: "column",
           gap: 6,
           marginBottom: 8
         }
-      }, SF_FIELDS.map(f => /*#__PURE__*/React.createElement("div", {
-        key: f.key
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          fontWeight: 600,
-          color: "#2d5a2d",
-          marginBottom: 3,
-          textTransform: "uppercase"
+      }, SF_FIELDS.map(f => {
+        // Custom renderers for the M (measurable) and T (timebound) rows.
+        // M splits into two inputs: a numeric amount and a free-text unit
+        // (e.g. "10" + "miles / week"). T becomes a native date picker
+        // storing YYYY-MM-DD. Other letters stay as textareas.
+        if (f.key === "measurable") {
+          return /*#__PURE__*/React.createElement("div", {
+            key: f.key
+          }, /*#__PURE__*/React.createElement("div", {
+            style: {
+              fontSize: 9,
+              fontWeight: 600,
+              color: "#2d5a2d",
+              marginBottom: 3,
+              textTransform: "uppercase"
+            }
+          }, f.label), /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", gap: 6 }
+          }, /*#__PURE__*/React.createElement("input", {
+            type: "number",
+            inputMode: "decimal",
+            className: "sf",
+            value: eGSmart.measurable || "",
+            onChange: e => sEGSmart(p => ({ ...p, measurable: e.target.value })),
+            placeholder: "Amount",
+            style: { width: 110 }
+          }), /*#__PURE__*/React.createElement("input", {
+            type: "text",
+            className: "sf",
+            value: eGSmart.measurableUnit || "",
+            onChange: e => sEGSmart(p => ({ ...p, measurableUnit: e.target.value })),
+            placeholder: "Unit (e.g. miles / week)",
+            style: { flex: 1 }
+          })));
         }
-      }, f.label), /*#__PURE__*/React.createElement("textarea", {
-        className: "sf",
-        rows: 3,
-        value: eGSmart[f.key] || "",
-        onChange: e => sEGSmart(p => ({
-          ...p,
-          [f.key]: e.target.value
-        })),
-        placeholder: f.ph
-      })))), /*#__PURE__*/React.createElement("div", {
+        if (f.key === "timebound") {
+          return /*#__PURE__*/React.createElement("div", {
+            key: f.key
+          }, /*#__PURE__*/React.createElement("div", {
+            style: {
+              fontSize: 9,
+              fontWeight: 600,
+              color: "#2d5a2d",
+              marginBottom: 3,
+              textTransform: "uppercase"
+            }
+          }, f.label), /*#__PURE__*/React.createElement("input", {
+            type: "date",
+            className: "sf",
+            value: /^\d{4}-\d{2}-\d{2}$/.test(eGSmart.timebound || "") ? eGSmart.timebound : "",
+            onChange: e => sEGSmart(p => ({ ...p, timebound: e.target.value })),
+            placeholder: "Target date",
+            style: { width: "100%" }
+          }));
+        }
+        return /*#__PURE__*/React.createElement("div", {
+          key: f.key
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 9,
+            fontWeight: 600,
+            color: "#2d5a2d",
+            marginBottom: 3,
+            textTransform: "uppercase"
+          }
+        }, f.label), /*#__PURE__*/React.createElement("textarea", {
+          className: "sf",
+          rows: 3,
+          value: eGSmart[f.key] || "",
+          onChange: e => sEGSmart(p => ({
+            ...p,
+            [f.key]: e.target.value
+          })),
+          placeholder: f.ph
+        }));
+      })), /*#__PURE__*/React.createElement("div", {
         style: {
           marginBottom: 8
         }
@@ -9209,23 +9627,49 @@ function App() {
           flexDirection: "column",
           gap: 7
         }
-      }, SF_FIELDS.map(f => goal.smart?.[f.key] ? /*#__PURE__*/React.createElement("div", {
-        key: f.key
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 9,
-          fontWeight: 700,
-          color: "#6b7280",
-          textTransform: "uppercase",
-          marginBottom: 2
+      }, SF_FIELDS.map(f => {
+        // Per-field display formatting:
+        //   M → "<amount> <unit>" if both present, else amount alone
+        //       (or legacy free-text value from the old schema).
+        //   T → formatted date (e.g. "Apr 22, 2026") if the stored value
+        //       is a YYYY-MM-DD string; otherwise the raw legacy text.
+        //   other → unchanged.
+        let shown = null;
+        if (f.key === "measurable") {
+          const amt = goal.smart?.measurable || "";
+          const unit = goal.smart?.measurableUnit || "";
+          if (amt || unit) shown = [amt, unit].filter(Boolean).join(" ");
+        } else if (f.key === "timebound") {
+          const raw = goal.smart?.timebound || "";
+          if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            const [y, m, d] = raw.split("-").map(Number);
+            const dt = new Date(y, m - 1, d);
+            shown = dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+          } else if (raw) {
+            shown = raw;
+          }
+        } else if (goal.smart?.[f.key]) {
+          shown = goal.smart[f.key];
         }
-      }, f.label), /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 13,
-          color: "#374151",
-          lineHeight: 1.6
-        }
-      }, goal.smart[f.key])) : null))), expGoalHabits[goal.id] && !isE && (() => {
+        if (!shown) return null;
+        return /*#__PURE__*/React.createElement("div", {
+          key: f.key
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 9,
+            fontWeight: 700,
+            color: "#6b7280",
+            textTransform: "uppercase",
+            marginBottom: 2
+          }
+        }, f.label), /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 13,
+            color: "#374151",
+            lineHeight: 1.6
+          }
+        }, shown));
+      }))), expGoalHabits[goal.id] && !isE && (() => {
         // Habits linked to this goal, ordered by how often they fire
         // (daily > select-days > weekly > monthly > quarterly > annual).
         // Below the habits we list linked one-off to-dos. A quick-add row
@@ -9414,7 +9858,7 @@ function App() {
           const out = [];
           if (prev.text !== next.text) out.push({ label: "Text", from: prev.text, to: next.text });
           if ((prev.type || null) !== (next.type || null)) out.push({ label: "Category", from: prev.type || "—", to: next.type || "—" });
-          const keys = ["specific","measurable","achievable","relevant","timebound"];
+          const keys = ["specific","measurable","measurableUnit","achievable","relevant","timebound"];
           keys.forEach(k => {
             const a = (prev.smart && prev.smart[k]) || "";
             const b = (next.smart && next.smart[k]) || "";
@@ -10643,7 +11087,114 @@ function App() {
       color: "#dc2626",
       cursor: "pointer"
     }
-  }, "Delete")))), completeGoalModal && /*#__PURE__*/React.createElement("div", {
+  }, "Delete")))),
+  /* ── Exit Demo confirmation (two-phase) ──────────────────────────
+     Fired from the "Exit Demo" pill we render in the top-right of
+     each tour tooltip while demoMode is on. Mirrors the confirmDel
+     styling so it feels like a native part of the app. zIndex sits
+     above the tour overlay (10000) so it reads cleanly on top of
+     the dim + tooltip.
+
+     Phase 1 ("confirm"): user confirms they want out of the demo.
+     Phase 2 ("hint"):    show where to find the Replay Tour
+                          control, then exit on "Got it". We do the
+                          hint BEFORE calling exitDemo() so the user
+                          actually sees it — exitDemo() kicks an
+                          unauthenticated viewer back to the login
+                          screen, which would unmount any toast
+                          rendered after the fact. */
+  confirmExitDemo && /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,0.55)",
+      zIndex: 10100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 20
+    },
+    onClick: e => { if (e.target === e.currentTarget) setConfirmExitDemo(null); }
+  }, confirmExitDemo === "confirm"
+    ? /*#__PURE__*/React.createElement("div", {
+        className: "fade-in lg tour-tip",
+        style: {
+          borderRadius: 18, padding: "24px",
+          width: "100%", maxWidth: 360,
+          backdropFilter: "blur(28px) saturate(180%)",
+          WebkitBackdropFilter: "blur(28px) saturate(180%)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.38), 0 2px 8px rgba(0,0,0,.1)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 28, textAlign: "center", marginBottom: 12 } }, "\u{1F44B}"),
+        /*#__PURE__*/React.createElement("div", {
+          className: "tour-tip-title",
+          style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, textAlign: "center", marginBottom: 8 }
+        }, "Exit the demo?"),
+        /*#__PURE__*/React.createElement("div", {
+          className: "tour-tip-body",
+          style: { fontSize: 13, textAlign: "center", lineHeight: 1.6, marginBottom: 16 }
+        }, "You'll leave the guided tour and go back to the sign-in screen. You can replay the tour anytime from Settings."),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 10 } },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => setConfirmExitDemo(null),
+            style: {
+              flex: 1, background: "#f3f4f6", border: "none", borderRadius: 10,
+              padding: "12px", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer"
+            }
+          }, "Keep Exploring"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => setConfirmExitDemo("hint"),
+            style: {
+              flex: 1, background: "#fef3c7", border: "1px solid #fcd34d",
+              borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 600,
+              color: "#78350f", cursor: "pointer"
+            }
+          }, "Exit Demo")
+        )
+      )
+    : /*#__PURE__*/React.createElement("div", {
+        className: "fade-in lg tour-tip",
+        style: {
+          borderRadius: 18, padding: "24px",
+          width: "100%", maxWidth: 380,
+          backdropFilter: "blur(28px) saturate(180%)",
+          WebkitBackdropFilter: "blur(28px) saturate(180%)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.38), 0 2px 8px rgba(0,0,0,.1)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 28, textAlign: "center", marginBottom: 12 } }, "\u{1F9ED}"),
+        /*#__PURE__*/React.createElement("div", {
+          className: "tour-tip-title",
+          style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, textAlign: "center", marginBottom: 10 }
+        }, "Want to replay the tour later?"),
+        /*#__PURE__*/React.createElement("div", {
+          className: "tour-tip-body",
+          style: { fontSize: 13, lineHeight: 1.6, marginBottom: 14, textAlign: "center" }
+        }, "You'll find it anytime under"),
+        /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 13, color: "#78350f",
+            background: "#fffbeb", border: "1px solid #fcd34d",
+            borderRadius: 10, padding: "10px 12px",
+            textAlign: "center", marginBottom: 16,
+            fontWeight: 600, lineHeight: 1.5
+          }
+        }, "Profile \u2192 App Settings \u2192 Guided Tour \u2192 Replay Welcome Tour"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => {
+            // Close the modal first so it tears down before
+            // exitDemo() triggers a cascade of state resets + a
+            // splash re-mount on the login screen.
+            setConfirmExitDemo(null);
+            exitDemo();
+          },
+          style: {
+            width: "100%", background: "#2d5a2d", color: "#fff",
+            border: "none", borderRadius: 10, padding: "12px",
+            fontSize: 13, fontWeight: 600, cursor: "pointer"
+          }
+        }, "Got it \u2014 exit demo")
+      )
+  ),
+  completeGoalModal && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
@@ -11898,11 +12449,17 @@ function App() {
     }
   }, /*#__PURE__*/React.createElement("select", {
     value: eHType,
-    onChange: e => sEHType(e.target.value),
+    // Same lock as the add-habit form: a habit linked to a goal
+    // inherits the goal's Area of Life. Disabled while a goal is
+    // selected so the two categories can't drift apart.
+    onChange: e => { if (!eHGoal) sEHType(e.target.value); },
+    disabled: !!eHGoal,
     style: {
       ...S,
       flex: 1,
-      color: HT.find(t => t.value === eHType)?.color || "#9ca3af"
+      color: HT.find(t => t.value === eHType)?.color || "#9ca3af",
+      opacity: eHGoal ? 0.75 : 1,
+      cursor: eHGoal ? "not-allowed" : "pointer"
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
@@ -11938,8 +12495,15 @@ function App() {
       if (e.target.value === "__new__") {
         setNewGoalFromHabit(true);
       } else {
-        sEHGoal(e.target.value);
+        const v = e.target.value;
+        sEHGoal(v);
         setNewGoalFromHabit(false);
+        // Mirror the add-habit flow: sync Area of Life to the linked
+        // goal's area so they can't diverge.
+        if (v) {
+          const g = data.goals.find(x => String(x.id) === String(v));
+          if (g && g.type) sEHType(g.type);
+        }
       }
     },
     style: {
@@ -11985,13 +12549,22 @@ function App() {
   }), /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       if (!newGoalText.trim()) return;
+      // Goals now require an Area of Life. Inline goal creation from
+      // the edit-habit card inherits the habit's current area — if
+      // the habit doesn't have one yet, bail and prompt the user to
+      // pick one on the habit before creating the linked goal.
+      if (!eHType) {
+        alert("Pick an Area of Life on the habit before creating a linked goal.");
+        return;
+      }
       const ng = {
         id: Date.now(),
         text: newGoalText.trim(),
-        type: eHType || null,
+        type: eHType,
         smart: {
           specific: "",
           measurable: "",
+          measurableUnit: "",
           achievable: "",
           relevant: "",
           timebound: ""
