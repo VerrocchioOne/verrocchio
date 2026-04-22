@@ -30,7 +30,6 @@ body{background:var(--app-bg);font-family:system-ui,-apple-system,sans-serif;col
    override matches a specific rgb triple. If you add new surfaces in
    light mode, add a matching rule here. */
 body.dark{--app-bg:#0b0d0f;--app-text:#e5e7eb}
-body.dark .splashv2{background:#0b0d0f}
 /* ── neutral surface → dark card ── */
 body.dark [style*="background: rgb(255, 255, 255)"]{background:#17191c!important}
 body.dark [style*="background: rgb(249, 250, 251)"]{background:#1c1f23!important}
@@ -186,115 +185,62 @@ textarea{resize:vertical}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
 .fade-in{animation:fadeIn .2s ease forwards}
 .pulsing{animation:pulse 1.5s ease infinite}
-/* ── Verrocchio welcome splash (splashv2) ──
-   Full-bleed brand animation: blocks stack bottom-to-top, stick-figure
-   climbs the pyramid with a slip-and-recover moment, summits in a
-   victory pose, fades out; "Verrocchio" wordmark appears above the
-   pyramid, the V drops into the pyramid's bottom three blocks, and
-   "Achieve Anything" shuffles in below. Mounted while splashPhase ==
-   "loading" on the welcome screen — see setSplashPhase timer. */
-.splashv2{position:fixed;inset:0;background:#faf8f3;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;overflow:hidden;z-index:9999}
-.splashv2 .stage{position:relative;flex:0 0 auto;width:360px;height:340px}
-.splashv2 .pyramid{position:absolute;top:80px;left:50%;width:200px;height:112px;transform:translateX(-50%)}
-.splashv2 .block{position:absolute;left:50%;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);transform:translate(-50%,-44px);opacity:0;animation:splashv2Stack .75s cubic-bezier(.34,1.35,.64,1) forwards;will-change:transform,opacity,filter}
-.splashv2 .b1{bottom:0;width:200px;animation-delay:.08s}
-.splashv2 .b2{bottom:28px;width:150px;animation-delay:.30s}
-.splashv2 .b3{bottom:56px;width:100px;animation-delay:.52s}
-.splashv2 .b4{bottom:84px;width:50px;animation-delay:.74s}
-@keyframes splashv2Stack{0%{transform:translate(-50%,-44px);opacity:0;filter:blur(3px)}55%{opacity:1;filter:blur(.4px)}100%{transform:translate(-50%,0);opacity:1;filter:blur(0)}}
-/* Climber — single canonical route. The stick figure's ascent plays
-   out in three deliberate phases that symbolize how a new habit gets
-   built: a slow, halting CRAWL up the bottom two blocks (progress is
-   hard, there's even a small slip); a steadier WALK across the middle
-   using his legs (momentum is established); and a decisive JUMP onto
-   the summit block (the leap that crystallises the habit). The path
-   is keyed by splashv2Climb; splashv2Mount/Reach/Crawl/Victory switch
-   poses in lockstep so the posture matches what the body is doing. */
-.splashv2 .climber{position:absolute;left:48px;top:156px;width:28px;height:36px;overflow:visible;stroke:#2d5a2d;fill:#2d5a2d;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;opacity:0;animation-name:splashv2Climb,splashv2ClimberOff;animation-duration:4.2s,.5s;animation-timing-function:cubic-bezier(.5,.05,.5,.95),ease-out;animation-delay:1.7s,6.15s;animation-fill-mode:forwards,forwards;will-change:transform,opacity;z-index:3;pointer-events:none}
-/* Contrast overlay: a second, identically-animated climber painted in
-   white and clipped to the pyramid silhouette, so whenever any part of
-   the stick figure crosses a green block that exact body part shows in
-   white. Outside the pyramid the overlay is clipped away and the green
-   base climber shows through against the beige stage. The clip-path is
-   expressed in stage pixels (the wrapper spans the full stage) so it
-   stays put while the climber translates through it. Path is a union
-   of four rectangles — one per block — with the 2px gaps preserved so
-   a limb crossing a gap renders green against the beige, not white. */
-.splashv2 .climber-mask{position:absolute;inset:0;pointer-events:none;z-index:4;clip-path:path("M80,166 H280 V192 H80 Z M105,138 H255 V164 H105 Z M130,110 H230 V136 H130 Z M155,82 H205 V108 H155 Z");-webkit-clip-path:path("M80,166 H280 V192 H80 Z M105,138 H255 V164 H105 Z M130,110 H230 V136 H130 Z M155,82 H205 V108 H155 Z")}
-.splashv2 .climber.white{stroke:#ffffff;fill:#ffffff}
-@keyframes splashv2ClimberOff{0%{opacity:1}100%{opacity:0}}
-/* Three-phase ascent keyed to the habit-building metaphor.
-   Phase 1 (0–46%): CRAWL. Body stays low to the ground — inches up
-     the b1 face with a small slip at 14%, drags across b1, hauls up
-     onto b2. The halting timing sells "progress is hard".
-   Phase 2 (46–70%): WALK. Stands tall and strides up b2 → b3 at a
-     confident cadence; momentum is established.
-   Phase 3 (70–100%): JUMP. Crouch at 74%, launch, arc whose apex
-     sits above b4 at 86%, land on the summit block and hold. */
-@keyframes splashv2Climb{
-  0%{opacity:0;transform:translate(0,0)}
-  3%{opacity:1;transform:translate(0,0)}
-  /* crawl — ground → b1 face, with a slip at 14% */
-  6%{transform:translate(2px,0)}
-  10%{transform:translate(6px,-6px)}
-  14%{transform:translate(5px,-4px)}
-  18%{transform:translate(10px,-14px)}
-  22%{transform:translate(16px,-24px)}
-  /* crawl — across b1 */
-  26%{transform:translate(22px,-26px)}
-  30%{transform:translate(28px,-26px)}
-  /* crawl — b1 face → b2 top */
-  34%{transform:translate(32px,-34px)}
-  38%{transform:translate(38px,-44px)}
-  42%{transform:translate(46px,-52px)}
-  46%{transform:translate(54px,-54px)}
-  /* walk — b2 → b3 with clean strides */
-  50%{transform:translate(60px,-60px)}
-  55%{transform:translate(66px,-68px)}
-  60%{transform:translate(74px,-76px)}
-  65%{transform:translate(82px,-80px)}
-  70%{transform:translate(88px,-82px)}
-  /* jump — crouch, launch, apex above b4, land */
-  74%{transform:translate(90px,-80px)}
-  78%{transform:translate(96px,-94px)}
-  82%{transform:translate(104px,-110px)}
-  86%{transform:translate(112px,-120px)}
-  90%{transform:translate(116px,-116px)}
-  94%{transform:translate(118px,-112px)}
-  96%{transform:translate(118px,-110px)}
-  100%{opacity:1;transform:translate(118px,-110px)}
-}
-.splashv2 .climber .pose{opacity:0}
-.splashv2 .climber .pose.crawl{animation:splashv2Crawl 4.2s linear 1.7s forwards}
-.splashv2 .climber .pose.mount{animation:splashv2Mount 4.2s linear 1.7s forwards}
-.splashv2 .climber .pose.reach{animation:splashv2Reach 4.2s linear 1.7s forwards}
-.splashv2 .climber .pose.victory{animation:splashv2Victory 4.2s linear 1.7s forwards}
-/* Pose windows stay in lockstep with the motion phases:
-   • crawl pose holds 0→46% (body low, hauling up),
-   • mount (standing) alternates with reach (step-up) during 46–70% walk
-     and reappears as a crouch at 72–77% before the leap,
-   • reach covers the jump flight (78–94% — arm extended mid-air),
-   • victory locks in once the feet plant on b4 (95% → end). */
-@keyframes splashv2Crawl{0%{opacity:1}44%{opacity:1}46%{opacity:0}100%{opacity:0}}
-@keyframes splashv2Mount{0%{opacity:0}45%{opacity:0}47%{opacity:1}54%{opacity:1}55%{opacity:0}62%{opacity:0}63%{opacity:1}70%{opacity:1}71%{opacity:0}73%{opacity:1}77%{opacity:1}78%{opacity:0}100%{opacity:0}}
-@keyframes splashv2Reach{0%{opacity:0}54%{opacity:0}56%{opacity:1}61%{opacity:1}62%{opacity:0}77%{opacity:0}79%{opacity:1}93%{opacity:1}94%{opacity:0}100%{opacity:0}}
-@keyframes splashv2Victory{0%{opacity:0}93%{opacity:0}95%{opacity:1}100%{opacity:1}}
-.splashv2 .brand-wordmark{position:absolute;top:30px;left:50%;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-style:normal;font-size:39px;line-height:1;color:#2d5a2d;letter-spacing:.005em;white-space:nowrap;opacity:0;transform:translate(-50%,6px);animation:splashv2BrandIn .75s cubic-bezier(.22,1,.36,1) 7.4s forwards;will-change:transform,opacity,filter;pointer-events:none}
-@keyframes splashv2BrandIn{0%{opacity:0;transform:translate(-50%,6px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,0);filter:blur(0)}}
-.splashv2 .v-mark{position:absolute;top:112px;left:50%;transform:translate(-50%,-4px);width:100px;height:78px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:88px;line-height:1;color:#f4efe4;text-shadow:0 2px 10px rgba(0,0,0,.28);opacity:0;animation:splashv2VFade .75s cubic-bezier(.22,1,.36,1) 6.35s forwards;will-change:transform,opacity,filter;pointer-events:none}
-@keyframes splashv2VFade{0%{opacity:0;transform:translate(-50%,4px);filter:blur(3px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;transform:translate(-50%,-4px);filter:blur(0)}}
-/* "Achieve Anything" tagline — materialises in place (fade + blur-in)
-   instead of the old sliding A. The leading A is rendered in its final
-   position from the start (no horizontal translate), and each char of
-   "chieve Anything" materialises with the same blur-to-clear effect
-   staggered across a short window. */
-.splashv2 .a-mark{position:absolute;top:198px;left:calc(50% - 82px);width:14px;height:28px;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-weight:600;font-size:22px;line-height:1;color:#111;opacity:0;transform:translate(-50%,0);filter:blur(2px);animation:splashv2AMaterialize .75s cubic-bezier(.22,1,.36,1) 8.5s forwards;will-change:opacity,filter}
-@keyframes splashv2AMaterialize{0%{opacity:0;filter:blur(2px)}60%{opacity:1;filter:blur(.4px)}100%{opacity:1;filter:blur(0)}}
-.splashv2 .tagline{position:absolute;top:198px;left:calc(50% - 75px);height:28px;display:flex;align-items:center;font-family:system-ui,-apple-system,sans-serif;font-style:italic;font-size:22px;font-weight:600;color:#111;letter-spacing:0;white-space:nowrap;pointer-events:none}
-.splashv2 .tagline .char{display:inline-block;opacity:0;filter:blur(2px);animation:splashv2CharIn .5s cubic-bezier(.22,1,.36,1) forwards;will-change:opacity,filter}
-.splashv2 .tagline .char.space{width:.26em}
-@keyframes splashv2CharIn{0%{opacity:0;filter:blur(2px)}100%{opacity:1;filter:blur(0)}}
-@media (prefers-reduced-motion: reduce){.splashv2 .block,.splashv2 .climber,.splashv2 .climber .pose,.splashv2 .v-mark,.splashv2 .a-mark,.splashv2 .tagline .char,.splashv2 .brand-wordmark{animation-duration:.01s!important}}
+/* ── Verrocchio welcome splash ("Ink V") ──────────────────────────────
+   Full-bleed brand animation on the welcome screen while
+   splashPhase === "loading" (see setSplashPhase timer). Pyramid
+   blocks stack bottom-to-top in quick springy succession; a Playfair
+   Display "V" is then DRAWN into the pyramid's negative space via
+   an SVG stroke-dashoffset reveal — left arm first, then the
+   thinner right arm — so the glyph appears hand-inked. The Lora
+   wordmark and italic tagline land last.
+   Earlier "Climber" (v2) and "Quick build" (v3) variants lived here
+   too; they were removed once the Ink V was chosen as the final
+   animation. If you need to restore them, their commit is in git. */
+.splashv4{position:fixed;inset:0;background:#faf8f3;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:9999}
+.splashv4 .stage{position:relative;flex:0 0 auto;width:320px;height:280px}
+.splashv4 .pyramid{position:absolute;top:66px;left:50%;width:200px;height:112px;transform:translateX(-50%)}
+.splashv4 .block{position:absolute;left:50%;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);transform:translate(-50%,-34px) scale(.92);opacity:0;animation:splashv4Stack .42s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity}
+.splashv4 .b1{bottom:0;width:200px;animation-delay:.05s}
+.splashv4 .b2{bottom:28px;width:150px;animation-delay:.22s}
+.splashv4 .b3{bottom:56px;width:100px;animation-delay:.39s}
+.splashv4 .b4{bottom:84px;width:50px;animation-delay:.56s}
+@keyframes splashv4Stack{0%{transform:translate(-50%,-34px) scale(.92);opacity:0}70%{opacity:1}100%{transform:translate(-50%,0) scale(1);opacity:1}}
+/* Playfair serif V revealed by a two-stroke pen-draw.
+   The V itself is an SVG <text> element in Playfair Display 900 — the
+   exact same glyph as the in-app brand-mark. An SVG <mask> with two
+   thick path strokes sits on top: as each mask path draws in via
+   stroke-dashoffset, it reveals the Playfair V underneath along the
+   stroke's direction.
+     • mask-left  pen: travels top-left → apex (the thick arm)
+     • mask-right pen: travels apex → top-right (the thin finishing line)
+   Linear timing end-to-end so the pen velocity never spikes. */
+.splashv4 .ink-v-wrap{position:absolute;top:98px;left:50%;transform:translateX(-50%);width:100px;height:78px;pointer-events:none;z-index:2}
+.splashv4 .ink-v-svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 8px rgba(0,0,0,.22));shape-rendering:geometricPrecision}
+.splashv4 .ink-v-svg .v-glyph{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:92px;fill:#f4efe4}
+/* Smoothing notes:
+   - pathLength 1000 (instead of 1) gives the browser 3 extra orders of
+     magnitude of sub-pixel precision on the dashoffset animation, which
+     removes the micro-stutter you get with pathLength 1.
+   - will-change:stroke-dashoffset hoists each path to its own GPU layer.
+   - Easing: cubic-bezier(.33,0,.1,1) — a gentle "pen start / pen settle"
+     curve: quick acceleration from rest, a long smooth glide, and a soft
+     deceleration at the stroke's end. Feels more like handwriting than
+     pure linear (which reads as mechanical constant-velocity).
+   - Right stroke starts at 2.45s — the exact moment the left stroke
+     finishes — so there's zero visual pause at the apex handoff. */
+.splashv4 .ink-v-svg .v-mask-left{fill:none;stroke:#fff;stroke-width:70;stroke-linecap:round;stroke-dasharray:1000;stroke-dashoffset:1000;will-change:stroke-dashoffset;animation:splashv4VLeftDraw 1.3s cubic-bezier(.33,0,.1,1) 1.15s forwards}
+.splashv4 .ink-v-svg .v-mask-right{fill:none;stroke:#fff;stroke-width:70;stroke-linecap:round;stroke-dasharray:1000;stroke-dashoffset:1000;will-change:stroke-dashoffset;animation:splashv4VRightDraw .95s cubic-bezier(.33,0,.1,1) 2.45s forwards}
+@keyframes splashv4VLeftDraw{to{stroke-dashoffset:0}}
+@keyframes splashv4VRightDraw{to{stroke-dashoffset:0}}
+.splashv4 .brand-wordmark{position:absolute;top:22px;left:50%;font-family:'Lora',Georgia,'Times New Roman',serif;font-weight:700;font-size:34px;line-height:1;color:#2d5a2d;letter-spacing:.12em;white-space:nowrap;opacity:0;transform:translate(-50%,8px);animation:splashv4BrandIn .7s cubic-bezier(.22,1,.36,1) 3.3s forwards;will-change:transform,opacity,letter-spacing}
+@keyframes splashv4BrandIn{0%{opacity:0;transform:translate(-50%,8px);letter-spacing:.12em}60%{opacity:1}100%{opacity:1;transform:translate(-50%,0);letter-spacing:-.01em}}
+/* Tagline mirrors the in-app header: system-ui sans-serif, medium weight,
+   #9ca3af gray, no italic. Scaled up from the header's 10px so it reads
+   at splash size. */
+.splashv4 .tagline{position:absolute;top:204px;left:50%;transform:translateX(-50%);font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;color:#9ca3af;letter-spacing:.5px;white-space:nowrap;opacity:0;animation:splashv4TagIn .6s ease-out 3.9s forwards;will-change:opacity,transform}
+@keyframes splashv4TagIn{0%{opacity:0;transform:translate(-50%,6px)}100%{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion: reduce){.splashv4 .block,.splashv4 .ink-v-svg .v-mask-left,.splashv4 .ink-v-svg .v-mask-right,.splashv4 .brand-wordmark,.splashv4 .tagline{animation-duration:.01s!important}}
+
 /* Compact pyramid + V brand mark — static lockup used on the quote card. */
 .brand-mark{position:relative;width:140px;height:78px;margin:0 auto 22px}
 .brand-mark .bm-block{position:absolute;left:50%;height:18px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:3px;box-shadow:0 4px 10px rgba(45,90,45,.2),inset 0 1px 0 rgba(255,255,255,.18);transform:translateX(-50%)}
@@ -1996,10 +1942,10 @@ function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   const [splashPhase, setSplashPhase] = useState("loading"); // "loading" | "quote"
-  // Only a single canonical climb route — the three-phase crawl → walk →
-  // jump ascent defined by splashv2Climb. Previous versions randomised
-  // across 5 routes; that was removed so every splash tells the same
-  // habit-building story.
+  // Bumped to remount the splash subtree with a fresh CSS animation
+  // start-time — used historically by the variant picker; kept so any
+  // future "replay splash" affordance still has a handle.
+  const [splashAnimKey, setSplashAnimKey] = useState(0);
   const [demoMode, setDemoMode] = useState(false);
   /* ── ONBOARDING STATE ── */
   // Which step of the onboarding we're on. Steps:
@@ -2386,13 +2332,22 @@ function App() {
     const t = setTimeout(() => setTourStep(1), 400);
     return () => clearTimeout(t);
   }, [tourDone, inPreApp, demoMode, tourStep]);
-  // Re-render when the window resizes — tooltip anchors use live
-  // getBoundingClientRect, which would otherwise go stale.
+  // Re-render when the window resizes OR anything scrolls — tooltip
+  // anchors use live getBoundingClientRect, which would otherwise go
+  // stale and leave the spotlight ring / dim panels / tooltip pinned
+  // to where the target USED to be. `capture: true` on the scroll
+  // listener catches scrolls inside nested scroll containers too
+  // (not just the window), which matters because the tab content
+  // scrolls in its own container, not the body.
   useEffect(() => {
     if (tourStep === 0) return;
     const onR = () => setTourResizeTick(t => t + 1);
     window.addEventListener("resize", onR);
-    return () => window.removeEventListener("resize", onR);
+    window.addEventListener("scroll", onR, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("resize", onR);
+      window.removeEventListener("scroll", onR, { capture: true });
+    };
   }, [tourStep]);
   // Auto-switch the active tab as the tour advances. Any step can
   // declare a `tab` field in TOUR_STEPS and this effect flips setTab
@@ -3760,13 +3715,14 @@ function App() {
     const willShowWelcome = authUser !== undefined && (authUser !== null || demoMode);
     if (!willShowWelcome) return;
     if (splashPhase !== "loading") return;
-    // Splash animation runs ~11.4s — tagline's last char (15 chars at 0.045s
-    // stagger starting at 10.2s, each char animates for 0.5s). Hold the
-    // completed lockup for ~1.6s so the moment lands before the quote
-    // page takes over.
-    const t = setTimeout(() => setSplashPhase("quote"), 13000);
+    // Splash runtime: ~3.4s of V-draw motion + wordmark/tagline landings,
+    // then hold the completed lockup for ~1.2s before advancing to the
+    // quote page. Pyramid stacks (≤0.98s) → left stroke (1.15–2.45s) →
+    // right stroke (2.45–3.40s) → wordmark (3.30s) → tagline (3.90s).
+    const SPLASH_HOLD = 5800;
+    const t = setTimeout(() => setSplashPhase("quote"), SPLASH_HOLD);
     return () => clearTimeout(t);
-  }, [hasSeenWelcome, splashPhase, authUser, demoMode]);
+  }, [hasSeenWelcome, splashPhase, authUser, demoMode, splashAnimKey]);
 
   /* DERIVED */
   const habits = data.habits || [];
@@ -4052,8 +4008,12 @@ function App() {
   // Loading spinner while auth state is resolving
   if (authUser === undefined) {
     return onboardShell([
-      React.createElement("div", { key: "lg", style: { fontSize: 28, fontWeight: 800, letterSpacing: "0.08em", color: "#1f2937", marginBottom: 6 } }, "VERROCCHIO"),
-      React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 22 } }, "Achieve Anything"),
+      // Playfair serif green wordmark — user preferred the green version
+      // over the header's Lora/#111827 lockup, so the login / loading shells
+      // lean into the brand's heritage typeface while the splash + in-app
+      // header use their own (Lora) styling. Tagline stays muted gray italic.
+      React.createElement("div", { key: "lg", style: { fontFamily: "'Playfair Display',Georgia,'Times New Roman',serif", fontSize: 36, fontWeight: 700, letterSpacing: ".005em", color: "#2d5a2d", lineHeight: 1, marginBottom: 4 } }, "Verrocchio"),
+      React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 22, fontStyle: "italic" } }, "Achieve Anything"),
       React.createElement("div", { key: "sp", style: { width: 28, height: 28, margin: "0 auto", border: "3px solid #e5e7eb", borderTopColor: "#1f2937", borderRadius: "50%", animation: "spin 1s linear infinite" } }),
       React.createElement("style", { key: "st" }, "@keyframes spin{to{transform:rotate(360deg)}}")
     ]);
@@ -4063,7 +4023,8 @@ function App() {
   if (authUser === null && !demoMode) {
     const isSignup = authMode === "signup";
     return onboardShell([
-      React.createElement("div", { key: "lg", style: { fontFamily: "'Playfair Display',Georgia,'Times New Roman',serif", fontSize: 36, fontWeight: 700, letterSpacing: ".005em", color: "#2d5a2d", marginBottom: 4 } }, "Verrocchio"),
+      // Playfair serif green wordmark — user preferred the green version.
+      React.createElement("div", { key: "lg", style: { fontFamily: "'Playfair Display',Georgia,'Times New Roman',serif", fontSize: 36, fontWeight: 700, letterSpacing: ".005em", color: "#2d5a2d", lineHeight: 1, marginBottom: 4 } }, "Verrocchio"),
       React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 24, fontStyle: "italic" } }, "Achieve Anything"),
       React.createElement("div", { key: "ttl", style: { fontSize: 18, fontWeight: 700, color: "#1f2937", marginBottom: 16 } }, isSignup ? "Create your account" : "Welcome Back"),
       React.createElement("input", {
@@ -4114,101 +4075,65 @@ function App() {
   }
 
   // Welcome / loading page — shown after auth until user clicks Continue.
-  // Phase 1: full-bleed Verrocchio brand splash animation.
-  //          (pyramid stacks → climber ascends → "Verrocchio" + V + "Achieve Anything".)
-  //          See splash-animation.html for the standalone preview.
+  // Phase 1: full-bleed Verrocchio "Ink" splash — pyramid stacks, then the
+  //          Playfair V is drawn by two pen strokes (thick left arm, then
+  //          thin upward right arm), wordmark + tagline land at the end.
   // Phase 2: daily quote card.
   if (!hasSeenWelcome) {
     if (splashPhase === "loading") {
-      // Tagline shuffles in character-by-character, each char delayed
-      // proportionally — see the matching charIn keyframe timing.
-      // Tagline chars start materialising just after the leading A
-      // begins its fade-in (8.5s). A shorter overall cascade than the
-      // previous slide-and-join effect — the whole phrase now appears
-      // together rather than sequentially.
-      const TAGLINE_START = 8.65;
-      const CHAR_STAGGER  = 0.04;
-      const taglineChars = [..."chieve Anything"].map((ch, i) =>
-        React.createElement("span", {
-          key: "c" + i,
-          className: "char" + (ch === " " ? " space" : ""),
-          style: { animationDelay: (TAGLINE_START + i * CHAR_STAGGER) + "s" }
-        }, ch === " " ? "\u00A0" : ch)
-      );
-      // Three synced SVG poses — mount (standing), reach (pulling up),
-      // victory (arms raised at the summit). All three share a single
-      // SVG; CSS crossfades opacity in lockstep with the climb keyframes.
-      const poseMount = React.createElement("g", { key: "mount", className: "pose mount" },
-        React.createElement("circle", { cx: 14, cy: 5.5, r: 3.4, stroke: "none" }),
-        React.createElement("line", { x1: 14, y1: 8.9, x2: 14, y2: 22 }),
-        React.createElement("line", { x1: 14, y1: 12, x2: 9.5, y2: 20 }),
-        React.createElement("line", { x1: 14, y1: 12, x2: 18.5, y2: 20 }),
-        React.createElement("line", { x1: 14, y1: 22, x2: 11, y2: 34 }),
-        React.createElement("line", { x1: 14, y1: 22, x2: 17, y2: 34 })
-      );
-      const poseReach = React.createElement("g", { key: "reach", className: "pose reach" },
-        React.createElement("circle", { cx: 14, cy: 5.5, r: 3.4, stroke: "none" }),
-        React.createElement("line", { x1: 14, y1: 8.9, x2: 13, y2: 21.5 }),
-        React.createElement("line", { x1: 14, y1: 11.5, x2: 19, y2: 3 }),
-        React.createElement("line", { x1: 19, y1: 3, x2: 22, y2: -2 }),
-        React.createElement("line", { x1: 14, y1: 11.5, x2: 8.5, y2: 14 }),
-        React.createElement("line", { x1: 8.5, y1: 14, x2: 11, y2: 19 }),
-        React.createElement("line", { x1: 13, y1: 21.5, x2: 8.5, y2: 26 }),
-        React.createElement("line", { x1: 8.5, y1: 26, x2: 11, y2: 33 }),
-        React.createElement("line", { x1: 13, y1: 21.5, x2: 17, y2: 28 }),
-        React.createElement("line", { x1: 17, y1: 28, x2: 19, y2: 34 })
-      );
-      const poseVictory = React.createElement("g", { key: "victory", className: "pose victory" },
-        React.createElement("circle", { cx: 14, cy: 5.5, r: 3.4, stroke: "none" }),
-        React.createElement("line", { x1: 14, y1: 8.9, x2: 14, y2: 22.5 }),
-        React.createElement("line", { x1: 14, y1: 12, x2: 6, y2: 1 }),
-        React.createElement("line", { x1: 14, y1: 12, x2: 22, y2: 1 }),
-        React.createElement("line", { x1: 14, y1: 22.5, x2: 10, y2: 34 }),
-        React.createElement("line", { x1: 14, y1: 22.5, x2: 18, y2: 34 })
-      );
-      // Crawl pose — body flattened near the bottom of the 28×36 viewBox,
-      // head on the left, legs trailing right. Used during phase 1 of the
-      // climb (0→46%) to symbolise slow, effortful early progress.
-      const poseCrawl = React.createElement("g", { key: "crawl", className: "pose crawl" },
-        React.createElement("circle", { cx: 7, cy: 28, r: 3, stroke: "none" }),
-        // torso (head → hip)
-        React.createElement("line", { x1: 9.5, y1: 29, x2: 22, y2: 31.5 }),
-        // front (planted) arm reaching forward/down
-        React.createElement("line", { x1: 10, y1: 28.5, x2: 4, y2: 32 }),
-        // trailing arm pushing off
-        React.createElement("line", { x1: 14, y1: 29.5, x2: 12, y2: 34 }),
-        // back leg stretched
-        React.createElement("line", { x1: 22, y1: 31.5, x2: 26, y2: 34 }),
-        // front leg bent under body
-        React.createElement("line", { x1: 20, y1: 31, x2: 18, y2: 35 })
-      );
-      // Single canonical climb — no route randomisation.
-      const climberRouteCls = "climber";
-      return React.createElement("div", { className: "splashv2" },
+      // Ink splash: pyramid blocks stack, then the Playfair Display "V"
+      // is uncovered by two pen strokes — thick left diagonal painted
+      // top-left → apex, then the thinner right diagonal drawn upward
+      // apex → top-right. Wordmark and tagline land after the V is
+      // complete. See the .splashv4 CSS block for full stroke timing.
+      return React.createElement("div", { className: "splashv4", key: "splash-" + splashAnimKey },
         React.createElement("div", { className: "stage" },
+          React.createElement("div", { className: "brand-wordmark" }, "Verrocchio"),
           React.createElement("div", { className: "pyramid" },
             React.createElement("div", { className: "block b1" }),
             React.createElement("div", { className: "block b2" }),
             React.createElement("div", { className: "block b3" }),
             React.createElement("div", { className: "block b4" })
           ),
-          React.createElement("svg", { className: climberRouteCls, viewBox: "0 0 28 36", "aria-hidden": "true" },
-            poseCrawl, poseMount, poseReach, poseVictory
-          ),
-          // Contrast overlay climber: identical animation + poses but
-          // painted white and clipped to the pyramid shape via the
-          // wrapper's clip-path. Only visible where the stick figure
-          // overlaps a green block; elsewhere the base green climber
-          // shows through.
-          React.createElement("div", { className: "climber-mask", "aria-hidden": "true" },
-            React.createElement("svg", { className: climberRouteCls + " white", viewBox: "0 0 28 36" },
-              poseCrawl, poseMount, poseReach, poseVictory
+          // Playfair Display serif V, revealed by a two-stroke pen draw.
+          // The <text> element IS the real Playfair glyph (same font,
+          // weight and colour as the in-app brand-mark). An SVG <mask>
+          // with two oversized stroke paths covers it; as each mask
+          // path draws in via stroke-dashoffset, it uncovers the serif
+          // V along the stroke's direction. Result: the pen physically
+          // travels along the thick left diagonal, then up the thin
+          // right diagonal — never a rectangular wipe.
+          //   Mask path 1 (thick arm): M10,3 → L50,74
+          //   Mask path 2 (thin arm):  M50,74 → L90,3
+          // Stroke width 70 is way larger than the glyph thickness so
+          // the mask "paint" fully covers the stroke as it travels.
+          React.createElement("div", { className: "ink-v-wrap" },
+            React.createElement("svg", {
+              className: "ink-v-svg",
+              viewBox: "0 0 100 78",
+              xmlns: "http://www.w3.org/2000/svg",
+              "aria-hidden": "true"
+            },
+              React.createElement("defs", null,
+                React.createElement("mask", {
+                  id: "splashv4-v-mask",
+                  maskUnits: "userSpaceOnUse",
+                  x: "-20", y: "-20", width: "140", height: "120"
+                },
+                  React.createElement("rect", { x: "-20", y: "-20", width: "140", height: "120", fill: "#000" }),
+                  React.createElement("path", { className: "v-mask-left",  d: "M10,3 L50,74", pathLength: "1000" }),
+                  React.createElement("path", { className: "v-mask-right", d: "M50,74 L90,3", pathLength: "1000" })
+                )
+              ),
+              React.createElement("text", {
+                className: "v-glyph",
+                x: "50", y: "68",
+                textAnchor: "middle",
+                mask: "url(#splashv4-v-mask)"
+              }, "V")
             )
           ),
-          React.createElement("div", { className: "brand-wordmark" }, "Verrocchio"),
-          React.createElement("div", { className: "v-mark" }, "V"),
-          React.createElement("div", { className: "a-mark" }, "A"),
-          React.createElement("div", { className: "tagline", "aria-label": "Achieve Anything" }, taglineChars)
+          React.createElement("div", { className: "tagline", "aria-label": "Achieve Anything" }, "Achieve Anything")
         )
       );
     }
