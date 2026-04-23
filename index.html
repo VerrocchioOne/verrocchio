@@ -3184,6 +3184,9 @@ function App() {
   const [reorderDraft, setReorderDraft] = useState([]);
   // Which page's sort menu is open: "habits" | "goals" | "todos" | null
   const [openSortMenu, setOpenSortMenu] = useState(null);
+  // Routine-view modal: null = closed, else the current tab shape
+  // ("day" | "week" | "month").
+  const [routineView, setRoutineView] = useState(null);
   // Ref-flag that lets the section-header's short-click path know a
   // long-press just fired so it doesn't also toggle the collapse.
   const sectionLongPressRef = useRef({ timer: null, fired: false });
@@ -8734,6 +8737,24 @@ function App() {
           }, "\u25BE")
         );
       })(),
+      // Routine-view button — opens a bottom-sheet that lets the user
+      // browse habits by weekday / full-week grid / month view.
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setRoutineView("week"),
+        "aria-label": "View routines",
+        title: "Browse habits by day, week, or month",
+        style: {
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "4px 10px",
+          borderRadius: 20,
+          border: "1px solid var(--c-border)",
+          background: "var(--c-surface, #fff)",
+          color: "#6b7280",
+          fontSize: 11, fontWeight: 500,
+          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          WebkitTapHighlightColor: "transparent", userSelect: "none"
+        }
+      }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "📅"), "Routine"),
       // Sort button — opens the bottom-sheet sort menu for the Habits
       // page. Sits at the end of the filter pill row.
       renderSortButton("habits")
@@ -14621,6 +14642,145 @@ function App() {
   //    pref and closes the sheet. "Edit custom order…" (goals / todos
   //    only) opens the reorder modal.
   renderSortSheet(),
+  // ── Routine view ──
+  //    Bottom-sheet that lets the user browse their habit schedule
+  //    by day (single weekday), week (Mon-Sun grid), or month
+  //    (monthly/quarterly/annual). Daily habits are shown on every
+  //    weekday; type=weekly is shown on its anchor day; type=weekdays
+  //    is shown on its selected days; month-frequency habits surface
+  //    on the month tab.
+  routineView && (() => {
+    const DOW_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    const hs = (data.habits || []).filter(h => h && h.section !== "avoid");
+    const habitOccursOnWeekday = (h, dow) => {
+      const fq = getFreq(h);
+      if (fq.type === "daily") return true;
+      if (fq.type === "weekdays") return (fq.days || []).includes(dow);
+      if (fq.type === "weekly") return (fq.day == null ? 1 : fq.day) === dow;
+      return false;
+    };
+    const todayDow = new Date().getDay();
+    const [dayTab, setDayTab] = [routineView === "day-*" ? null : null, null]; // unused placeholder
+    const close = () => setRoutineView(null);
+    const tabBtn = (val, label) => /*#__PURE__*/React.createElement("button", {
+      key: val,
+      type: "button",
+      onClick: () => setRoutineView(val),
+      style: {
+        flex: 1, minHeight: 36, padding: "7px 10px", borderRadius: 8,
+        border: "1px solid " + (routineView === val ? "#2d5a2d" : "var(--c-border)"),
+        background: routineView === val ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+        color: routineView === val ? "#2d5a2d" : "#6b7280",
+        fontSize: 12, fontWeight: routineView === val ? 700 : 500,
+        cursor: "pointer"
+      }
+    }, label);
+    const habitRow = (h) => /*#__PURE__*/React.createElement("div", {
+      key: h.id,
+      style: { display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 6, minHeight: 32 }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+        h.icon ? h.icon + " " : "", h.text)
+    );
+    // Day tab: pick one weekday, show habits for it.
+    const renderDayTab = () => {
+      // Reuse selDate's weekday as default
+      const dow = new Date(selDate + "T12:00:00").getDay();
+      const todays = hs.filter(h => habitOccursOnWeekday(h, dow));
+      return /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", marginBottom: 10 } },
+          "Habits scheduled for ", /*#__PURE__*/React.createElement("strong", null, DOW_LABELS[dow]), " (based on the selected date)."),
+        todays.length
+          ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, todays.map(habitRow))
+          : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "14px 2px" } }, "No habits scheduled for this day.")
+      );
+    };
+    // Week tab: 7-column grid, one column per weekday, habits listed.
+    const renderWeekTab = () => /*#__PURE__*/React.createElement("div", {
+      style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }
+    }, [0,1,2,3,4,5,6].map(i => {
+      const dow = (i + 1) % 7; // Mon-first ordering: Mon=1,...Sat=6,Sun=0
+      const habits = hs.filter(h => habitOccursOnWeekday(h, dow));
+      const isToday = dow === todayDow;
+      return /*#__PURE__*/React.createElement("div", {
+        key: "wk" + dow,
+        style: {
+          background: isToday ? "var(--c-tint-green)" : "var(--c-surface-raised)",
+          border: "1px solid " + (isToday ? "#c6dfc6" : "var(--c-border)"),
+          borderRadius: 8,
+          padding: 4,
+          minHeight: 60
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 10, fontWeight: 700, color: isToday ? "#2d5a2d" : "#6b7280", textAlign: "center", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.3 }
+        }, DOW_LABELS[dow]),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } },
+          habits.length
+            ? habits.map(h => /*#__PURE__*/React.createElement("div", {
+                key: h.id,
+                style: { fontSize: 10, color: "var(--c-text)", padding: "2px 4px", background: "var(--c-surface, #fff)", borderRadius: 4, border: "1px solid var(--c-border)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+              }, h.text))
+            : /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#d1d5db", textAlign: "center", padding: "4px 2px" } }, "—")
+        )
+      );
+    }));
+    // Month tab: habits whose frequency targets a specific date in the
+    // month (monthly / quarterly / annual).
+    const renderMonthTab = () => {
+      const months = hs.filter(h => {
+        const fq = getFreq(h);
+        return fq.type === "monthly" || fq.type === "quarterly" || fq.type === "annual";
+      });
+      const groups = { monthly: [], quarterly: [], annual: [] };
+      for (const h of months) groups[getFreq(h).type].push(h);
+      const section = (title, arr) => arr.length ? /*#__PURE__*/React.createElement("div", {
+        key: title,
+        style: { marginBottom: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 4 } }, title),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, arr.map(habitRow))
+      ) : null;
+      return /*#__PURE__*/React.createElement("div", null,
+        months.length === 0
+          ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "14px 2px" } }, "No monthly, quarterly, or annual habits yet.")
+          : null,
+        section("Monthly", groups.monthly),
+        section("Quarterly", groups.quarterly),
+        section("Annual", groups.annual)
+      );
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": "Browse habit routine",
+      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 310, display: "flex", alignItems: "flex-end", justifyContent: "center" },
+      onClick: e => { if (e.target === e.currentTarget) close(); }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "18px 16px 22px", width: "100%", maxWidth: 520, maxHeight: "82vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)" } }, "Your routine"),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: close,
+            "aria-label": "Close",
+            style: { background: "none", border: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }
+          }, "×")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
+          tabBtn("day",   "Day"),
+          tabBtn("week",  "Week"),
+          tabBtn("month", "Month")
+        ),
+        routineView === "day"   ? renderDayTab()   : null,
+        routineView === "week"  ? renderWeekTab()  : null,
+        routineView === "month" ? renderMonthTab() : null
+      )
+    );
+  })(),
   // ── Time-entry modal for habit completion. Opened by a slow swipe
   //    (dwelling briefly before release) or long-press on a habit
   //    card. "Log now" is the default action so the common case stays
