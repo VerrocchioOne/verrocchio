@@ -4145,6 +4145,22 @@ function App() {
   useEffect(() => {
     if (tourStep === 0) return undefined;
     let cancelled = false;
+    // Entry-point skip: if the step has a skipIf predicate and it
+    // returns true against the current data snapshot (user already has
+    // goals / habits), fast-forward past the whole walkthrough by
+    // skipSteps positions. Runs once on step mount — guarded by the
+    // same `s === tourStep` race check as autoAdvance below so a rapid
+    // second scheduler can't double-advance.
+    const step0 = TOUR_STEPS[tourStep - 1];
+    if (step0 && typeof step0.skipIf === "function") {
+      let shouldSkip = false;
+      try { shouldSkip = !!step0.skipIf(data); } catch (_) { shouldSkip = false; }
+      if (shouldSkip) {
+        const jump = Math.max(1, step0.skipSteps || 1);
+        setTourStep(s => (s === tourStep ? s + jump : s));
+        return undefined;
+      }
+    }
     const check = () => {
       if (cancelled) return;
       const step = TOUR_STEPS[tourStep - 1];
@@ -6940,6 +6956,14 @@ function App() {
     // the tour jumps forward so the prompt never sits stale on screen
     // after the user has already done what it asked.
     // 2 — Goals: tap the [+] to open the new-goal form
+    //
+    // skipIf: if the user ALREADY has goals (replaying the tour, signed in
+    // as a seeded persona, or returning after a previous session), the
+    // whole goal-form walkthrough (steps 2→6) is busywork — forcing them
+    // to tap [+] and fill another goal just to clear the tour would be
+    // hostile. skipIf returns true for that case and skipSteps:5 jumps
+    // straight to step 7 ("Now add a habit"), which has its own skipIf
+    // for the symmetric habit-already-exists case.
     {
       title: "Let's start by adding a goal",
       body: "Tap the [+] above to open the new-goal form.",
@@ -6953,7 +6977,9 @@ function App() {
       pinBottom: true,
       gate: () => !!document.querySelector("[data-tour-id='goal-form']"),
       gateHint: "Tap + to start.",
-      autoAdvance: true
+      autoAdvance: true,
+      skipIf: d => !!(d && Array.isArray(d.goals) && d.goals.length > 0),
+      skipSteps: 5
     },
     // 3 — Goals: write the goal description
     // NOTE: no `autoAdvance` here. Auto-advancing on the first
@@ -7032,6 +7058,11 @@ function App() {
     // the user to "pick an area" before they've linked would have them
     // picking a value the next step about to overwrite.
     // 7 — Habits: tap the [+] to open the new-habit form
+    //
+    // skipIf mirrors step 2 — if the user already has habits, skipSteps:8
+    // jumps past the full habit-form walkthrough (7→14) to step 15
+    // ("To-Dos"). Without this, a returning user with habits would be
+    // trapped on "Tap + to start" indefinitely.
     {
       title: "Now add a habit",
       body: "Habits are the daily reps that move your goal forward. Tap the [+] above to set one up.",
@@ -7041,7 +7072,9 @@ function App() {
       pinBottom: true,
       gate: () => !!document.querySelector("[data-tour-id='habit-form']"),
       gateHint: "Tap + to start.",
-      autoAdvance: true
+      autoAdvance: true,
+      skipIf: d => !!(d && Array.isArray(d.habits) && d.habits.length > 0),
+      skipSteps: 8
     },
     // 8 — Habits: name it
     // Same rationale as step 3 — no autoAdvance on text-name steps
