@@ -2491,8 +2491,12 @@ function hydrateCloudDoc(p) {
   if (!Array.isArray(p.customImportance)) p.customImportance = [];
   if (!Array.isArray(p.customSections)) p.customSections = [];
   if (!Array.isArray(p.dayVisits)) p.dayVisits = [];
-  if (!p.bestStreaks || typeof p.bestStreaks !== "object") p.bestStreaks = {};
-  if (!p.achievementsUnlocked || typeof p.achievementsUnlocked !== "object") p.achievementsUnlocked = {};
+  // Stricter than `typeof x !== "object"` — arrays ARE objects in JS,
+  // so a malicious (or just corrupt) remote write of [] here would
+  // pass the typeof guard and then break Object.entries / lookups
+  // downstream. Require a plain object.
+  if (!p.bestStreaks || typeof p.bestStreaks !== "object" || Array.isArray(p.bestStreaks)) p.bestStreaks = {};
+  if (!p.achievementsUnlocked || typeof p.achievementsUnlocked !== "object" || Array.isArray(p.achievementsUnlocked)) p.achievementsUnlocked = {};
   if (typeof p.xp !== "number") p.xp = 0;
   if (!p.dailyRitual) p.dailyRitual = {};
   if (typeof p.homeLocation !== "string") p.homeLocation = "";
@@ -2556,7 +2560,7 @@ function hydrateCloudDoc(p) {
   // Feature access log: featureId → lastUsedMs. Drives the scorecard
   // in Profile and the "check out this unused feature" tip source.
   // Stays empty for new users; populated lazily by touchFeature.
-  if (!p.featureAccess || typeof p.featureAccess !== "object") p.featureAccess = {};
+  if (!p.featureAccess || typeof p.featureAccess !== "object" || Array.isArray(p.featureAccess)) p.featureAccess = {};
   // Review-prompt tracking: `dismissedDays` is the list of milestone
   // day-counts (7/14/30) we've already surfaced and the user has
   // either reviewed or dismissed. Silent after a user picks "Maybe
@@ -3128,6 +3132,11 @@ function App() {
   // milestone so the banner doesn't fire mid-onboarding.
   const pendingReviewPromptDay = () => {
     if (!data || !data.signupAt) return null;
+    // Clock-skew guard: if signupAt somehow landed in the future
+    // (system clock drifted, bad seed, etc.), don't fire prompts on
+    // a negative daysSince — better silent than "please review, you
+    // joined tomorrow".
+    if (data.signupAt > Date.now()) return null;
     const daysSince = Math.floor((Date.now() - data.signupAt) / 86400000);
     const dismissed = new Set((data.reviewPrompt && data.reviewPrompt.dismissedDays) || []);
     for (const milestone of REVIEW_PROMPT_DAYS) {
@@ -3314,7 +3323,13 @@ function App() {
     let last = { x: null, y: null, z: null };
     let shakeCount = 0;
     let windowStart = 0;
+    // Gate the per-event math on document visibility so we're not
+    // burning ~60Hz of CPU while the page is backgrounded (or the
+    // user is in another tab). iOS + Capacitor WebView both fire
+    // visibilitychange reliably.
+    const isVisible = () => typeof document === "undefined" || !document.hidden;
     const onMotion = (ev) => {
+      if (!isVisible()) return;
       const a = (ev.accelerationIncludingGravity || ev.acceleration);
       if (!a) return;
       const { x, y, z } = a;
@@ -4480,6 +4495,18 @@ function App() {
      Derives the numbers that unlock tiers. Streak computation uses
      max(current streak across active habits, cached best-ever per
      habit), so streaks earned and later reset still count. */
+  // Habit-pattern derivations that were previously recomputed on every
+  // render of the Home tab. Both findCorrelations (O(N²·60)) and the
+  // per-habit off-schedule scan (O(N·14)) only change when the
+  // underlying habits array changes, so gating them on data.habits
+  // identity skips the work on unrelated re-renders (tab switch,
+  // scroll, etc.). The briefing prompt, the briefing fallback, and
+  // the smartTips block all read these memoized values now.
+  const memoedCorrelations = useMemo(() => findCorrelations((data && data.habits) || []), [data && data.habits]);
+  const memoedOffSchedule  = useMemo(() => {
+    const hs = (data && data.habits) || [];
+    return hs.filter(h => h && h.section !== "avoid").map(h => detectOffSchedule(h)).filter(Boolean);
+  }, [data && data.habits]);
   const achievementStats = useMemo(() => {
     const habitsArr = (data && data.habits) || [];
     const goalsArr = (data && data.goals) || [];
@@ -5889,7 +5916,7 @@ function App() {
     // Correlations from the last 60 days of completion-time data — the
     // LLM sees them alongside goals/habits so it can weave them into
     // the narrative instead of listing them mechanically.
-    const corrHints = findCorrelations(data.habits || []).slice(0, 3).map(r => {
+    const corrHints = memoedCorrelations.slice(0, 3).map(r => {
       const hrLabel = r.aCutoffHour === 12 ? "by noon" : r.aCutoffHour === 18 ? "by 6pm" : "by midnight";
       const pct = Math.round((r.lift) * 100);
       return `When "${r.aText}" is done ${hrLabel}, "${r.bText}" is ${pct}pp more likely to happen (${Math.round(r.conditional*100)}% vs ${Math.round(r.base*100)}% base)`;
@@ -5912,7 +5939,7 @@ function App() {
       const doneCt = dH.filter(h => isDone(h, td)).length;
       const focused = tc.filter(t => t.pct >= 70).map(t => t.type);
       const neglected = tc.filter(t => t.pct < 40).map(t => t.type);
-      const topCorr = findCorrelations(data.habits || [])[0];
+      const topCorr = memoedCorrelations[0];
       const tone = data.aiTone || "neutral";
       const opening = tone === "tough-love"
         ? "Morning. Here's where you stand:"
@@ -8330,12 +8357,9 @@ function App() {
     // because they reflect the user's actual behavior).
     const smartTips = [];
     // Off-schedule: habits the user is consistently logging AFTER their
-    // section cutoff (e.g. a "morning run" done most days after noon).
-    // Surfaces one nudge per qualifying habit, capped at 2.
-    const offSchedHits = activeH
-      .map(h => detectOffSchedule(h))
-      .filter(Boolean)
-      .slice(0, 2);
+    // section cutoff. Reads the App-scoped memoized result so the scan
+    // doesn't re-run on every Home-tab render.
+    const offSchedHits = memoedOffSchedule.slice(0, 2);
     for (const o of offSchedHits) {
       const secLabel = o.section.charAt(0).toUpperCase() + o.section.slice(1);
       const suggestSec = o.section === "morning" ? "afternoon" : o.section === "afternoon" ? "evening" : "morning";
@@ -8349,7 +8373,7 @@ function App() {
     // Observed correlations: top 1 pair by lift. Only surfaced once
     // we have the 14-day support — so it stays silent until data
     // accumulates.
-    const topCorrTip = findCorrelations(data.habits || [])[0];
+    const topCorrTip = memoedCorrelations[0];
     if (topCorrTip) {
       const hrLabel = topCorrTip.aCutoffHour === 12 ? "by noon" : topCorrTip.aCutoffHour === 18 ? "by 6pm" : "before bed";
       smartTips.push({
@@ -14033,7 +14057,10 @@ function App() {
               /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 14, fontSize: 11, color: "#6b7280" } },
                 /*#__PURE__*/React.createElement("span", null, "\uD83D\uDD25 ", /*#__PURE__*/React.createElement("strong", { style: { color: "#c2410c" } }, streak), " day", streak !== 1 ? "s" : ""),
                 /*#__PURE__*/React.createElement("span", null, "\uD83D\uDCC8 ", /*#__PURE__*/React.createElement("strong", { style: { color: "#2d5a2d" } }, rate, "%"), " rate"),
-                h.importance && /*#__PURE__*/React.createElement("span", null, h.importance))
+                h.importance && /*#__PURE__*/React.createElement("span", null, h.importance)),
+              /*#__PURE__*/React.createElement("div", {
+                style: { overflowX: "auto", WebkitOverflowScrolling: "touch", marginTop: 4 }
+              }, /*#__PURE__*/React.createElement(YearHeatmap, { habit: h }))
             );
           }))
       )
