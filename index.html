@@ -323,6 +323,10 @@ body.dark .lg::before{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%
 .tour-tip-body{color:#4b5563}
 .tour-tip-swipe{color:#9ca3af}
 body.dark .tour-tip{background:rgba(22,24,27,0.82)!important;color:#e5e7eb!important;border-color:rgba(255,255,255,0.08)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(0,0,0,0.18),0 20px 48px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.24)!important}
+/* Fixed-bottom swipe-footer pill — dark-mode translucent surface
+   matching the .tour-tip treatment so both pieces of chrome read
+   consistently against a dark page. */
+body.dark .tour-swipe-footer{background:rgba(22,24,27,0.78)!important;color:#d1d5db!important;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)!important}
 body.dark .tour-tip-title{color:#f3f4f6!important}
 body.dark .tour-tip-body{color:#d1d5db!important}
 body.dark .tour-tip-swipe{color:#6b7280!important}
@@ -330,12 +334,22 @@ body.dark .tour-tip-swipe{color:#6b7280!important}
    the spotlighted [+] button) uses a dark translucent fill inline,
    so only its text needs a touch more contrast in dark mode. */
 body.dark .tour-gate-bubble{background:rgba(0,0,0,0.78)!important;color:#fff!important;border-color:rgba(255,255,255,0.12)!important}
-/* Exit-Demo link inside the tour tooltip — subtle in light mode,
-   stays legible against the dark tip surface. */
-.tour-exit-demo{background:transparent;border:1px solid rgba(0,0,0,0.12);color:#6b7280;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.2px}
+/* "Hold to Exit" affordance in the top-right of every tour tooltip.
+   A tap alone no longer exits the demo — the user has to hold the
+   button for ~900ms. Prevents accidental exits from stray taps while
+   the tooltip sits inside a busy spotlight layout, and the label
+   itself teaches the gesture. The ::after bar fills left→right during
+   the press to give visible progress; we toggle `.holding` from JS
+   (pointerdown/up) to start/stop the fill. */
+.tour-exit-demo{position:relative;overflow:hidden;background:transparent;border:1px solid rgba(0,0,0,0.12);color:#6b7280;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.2px;user-select:none;-webkit-user-select:none;touch-action:none}
 .tour-exit-demo:hover{color:#111;border-color:rgba(0,0,0,0.25)}
+.tour-exit-demo::after{content:"";position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(220,38,38,0.18);transition:width 0s linear;pointer-events:none}
+.tour-exit-demo.holding::after{width:100%;transition:width 900ms linear}
+.tour-exit-demo.holding{color:#b91c1c;border-color:rgba(220,38,38,0.55)}
 body.dark .tour-exit-demo{border-color:rgba(255,255,255,0.18);color:#9ca3af}
 body.dark .tour-exit-demo:hover{color:#fff;border-color:rgba(255,255,255,0.38)}
+body.dark .tour-exit-demo.holding{color:#fca5a5;border-color:rgba(252,165,165,0.6)}
+body.dark .tour-exit-demo.holding::after{background:rgba(252,165,165,0.18)}
 
 /* ── Dark-mode overrides for the liquid-glass header + bottom nav ──
    Both surfaces use inline `background: rgba(255,255,255,0.55)` with
@@ -619,11 +633,32 @@ const ACHIEVEMENTS = [
   { id:"goal-10",  cat:"Achiever",   tier:"Gold",     icon:"🏆", name:"Ten Tall",         desc:"Complete 10 goals.",                        threshold:10,  stat:"goals" },
   { id:"goal-25",  cat:"Achiever",   tier:"Platinum", icon:"👑", name:"Quarter Master",   desc:"Complete 25 goals.",                        threshold:25,  stat:"goals" },
   { id:"goal-50",  cat:"Achiever",   tier:"Diamond",  icon:"🌠", name:"Half a Hundred",   desc:"Complete 50 goals.",                        threshold:50,  stat:"goals" },
+  // ACHIEVER (bonus — quality + clean-slate achievements). These live in
+  // the Achiever category because they reward goal-level commitment, not
+  // just count. `smart-1` lands after the user fills every SMART field
+  // on a single goal (proof they actually used the framework, not just
+  // typed a name). `active-cleared` is the clean-slate moment — zero
+  // active goals after having completed at least one, awarded as a
+  // one-time psychological reset.
+  { id:"smart-1",       cat:"Achiever", tier:"Silver", icon:"🎯", name:"SMART Set",    desc:"Fill every SMART field on a goal.",          threshold:1, stat:"smartGoals" },
+  { id:"active-cleared",cat:"Achiever", tier:"Gold",   icon:"🧹", name:"Clean Slate",  desc:"Complete every active goal.",                threshold:1, stat:"activeGoalsCleared" },
   // BUILDER — active habits ever stacked at once
   { id:"habit-1",  cat:"Builder",    tier:"Bronze",   icon:"🧱", name:"Breaking Ground",  desc:"Add your first habit.",                     threshold:1,   stat:"habitsActive" },
   { id:"habit-5",  cat:"Builder",    tier:"Silver",   icon:"🏗️", name:"Foundation",       desc:"Have 5 active habits at once.",             threshold:5,   stat:"habitsActive" },
   { id:"habit-10", cat:"Builder",    tier:"Gold",     icon:"🏛️", name:"Full Routine",     desc:"Have 10 active habits at once.",            threshold:10,  stat:"habitsActive" },
   { id:"habit-20", cat:"Builder",    tier:"Platinum", icon:"🗼", name:"Master Architect", desc:"Have 20 active habits at once.",            threshold:20,  stat:"habitsActive" },
+  // BUILDER (bonus — goal-creation milestones + habit-per-goal link).
+  // `goalsCreated` tracks every goal the user has EVER created (live +
+  // archived), so completing a goal doesn't claw back progress on these
+  // tiers. `habit-per-goal` requires every active goal to have at least
+  // one linked habit — the app's core value prop is "daily reps ladder
+  // up to real goals", so this one rewards actually wiring the ladder.
+  { id:"goals-created-1",  cat:"Builder", tier:"Bronze",   icon:"🌱", name:"First Goal",     desc:"Create your first goal.", threshold:1,  stat:"goalsCreated" },
+  { id:"goals-created-3",  cat:"Builder", tier:"Silver",   icon:"🌿", name:"Three-Pointer",  desc:"Create 3 goals.",         threshold:3,  stat:"goalsCreated" },
+  { id:"goals-created-5",  cat:"Builder", tier:"Gold",     icon:"🌳", name:"High Five",      desc:"Create 5 goals.",         threshold:5,  stat:"goalsCreated" },
+  { id:"goals-created-10", cat:"Builder", tier:"Platinum", icon:"🏛️", name:"Double Digits",  desc:"Create 10 goals.",        threshold:10, stat:"goalsCreated" },
+  { id:"goals-created-25", cat:"Builder", tier:"Diamond",  icon:"🏆", name:"Quartercentury", desc:"Create 25 goals.",        threshold:25, stat:"goalsCreated" },
+  { id:"habit-per-goal",   cat:"Builder", tier:"Gold",     icon:"🔗", name:"Laddered Up",    desc:"Link at least one habit to every goal.", threshold:1, stat:"habitPerGoal" },
   // XP
   { id:"xp-500",    cat:"XP",         tier:"Bronze",   icon:"⚡", name:"Level 2",          desc:"Reach Level 2 (500 XP).",                   threshold:500,    stat:"xp" },
   { id:"xp-2500",   cat:"XP",         tier:"Silver",   icon:"⚡", name:"Level 6",          desc:"Reach Level 6 (2,500 XP).",                 threshold:2500,   stat:"xp" },
@@ -2356,6 +2391,17 @@ function App() {
   });
   const [expGoals, setExpGoals] = useState({});
   const [expGForm, setExpGForm] = useState(false);
+  // Step-by-step progressive disclosure for the add-goal form. Instead
+  // of showing name + area + SMART + save all at once (overwhelming for
+  // a new user), we reveal one sub-section at a time and gate the Next
+  // button on the current step's required input.
+  //   0 — name (Next gated on non-empty text)
+  //   1 — Area of Life (Next gated on a pick)
+  //   2 — SMART framework + Add Goal (SMART is optional; the final
+  //       button saves the goal and closes the form)
+  // Reset to 0 whenever the form opens/closes. The guided tour's
+  // goal-walkthrough steps map 1:1 onto these sub-steps.
+  const [goalFormStep, setGoalFormStep] = useState(0);
   // When the user tries to save a goal without picking an Area of Life,
   // we flip this flag so the dropdown gets a red ring + hint. Cleared on
   // successful add or when the user picks an area. "General" used to be
@@ -2509,6 +2555,14 @@ function App() {
   // buttons: swipe right-to-left = advance, left-to-right = back.
   // Lives in a ref so re-renders mid-gesture don't reset the start point.
   const tourSwipeRef = useRef({ x: 0, y: 0, t: 0, active: false });
+  // advance() / goBack() are defined inside renderTour (they close over
+  // the current step/gate/form state), but the GLOBAL swipe listener
+  // below needs to call them from a useEffect at component scope. We
+  // keep them on refs so the effect can invoke the latest versions
+  // without re-binding listeners on every render. renderTour updates
+  // these refs each time it runs.
+  const tourAdvanceRef = useRef(null);
+  const tourGoBackRef = useRef(null);
 
   /* CONFETTI on first goal + first habit.
      Refs seed to -1 so the first render (which may land with goals
@@ -2610,6 +2664,19 @@ function App() {
     return () => clearTimeout(t);
   }, [tourDone, inPreApp, tourStep]);
 
+  // Tour ↔ goal-form sub-step bridge. The add-goal form now reveals
+  // its fields one step at a time (name → area → SMART+save). When
+  // the tour walks past a field, flip the form to the matching
+  // sub-step so the selector it spotlights (goal-name / goal-area
+  // / goal-smart / goal-save) is actually visible on screen. One-way
+  // drive from tour → form; the form's Next button handles the
+  // reverse direction inline.
+  useEffect(() => {
+    if (tourStep === 3) setGoalFormStep(0);
+    else if (tourStep === 4) setGoalFormStep(1);
+    else if (tourStep === 5 || tourStep === 6) setGoalFormStep(2);
+  }, [tourStep]);
+
   /* Confetti — fire once the first time the user creates a goal or
      habit. Watches the length of each array and fires on the 0 → 1
      transition, guarded by a persisted flag on `data` so it never
@@ -2657,6 +2724,22 @@ function App() {
     // that would yank the value back to the saved snapshot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourStep]);
+
+  // Auto-advance the centered "Let's show you around!" welcome step
+  // onto the [+] spotlight after a short beat. Previously the user had
+  // to swipe before the + button ever got highlighted, which made the
+  // tour feel like it was waiting on something obscure. Now the intro
+  // appears, gives the user a second to read it, then the spotlight on
+  // the + button lands on its own.
+  useEffect(() => {
+    if (tourStep !== 1) return;
+    const t = setTimeout(() => {
+      // Only advance if still on step 1 — if the user already swiped
+      // forward (fast reader) don't bump them to step 3.
+      setTourStep(s => s === 1 ? 2 : s);
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [tourStep]);
   // Re-render when the window resizes OR anything scrolls — tooltip
   // anchors use live getBoundingClientRect, which would otherwise go
   // stale and leave the spotlight ring / dim panels / tooltip pinned
@@ -2691,15 +2774,17 @@ function App() {
     // Current shape (1-indexed):
     //   1        intro (no tab change)
     //   2-6      Goals walkthrough (tap +, name, area, SMART, save)
-    //   7-11     Habits walkthrough (tap +, name, timing, link, save)
-    //   12       To-Dos
-    //   13       Reflect
-    //   14-21    header widgets / profile (no tab change)
-    //   22       final "you're all set" (lands on brief)
+    //   7-14     Habits walkthrough (tap +, name, link, area, importance,
+    //            timing, schedule, save)
+    //   15       To-Dos
+    //   16       Reflect
+    //   17-24    header widgets / profile (no tab change)
+    //   25       final "you're all set" (lands on brief)
     const TOUR_TAB_BY_STEP = {
       2: "goals", 3: "goals", 4: "goals", 5: "goals", 6: "goals",
       7: "habits", 8: "habits", 9: "habits", 10: "habits", 11: "habits",
-      12: "todos", 13: "reflection", 22: "brief"
+      12: "habits", 13: "habits", 14: "habits",
+      15: "todos", 16: "reflection", 25: "brief"
     };
     const wantTab = TOUR_TAB_BY_STEP[tourStep];
     if (wantTab && tab !== wantTab) setTab(wantTab);
@@ -2715,19 +2800,27 @@ function App() {
      noise rather than a "tap me" cue.
 
      Step indices track TOUR_STEPS:
-       2 — "Let's start by adding a goal" → New-goal [+]
-       7 — "Now add a habit"              → New-habit [+]
+       2  — "Let's start by adding a goal" → New-goal [+]
+       6  — "Save your goal"               → Add-Goal button
+       7  — "Now add a habit"               → New-habit [+]
+       14 — "Save your habit"               → Add-Habit button
      Re-run key includes goals.length / habits.length so the bounce stops
      the instant the user creates the first goal / habit and the form
      un-mounts (otherwise the class would stay stamped on a stale DOM
-     node if one ever came back via back-swipe). */
+     node if one ever came back via back-swipe). Steps 6/14 bounce the
+     SAVE button itself — these are the "press the spotlighted save"
+     gates that keep the user from swiping past without actually saving
+     (U13); the pulsing spotlight ring alone was easy to read as
+     decorative. */
   const goalsLen = (data && data.goals) ? data.goals.length : 0;
   const habitsLen = (data && data.habits) ? data.habits.length : 0;
   useEffect(() => {
     if (tourStep === 0) return undefined;
     const GATED = {
-      2: { sel: "button[aria-label='New goal']",  open: goalsLen  === 0 },
-      7: { sel: "button[aria-label='New habit']", open: habitsLen === 0 }
+      2:  { sel: "button[aria-label='New goal']",  open: goalsLen  === 0 },
+      6:  { sel: "[data-tour-id='goal-save']",     open: goalsLen  === 0 },
+      7:  { sel: "button[aria-label='New habit']", open: habitsLen === 0 },
+      14: { sel: "[data-tour-id='habit-save']",    open: habitsLen === 0 }
     };
     const info = GATED[tourStep];
     if (!info || !info.open) return undefined;
@@ -2747,6 +2840,69 @@ function App() {
       if (el) el.classList.remove("tour-target-bounce");
     };
   }, [tourStep, goalsLen, habitsLen]);
+
+  /* Global swipe listener (document-level) — swiping anywhere on the
+     app during the tour advances / rewinds. The old listener only fired
+     on the tooltip + dim panels, but form-walkthrough steps turn off
+     pointer events on the panels so the user can interact with fields
+     underneath — which meant a swipe over the form itself didn't
+     register. Now any horizontal swipe that started somewhere non-
+     interactive (not an input/select/button/textarea) advances the
+     tour, regardless of whether it crossed the card, the spotlight
+     ring, or the app chrome.
+
+     Rules:
+       • 60px horizontal threshold + |dx| > |dy| clamp so vertical
+         scrolls and small taps don't count.
+       • Swipes that START on an input/select/textarea/button are
+         ignored — dragging to select text or scrubbing a slider
+         shouldn't flip the tour step.
+       • The Hold-to-Exit pill carries `data-no-swipe` so the long-
+         press gesture there isn't hijacked by the swipe tracker.
+       • Handlers call tourAdvanceRef/tourGoBackRef, which point at
+         the latest closures inside renderTour, so gate checks and
+         form-saves still run correctly. */
+  useEffect(() => {
+    if (tourStep === 0) return undefined;
+    const SWIPE_MIN = 60;
+    let startX = 0, startY = 0, tracking = false;
+    const ignoreTarget = (t) => {
+      if (!t || !t.closest) return false;
+      // Let the Hold-to-Exit button, inline form inputs, and any
+      // explicit opt-outs manage their own pointer events.
+      if (t.closest("[data-no-swipe='1'], .tour-exit-demo")) return true;
+      if (t.closest("input, select, textarea, button, [contenteditable='true']")) return true;
+      return false;
+    };
+    const onStart = (x, y, t) => {
+      if (ignoreTarget(t)) { tracking = false; return; }
+      startX = x; startY = y; tracking = true;
+    };
+    const onEnd = (x, y) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = x - startX;
+      const dy = y - startY;
+      if (Math.abs(dx) < SWIPE_MIN) return;
+      if (Math.abs(dx) < Math.abs(dy)) return;
+      if (dx < 0) { if (tourAdvanceRef.current) tourAdvanceRef.current(); }
+      else        { if (tourGoBackRef.current)  tourGoBackRef.current();  }
+    };
+    const ts = (e) => { const p = e.touches && e.touches[0]; if (p) onStart(p.clientX, p.clientY, e.target); };
+    const te = (e) => { const p = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]); if (p) onEnd(p.clientX, p.clientY); };
+    const md = (e) => onStart(e.clientX, e.clientY, e.target);
+    const mu = (e) => onEnd(e.clientX, e.clientY);
+    document.addEventListener("touchstart", ts, { passive: true });
+    document.addEventListener("touchend", te, { passive: true });
+    document.addEventListener("mousedown", md);
+    document.addEventListener("mouseup", mu);
+    return () => {
+      document.removeEventListener("touchstart", ts);
+      document.removeEventListener("touchend", te);
+      document.removeEventListener("mousedown", md);
+      document.removeEventListener("mouseup", mu);
+    };
+  }, [tourStep]);
 
   /* Auto-advance + DOM gate re-evaluation.
 
@@ -3163,14 +3319,63 @@ function App() {
      habit), so streaks earned and later reset still count. */
   const achievementStats = useMemo(() => {
     const habitsArr = (data && data.habits) || [];
+    const goalsArr = (data && data.goals) || [];
+    const archiveArr = (data && data.goalArchive) || [];
     const currentBest = habitsArr.length ? Math.max(0, ...habitsArr.map(h => getStreak(h))) : 0;
     const cachedBest = Math.max(0, ...Object.values((data && data.bestStreaks) || {}), 0);
+    // ── Derived goal-quality stats (feed the new Achiever/Builder
+    // achievements). None of these introduce new storage — they're
+    // pure functions of `data.goals` / `data.goalArchive` / `data.habits`.
+    //
+    //  smartGoals: count of goals (live OR archived) where every SMART
+    //    field carries a non-empty value. `measurable` is the trickiest
+    //    — the UI splits it into a number field + a unit field, so both
+    //    must be filled for the M to count. The unlock check is
+    //    `smartGoals >= 1` so filling SMART on a SINGLE goal triggers
+    //    it; keeping it as a count (not a boolean) leaves room for
+    //    future "3 SMART goals", "10 SMART goals" tiers without a
+    //    schema change.
+    //
+    //  goalsCreated: total goals the user has ever created, = live +
+    //    archived. Completing a goal moves it from data.goals to
+    //    data.goalArchive; summing both means a 3-goals milestone
+    //    stays unlocked even after the user checks them all off.
+    //
+    //  activeGoalsCleared: 1 at the "zero active, ≥1 archived" clean-
+    //    slate moment, else 0. Boolean-as-threshold so the existing
+    //    `statVal >= threshold` unlock check works unchanged.
+    //
+    //  habitPerGoal: 1 when there's at least one goal AND every live
+    //    goal's id appears as a goalId on at least one habit. Zero-
+    //    goal state stays locked so an empty workspace can't accidentally
+    //    unlock "Laddered Up".
+    const isSmartComplete = (g) => {
+      const s = g && g.smart;
+      if (!s) return false;
+      const measurableOk = String(s.measurable || "").trim().length > 0
+        && String(s.measurableUnit || "").trim().length > 0;
+      return measurableOk
+        && String(s.specific    || "").trim().length > 0
+        && String(s.achievable  || "").trim().length > 0
+        && String(s.relevant    || "").trim().length > 0
+        && String(s.timebound   || "").trim().length > 0;
+    };
+    const smartGoals = goalsArr.filter(isSmartComplete).length
+                     + archiveArr.filter(isSmartComplete).length;
+    const goalsCreated = goalsArr.length + archiveArr.length;
+    const activeGoalsCleared = (goalsArr.length === 0 && archiveArr.length >= 1) ? 1 : 0;
+    const linkedGoalIds = new Set(habitsArr.map(h => h && h.goalId).filter(Boolean).map(String));
+    const habitPerGoal = (goalsArr.length >= 1 && goalsArr.every(g => linkedGoalIds.has(String(g.id)))) ? 1 : 0;
     return {
       visits: ((data && data.dayVisits) || []).length,
       bestStreak: Math.max(currentBest, cachedBest),
-      goals: ((data && data.goalArchive) || []).length,
+      goals: archiveArr.length,
       habitsActive: habitsArr.length,
-      xp: (data && data.xp) || 0
+      xp: (data && data.xp) || 0,
+      smartGoals,
+      goalsCreated,
+      activeGoalsCleared,
+      habitPerGoal
     };
   }, [data]);
 
@@ -3209,7 +3414,7 @@ function App() {
     if (Object.keys(newly).length === 0) return;
     save({ ...data, achievementsUnlocked: { ...already, ...newly } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [achievementStats.visits, achievementStats.bestStreak, achievementStats.goals, achievementStats.habitsActive, achievementStats.xp]);
+  }, [achievementStats.visits, achievementStats.bestStreak, achievementStats.goals, achievementStats.habitsActive, achievementStats.xp, achievementStats.smartGoals, achievementStats.goalsCreated, achievementStats.activeGoalsCleared, achievementStats.habitPerGoal]);
 
   /* Also keep data.bestStreaks up-to-date — whenever a habit's current
      streak exceeds its cached best, bump the cache so the achievement
@@ -3395,6 +3600,7 @@ function App() {
       timebound: ""
     });
     setGoalAreaErr(false);
+    setGoalFormStep(0);
     setExpGForm(false);
   };
   const sEGoal = g => {
@@ -3714,7 +3920,12 @@ function App() {
     /*#__PURE__*/React.createElement("input", {
       value: goalTodoDraft[goal.id] || "",
       onChange: e => setGoalTodoDraft(prev => ({ ...prev, [goal.id]: e.target.value })),
-      onKeyDown: e => { if (e.key === "Enter") addGoalTodo(goal.id); },
+      // No Enter-to-save. Per user: saves happen on explicit tap of the
+      // save/add button only — hitting Enter used to close the form and
+      // silently commit a half-filled item, which felt like the card
+      // "exited" on accident. Swallow Enter so the browser doesn't try
+      // to submit a nonexistent parent form either.
+      onKeyDown: e => { if (e.key === "Enter") e.preventDefault(); },
       placeholder: "+ Add a to-do for this goal\u2026",
       style: {
         flex: 1, background: "#fff", border: "1px solid #e5e7eb",
@@ -5020,6 +5231,11 @@ function App() {
       selector: "button[aria-label='New goal']",
       placement: "bottom",
       tab: "goals",
+      // Pin the tooltip to the bottom of the viewport so it doesn't
+      // hover on top of the [+] button near the header — otherwise the
+      // spotlighted target is covered by the very tooltip asking you
+      // to tap it.
+      pinBottom: true,
       gate: () => !!document.querySelector("[data-tour-id='goal-form']"),
       gateHint: "Tap + to start.",
       autoAdvance: true
@@ -5080,9 +5296,14 @@ function App() {
       gateHint: "Tap Add Goal to continue.",
       autoAdvance: true
     },
-    // ── Habits walkthrough (7-11) ────────────────────────────────────
-    // Same shape as the goal walkthrough: tap +, name it, set timing,
-    // link to the goal we just created, save.
+    // ── Habits walkthrough (7-14) ────────────────────────────────────
+    // Same shape as the goal walkthrough, expanded to hit every habit
+    // field the user can set: tap +, name, link-to-goal FIRST (so area
+    // auto-fills from the goal), area confirmation, importance, timing,
+    // schedule, save. Linking before the area step matters because the
+    // Area of Life dropdown is locked to match the linked goal — walking
+    // the user to "pick an area" before they've linked would have them
+    // picking a value the next step about to overwrite.
     // 7 — Habits: tap the [+] to open the new-habit form
     {
       title: "Now add a habit",
@@ -5090,6 +5311,7 @@ function App() {
       selector: "button[aria-label='New habit']",
       placement: "bottom",
       tab: "habits",
+      pinBottom: true,
       gate: () => !!document.querySelector("[data-tour-id='habit-form']"),
       gateHint: "Tap + to start.",
       autoAdvance: true
@@ -5111,7 +5333,43 @@ function App() {
       },
       gateHint: "Type a habit to continue."
     },
-    // 9 — Habits: time of day + duration
+    // 9 — Habits: link to the goal just created (moved UP from
+    // former step 10). We walk link first so the habit's Area of
+    // Life auto-syncs from the goal — then the next step is a quick
+    // "see, it's already set" confirmation rather than a blank pick.
+    {
+      title: "Link it to the goal you just set",
+      body: "Connect this habit to the goal you just added so progress rolls up. Picking the goal also auto-fills the habit's Area of Life — they have to match.",
+      selector: "[data-tour-id='habit-goal']",
+      placement: "top",
+      tab: "habits",
+      formStep: true,
+      gate: () => {
+        const sel = document.querySelector("[data-tour-id='habit-goal']");
+        return !!(sel && sel.value && sel.value !== "__new__");
+      },
+      gateHint: "Pick the goal you just created.",
+      autoAdvance: true
+    },
+    // 10 — Habits: Area of Life (auto-filled from linked goal)
+    {
+      title: "Area of Life \u2014 locked to the goal",
+      body: "Because you linked a goal, the habit sits in the same Area of Life. Unlink the goal if you need to change it.",
+      selector: "[data-tour-id='habit-area']",
+      placement: "top",
+      tab: "habits",
+      formStep: true
+    },
+    // 11 — Habits: Importance
+    {
+      title: "How important is this habit?",
+      body: "Rank it so the daily view surfaces the load-bearing habits first when your day gets crowded.",
+      selector: "[data-tour-id='habit-importance']",
+      placement: "top",
+      tab: "habits",
+      formStep: true
+    },
+    // 12 — Habits: time of day + duration
     {
       title: "When & how long?",
       body: "Pick a time of day and roughly how long it takes. These two slots drive how the habit groups on your daily view.",
@@ -5120,16 +5378,16 @@ function App() {
       tab: "habits",
       formStep: true
     },
-    // 10 — Habits: link to the goal just created
+    // 13 — Habits: schedule (start date + cadence)
     {
-      title: "Link it to the goal you just set",
-      body: "Connect this habit to the goal you just added so progress rolls up. That link is what turns daily reps into real results.",
-      selector: "[data-tour-id='habit-goal']",
+      title: "Start date & cadence",
+      body: "Pick when the habit begins and how often it repeats — daily, weekly on certain days, monthly, or a one-off date.",
+      selector: "[data-tour-id='habit-schedule']",
       placement: "top",
       tab: "habits",
       formStep: true
     },
-    // 11 — Habits: save
+    // 14 — Habits: save
     {
       title: "Save your habit",
       body: "Tap Add to save it. You can always edit later by long-pressing the habit card.",
@@ -5254,24 +5512,96 @@ function App() {
     }
 
     let rect = null;
+    // ringRadius is the CSS border-radius to paint on the spotlight ring
+    // so it MATCHES the shape of the target element — circles ([+] add
+    // buttons) get a circular ring, inputs get their rounded-rectangle
+    // radius, etc. The old hard-coded 12px made a pill-capsule [+] sit
+    // inside a boxy square, which read as "the spotlight drifted off
+    // the button" even though it was centered. We grab the target's
+    // computed border-radius (using its four corner values so we don't
+    // get tripped up by shorthand quirks), treat 50% / values close to
+    // half the smallest side as "circle → render a perfect circle ring
+    // that hugs the button", and otherwise extend each corner radius by
+    // the overlay's pad so the widened ring still aligns with the
+    // target's curve instead of collapsing to a sharp outline.
+    let ringRadius = "12px";
     if (target) {
       const r = target.getBoundingClientRect();
       rect = { top: r.top, left: r.left, width: r.width, height: r.height,
                bottom: r.bottom, right: r.right };
+      try {
+        const cs = window.getComputedStyle(target);
+        const raw = [
+          cs.borderTopLeftRadius,
+          cs.borderTopRightRadius,
+          cs.borderBottomRightRadius,
+          cs.borderBottomLeftRadius
+        ];
+        const minSide = Math.min(r.width, r.height);
+        // A value ≥ half the smallest side means the corner is fully
+        // rounded (pill/circle). If ALL four corners hit that threshold
+        // AND the element is roughly square (within 10%), we paint a
+        // perfect circle ring hugging the button. Using 50% on a wide
+        // pill would produce an ellipse — that's desirable too, so pill-
+        // shaped buttons still get a pill ring.
+        const parsed = raw.map(v => {
+          if (!v) return 0;
+          if (v.endsWith("%")) return (parseFloat(v) / 100) * minSide;
+          return parseFloat(v) || 0;
+        });
+        const allPill = parsed.every(p => p >= minSide / 2 - 1);
+        const squareish = Math.abs(r.width - r.height) / Math.max(r.width, r.height, 1) < 0.12;
+        if (allPill && squareish) {
+          // Perfect circle — radius = half the widened (padded) side so
+          // the spotlight ring hugs the button edge without cutting in.
+          ringRadius = "50%";
+        } else if (allPill) {
+          // Pill / ellipse — keep it round-on-the-ends by using 9999px
+          // which CSS clamps to half-the-shorter-side, preserving the
+          // capsule look even after the ring is widened by pad.
+          ringRadius = "9999px";
+        } else {
+          // Rounded rectangle — extend each corner radius by `pad` so
+          // the ring's curve stays flush with the element's curve after
+          // the ring is grown outward.
+          ringRadius = parsed.map(p => (p + pad) + "px").join(" ");
+        }
+      } catch (_e) {
+        ringRadius = "12px";
+      }
     }
 
     // Form-walkthrough steps (pick area, SMART, save, etc.) dock at the
-    // top of the viewport just like the initial gated [+] step does, so
+    // top of the viewport just like the initial gated [+] step did, so
     // the middle of the screen stays clear and the user can SEE + type
     // into the form beneath. We treat any step flagged `formStep: true`
-    // as needing the top-dock treatment, not just gated ones.
-    const topDock = gateBlocked || step.formStep === true;
+    // as needing the top-dock treatment.
+    //
+    // `pinBottom: true` overrides that and pins the tooltip to the
+    // bottom of the viewport instead — used on the "Tap + to start"
+    // steps where the spotlight target is the [+] button near the top
+    // of the page. Top-docking would cover that button; bottom-docking
+    // keeps it unobstructed.
+    const pinBottom = step.pinBottom === true;
+    const topDock = !pinBottom && (gateBlocked || step.formStep === true);
 
     // Decide tooltip position: if anchored, place above (default) or
     // below depending on room + step.placement hint. If not anchored,
     // center the tooltip in the viewport.
     let tipStyle = {};
-    if (topDock) {
+    if (pinBottom) {
+      // The fixed-bottom swipe-footer pill occupies ~30px of height at
+      // `bottom: 14px`. Park the pin-bottom tooltip ABOVE the pill
+      // (footer height + gap + safe-area) so the user can see both the
+      // "Tap + to start" card AND the swipe hint on the same screen.
+      tipStyle = {
+        position: "fixed",
+        left: 12,
+        right: 12,
+        bottom: "calc(62px + env(safe-area-inset-bottom, 0px))",
+        width: "auto"
+      };
+    } else if (topDock) {
       // Gated / form-walkthrough steps — dock the tooltip across the TOP
       // of the viewport, above the spotlighted [+] button or form field.
       // Typical phone stack:
@@ -5373,6 +5703,12 @@ function App() {
     const goBack = () => {
       if (tourStep > 1) setTourStep(tourStep - 1);
     };
+    // Expose the latest closures so the component-level global-swipe
+    // useEffect can trigger them without re-binding document listeners
+    // on every step/state change. renderTour runs on every render, so
+    // these refs are always current when a swipe fires.
+    tourAdvanceRef.current = advance;
+    tourGoBackRef.current = goBack;
 
     // ── Swipe handlers — attached to the tooltip and the dim panels so
     //    a horizontal swipe anywhere off the spotlight area navigates the
@@ -5511,14 +5847,19 @@ function App() {
           transition: "all 0.2s ease"
         }
       }, (gateBlocked || step.formStep === true) ? null : swipeHandlers))),
-      // Highlight ring
+      // Highlight ring — borderRadius matches the target's shape. See
+      // `ringRadius` computation above: circular [+] buttons get a
+      // perfect circle ring, pill buttons keep their capsule outline,
+      // inputs / form fields get their own rounded-rectangle radius
+      // extended by `pad` so the ring still hugs the curve after it's
+      // widened outward.
       rect && /*#__PURE__*/React.createElement("div", {
         style: {
           position: "fixed",
           left: rect.left - pad, top: rect.top - pad,
           width: rect.width + pad * 2, height: rect.height + pad * 2,
           border: "2px solid #2d5a2d",
-          borderRadius: 12,
+          borderRadius: ringRadius,
           boxShadow: "0 0 0 4px rgba(45,90,45,.25), 0 8px 24px rgba(0,0,0,.3)",
           pointerEvents: "none",
           animation: "tourPulse 1.6s ease-in-out infinite"
@@ -5619,30 +5960,65 @@ function App() {
           zIndex: 10000
         }
       }, swipeHandlers),
-        // Top-right "Exit Demo" pill — only in demo mode. The main
+        // Top-right "Hold to Exit" pill — only in demo mode. The main
         // yellow "Exit demo" bar sits behind the tour overlay (the
         // overlay's zIndex:10000 covers the zIndex:60 sticky bar), so
         // without this pill the user has no way to leave demo mode
-        // during the walkthrough. Tap fires a confirm modal; confirm
-        // runs exitDemo() and surfaces a hint pointing to the Replay
-        // Tour control in Profile settings.
+        // during the walkthrough. U14 changed this from a tap-fires-
+        // confirm-modal pattern to a press-and-hold gesture: a short
+        // tap does nothing, but holding for ~900ms fires the confirm
+        // modal. Prevents accidental exits from stray taps on the
+        // tooltip (which is a busy area sitting over a spotlit form)
+        // and the label itself teaches the gesture. The CSS rule on
+        // `.tour-exit-demo.holding` fills a red bar left→right for
+        // the 900ms so the user sees the press register.
         demoMode && /*#__PURE__*/React.createElement("button", Object.assign({
           className: "tour-exit-demo",
-          onClick: () => setConfirmExitDemo("confirm"),
+          "aria-label": "Hold to exit demo",
+          onPointerDown: (e) => {
+            e.currentTarget.classList.add("holding");
+            // Store timeout id on the element itself so we can cancel
+            // on pointerup/leave without closure gymnastics across
+            // multiple handlers. 900ms matches the ::after fill.
+            const btn = e.currentTarget;
+            btn._holdTimer = setTimeout(() => {
+              btn.classList.remove("holding");
+              setConfirmExitDemo("confirm");
+            }, 900);
+          },
+          onPointerUp: (e) => {
+            const btn = e.currentTarget;
+            if (btn._holdTimer) { clearTimeout(btn._holdTimer); btn._holdTimer = null; }
+            btn.classList.remove("holding");
+          },
+          onPointerLeave: (e) => {
+            const btn = e.currentTarget;
+            if (btn._holdTimer) { clearTimeout(btn._holdTimer); btn._holdTimer = null; }
+            btn.classList.remove("holding");
+          },
+          onPointerCancel: (e) => {
+            const btn = e.currentTarget;
+            if (btn._holdTimer) { clearTimeout(btn._holdTimer); btn._holdTimer = null; }
+            btn.classList.remove("holding");
+          },
+          // Block the native click → no-op on quick taps.
+          onClick: (e) => { e.preventDefault(); e.stopPropagation(); },
           style: {
             position: "absolute",
             top: 10, right: 12,
             zIndex: 2
           }
-        }, stopSwipeStart), "Exit Demo"),
+        }, stopSwipeStart), "Hold to Exit"),
         // No "Step X of Y" badge and no progress dots — the tour shouldn't
         // feel like a numbered checklist. Title + body + swipe hint do all
         // the navigation framing on their own.
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-title",
-          // Reserve right-side room for the Exit Demo pill so the title
-          // doesn't collide with it on narrow viewports.
-          style: { fontSize: 17, fontWeight: 700, marginBottom: 6, paddingRight: demoMode ? 78 : 0 }
+          // Reserve right-side room for the "Hold to Exit" pill so the
+          // title doesn't collide with it on narrow viewports. The pill
+          // is wider than the old "Exit Demo" one (U14), so the reserve
+          // is a bit larger.
+          style: { fontSize: 17, fontWeight: 700, marginBottom: 6, paddingRight: demoMode ? 96 : 0 }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-body",
@@ -5685,28 +6061,14 @@ function App() {
               }, stopSwipeStart), "Got it")
             )
           : /*#__PURE__*/React.createElement("div", null,
-              // Hide the "← swipe →" hint while the step is gated — the
-              // top-docked tooltip has a tight height budget (it sits
-              // above the [+] button) so we don't want anything optional
-              // pushing content off the bottom. The arrow + bubble
-              // callout below the [+] button already says "Add a goal /
-              // habit to continue", so no additional prompt is needed
-              // here.
-              !gateBlocked && /*#__PURE__*/React.createElement("div", {
-                className: "tour-tip-swipe",
-                style: {
-                  fontSize: 12,
-                  textAlign: "center", marginBottom: step.optionalActionKey ? 10 : 0,
-                  fontWeight: 500, letterSpacing: .3,
-                  display: "flex", justifyContent: "center"
-                }
-              },
-                /*#__PURE__*/React.createElement("span", { className: "swipe-hint" },
-                  /*#__PURE__*/React.createElement("span", null, "\u2190"),
-                  /*#__PURE__*/React.createElement("span", { className: "swipe-word" }, "swipe"),
-                  /*#__PURE__*/React.createElement("span", null, "\u2192")
-                )
-              ),
+              // The "← swipe →" hint that used to live here has moved
+              // to a fixed-bottom footer outside the tooltip (see the
+              // global swipe-footer render at the end of renderTour).
+              // Keeping it inside the card crowded the copy on the
+              // gated Tap+ steps AND made the gesture feel "bound" to
+              // the card — but swipes work anywhere on the app now, so
+              // the hint belongs at the bottom of the viewport where
+              // the gesture actually terminates.
               // Optional secondary action only — Skip is intentionally absent.
               step.optionalActionKey && /*#__PURE__*/React.createElement("div", {
                 style: { display: "flex", justifyContent: "center" }
@@ -5721,7 +6083,43 @@ function App() {
                 }, stopSwipeStart), step.optionalActionLabel || "Try it")
               )
             )
-      )
+      ),
+      // ── Fixed-bottom swipe footer ──────────────────────────────────
+      // The ← swipe → hint lives OUTSIDE the tour card, pinned to the
+      // bottom of the viewport. Two reasons:
+      //   1. The gesture works anywhere on the app now (see the
+      //      document-level swipe listener earlier in the component),
+      //      so the hint shouldn't look "bound" to the card.
+      //   2. On gated Tap+ steps the card's internal height budget is
+      //      tight; an external hint keeps the card copy clean.
+      // Hidden when gate is blocking (the gate callout says "Add a
+      // goal to continue" already) and on the final step (the Got it
+      // button is the only way out — no swipe needed). The wrapper is
+      // pointerEvents:none so the pill never blocks a tap on whatever
+      // sits beneath it (e.g. the bottom nav during tour steps 15+).
+      !isLast && !gateBlocked && /*#__PURE__*/React.createElement("div", {
+        key: "swipeFooter",
+        style: {
+          position: "fixed", left: 0, right: 0,
+          bottom: "calc(14px + env(safe-area-inset-bottom, 0px))",
+          display: "flex", justifyContent: "center",
+          pointerEvents: "none", zIndex: 10001
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        className: "tour-swipe-footer",
+        style: {
+          padding: "6px 14px", borderRadius: 999,
+          background: "rgba(255,255,255,0.82)",
+          backdropFilter: "blur(16px) saturate(180%)",
+          WebkitBackdropFilter: "blur(16px) saturate(180%)",
+          boxShadow: "0 8px 24px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.9)",
+          fontSize: 12, fontWeight: 500, letterSpacing: .3, color: "#4b5563"
+        }
+      }, /*#__PURE__*/React.createElement("span", { className: "swipe-hint" },
+        /*#__PURE__*/React.createElement("span", null, "\u2190"),
+        /*#__PURE__*/React.createElement("span", { className: "swipe-word" }, "swipe"),
+        /*#__PURE__*/React.createElement("span", null, "\u2192")
+      )))
     );
   };
 
@@ -7343,7 +7741,11 @@ function App() {
     }, /*#__PURE__*/React.createElement("input", {
       value: nHabit,
       onChange: e => sNHabit(e.target.value),
-      onKeyDown: e => e.key === "Enter" && addHabit(),
+      // No Enter-to-save. The habit only commits when the user taps the
+      // spotlighted Add button — hitting Enter mid-form used to save a
+      // habit that was missing its area / importance / schedule, which
+      // read as the card closing on the user by accident.
+      onKeyDown: e => { if (e.key === "Enter") e.preventDefault(); },
       placeholder: "Habit name...",
       "data-tour-id": "habit-name",
       style: {
@@ -7398,6 +7800,7 @@ function App() {
       // disabled until the goal link is cleared.
       onChange: e => { if (!nHGoal) sNHType(e.target.value); },
       disabled: !!nHGoal,
+      "data-tour-id": "habit-area",
       style: {
         ...S,
         flex: 1,
@@ -7413,6 +7816,7 @@ function App() {
     }, t.value))), /*#__PURE__*/React.createElement("select", {
       value: nHImp,
       onChange: e => sNHImp(e.target.value),
+      "data-tour-id": "habit-importance",
       style: {
         ...S,
         flex: 1,
@@ -7427,7 +7831,12 @@ function App() {
     // Schedule block: start date + frequency cadence + cadence-specific
     // sub-picker (weekday chips, day-of-month, or month+day anchor).
     // See `renderFreqPicker` for the per-cadence field layout.
-    renderFreqPicker(nHFreq, sNHFreq, nHStart, sNHStart),
+    // Wrapped so the tour can spotlight the whole schedule block at once
+    // (start date + cadence) as a single walkthrough step instead of
+    // flashing the picker sub-selects one by one.
+    /*#__PURE__*/React.createElement("div", {
+      "data-tour-id": "habit-schedule"
+    }, renderFreqPicker(nHFreq, sNHFreq, nHStart, sNHStart)),
     /*#__PURE__*/React.createElement("select", {
       value: nHGoal,
       onChange: e => {
@@ -8152,8 +8561,11 @@ function App() {
       }, /*#__PURE__*/React.createElement("input", {
         value: eTodoTxt,
         onChange: e => sETodoTxt(e.target.value),
+        // Enter is a no-op — the edit only commits when the user taps
+        // the save button. Escape still bails out of the edit row
+        // without saving, matching the old behavior.
         onKeyDown: e => {
-          if (e.key === "Enter") svETodo(todo.id);
+          if (e.key === "Enter") e.preventDefault();
           if (e.key === "Escape") sETodoId(null);
         },
         autoFocus: true,
@@ -8342,7 +8754,13 @@ function App() {
         /*#__PURE__*/React.createElement("input", {
           value: nTodo,
           onChange: e => sNTodo(e.target.value),
-          onKeyDown: e => { if (e.key === "Enter") { addTodo(); setExpTodoForm(false); } if (e.key === "Escape") setExpTodoForm(false); },
+          // Enter no longer saves — only the Add button commits the
+          // task. Escape still closes the inline form (no save) since
+          // that's a pure cancel, not a hidden commit.
+          onKeyDown: e => {
+            if (e.key === "Enter") e.preventDefault();
+            if (e.key === "Escape") setExpTodoForm(false);
+          },
           placeholder: "What do you need to get done?",
           autoFocus: true,
           style: { ...IS, width: "100%" }
@@ -8983,7 +9401,7 @@ function App() {
     // management moved to Profile → My Account, since it's a settings
     // concern, not a per-session action.)
     /*#__PURE__*/React.createElement("button", {
-      onClick: () => setExpGForm(p => !p),
+      onClick: () => setExpGForm(p => { if (!p) setGoalFormStep(0); return !p; }),
       "aria-label": "New goal",
       title: "New goal",
       style: {
@@ -9076,63 +9494,99 @@ function App() {
       marginBottom: 14,
       boxShadow: "0 1px 3px rgba(0,0,0,.04)"
     }
-  }, /*#__PURE__*/React.createElement("input", {
-    value: nGoal,
-    onChange: e => sNGoal(e.target.value),
-    onKeyDown: e => e.key === "Enter" && addGoal(),
-    placeholder: "Goal description...",
-    "data-tour-id": "goal-name",
-    style: {
-      ...IS,
-      width: "100%",
-      marginBottom: 8
-    }
-  }), /*#__PURE__*/React.createElement("select", {
-    value: nGType,
-    onChange: e => {
-      sNGType(e.target.value);
-      if (e.target.value) setGoalAreaErr(false);
+  },
+    // Tiny stepper pill above the current sub-step so the user knows
+    // where they are in the 3-part flow. Purely decorative — the real
+    // state is `goalFormStep`.
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 4, justifyContent: "center", marginBottom: 10 }
+    }, [0, 1, 2].map(i => /*#__PURE__*/React.createElement("div", {
+      key: "gs" + i,
+      style: {
+        width: i === goalFormStep ? 22 : 8,
+        height: 5, borderRadius: 3,
+        background: i <= goalFormStep ? "#2d5a2d" : "#e5e7eb",
+        transition: "all .18s ease"
+      }
+    }))),
+    // STEP 0 — name. Kept in the DOM so the tour's goal-name selector
+    // can still find it even when sub-steps 1/2 are visible; we just
+    // hide it via display:none so the flow still feels step-by-step.
+    // (Inputs outside the current step stay mounted so their values
+    // persist if the user hits Back.)
+    //
+    // INVARIANT: step panels toggle via display:none (NOT conditional
+    // rendering) so React keeps every input mounted — typed names,
+    // picked areas, and SMART values survive the tour's auto-advance
+    // between steps, survive Back swipes, and only reset when
+    // addGoal() explicitly clears state on save/cancel. Do NOT change
+    // these wrappers to `{goalFormStep === 0 && <step0/>}` — that
+    // remount would wipe what the user already typed.
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: goalFormStep === 0 ? "block" : "none" }
     },
-    "data-tour-id": "goal-area",
-    style: {
-      ...S,
-      width: "100%",
-      marginBottom: goalAreaErr ? 2 : 8,
-      color: [...HT,...(data.customGoalTypes||[])].find(t => t.value === nGType)?.color || "#9ca3af",
-      // Red ring + tinted bg when the user tried to save without a pick.
-      // Cleared the moment they pick anything (see onChange above) or
-      // the goal saves successfully.
-      border: goalAreaErr ? "1px solid #dc2626" : (S.border || "1px solid #e5e7eb"),
-      background: goalAreaErr ? "#fef2f2" : (S.background || "#fff")
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\uD83C\uDFF7 Area of Life"), [...HT,...(data.customGoalTypes||[])].map(t => /*#__PURE__*/React.createElement("option", {
-    key: t.value,
-    value: t.value
-  }, t.value))), goalAreaErr && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#dc2626",
-      marginBottom: 8,
-      marginTop: 2
-    }
-  }, "Pick an area of life to save this goal."), /*#__PURE__*/React.createElement("div", {
-    "data-tour-id": "goal-smart",
-    style: {
-      fontSize: 10,
-      fontWeight: 700,
-      color: "#2d5a2d",
-      textTransform: "uppercase",
-      marginBottom: 8
-    }
-  }, "S.M.A.R.T. Framework (optional)"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 6,
-      marginBottom: 10
-    }
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 6 }
+      }, "Step 1 of 3 — Name your goal"),
+      /*#__PURE__*/React.createElement("input", {
+        value: nGoal,
+        onChange: e => sNGoal(e.target.value),
+        // Enter is a no-op on the goal form. It used to jump to the
+        // next sub-step (area of life), but the multi-step form already
+        // has a spotlighted Next button driving the tour — the implicit
+        // Enter shortcut caused users to race past the Next affordance
+        // and occasionally submit a half-configured goal on the final
+        // step (when Enter hit the SMART fields). Saving now only
+        // happens when the user taps Add Goal.
+        onKeyDown: e => { if (e.key === "Enter") e.preventDefault(); },
+        placeholder: "e.g. Run a half-marathon",
+        "data-tour-id": "goal-name",
+        autoFocus: goalFormStep === 0,
+        style: { ...IS, width: "100%", marginBottom: 4 }
+      }),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "#6b7280", marginBottom: 4 }
+      }, "Keep it concrete and short.")
+    ),
+    // STEP 1 — Area of Life
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: goalFormStep === 1 ? "block" : "none" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 6 }
+      }, "Step 2 of 3 — Pick an Area of Life"),
+      /*#__PURE__*/React.createElement("select", {
+        value: nGType,
+        onChange: e => { sNGType(e.target.value); if (e.target.value) setGoalAreaErr(false); },
+        "data-tour-id": "goal-area",
+        autoFocus: goalFormStep === 1,
+        style: {
+          ...S,
+          width: "100%",
+          marginBottom: goalAreaErr ? 2 : 6,
+          color: [...HT,...(data.customGoalTypes||[])].find(t => t.value === nGType)?.color || "#9ca3af",
+          border: goalAreaErr ? "1px solid #dc2626" : (S.border || "1px solid #e5e7eb"),
+          background: goalAreaErr ? "#fef2f2" : (S.background || "#fff")
+        }
+      }, /*#__PURE__*/React.createElement("option", { value: "" }, "\uD83C\uDFF7 Area of Life"),
+         [...HT,...(data.customGoalTypes||[])].map(t => /*#__PURE__*/React.createElement("option", { key: t.value, value: t.value }, t.value))),
+      goalAreaErr && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "#dc2626", marginBottom: 6 }
+      }, "Pick an area of life to continue.")
+    ),
+    // STEP 2 — SMART framework + final Add Goal
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: goalFormStep === 2 ? "block" : "none" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 6 }
+      }, "Step 3 of 3 — SMART details (optional)"),
+      /*#__PURE__*/React.createElement("div", {
+        "data-tour-id": "goal-smart",
+        style: { fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 8 }
+      }, "Fill these in now or come back later."),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }
   }, SF_FIELDS.map(f => {
     // See the edit-goal variant for the rationale on splitting M into
     // (number, unit) and turning T into a native date picker.
@@ -9176,11 +9630,15 @@ function App() {
           marginBottom: 2
         }
       }, f.label), /*#__PURE__*/React.createElement("input", {
-        type: "date",
+        // datetime-local so the user can pick both the target DATE
+        // and the target TIME of day. Stored as "YYYY-MM-DDTHH:MM".
+        // The display path upgrades older date-only values ("YYYY-MM-DD")
+        // to still render, so legacy data keeps working.
+        type: "datetime-local",
         className: "sf",
-        value: /^\d{4}-\d{2}-\d{2}$/.test(nGSmart.timebound) ? nGSmart.timebound : "",
+        value: /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(nGSmart.timebound) ? nGSmart.timebound : "",
         onChange: e => sNGSmart(p => ({ ...p, timebound: e.target.value })),
-        placeholder: "Target date",
+        placeholder: "Target date & time",
         style: { width: "100%" }
       }));
     }
@@ -9203,37 +9661,62 @@ function App() {
       })),
       placeholder: f.ph
     }));
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      justifyContent: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => { setExpGForm(false); setGoalAreaErr(false); },
-    style: {
-      ...AB,
-      background: "#f3f4f6",
-      color: "#6b7280",
-      padding: "8px 14px",
-      fontSize: 12
-    }
-  }, "Cancel"), /*#__PURE__*/React.createElement("button", {
-    "data-tour-id": "goal-save",
-    // addGoal() is responsible for closing the form on success (via
-    // setExpGForm(false) inside the save path). The old wrapper closed
-    // the form unconditionally, which silently swallowed empty-name
-    // taps — the form shut without adding anything, leaving the user
-    // wondering why nothing happened. Just call addGoal and let it
-    // handle the close; if the name is empty it no-ops and the form
-    // stays open for the user to finish typing.
-    onClick: addGoal,
-    style: {
-      ...AB,
-      padding: "8px 18px",
-      fontSize: 12
-    }
-  }, "Add Goal"))), data.goals.filter(g => goalTypeFilter.length === 0 || goalTypeFilter.includes(g.type)).length === 0 && data.goals.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }))
+    ),
+    // Dynamic nav row. Cancel is always on the far left. Back appears
+    // once we're past step 0. The primary action is Next until the
+    // final step, where it becomes Add Goal. Next on step 1 validates
+    // that an Area of Life is picked (otherwise we flip goalAreaErr
+    // and the existing red-ring treatment flashes).
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }
+    },
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => { setExpGForm(false); setGoalAreaErr(false); setGoalFormStep(0); },
+        style: { ...AB, background: "#f3f4f6", color: "#6b7280", padding: "8px 14px", fontSize: 12 }
+      }, "Cancel"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 8 }
+      },
+        goalFormStep > 0 && /*#__PURE__*/React.createElement("button", {
+          onClick: () => setGoalFormStep(s => Math.max(0, s - 1)),
+          style: { ...AB, background: "#f3f4f6", color: "#374151", padding: "8px 14px", fontSize: 12 }
+        }, "Back"),
+        goalFormStep < 2 && /*#__PURE__*/React.createElement("button", {
+          // Each Next is gated on the current step's required input.
+          // Step 0: need non-empty name. Step 1: need Area of Life
+          // picked (we surface the red-ring error instead of silently
+          // blocking). Step 2's primary button is Add Goal, not Next.
+          onClick: () => {
+            if (goalFormStep === 0) {
+              if (!nGoal.trim()) return;
+              setGoalFormStep(1);
+              // Keep the guided tour in lockstep with the form so
+              // the coach-marks don't lag behind the user.
+              if (tourStep === 3) setTourStep(4);
+            } else if (goalFormStep === 1) {
+              if (!nGType) { setGoalAreaErr(true); return; }
+              setGoalFormStep(2);
+              if (tourStep === 4) setTourStep(5);
+            }
+          },
+          disabled: goalFormStep === 0 ? !nGoal.trim() : false,
+          style: {
+            ...AB,
+            padding: "8px 18px",
+            fontSize: 12,
+            background: (goalFormStep === 0 && !nGoal.trim()) ? "#9ca3af" : "#2d5a2d",
+            cursor: (goalFormStep === 0 && !nGoal.trim()) ? "default" : "pointer"
+          }
+        }, "Next"),
+        goalFormStep === 2 && /*#__PURE__*/React.createElement("button", {
+          "data-tour-id": "goal-save",
+          onClick: addGoal,
+          style: { ...AB, padding: "8px 18px", fontSize: 12 }
+        }, "Add Goal")
+      )
+    )
+  ), data.goals.filter(g => goalTypeFilter.length === 0 || goalTypeFilter.includes(g.type)).length === 0 && data.goals.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       textAlign: "center",
       color: "#d1d5db",
@@ -9473,11 +9956,13 @@ function App() {
               textTransform: "uppercase"
             }
           }, f.label), /*#__PURE__*/React.createElement("input", {
-            type: "date",
+            // Match the add-goal variant: datetime-local so the user
+            // can pin a target date AND time. Accepts legacy date-only.
+            type: "datetime-local",
             className: "sf",
-            value: /^\d{4}-\d{2}-\d{2}$/.test(eGSmart.timebound || "") ? eGSmart.timebound : "",
+            value: /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(eGSmart.timebound || "") ? eGSmart.timebound : "",
             onChange: e => sEGSmart(p => ({ ...p, timebound: e.target.value })),
-            placeholder: "Target date",
+            placeholder: "Target date & time",
             style: { width: "100%" }
           }));
         }
@@ -9641,9 +10126,20 @@ function App() {
           if (amt || unit) shown = [amt, unit].filter(Boolean).join(" ");
         } else if (f.key === "timebound") {
           const raw = goal.smart?.timebound || "";
-          if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-            const [y, m, d] = raw.split("-").map(Number);
-            const dt = new Date(y, m - 1, d);
+          // Two accepted formats:
+          //   "YYYY-MM-DD"         → legacy date-only value
+          //   "YYYY-MM-DDTHH:MM"   → datetime-local (date + time)
+          // Display with time only when one was actually captured.
+          const mDT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(raw);
+          const mD = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+          if (mDT) {
+            const dt = new Date(+mDT[1], +mDT[2] - 1, +mDT[3], +mDT[4], +mDT[5]);
+            shown = dt.toLocaleString(undefined, {
+              year: "numeric", month: "short", day: "numeric",
+              hour: "numeric", minute: "2-digit"
+            });
+          } else if (mD) {
+            const dt = new Date(+mD[1], +mD[2] - 1, +mD[3]);
             shown = dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
           } else if (raw) {
             shown = raw;
@@ -12231,6 +12727,15 @@ function App() {
           if (s === "goals") return achievementStats.goals + " goal" + (achievementStats.goals === 1 ? "" : "s") + " completed";
           if (s === "habitsActive") return achievementStats.habitsActive + " active habit" + (achievementStats.habitsActive === 1 ? "" : "s");
           if (s === "xp") return achievementStats.xp.toLocaleString() + " XP earned";
+          // ── New goal-quality stats. Today these sit mid-list in
+          // Achiever/Builder so `catAchievements[0].stat` won't pick
+          // them up, but if the ordering ever shifts (or a new category
+          // is added that leads with one of these) the header still
+          // renders a sensible caption instead of falling back to "".
+          if (s === "smartGoals") return achievementStats.smartGoals + " SMART-filled goal" + (achievementStats.smartGoals === 1 ? "" : "s");
+          if (s === "goalsCreated") return achievementStats.goalsCreated + " goal" + (achievementStats.goalsCreated === 1 ? "" : "s") + " created";
+          if (s === "activeGoalsCleared") return achievementStats.activeGoalsCleared ? "Clean slate reached" : "Active goals in play";
+          if (s === "habitPerGoal") return achievementStats.habitPerGoal ? "Every goal has a habit" : "Some goals need a habit";
           return "";
         })();
         return /*#__PURE__*/React.createElement("div", { key: cat },
