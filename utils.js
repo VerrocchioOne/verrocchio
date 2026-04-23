@@ -18,6 +18,16 @@ const dk = d => {
 
 const tk = () => dk(new Date());
 
+// Local HH:MM (24-hour, zero-padded) for a Date. Used to stamp habit
+// completion times alongside `completions[dateKey]` so we can later
+// correlate e.g. "cardio before 8am" with "slept by 10pm".
+const dkTime = d => {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+};
+const tkTime = () => dkTime(new Date());
+
 function pastDays(n) {
   return Array.from({ length: n }, (_, i) => {
     const d = new Date();
@@ -66,5 +76,5 @@ function getLast14(h) {
 // CommonJS export for Node-side tests. The `typeof module` guard means
 // the browser path (no CommonJS) is untouched.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { dk, tk, pastDays, getStreak, daysSinceLast, getCR, getLast14 };
+  module.exports = { dk, tk, dkTime, tkTime, pastDays, getStreak, daysSinceLast, getCR, getLast14 };
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { dk, tk, pastDays, getStreak, daysSinceLast, getCR, getLast14 } = require("../utils.js");
+const { dk, tk, dkTime, tkTime, pastDays, getStreak, daysSinceLast, getCR, getLast14 } = require("../utils.js");
 
 // Helper: freeze Date to a known local-time instant for the duration of
 // a test. Restores the original Date when the test returns. We use a
@@ -42,6 +42,18 @@ test("dk does not shift the day when local time is very early morning", () => {
 test("tk returns today's local date key", () => {
   withFakeNow("2026-04-23T10:00:00", () => {
     assert.equal(tk(), dk(new Date(2026, 3, 23, 10, 0, 0)));
+  });
+});
+
+test("dkTime returns zero-padded HH:MM in 24-hour time", () => {
+  assert.equal(dkTime(new Date(2026, 3, 23, 8, 5)), "08:05");
+  assert.equal(dkTime(new Date(2026, 3, 23, 0, 0)), "00:00");
+  assert.equal(dkTime(new Date(2026, 3, 23, 23, 59)), "23:59");
+});
+
+test("tkTime tracks the fake clock", () => {
+  withFakeNow("2026-04-23T14:07:00", () => {
+    assert.equal(tkTime(), "14:07");
   });
 });
 

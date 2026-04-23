@@ -2438,7 +2438,17 @@ function hydrateCloudDoc(p) {
     return t;
   }).filter(Boolean);
   if (Array.isArray(p.habits)) {
-    p.habits = p.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
+    p.habits = p.habits.map(h => {
+      if (!h) return h;
+      // Backfill frequency (pre-frequency-field habits default to daily).
+      if (!h.frequency) h = { ...h, frequency: { type: "daily", days: [], day: null } };
+      // Backfill completionTimes — parallel to `completions`, stores the
+      // local HH:MM the habit was logged. Empty on historical data; we
+      // only populate it going forward. Always an object so later
+      // access doesn't have to null-check.
+      if (!h.completionTimes || typeof h.completionTimes !== "object") h = { ...h, completionTimes: {} };
+      return h;
+    });
   }
   // `_order` backfill: habits have had it for a while (section-reorder);
   // goals and todos didn't, but the sort feature needs one. Seed the
@@ -2861,6 +2871,12 @@ function App() {
     lastShake: 0
   });
   const [swipeAnim, setSwipeAnim] = useState({});
+  // Time-entry modal context. Opens when a user does a slow swipe or
+  // long-presses a habit: lets them log the habit at a custom time
+  // instead of "now". Shape: null | { habitId, dateKey, mode } where
+  // mode is "done" | "missed".
+  const [timeEntryCtx, setTimeEntryCtx] = useState(null);
+  const [timeEntryValue, setTimeEntryValue] = useState("");
   const [eHId, sEHId] = useState(null);
   const [eHTxt, sEHTxt] = useState("");
   const [eHDur, sEHDur] = useState("");
@@ -4296,20 +4312,27 @@ function App() {
     setShowAddHabit(false);
   };
   ;
-  const togHabit = (id, fd, mode) => {
+  const togHabit = (id, fd, mode, atTime) => {
     const key = fd || tk();
     const targetH = (data.habits || []).find(h => h.id === id);
     if (!targetH) return;
     const prev = targetH.completions?.[key];
     const prevState = (prev === "done" || prev === true) ? "done" : (prev === "missed" ? "missed" : "none");
     const newState = mode === "done" ? "done" : (mode === "missed" ? "missed" : "none");
+    // Resolve the completion time. `atTime` (HH:MM) from the time-entry
+    // modal wins; otherwise we stamp with the current wall-clock. Only
+    // done/missed get a time — clearing (none) wipes it.
+    const resolvedTime = newState === "done" || newState === "missed"
+      ? (atTime && /^\d{2}:\d{2}$/.test(atTime) ? atTime : tkTime())
+      : null;
     const habits = (data.habits || []).map(h => {
       if (h.id !== id) return h;
       const c = { ...h.completions };
-      if (newState === "done") { c[key] = "done"; }
-      else if (newState === "missed") { c[key] = "missed"; }
-      else { delete c[key]; }
-      return { ...h, completions: c };
+      const ct = { ...(h.completionTimes || {}) };
+      if (newState === "done") { c[key] = "done"; ct[key] = resolvedTime; }
+      else if (newState === "missed") { c[key] = "missed"; ct[key] = resolvedTime; }
+      else { delete c[key]; delete ct[key]; }
+      return { ...h, completions: c, completionTimes: ct };
     });
     // XP rules: done = +imp, missed = -imp, none = 0. Delta = new - prev.
     const imp = targetH.importance;
@@ -4708,6 +4731,14 @@ function App() {
     save(next);
     setReorderCtx(null);
     setReorderDraft([]);
+  };
+  // Open the time-entry modal (slow swipe / long-press path). Seeds the
+  // input with the current local time as the default — one tap on "Log
+  // now" and the user is done, so adding the modal doesn't punish the
+  // "I'm logging this right now" common case.
+  const openTimeEntry = (habitId, dateKey, mode) => {
+    setTimeEntryValue(tkTime());
+    setTimeEntryCtx({ habitId, dateKey: dateKey || tk(), mode: mode || "done" });
   };
   const moveDraftItem = (id, dir) => {
     setReorderDraft(prev => {
@@ -8517,6 +8548,7 @@ function App() {
               swipeRef.current[habit.id] = {
                 x: t.clientX,
                 y: t.clientY,
+                t: Date.now(),
                 holdTimer: setTimeout(() => {
                   habitHoldRef.current[habit.id] = { fired: true };
                   sEHabit(habit);
@@ -8535,10 +8567,19 @@ function App() {
               clearTimeout(s.holdTimer);
               const dx = e.changedTouches[0].clientX - s.x;
               const dy = e.changedTouches[0].clientY - s.y;
+              const dt = Date.now() - (s.t || Date.now());
               delete swipeRef.current[habit.id];
               if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
               if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
                 if (dx > 0) {
+                  // Slow swipe right: open the time-entry modal so the
+                  // user can log a resisted-avoid at a custom time
+                  // (e.g. "I was tempted at 3pm, not right now"). Fast
+                  // swipe (dt < 400ms) keeps the original behavior.
+                  if (dt >= 400) {
+                    openTimeEntry(habit.id, selDate, "done");
+                    return;
+                  }
                   setSwipeAnim(p => ({ ...p, [habit.id]: "done" }));
                   if (navigator.vibrate) navigator.vibrate(40);
                   const msgs = ["Strong willpower! ", "Temptation conquered!", "Discipline pays off!", "Another win!", "You resisted! "];
@@ -8681,6 +8722,7 @@ function App() {
             swipeRef.current[habit.id] = {
               x: t.clientX,
               y: t.clientY,
+              t: Date.now(),
               holdTimer: setTimeout(() => {
                 // Flag the hold so the synthetic click that follows
                 // touchend doesn't also toggle the card expansion.
@@ -8701,10 +8743,20 @@ function App() {
             clearTimeout(s.holdTimer);
             const dx = e.changedTouches[0].clientX - s.x;
             const dy = e.changedTouches[0].clientY - s.y;
+            const dt = Date.now() - (s.t || Date.now());
             delete swipeRef.current[habit.id];
             if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
             if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
               if (dx > 0) {
+                // Slow right-swipe (user dwells before releasing) opens
+                // the time-entry modal so the habit can be logged at a
+                // back-dated time — "I did my run at 7am even though
+                // I'm checking it off at 10am". Fast flick keeps the
+                // original one-gesture log with current time.
+                if (dt >= 400) {
+                  openTimeEntry(habit.id, selDate, "done");
+                  return;
+                }
                 setSwipeAnim(p => ({
                   ...p,
                   [habit.id]: "done"
@@ -13456,6 +13508,73 @@ function App() {
   //    pref and closes the sheet. "Edit custom order…" (goals / todos
   //    only) opens the reorder modal.
   renderSortSheet(),
+  // ── Time-entry modal for habit completion. Opened by a slow swipe
+  //    (dwelling briefly before release) or long-press on a habit
+  //    card. "Log now" is the default action so the common case stays
+  //    a single tap; the time input lets the user back-fill a past
+  //    completion time without penalizing their routine.
+  timeEntryCtx && (() => {
+    const ctx = timeEntryCtx;
+    const habit = (data.habits || []).find(h => h.id === ctx.habitId);
+    if (!habit) return null;
+    const verb = ctx.mode === "missed" ? "Miss" : "Log";
+    const close = () => setTimeEntryCtx(null);
+    const commit = (atTime) => {
+      togHabit(ctx.habitId, ctx.dateKey, ctx.mode, atTime);
+      setTimeEntryCtx(null);
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "te-title",
+      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 315, display: "flex", alignItems: "flex-end", justifyContent: "center" },
+      onClick: e => { if (e.target === e.currentTarget) close(); }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "20px 18px 22px", width: "100%", maxWidth: 480, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          id: "te-title",
+          style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.3 }
+        }, verb + " completion"),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 13, color: "#6b7280", marginBottom: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+        }, habit.text),
+        // Primary action — log as "right now".
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => commit(tkTime()),
+          style: { width: "100%", minHeight: 44, padding: "12px 14px", borderRadius: 10, border: "none", background: ctx.mode === "missed" ? "#991b1b" : "#2d5a2d", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 10 }
+        }, "Log now (" + tkTime() + ")"),
+        // Secondary — pick a custom time, then Save.
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }
+        },
+          /*#__PURE__*/React.createElement("label", {
+            style: { fontSize: 12, color: "#6b7280", flexShrink: 0 }
+          }, "At"),
+          /*#__PURE__*/React.createElement("input", {
+            type: "time",
+            value: timeEntryValue,
+            onChange: e => setTimeEntryValue(e.target.value),
+            style: { flex: 1, minHeight: 44, padding: "10px 12px", borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 14 }
+          }),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: () => commit(timeEntryValue),
+            disabled: !/^\d{2}:\d{2}$/.test(timeEntryValue),
+            style: { minHeight: 44, padding: "10px 16px", borderRadius: 8, border: "1px solid " + (ctx.mode === "missed" ? "#991b1b" : "#2d5a2d"), background: "transparent", color: (ctx.mode === "missed" ? "#991b1b" : "#2d5a2d"), fontSize: 13, fontWeight: 700, cursor: "pointer" }
+          }, "Save")
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: close,
+          style: { width: "100%", minHeight: 44, padding: "10px 14px", borderRadius: 10, border: "none", background: "var(--c-surface-muted)", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }
+        }, "Cancel")
+      )
+    );
+  })(),
   // ── Custom-order reorder modal — opened by long-press on a Habits
   //    section header, or by "Edit custom order…" in a page's sort
   //    menu. `reorderCtx.kind` dispatches which collection is being
