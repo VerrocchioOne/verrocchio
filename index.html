@@ -3676,16 +3676,33 @@ function App() {
     try { sessionStorage.setItem("v-demo-shake-hint", "1"); } catch (e) {}
     setShowShakeHint(false);
   };
-  // Shake-to-exit gesture detection. Listens on devicemotion while the
-  // app is in demo mode and opens the existing exit-confirm modal
-  // when the user shakes the device. iOS 13+ requires an explicit
-  // permission grant (gated on a user gesture), which we request at
-  // demo start; if the user denies, the top-bar "Exit demo" button
-  // still works as a fallback.
+  // Shake-to-exit gesture detection. Listens on devicemotion while
+  // EITHER the app is in demo mode OR the guided tour is active, and
+  // takes the appropriate "get me out" action when the user shakes
+  // the device:
+  //   • tour active  → finishTour() (writes tourDone, closes overlay)
+  //   • demo, no tour → existing two-phase exit-demo confirm modal
+  // When both are active (demo with tour running on top), the tour
+  // wins — a shake exits just the tour first so the user can keep
+  // poking around the demo. A second shake then exits the demo.
+  // iOS 13+ requires an explicit permission grant (gated on a user
+  // gesture); we request it at demo start AND at tour start. If the
+  // user denies, the tour's × button and the demo's top-bar "Exit
+  // demo" button still work as fallbacks.
   const lastShakeTsRef = useRef(0);
+  const shakeActive = demoMode || tourStep > 0;
   useEffect(() => {
-    if (!demoMode) return;
+    if (!shakeActive) return;
     if (typeof window === "undefined" || !window.addEventListener) return;
+    // Request DeviceMotion permission the first time the listener
+    // mounts for a tour — demoMode already requests it on entry
+    // (see signInAsDemoUser), but a non-demo user replaying the tour
+    // would otherwise never see the prompt. Safe to call repeatedly:
+    // browsers remember the grant.
+    if (tourStep > 0 && typeof DeviceMotionEvent !== "undefined"
+        && typeof DeviceMotionEvent.requestPermission === "function") {
+      DeviceMotionEvent.requestPermission().catch(() => {});
+    }
     let last = { x: null, y: null, z: null };
     let shakeCount = 0;
     let windowStart = 0;
@@ -3716,14 +3733,21 @@ function App() {
         if (shakeCount >= 3 && now - lastShakeTsRef.current > 2000) {
           lastShakeTsRef.current = now;
           shakeCount = 0;
-          // Reuse the existing two-phase exit-demo confirm modal.
-          setConfirmExitDemo({ via: "shake" });
+          // Tour takes precedence over demo exit — if the user is
+          // inside the guided walkthrough, the most obvious meaning
+          // of "shake to get out" is "exit this tour" not "sign out
+          // of the whole demo".
+          if (tourStep > 0) {
+            finishTour();
+          } else if (demoMode) {
+            setConfirmExitDemo({ via: "shake" });
+          }
         }
       }
     };
     window.addEventListener("devicemotion", onMotion);
     return () => window.removeEventListener("devicemotion", onMotion);
-  }, [demoMode]);
+  }, [shakeActive, demoMode, tourStep]);
 
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
