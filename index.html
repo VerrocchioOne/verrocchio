@@ -9102,9 +9102,52 @@ function App() {
     // card at the top of Home already shows their why on day one.)
 
     // Pinned intention card — only when an intention is saved for today.
+    // The card's gradient now tracks the user's chosen accent color
+    // (when settingsMode === "custom"), so saving the intention paints
+    // a band in the user's palette rather than the default brand green.
+    // Falls back to the default green otherwise so the stock look is
+    // unchanged. mixHex lightens by blending toward white; hexToRgb
+    // feeds the accent-tinted box-shadow.
+    const intentionAccent = (settingsMode === "custom" && !themeLocked && accentColor) ? accentColor : "#2d5a2d";
+    const intMix = (hex, pct) => {
+      try {
+        const h = String(hex).replace("#", "");
+        const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+        const num = parseInt(full, 16);
+        if (isNaN(num)) return hex;
+        let r = (num >> 16) & 0xff, g = (num >> 8) & 0xff, b = num & 0xff;
+        if (pct >= 0) {
+          r = Math.round(r + (255 - r) * pct);
+          g = Math.round(g + (255 - g) * pct);
+          b = Math.round(b + (255 - b) * pct);
+        } else {
+          r = Math.round(r * (1 + pct));
+          g = Math.round(g * (1 + pct));
+          b = Math.round(b * (1 + pct));
+        }
+        return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+      } catch (_) { return hex; }
+    };
+    const intRgb = (hex) => {
+      try {
+        const h = String(hex).replace("#", "");
+        const full = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+        const num = parseInt(full, 16);
+        if (isNaN(num)) return [45, 90, 45];
+        return [(num >> 16) & 0xff, (num >> 8) & 0xff, num & 0xff];
+      } catch (_) { return [45, 90, 45]; }
+    };
+    const intRgbTuple = intRgb(intentionAccent);
     const intentionPinned = intentionSet ? /*#__PURE__*/React.createElement("div", {
       key: "int-pin",
-      style: { background: "linear-gradient(135deg, #2d5a2d, #3d7a3d)", borderRadius: 12, padding: "16px 18px", marginBottom: 12, boxShadow: "0 2px 8px rgba(45,90,45,.2)", color: "#fff" }
+      style: {
+        background: "linear-gradient(135deg, " + intentionAccent + ", " + intMix(intentionAccent, 0.22) + ")",
+        borderRadius: 12,
+        padding: "16px 18px",
+        marginBottom: 12,
+        boxShadow: "0 2px 8px rgba(" + intRgbTuple[0] + "," + intRgbTuple[1] + "," + intRgbTuple[2] + ",.22)",
+        color: "#fff"
+      }
     },
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "rgba(255,255,255,.8)", marginBottom: 6 } }, "TODAY'S INTENTION"),
       /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 17, fontWeight: 600, lineHeight: 1.45, marginBottom: 10 } }, rit.intention),
