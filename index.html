@@ -3795,21 +3795,54 @@ function App() {
     localStorage.setItem("v-accent-color", accentColor);
   }, [settingsMode, accentColor, themeLocked]);
 
+  // Cross-device tour-done sync: once the user's data doc loads, pull
+  // data.tourDone into local state so a fresh browser / device doesn't
+  // re-fire the tour on a user who already dismissed it elsewhere.
+  // Device-local "v-tour-done" localStorage is still the write-back
+  // path (see finishTour) — this just makes the device PICK UP what's
+  // on the doc. Never flips tourDone back to false from data; only
+  // ever promotes false→true. Demo mode is skipped so the demo always
+  // runs the tour regardless of the replaying real account's state.
+  useEffect(() => {
+    if (demoMode) return;
+    if (!data || !data.tourDone) return;
+    if (tourDone) return;
+    setTourDone(true);
+    try { localStorage.setItem("v-tour-done", "1"); } catch (e) {}
+  }, [data && data.tourDone, demoMode, tourDone]);
+
   // Auto-start the guided tour once the user is past onboarding and
   // hasn't seen it before. demoMode deliberately runs the tour too:
   // the whole point of demo mode is to preview what a brand-new user
   // sees, and the tour IS part of that experience. Placed above all
   // the conditional early-returns for onboarding / auth screens so
   // React's hook order stays stable across renders.
+  //
+  // Returning-user guard: if the user already has any goals or habits
+  // AND isn't in demo mode, they've obviously used the app before —
+  // auto-firing the tour on them (and landing on "Your goal is set"
+  // via skipIf) is more intrusive than helpful. They can still replay
+  // the tour from App Settings. This is a belt on top of `tourDone`
+  // for cases where tourDone hasn't synced yet (fresh device) but the
+  // user's Firestore doc has goals/habits.
+  const hasAnyData = !demoMode && !!(data && ((data.goals && data.goals.length) || (data.habits && data.habits.length)));
   useEffect(() => {
     if (tourDone) return;
     if (inPreApp) return;
     if (tourStep !== 0) return;
+    if (hasAnyData) return;
     // Defer a beat so the nav + render tree have landed in the DOM
-    // before the tour tries to anchor to nav-button selectors.
-    const t = setTimeout(() => setTourStep(1), 400);
+    // before the tour tries to anchor to nav-button selectors. Longer
+    // delay here (1200ms vs the old 400ms) gives Firestore a window to
+    // hydrate data.tourDone first — otherwise a real user signing in
+    // on a fresh device would see the tour briefly fire before the
+    // cross-device sync effect above promotes tourDone.
+    const t = setTimeout(() => {
+      if (tourDone) return;
+      setTourStep(1);
+    }, 1200);
     return () => clearTimeout(t);
-  }, [tourDone, inPreApp, tourStep]);
+  }, [tourDone, inPreApp, tourStep, hasAnyData]);
 
   // Keyboard support for the guided tour: left/right arrows drive
   // Back/Next via the refs that renderTour keeps up to date. Lets
@@ -7423,7 +7456,16 @@ function App() {
     // Don't persist "tour done" while in demo mode — demo is a preview
     // of the new-user experience, so completing the tour in demo must
     // not cause the real account's next login to skip the tour.
-    if (!demoMode) localStorage.setItem("v-tour-done", "1");
+    if (!demoMode) {
+      localStorage.setItem("v-tour-done", "1");
+      // Also mirror to the user's data doc so the decision follows them
+      // across devices. Without this, logging in on a fresh browser re-
+      // fires the tour (localStorage is device-local) and the skipIf
+      // predicates land pre-existing users on "Your goal is set" with
+      // no invitation. Guard on `data` being loaded so we don't splat
+      // a stale snapshot during the sign-in transition.
+      if (data && !data.tourDone) save({ ...data, tourDone: true });
+    }
     setTourDone(true);
     setTourStep(0);
   };
