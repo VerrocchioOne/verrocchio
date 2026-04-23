@@ -6396,7 +6396,7 @@ function App() {
         : (data.aiTone === "encouraging")
           ? "You are a warm personal coach. Lead with positive framing and celebrate progress."
           : "You are a neutral analyst. Summarize the user's day factually without cheerleading or criticism. Plain language, no emotional framing.";
-    const prompt = `${toneLine} Generate a brief, motivating morning briefing.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (30d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (30d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}${corrHints.length ? `\nPATTERNS DETECTED: ${corrHints.join(" | ")}` : ""}\nQUOTE: ${q ? `"${q.text.slice(0, 120)}"${q.author ? ` — ${q.author}` : ""}` : "None"}\n\n3 paragraphs: 1) greeting referencing today's tasks/goals, 2) life balance insight — weave in any PATTERNS DETECTED naturally if present, 3) brief closing. Match the tone above exactly.`;
+    const prompt = `${toneLine} Generate a brief, data-driven morning briefing. Do NOT include any quotations, author attributions, or motivational aphorisms — that content lives elsewhere in the app.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (${dataDays}d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (${dataDays}d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}${corrHints.length ? `\nPATTERNS DETECTED: ${corrHints.join(" | ")}` : ""}\n\n3 short paragraphs: 1) greeting referencing today's tasks/goals, 2) life-balance insight — weave in any PATTERNS DETECTED naturally if present, 3) brief closing. Match the tone above exactly. No quotes.`;
     if (!AI_BACKEND_URL) {
       // No backend proxy configured — produce a richer deterministic
       // briefing from the same data we'd have sent to the LLM. Adds
@@ -6481,7 +6481,9 @@ function App() {
         const hr = topCorr.aCutoffHour === 12 ? "by noon" : topCorr.aCutoffHour === 18 ? "by 6pm" : "before bed";
         parts.push(`Pattern: when you finish "${topCorr.aText}" ${hr}, "${topCorr.bText}" lands ${Math.round(topCorr.conditional * 100)}% of the time (vs ${Math.round(topCorr.base * 100)}% normally).`);
       }
-      if (q && q.text && tone !== "neutral") parts.push(`"${q.text.slice(0, 200)}"${q.author ? ` — ${q.author}` : ""}`);
+      // (No quote line — the briefing is a data-driven coaching note,
+      // not a motivational card. Quotes live in the Inspiration collection
+      // under Profile → My Inspiration.)
       const txt = parts.join("\n\n");
       setBriefTxt(txt);
       updateRitual({ briefing: txt });
