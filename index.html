@@ -7414,15 +7414,20 @@ function App() {
       placement: "bottom",
       tab: "todos"
     },
-    // 13 — Reflect: optional focus
+    // 13 — Reflect: read-only showcase. Previously had a "Write a
+    // reflection" optional action button + anchored to the journal
+    // textarea, which left the tooltip floating over (and sometimes
+    // behind) the Daily Journal card because the input's ancestor
+    // created a stacking context the overlay didn't pierce. The
+    // Reflect tab's whole point is obvious from the page itself, so
+    // we drop the CTA, drop the selector, and pin the tooltip to the
+    // bottom so the Daily Journal / Goal-Specific Journal cards
+    // behind the dim stay readable.
     {
       title: "Reflect \u2014 look back",
       body: "Journal by day, save favorite quotes, revisit past entries. Weekly reviews and mood notes land here too.",
-      selector: "[data-tour='reflect-input']",
-      placement: "bottom",
       tab: "reflection",
-      optionalActionKey: "focusReflect",
-      optionalActionLabel: "Write a reflection"
+      pinBottom: true
     },
     // 14 — Date badge
     {
