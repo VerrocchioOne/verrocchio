@@ -4553,6 +4553,16 @@ function App() {
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
   const [expHabitGoals, setExpHabitGoals] = useState({});
+  // Per-subsection expansion for the goal detail view. When a goal
+  // card is first opened, every sub-block (SMART, Linked, History)
+  // starts collapsed — just a title row with a count. Clicking the
+  // title toggles only THAT block. Key format: `${goalId}:${subId}`.
+  const [expGoalSub, setExpGoalSub] = useState({});
+  const toggleGoalSub = (goalId, subId) => {
+    const k = goalId + ":" + subId;
+    setExpGoalSub(p => ({ ...p, [k]: !p[k] }));
+  };
+  const isGoalSubOpen = (goalId, subId) => !!expGoalSub[goalId + ":" + subId];
   // Version-history accordions on the goal detail view. `expGoalHistory`
   // tracks whether the goal's own history panel is open; `expHabitHistory`
   // tracks each linked habit's history panel independently, so opening one
@@ -12460,27 +12470,43 @@ function App() {
           transition: "width 0.4s ease",
           minWidth: linkedDone > 0 ? 4 : 0
         }
-      })), expGoalHabits[goal.id] && !isE && hasSm && /*#__PURE__*/React.createElement("div", {
-        style: {
-          borderTop: "1px solid #f3f4f6",
-          padding: "12px 14px",
-          background: "#fafafa"
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#2d5a2d",
-          textTransform: "uppercase",
-          marginBottom: 8
-        }
-      }, "S.M.A.R.T. Framework"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          flexDirection: "column",
-          gap: 7
-        }
-      }, SF_FIELDS.map(f => {
+      })), expGoalHabits[goal.id] && !isE && hasSm && (() => {
+        const smOpen = isGoalSubOpen(goal.id, "smart");
+        return /*#__PURE__*/React.createElement("div", {
+          style: {
+            borderTop: "1px solid #f3f4f6",
+            padding: "10px 14px",
+            background: "#fafafa"
+          }
+        },
+          // Collapsible header — title on the left, filled-count + caret
+          // on the right. Whole row is tappable.
+          /*#__PURE__*/React.createElement("div", {
+            onClick: (e) => { e.stopPropagation(); toggleGoalSub(goal.id, "smart"); },
+            style: {
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              cursor: "pointer", userSelect: "none",
+              padding: smOpen ? "0 0 8px 0" : "0"
+            }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase" }
+            }, "S.M.A.R.T. Framework"),
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", alignItems: "center", gap: 8 }
+            },
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 10, color: "#6b7280", fontWeight: 500 }
+              }, smartCount + "/5 filled"),
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 10, color: "#9ca3af", transform: smOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" }
+              }, "\u25B8")
+            )
+          ),
+          // Body — the 5 SMART field rows. Only renders when open.
+          smOpen && /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", gap: 7 }
+          }, SF_FIELDS.map(f => {
         // Per-field display formatting:
         //   M → "<amount> <unit>" if both present, else amount alone
         //       (or legacy free-text value from the old schema).
@@ -12533,7 +12559,8 @@ function App() {
             lineHeight: 1.6
           }
         }, shown));
-      }))), expGoalHabits[goal.id] && !isE && (() => {
+      })));
+      })(), expGoalHabits[goal.id] && !isE && (() => {
         // Habits linked to this goal, ordered by how often they fire
         // (daily > select-days > weekly > monthly > quarterly > annual).
         // Below the habits we list linked one-off to-dos. A quick-add row
@@ -12544,21 +12571,35 @@ function App() {
           .slice()
           .sort((a, b) => freqRank(a) - freqRank(b));
         const linkedTodos = (data.todos || []).filter(t => String(t.goalId) === String(goal.id));
+        const habitsOpen = isGoalSubOpen(goal.id, "habits");
+        const todosOpen  = isGoalSubOpen(goal.id, "todos");
         return (linked.length > 0 || linkedTodos.length > 0) ? /*#__PURE__*/React.createElement("div", {
           style: {
             borderTop: "1px solid #f3f4f6",
             padding: "10px 14px",
             background: "var(--c-surface-raised)"
           }
-        }, linked.length > 0 && /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 10,
-            fontWeight: 700,
-            color: "#2d5a2d",
-            textTransform: "uppercase",
-            marginBottom: 6
-          }
-        }, "Linked Habits"), linked.length > 0 && /*#__PURE__*/React.createElement("div", {
+        },
+          // Linked Habits collapsible header
+          linked.length > 0 && /*#__PURE__*/React.createElement("div", {
+            onClick: (e) => { e.stopPropagation(); toggleGoalSub(goal.id, "habits"); },
+            style: {
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              cursor: "pointer", userSelect: "none",
+              marginBottom: habitsOpen ? 6 : (linkedTodos.length > 0 ? 8 : 0)
+            }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase" }
+            }, "Linked Habits"),
+            /*#__PURE__*/React.createElement("span", {
+              style: { display: "flex", alignItems: "center", gap: 8 }
+            },
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 500 } }, linked.length + (linked.length === 1 ? " habit" : " habits")),
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", transform: habitsOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
+            )
+          ),
+          linked.length > 0 && habitsOpen && /*#__PURE__*/React.createElement("div", {
           style: {
             display: "flex",
             flexDirection: "column",
@@ -12632,11 +12673,26 @@ function App() {
             style: { fontSize: 9, color: "#9ca3af", marginLeft: 4 }
           }, freqLabel(h)));
         })),
-        // Linked to-dos list (one-off, not recurring).
+        // Linked to-dos list (one-off, not recurring) — collapsible.
         linkedTodos.length > 0 && /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 10, fontWeight: 700, color: "#0891b2", textTransform: "uppercase", marginBottom: 6 }
-        }, "Linked To-Dos"),
-        linkedTodos.length > 0 && /*#__PURE__*/React.createElement("div", {
+          onClick: (e) => { e.stopPropagation(); toggleGoalSub(goal.id, "todos"); },
+          style: {
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            cursor: "pointer", userSelect: "none",
+            marginBottom: todosOpen ? 6 : 0
+          }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 10, fontWeight: 700, color: "#0891b2", textTransform: "uppercase" }
+          }, "Linked To-Dos"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { display: "flex", alignItems: "center", gap: 8 }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 500 } }, linkedTodos.length + (linkedTodos.length === 1 ? " to-do" : " to-dos")),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", transform: todosOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
+          )
+        ),
+        linkedTodos.length > 0 && todosOpen && /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }
         }, linkedTodos.map(t => /*#__PURE__*/React.createElement("div", {
           key: t.id,
