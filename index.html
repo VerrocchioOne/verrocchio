@@ -558,6 +558,14 @@ const userDoc = uid => db.collection("users").doc(uid);
    data-driven briefing and a clear "not configured" message for
    insights — no failed network calls. */
 const AI_BACKEND_URL = null;
+// App version — shown in the Profile footer. Bump on every deploy.
+// Keep it semver-ish so the user can tell at a glance if the version
+// they're on matches the one support is asking about.
+const APP_VERSION = "0.1.0";
+// Support / feedback address — shown as a mailto: link in Profile.
+// Replace with your real support alias when you have one; gmail
+// placeholder is OK for dev but will route to nowhere in production.
+const SUPPORT_EMAIL = "support@verrocchio.app";
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
@@ -2710,6 +2718,128 @@ function App() {
     auth.signOut();
     setHasSeenWelcome(false);
   };
+  // ── Account management ──
+  // Each sensitive action (email change, password change, delete)
+  // requires a fresh reauthentication with the current password per
+  // Firebase's security model. We bundle the reauth + operation into
+  // one helper so callers don't have to orchestrate it. acctFeedback
+  // is set on both success and failure for inline confirmation.
+  const firebaseErrMsg = e => {
+    const raw = (e && (e.message || String(e))) || "Something went wrong.";
+    return raw.replace(/^Firebase:\s*/, "").replace(/\s*\(auth\/[^)]+\)\.?\s*$/, ".");
+  };
+  const reauthenticate = async (currentPassword) => {
+    if (!auth.currentUser || !auth.currentUser.email) throw new Error("Not signed in.");
+    if (!currentPassword) throw new Error("Current password required.");
+    const cred = firebase.auth.EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
+    await auth.currentUser.reauthenticateWithCredential(cred);
+  };
+  const doChangeEmail = async () => {
+    setAcctFeedback(null);
+    const newEmail = acctNewEmail.trim();
+    if (!newEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(newEmail)) {
+      setAcctFeedback({ kind: "err", msg: "Enter a valid new email." });
+      return;
+    }
+    setAcctBusy(true);
+    try {
+      await reauthenticate(acctCurrentPw);
+      await auth.currentUser.updateEmail(newEmail);
+      setAcctNewEmail("");
+      setAcctCurrentPw("");
+      setAcctFeedback({ kind: "ok", msg: "Email updated." });
+    } catch (e) {
+      setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
+    }
+    setAcctBusy(false);
+  };
+  const doChangePassword = async () => {
+    setAcctFeedback(null);
+    if (!acctNewPw || acctNewPw.length < 6) {
+      setAcctFeedback({ kind: "err", msg: "New password must be at least 6 characters." });
+      return;
+    }
+    setAcctBusy(true);
+    try {
+      await reauthenticate(acctCurrentPw);
+      await auth.currentUser.updatePassword(acctNewPw);
+      setAcctNewPw("");
+      setAcctCurrentPw("");
+      setAcctFeedback({ kind: "ok", msg: "Password updated." });
+    } catch (e) {
+      setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
+    }
+    setAcctBusy(false);
+  };
+  const doDeleteAccount = async () => {
+    setAcctFeedback(null);
+    setAcctBusy(true);
+    try {
+      await reauthenticate(acctCurrentPw);
+      const uidToNuke = auth.currentUser.uid;
+      // Best-effort Firestore doc delete BEFORE the auth user is
+      // nuked — once the user is deleted, the security rules will
+      // reject any further writes to their doc.
+      try { await userDoc(uidToNuke).delete(); } catch (e) {}
+      await auth.currentUser.delete();
+      try { localStorage.removeItem(`${SK}-${uidToNuke}`); } catch (e) {}
+      setAcctCurrentPw("");
+      setConfirmDeleteAcct(false);
+      // onAuthStateChanged fires and the app reroutes to the sign-in
+      // gate on its own.
+    } catch (e) {
+      setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
+    }
+    setAcctBusy(false);
+  };
+  // Summary export — aggregates only, no identifiers or content. The
+  // product rule: users should never be able to export their granular
+  // data (habit names, journal entries, daily completions) in a way
+  // that would make it trivial to migrate to another app. Summary
+  // stats are a victory-lap artifact, not a portability layer.
+  const exportSummary = () => {
+    const habits = data.habits || [];
+    const goals  = data.goals  || [];
+    const archive = data.goalArchive || data.archive || [];
+    const activeH = habits.filter(h => h.section !== "avoid");
+    const bestStreak = activeH.length ? Math.max(0, ...activeH.map(h => getStreak(h)), ...Object.values(data.bestStreaks || {})) : 0;
+    const completionRate = activeH.length
+      ? Math.round(activeH.reduce((s, h) => s + getCR(h).pct, 0) / activeH.length)
+      : 0;
+    const perArea = {};
+    for (const h of habits) {
+      const k = h.type || "Uncategorized";
+      perArea[k] = (perArea[k] || 0) + 1;
+    }
+    const lines = [];
+    lines.push("VERROCCHIO SUMMARY");
+    lines.push("Generated: " + new Date().toLocaleString());
+    lines.push("");
+    lines.push("Habits tracked:        " + habits.length);
+    lines.push("Goals open:            " + goals.length);
+    lines.push("Goals completed:       " + (Array.isArray(archive) ? archive.length : 0));
+    lines.push("Longest streak:        " + bestStreak + " days");
+    lines.push("30-day completion:     " + completionRate + "%");
+    lines.push("Days using the app:    " + ((data.dayVisits && data.dayVisits.length) || 0));
+    lines.push("XP earned:             " + ((data.xp || 0).toLocaleString()));
+    lines.push("");
+    lines.push("Habits by area of life:");
+    for (const [k, v] of Object.entries(perArea).sort((a,b) => b[1] - a[1])) {
+      lines.push("  " + k.padEnd(14) + String(v));
+    }
+    lines.push("");
+    lines.push("(Aggregate stats only. No habit titles, journal entries,");
+    lines.push(" or daily completion logs are included.)");
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "verrocchio-summary-" + tk() + ".txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
   const startDemo = () => {
     setAuthErr("");
     setAuthEmail(""); setAuthPass("");
@@ -2988,6 +3118,15 @@ function App() {
   const [profileNavOpen, setProfileNavOpen] = useState(false);
   const [profileName, setProfileName] = useState(() => localStorage.getItem("v-profile-name") || "");
   const [profileGoal, setProfileGoal] = useState(() => localStorage.getItem("v-profile-goal") || "");
+  // Account-management form state. Kept top-level so the inline forms
+  // don't lose typing on a re-render. `acctFeedback` is the inline
+  // success/error readout beneath each form.
+  const [acctNewEmail, setAcctNewEmail] = useState("");
+  const [acctCurrentPw, setAcctCurrentPw] = useState("");
+  const [acctNewPw, setAcctNewPw] = useState("");
+  const [acctBusy, setAcctBusy] = useState(false);
+  const [acctFeedback, setAcctFeedback] = useState(null); // {kind:"ok"|"err", msg}
+  const [confirmDeleteAcct, setConfirmDeleteAcct] = useState(false);
 
   /* GUIDED TOUR — Appcues-style first-login walkthrough. `tourStep` is
      0 when inactive, 1..TOUR_STEPS.length when showing that step. Auto-
@@ -12875,20 +13014,135 @@ function App() {
       // Goal categories are managed in App Settings → Custom. See
       // appSettingsPanel below. My Account stays identity-only (name,
       // email, primary goal, stats).
+      // Lifetime stats — extends the existing 3-stat card with best
+      // streak, days using the app, goals completed. All aggregate —
+      // no titles or content included.
+      (() => {
+        const hs = data.habits || [];
+        const gs = data.goals || [];
+        const archived = (data.goalArchive || data.archive || []);
+        const activeH = hs.filter(h => h.section !== "avoid");
+        const bestStreakLive = activeH.length ? Math.max(0, ...activeH.map(h => getStreak(h))) : 0;
+        const bestStreakEver = Math.max(bestStreakLive, ...Object.values(data.bestStreaks || {}), 0);
+        const daysActive = (data.dayVisits && data.dayVisits.length) || 0;
+        const statCell = (value, label) => /*#__PURE__*/React.createElement("div", { style: { textAlign: "center" } },
+          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#2d5a2d" } }, value),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, label)
+        );
+        return /*#__PURE__*/React.createElement("div", {
+          style: { padding: "14px", background: "var(--c-tint-green)", borderRadius: 10, marginBottom: 18 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 10 }
+          },
+            statCell(hs.length, "Habits"),
+            statCell(gs.length, "Goals"),
+            statCell((data.xp || 0).toLocaleString(), "XP")
+          ),
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, paddingTop: 10, borderTop: "1px solid #c6dfc6" }
+          },
+            statCell(bestStreakEver, "Best streak"),
+            statCell(archived.length, "Completed"),
+            statCell(daysActive, "Days active")
+          )
+        );
+      })(),
+      // ── Account ──
+      // Change email / change password / delete. All three require a
+      // fresh reauthentication (Firebase security model) — single
+      // "Current password" input is shared across them so the user
+      // doesn't type it twice in the same session.
+      (() => {
+        const fmtFeedback = acctFeedback
+          ? /*#__PURE__*/React.createElement("div", {
+              style: {
+                fontSize: 12, marginTop: 6, padding: "6px 10px", borderRadius: 6,
+                color: acctFeedback.kind === "ok" ? "#166534" : "#991b1b",
+                background: acctFeedback.kind === "ok" ? "#f0fdf4" : "#fef2f2",
+                border: "1px solid " + (acctFeedback.kind === "ok" ? "#86efac" : "#fca5a5")
+              }
+            }, acctFeedback.msg)
+          : null;
+        const smallBtn = (label, onClick, color) => /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick,
+          disabled: acctBusy,
+          style: {
+            minHeight: 40, padding: "9px 14px", borderRadius: 8,
+            border: "1px solid " + (color || "#2d5a2d"),
+            background: "transparent",
+            color: color || "#2d5a2d",
+            fontSize: 13, fontWeight: 700,
+            cursor: acctBusy ? "default" : "pointer", opacity: acctBusy ? 0.6 : 1,
+            flexShrink: 0
+          }
+        }, label);
+        if (!authUser) return null;
+        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+          /*#__PURE__*/React.createElement("div", { style: labelS }, "Account"),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "Current password is required for each change."),
+          /*#__PURE__*/React.createElement("input", {
+            type: "password",
+            value: acctCurrentPw,
+            onChange: e => setAcctCurrentPw(e.target.value),
+            placeholder: "Current password",
+            autoComplete: "current-password",
+            style: { ...inputS, marginBottom: 10 }
+          }),
+          // Change email
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } },
+            /*#__PURE__*/React.createElement("input", {
+              type: "email",
+              value: acctNewEmail,
+              onChange: e => setAcctNewEmail(e.target.value),
+              placeholder: "New email",
+              autoComplete: "email",
+              style: { ...inputS, flex: 1 }
+            }),
+            smallBtn("Update email", doChangeEmail)
+          ),
+          // Change password
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } },
+            /*#__PURE__*/React.createElement("input", {
+              type: "password",
+              value: acctNewPw,
+              onChange: e => setAcctNewPw(e.target.value),
+              placeholder: "New password (min 6 chars)",
+              autoComplete: "new-password",
+              style: { ...inputS, flex: 1 }
+            }),
+            smallBtn("Update password", doChangePassword)
+          ),
+          // Delete account
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 12, color: "#6b7280", padding: "10px 2px" } }, "Permanently delete this account and all its data."),
+            smallBtn("Delete…", () => setConfirmDeleteAcct(true), "#991b1b")
+          ),
+          fmtFeedback
+        );
+      })(),
+      // ── Summary export ──
+      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Export summary"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "A plain-text victory-lap summary — aggregate counts only, no habit titles, journal entries, or daily completion logs."),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: exportSummary,
+          style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }
+        }, "Download summary (.txt)")
+      ),
+      // ── About / support ──
       /*#__PURE__*/React.createElement("div", {
-        style: { padding: "14px", background: "var(--c-tint-green)", borderRadius: 10, marginBottom: 4 }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, textAlign: "center" }
+        style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)", fontSize: 11, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }
       },
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#2d5a2d" } }, data.habits?.length || 0),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, "Habits")),
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#2d5a2d" } }, data.goals?.length || 0),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, "Goals")),
-        /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#2d5a2d" } }, (data.xp || 0).toLocaleString()),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, "XP"))))
+        /*#__PURE__*/React.createElement("span", null, "Verrocchio v", APP_VERSION),
+        /*#__PURE__*/React.createElement("a", {
+          href: "mailto:" + SUPPORT_EMAIL + "?subject=Verrocchio%20feedback%20(v" + APP_VERSION + ")",
+          rel: "noopener",
+          style: { color: "#2d5a2d", textDecoration: "none", fontWeight: 600 }
+        }, "Send feedback →")
+      )
     );
     const qKeyP = (x) => (x.text || "") + "|" + (x.author || "");
     const likedQuotesList = data.likedQuotes || [];
@@ -13839,6 +14093,51 @@ function App() {
       }, "Create Category")
     )
   )),
+  // ── Delete-account confirmation modal ──
+  //    Double-check for the destructive account-delete action. Re-
+  //    uses the acctCurrentPw input the user already typed in the
+  //    Account section, but rendering the warning in a dedicated
+  //    modal avoids the common "I clicked the wrong thing" path.
+  confirmDeleteAcct && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "del-acct-title",
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
+    onClick: e => { if (e.target === e.currentTarget) setConfirmDeleteAcct(false); }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", width: "100%", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        id: "del-acct-title",
+        style: { fontFamily: "'Lora',serif", fontSize: 17, fontWeight: 700, color: "#991b1b", marginBottom: 8 }
+      }, "Delete account?"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.6, marginBottom: 14 }
+      }, "This permanently removes your account, all habits, goals, journal entries, and every other piece of data you've saved. This cannot be undone."),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "#6b7280", marginBottom: 14 }
+      }, "Re-enter your current password in the Account section above, then confirm below."),
+      acctFeedback && acctFeedback.kind === "err" && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, padding: "6px 10px", borderRadius: 6, color: "#991b1b", background: "#fef2f2", border: "1px solid #fca5a5", marginBottom: 12 }
+      }, acctFeedback.msg),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => setConfirmDeleteAcct(false),
+          disabled: acctBusy,
+          style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: acctBusy ? "default" : "pointer" }
+        }, "Cancel"),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: doDeleteAccount,
+          disabled: acctBusy || !acctCurrentPw,
+          style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "none", background: "#991b1b", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (acctBusy || !acctCurrentPw) ? "default" : "pointer", opacity: (acctBusy || !acctCurrentPw) ? 0.5 : 1 }
+        }, acctBusy ? "Deleting…" : "Delete forever")
+      )
+    )
+  ),
   // ── Sort bottom-sheet — opened by the per-page ⇅ Sort button.
   //    Lists the allowed modes for that page; picking one sets the
   //    pref and closes the sheet. "Edit custom order…" (goals / todos
