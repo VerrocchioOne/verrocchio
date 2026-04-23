@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Verrocchio">
+<meta name="theme-color" content="#2d5a2d">
+<link rel="manifest" href="manifest.json">
 <title>Verrocchio</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='6' y='46' width='52' height='10' rx='2' fill='url(%23g)'/><rect x='12' y='34' width='40' height='10' rx='2' fill='url(%23g)'/><rect x='18' y='22' width='28' height='10' rx='2' fill='url(%23g)'/><rect x='24' y='10' width='16' height='10' rx='2' fill='url(%23g)'/><path d='M14 22 L32 54 L50 22 L44 22 L32 42 L20 22 Z' fill='%23f4efe4'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='18' y='130' width='144' height='28' rx='5' fill='url(%23g)'/><rect x='36' y='96' width='108' height='28' rx='5' fill='url(%23g)'/><rect x='54' y='62' width='72' height='28' rx='5' fill='url(%23g)'/><rect x='72' y='28' width='36' height='28' rx='5' fill='url(%23g)'/><path d='M42 62 L90 152 L138 62 L124 62 L90 120 L56 62 Z' fill='%23f4efe4'/></svg>">
@@ -525,7 +527,21 @@ document.addEventListener("DOMContentLoaded", function() {
 const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410262:web:dcbd72e6eedddc3622fab7"};
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
+// Offline persistence: Firestore keeps a local IndexedDB mirror so reads
+// and writes survive network drops. synchronizeTabs lets multiple open
+// tabs share one cache (coordinated via leader election). Must run
+// before any other Firestore call — hence right here at module load.
+// Rejects with `failed-precondition` when multiple tabs lack the tabs
+// flag and `unimplemented` on unsupported browsers; both are non-fatal,
+// so swallow.
+db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
 const auth=firebase.auth();
+// Register the service worker for offline app-shell caching. Guarded on
+// HTTPS / localhost because browsers only allow SW registration in
+// secure contexts — no-op on file:// or plain-http test servers.
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+}
 /* Multi-user scoping: each signed-in Firebase user gets their own
    Firestore document at users/<uid>. `userDoc(uid)` is a helper so
    we never accidentally share state across accounts. The legacy
@@ -2392,69 +2408,54 @@ const DD = {
   archive: [],
   dailyRitual: {}
 };
+// Single source of truth for "did this doc come from an older schema".
+// Called from BOTH the localStorage load and the Firestore read/listener
+// so a cloud-only user whose doc predates a field doesn't crash on
+// `.filter/.map/.length` later. Pure — takes a raw doc, returns a
+// hydrated copy (mutates for performance; caller has already cloned if
+// they care).
+function hydrateCloudDoc(p) {
+  if (!p.habits || p.habits.length === 0) p.habits = SEED_HABITS;
+  if (!p.goals || p.goals.length === 0) p.goals = SEED_GOALS;
+  if (!p.journal) p.journal = [];
+  if (!p.archive) p.archive = [];
+  if (!p.quotes) p.quotes = [];
+  if (!p.todos) p.todos = [];
+  if (!Array.isArray(p.customGoalTypes)) p.customGoalTypes = [];
+  if (!Array.isArray(p.customImportance)) p.customImportance = [];
+  if (!Array.isArray(p.customSections)) p.customSections = [];
+  if (!Array.isArray(p.dayVisits)) p.dayVisits = [];
+  if (!p.bestStreaks || typeof p.bestStreaks !== "object") p.bestStreaks = {};
+  if (!p.achievementsUnlocked || typeof p.achievementsUnlocked !== "object") p.achievementsUnlocked = {};
+  if (typeof p.xp !== "number") p.xp = 0;
+  if (!p.dailyRitual) p.dailyRitual = {};
+  if (typeof p.homeLocation !== "string") p.homeLocation = "";
+  if (!Array.isArray(p.travelDays)) p.travelDays = [];
+  p.travelDays = p.travelDays.map(t => {
+    if (typeof t === "string") return { date: t, location: "", tripId: "t-" + t };
+    if (!t || typeof t.date !== "string") return null;
+    if (!t.tripId) return { ...t, tripId: "t-" + t.date };
+    return t;
+  }).filter(Boolean);
+  if (Array.isArray(p.habits)) {
+    p.habits = p.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
+  }
+  if (typeof p.onboardingComplete !== "boolean") {
+    p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
+  }
+  if (typeof p.celebratedFirstGoal !== "boolean") {
+    p.celebratedFirstGoal = !!(p.goals && p.goals.length > 0);
+  }
+  if (typeof p.celebratedFirstHabit !== "boolean") {
+    p.celebratedFirstHabit = !!(p.habits && p.habits.length > 0);
+  }
+  return p;
+}
 function loadData() {
   try {
     const r = localStorage.getItem(SK);
     if (r) {
-      const p = JSON.parse(r);
-      if (!p.habits || p.habits.length === 0) p.habits = SEED_HABITS;
-      if (!p.goals || p.goals.length === 0) p.goals = SEED_GOALS;
-      if (!p.journal) p.journal = [];
-      if (!p.archive) p.archive = [];
-      if (!p.quotes) p.quotes = [];
-      if (!p.todos) p.todos = [];
-      if (!p.customGoalTypes) p.customGoalTypes = [];
-      if (!p.customImportance) p.customImportance = [];
-      if (!p.customSections) p.customSections = [];
-      // dayVisits is the sorted, de-duplicated list of every date (YYYY-MM-DD)
-      // the user has opened the app. Used by achievements (visit-N tiers) and
-      // potentially future retention analytics.
-      if (!Array.isArray(p.dayVisits)) p.dayVisits = [];
-      // bestStreaks caches the all-time best streak per habitId so a streak
-      // earned years ago still counts toward achievements even after the
-      // habit has been archived or reset.
-      if (!p.bestStreaks || typeof p.bestStreaks !== "object") p.bestStreaks = {};
-      // achievementsUnlocked maps achievementId -> ISO timestamp of unlock.
-      // We compute achievement status dynamically from stats, but cache the
-      // first-unlock moment here so we can show "unlocked Apr 21, 2026".
-      if (!p.achievementsUnlocked || typeof p.achievementsUnlocked !== "object") p.achievementsUnlocked = {};
-      if (typeof p.xp !== "number") p.xp = 0;
-      if (!p.dailyRitual) p.dailyRitual = {};
-      if (typeof p.homeLocation !== "string") p.homeLocation = "";
-      // Migrate legacy travelDays: string[] -> {date, location, tripId}[] so
-      // each travel day carries its own location, and days can be grouped
-      // into trips (contiguous trip = shared tripId; single-tap day = its
-      // own trip).
-      if (!Array.isArray(p.travelDays)) p.travelDays = [];
-      p.travelDays = p.travelDays.map(t => {
-        if (typeof t === "string") return { date: t, location: "", tripId: "t-" + t };
-        if (!t || typeof t.date !== "string") return null;
-        if (!t.tripId) return { ...t, tripId: "t-" + t.date };
-        return t;
-      }).filter(Boolean);
-      // Habits created before the frequency field existed default to daily.
-      if (Array.isArray(p.habits)) {
-        p.habits = p.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
-      }
-      // Any pre-existing user (has habits/goals or has completed it before)
-      // should skip onboarding so we don't force the new flow on them.
-      if (typeof p.onboardingComplete !== "boolean") {
-        p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
-      }
-      // Celebration flags — used to fire a one-time confetti burst when
-      // the user creates their first-ever goal / habit. For existing
-      // users who already have content, we assume they already got the
-      // "look at this, you made something" moment at signup and flip
-      // these to true so they don't see a misfire on next login. Flag
-      // lives on user data (not localStorage) so it follows the account
-      // across devices.
-      if (typeof p.celebratedFirstGoal !== "boolean") {
-        p.celebratedFirstGoal = !!(p.goals && p.goals.length > 0);
-      }
-      if (typeof p.celebratedFirstHabit !== "boolean") {
-        p.celebratedFirstHabit = !!(p.habits && p.habits.length > 0);
-      }
-      return p;
+      return hydrateCloudDoc(JSON.parse(r));
     }
   } catch (e) {}
   return JSON.parse(JSON.stringify(DD));
@@ -3712,42 +3713,9 @@ function App() {
         return;
       }
       if (snap.exists) {
-        const d = snap.data();
-        if (!d.habits || d.habits.length === 0) d.habits = SEED_HABITS;
-        if (!d.goals || d.goals.length === 0) d.goals = SEED_GOALS;
-        if (!d.journal) d.journal = [];
-        if (!d.archive) d.archive = [];
-        if (!d.quotes) d.quotes = [];
-        if (!d.todos) d.todos = [];
-        if (!d.dailyRitual) d.dailyRitual = {};
-        // Same defensive hydration as loadData() — without these, a
-        // cloud-only user whose Firestore doc predates a given field
-        // hits "undefined.filter/map/length" crashes later.
-        if (!Array.isArray(d.customGoalTypes)) d.customGoalTypes = [];
-        if (!Array.isArray(d.customImportance)) d.customImportance = [];
-        if (!Array.isArray(d.customSections)) d.customSections = [];
-        if (!Array.isArray(d.dayVisits)) d.dayVisits = [];
-        if (!d.bestStreaks || typeof d.bestStreaks !== "object") d.bestStreaks = {};
-        if (!d.achievementsUnlocked || typeof d.achievementsUnlocked !== "object") d.achievementsUnlocked = {};
-        if (typeof d.xp !== "number") d.xp = 0;
-        if (typeof d.celebratedFirstGoal !== "boolean") d.celebratedFirstGoal = !!(d.goals && d.goals.length > 0);
-        if (typeof d.celebratedFirstHabit !== "boolean") d.celebratedFirstHabit = !!(d.habits && d.habits.length > 0);
-        if (typeof d.homeLocation !== "string") d.homeLocation = "";
-        if (!Array.isArray(d.travelDays)) d.travelDays = [];
-        d.travelDays = d.travelDays.map(t => {
-          if (typeof t === "string") return { date: t, location: "", tripId: "t-" + t };
-          if (!t || typeof t.date !== "string") return null;
-          if (!t.tripId) return { ...t, tripId: "t-" + t.date };
-          return t;
-        }).filter(Boolean);
-        if (Array.isArray(d.habits)) {
-          d.habits = d.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
-        }
-        if (typeof d.onboardingComplete !== "boolean") {
-          // Existing cloud user: don't force them through onboarding.
-          d.onboardingComplete = (d.habits && d.habits.length > 0) || (d.goals && d.goals.length > 0);
-        }
+        const d = hydrateCloudDoc(snap.data());
         setData(d);
+        latestData.current = d;
         try {
           localStorage.setItem(lsKey, JSON.stringify(d));
         } catch (e) {}
@@ -3759,10 +3727,43 @@ function App() {
     }).catch(() => {
       setSyncState("offline");
     });
+
+    // Realtime listener: pick up writes from other tabs/devices the
+    // moment they land. The local `_updatedAt` stamp (written by save
+    // below) lets us distinguish echoes of our own writes from genuine
+    // remote changes and skip them. On a genuine remote change we
+    // last-write-wins: adopt the remote state wholesale. Concurrent
+    // edits across tabs can still drop one side's changes, but the
+    // window is ~1s (one debounce interval) instead of "until the
+    // tab next reloads".
+    const unsubRealtime = userDoc(uid).onSnapshot(snap => {
+      if (!snap.exists) return;
+      const remote = snap.data();
+      const remoteTs = (remote && remote._updatedAt) || 0;
+      const localTs = (latestData.current && latestData.current._updatedAt) || 0;
+      if (remoteTs <= localTs) return; // our own echo or older data
+      const d = hydrateCloudDoc(remote);
+      setData(d);
+      latestData.current = d;
+      try { localStorage.setItem(lsKey, JSON.stringify(d)); } catch (e) {}
+      setSyncState("synced");
+    }, err => {
+      // Network down / permission denied — the one-shot .get above has
+      // already set offline; the listener may fire this repeatedly
+      // during outages, so don't spam state changes.
+      setSyncState("offline");
+    });
+    return () => { try { unsubRealtime(); } catch (e) {} };
   }, [uid, demoMode]);
   const save = useCallback(d => {
-    setData(d);
-    latestData.current = d;
+    // Stamp every save with a monotonic local timestamp. The realtime
+    // onSnapshot listener uses this to distinguish echoes of our own
+    // writes from genuine remote changes — without it, every write
+    // would fire the listener, which would then overwrite the state
+    // we just set with a semantically-identical copy.
+    const stamped = { ...d, _updatedAt: Date.now() };
+    setData(stamped);
+    latestData.current = stamped;
     if (demoMode) {
       // In-memory only — don't touch localStorage or Firestore so the demo
       // can't overwrite a real user's data.
@@ -3774,7 +3775,7 @@ function App() {
     // Write to localStorage immediately, scoped to the current user so
     // account switching on the same device doesn't cross-contaminate.
     try {
-      localStorage.setItem(lsKey, JSON.stringify(d));
+      localStorage.setItem(lsKey, JSON.stringify(stamped));
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (e) {}
@@ -4688,10 +4689,13 @@ function App() {
       return;
     }
     try {
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!idToken) throw new Error("not_signed_in");
       const r = await fetch(AI_BACKEND_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
@@ -4862,10 +4866,13 @@ function App() {
       return;
     }
     try {
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (!idToken) throw new Error("not_signed_in");
       const r = await fetch(AI_BACKEND_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`
         },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514",
