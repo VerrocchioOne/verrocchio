@@ -10917,7 +10917,7 @@ function App() {
           padding: "9px 10px",
           minHeight: 42
         }
-      }), !isE && /*#__PURE__*/React.createElement(Grip, null), /*#__PURE__*/React.createElement("div", {
+      }), /*#__PURE__*/React.createElement("div", {
         onClick: () => !isE && chkTodo(todo.id),
         style: {
           width: 16,
@@ -15649,14 +15649,16 @@ function App() {
             title: b.value + " XP",
             style: { flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-end", position: "relative" }
           },
-            // Value label on top of each non-zero column. Day-view
-            // numbers would overlap at narrow widths, so on Day we
-            // only label columns with the max value (peak days).
-            // Week + Month always label because they have room.
-            b.value > 0 && (xpChartGrain !== "day" || b.value === maxVal) && /*#__PURE__*/React.createElement("div", {
+            // Value label on top of every non-zero column, at all
+            // granularities. Column width gets narrow on Day view, so
+            // we switch to rotated vertical labels for dense grids
+            // (30 cols) — the numbers still fit without overlapping.
+            b.value > 0 && /*#__PURE__*/React.createElement("div", {
               style: {
-                fontSize: 9, fontWeight: 700, color: chartAccent,
-                textAlign: "center", marginBottom: 2, whiteSpace: "nowrap"
+                fontSize: xpChartGrain === "day" ? 8 : 10,
+                fontWeight: 700, color: chartAccent,
+                textAlign: "center", marginBottom: 2, whiteSpace: "nowrap",
+                lineHeight: 1
               }
             }, b.value),
             /*#__PURE__*/React.createElement("div", {
