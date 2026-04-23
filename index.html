@@ -2815,22 +2815,177 @@ function App() {
     }
     setAuthBusy(false);
   };
-  // Temporary one-tap sign-in for the seeded demo personas. Mirrors
-  // the emails and shared password from scripts/seed-demo-users.mjs.
-  // If the account doesn't exist yet we surface a clear error telling
-  // the user to run the seed script first instead of a raw Firebase
-  // "INVALID_LOGIN_CREDENTIALS". Remove this block before shipping.
+  // Temporary one-tap sign-in for the seeded demo personas. Tapping a
+  // button tries to sign in; if the account doesn't exist it's
+  // created on the fly and the Firestore doc is populated with the
+  // persona's two-week seed directly from the browser — no need to
+  // run scripts/seed-demo-users.mjs first. The persona data mirrors
+  // the Node script so both paths produce identical accounts. Remove
+  // this block (and the persona builders below) before shipping.
+  const DEMO_PERSONAS = {
+    "alex.morning@demo.verrocchio.app":   { recipe: "morning-consistent" },
+    "blair.slipping@demo.verrocchio.app": { recipe: "falling-off"        },
+    "casey.steady@demo.verrocchio.app":   { recipe: "steady-average"     },
+    "dani.new@demo.verrocchio.app":       { recipe: "brand-new"          }
+  };
+  const DEMO_PASSWORD = "verrocchio-demo-1";
+  const buildDemoHabit = (id, text, section, type, importance, extras) => ({
+    id, text, section, type, importance,
+    frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+    completions: {}, completionTimes: {}, completionUnits: {},
+    notes: null, duration: null, goalId: null, location: "both",
+    icon: null, startDate: null,
+    target: null, unitLabel: null, increment: null,
+    _order: 0,
+    ...(extras || {})
+  });
+  const buildDemoSeed = (recipe) => {
+    const today = new Date(); today.setHours(12, 0, 0, 0);
+    const days = Array.from({ length: 21 }, (_, i) => {
+      const d = new Date(today); d.setDate(today.getDate() - i); return dk(d);
+    });
+    if (recipe === "morning-consistent") {
+      const h = [
+        buildDemoHabit(101, "Morning Run", "morning", "Physical", "Non-Negotiable", { target: 30, unitLabel: "min", increment: 10 }),
+        buildDemoHabit(102, "Meditate", "morning", "Mental", "Important", { _order: 1 }),
+        buildDemoHabit(103, "Read before bed", "evening", "Mental", "Important"),
+        buildDemoHabit(104, "Drink Water", "afternoon", "Physical", "Additive", { target: 8, unitLabel: "cups", increment: 1 })
+      ];
+      for (let i = 0; i < 14; i++) {
+        const k = days[i];
+        const runEarly = i < 12;
+        if (runEarly) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "06:30"; h[0].completionUnits[k] = 30; }
+        if (i < 13) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "07:10"; }
+        if (runEarly && i !== 4 && i !== 8) { h[2].completions[k] = "done"; h[2].completionTimes[k] = "22:00"; }
+        const cups = (i % 7 < 2) ? 8 : 5 + (i % 3);
+        h[3].completionUnits[k] = cups; h[3].completionTimes[k] = "21:00";
+        if (cups >= 8) h[3].completions[k] = "done";
+      }
+      return {
+        habits: h,
+        goals: [{ id: 201, text: "Complete a half-marathon", type: "Physical",
+          smart: { specific: "Finish an official half-marathon race", measurable: "42", measurableUnit: "km", achievable: "Currently running 20km/week", relevant: "Long-term cardio fitness goal", timebound: "2026-08-15" },
+          completed: false, _order: 0 }],
+        xp: 620, aiTone: "encouraging"
+      };
+    }
+    if (recipe === "falling-off") {
+      const h = [
+        buildDemoHabit(111, "Gym workout", "afternoon", "Physical", "Important", { target: 45, unitLabel: "min", increment: 15 }),
+        buildDemoHabit(112, "Journal", "evening", "Mental", "Additive"),
+        buildDemoHabit(113, "Skip sugar", "avoid", "Physical", "Important")
+      ];
+      for (let i = 0; i < 14; i++) {
+        const k = days[i];
+        const oldWeek = i >= 7;
+        if (oldWeek) {
+          h[0].completions[k] = "done"; h[0].completionTimes[k] = "17:00"; h[0].completionUnits[k] = 45;
+          h[1].completions[k] = "done"; h[1].completionTimes[k] = "22:30";
+          if (i !== 10) { h[2].completions[k] = "done"; h[2].completionTimes[k] = "20:00"; }
+        } else {
+          if (i === 0 || i === 2) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "21:30"; h[0].completionUnits[k] = 45; }
+          else if (i === 4) { h[0].completions[k] = "missed"; h[0].completionTimes[k] = "23:00"; }
+          else if (i === 5) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "22:00"; h[0].completionUnits[k] = 45; }
+          if (i === 1) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "23:30"; }
+          if (i === 3) { h[2].completions[k] = "missed"; h[2].completionTimes[k] = "14:00"; }
+        }
+      }
+      return {
+        habits: h,
+        goals: [{ id: 211, text: "Get back to 3 gym sessions a week", type: "Physical", smart: {}, completed: false, _order: 0 }],
+        xp: 240, aiTone: "tough-love"
+      };
+    }
+    if (recipe === "steady-average") {
+      const h = [
+        buildDemoHabit(121, "Morning stretch", "morning", "Physical", "Additive"),
+        buildDemoHabit(122, "Read for 20 min", "evening", "Mental", "Important", { target: 20, unitLabel: "min", increment: 5 }),
+        buildDemoHabit(123, "Walk outside", "afternoon", "Physical", "Important"),
+        buildDemoHabit(124, "Call a friend", "evening", "Social", "Additive", { _order: 1 })
+      ];
+      for (let i = 0; i < 14; i++) {
+        const k = days[i];
+        if (i % 3 !== 0) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "07:30"; }
+        if (i % 2 === 0) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "21:00"; h[1].completionUnits[k] = 20; }
+        if (i % 4 !== 3) { h[2].completions[k] = "done"; h[2].completionTimes[k] = "13:00"; }
+        if (i % 5 === 0) { h[3].completions[k] = "done"; h[3].completionTimes[k] = "19:00"; }
+      }
+      return {
+        habits: h,
+        goals: [{ id: 221, text: "Read 12 books this year", type: "Mental", smart: {}, completed: false, _order: 0 }],
+        xp: 310, aiTone: "neutral"
+      };
+    }
+    // brand-new
+    const h = [
+      buildDemoHabit(131, "Drink water", "morning", "Physical", "Important", { target: 8, unitLabel: "cups", increment: 1 }),
+      buildDemoHabit(132, "Go outside", "afternoon", "Physical", "Additive")
+    ];
+    for (let i = 0; i < 3; i++) {
+      const k = days[i];
+      h[0].completionUnits[k] = 3 + i; h[0].completionTimes[k] = "10:00";
+      if (i === 0) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "14:00"; }
+    }
+    return { habits: h, goals: [], xp: 30, aiTone: "neutral" };
+  };
+  const buildDemoFullDoc = (recipe) => {
+    const seed = buildDemoSeed(recipe);
+    const dayCount = recipe === "brand-new" ? 3 : 14;
+    const now = new Date(); now.setHours(12, 0, 0, 0);
+    const visits = Array.from({ length: dayCount }, (_, i) => {
+      const d = new Date(now); d.setDate(now.getDate() - i); return dk(d);
+    });
+    return {
+      habits: seed.habits,
+      goals: seed.goals || [],
+      todos: [], journal: [], quotes: [], archive: [], goalArchive: [],
+      customGoalTypes: [], customImportance: [], customSections: [],
+      dayVisits: visits,
+      bestStreaks: {}, achievementsUnlocked: {},
+      xp: seed.xp || 0,
+      dailyRitual: {},
+      homeLocation: "", travelDays: [],
+      celebratedFirstGoal: (seed.goals || []).length > 0,
+      celebratedFirstHabit: (seed.habits || []).length > 0,
+      onboardingComplete: true,
+      sortPrefs: { habits: "default", goals: "default", todos: "default" },
+      aiTone: seed.aiTone || "neutral",
+      homeCoords: null, locationOptIn: false, notifyOptIn: false,
+      signupAt: Date.now(),
+      reviewPrompt: { dismissedDays: [] },
+      featureAccess: {},
+      _updatedAt: Date.now()
+    };
+  };
   const signInAsDemoUser = async (email) => {
     setAuthErr("");
     setAuthBusy(true);
     try {
-      await auth.signInWithEmailAndPassword(email, "verrocchio-demo-1");
+      await auth.signInWithEmailAndPassword(email, DEMO_PASSWORD);
     } catch (e) {
       const msg = String(e && e.message || "");
-      if (/user-not-found|invalid-login-credentials|INVALID_LOGIN_CREDENTIALS/i.test(msg)) {
-        setAuthErr("Demo account not found. Run `node scripts/seed-demo-users.mjs` first.");
-      } else {
+      const notFound = /user-not-found|invalid-login-credentials|INVALID_LOGIN_CREDENTIALS/i.test(msg);
+      if (!notFound) {
         setAuthErr(msg.replace("Firebase: ", "") || "Sign-in failed.");
+        setAuthBusy(false);
+        return;
+      }
+      // Account doesn't exist — create it and seed Firestore inline
+      // so the buttons Just Work without the user running the Node
+      // seed script first.
+      try {
+        await auth.createUserWithEmailAndPassword(email, DEMO_PASSWORD);
+        const persona = DEMO_PERSONAS[email];
+        if (persona && auth.currentUser) {
+          const seeded = buildDemoFullDoc(persona.recipe);
+          // Write the seed directly via the SDK rather than through
+          // save() — save() depends on React state that hasn't landed
+          // yet right after auth flips. onSnapshot picks it up and
+          // flows into `data` normally on the next tick.
+          await userDoc(auth.currentUser.uid).set(seeded);
+        }
+      } catch (e2) {
+        setAuthErr(String(e2 && e2.message || "").replace("Firebase: ", "") || "Could not create demo account.");
       }
     }
     setAuthBusy(false);
