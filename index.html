@@ -2563,6 +2563,12 @@ function App() {
   // these refs each time it runs.
   const tourAdvanceRef = useRef(null);
   const tourGoBackRef = useRef(null);
+  // Timers kept alive across the tour-step re-measure effect so the
+  // cleanup can clear them on a rapid step change. Array of timeout IDs
+  // (0..N) — see the "re-measure after tourStep change" effect below.
+  const tourRemeasureTimers = useRef([]);
+  // Same idea for the auto-scroll-target-into-view effect.
+  const tourScrollTimers = useRef([]);
 
   /* CONFETTI on first goal + first habit.
      Refs seed to -1 so the first render (which may land with goals
@@ -2755,6 +2761,93 @@ function App() {
     return () => {
       window.removeEventListener("resize", onR);
       window.removeEventListener("scroll", onR, { capture: true });
+    };
+  }, [tourStep]);
+
+  /* Re-measure target rect after a tour-step change commits.
+     renderTour resolves `step.selector` synchronously on the first render
+     after tourStep changes, but the target DOM element often isn't mounted
+     yet at that instant — e.g. a setTab(...) from the step-to-tab effect
+     fires in the SAME render cycle, so the goal-tab's [+] button hasn't
+     been painted when we querySelector for it. Result: rect = null → no
+     spotlight ring, no carved dim hole, no ring-shape computation. The
+     tooltip shows but the [+] sits unhighlighted until the user taps or
+     scrolls (which bumps tourResizeTick via the listener above) and forces
+     a re-measure.
+     Fix: after every tourStep change we bump the tick twice — once on the
+     next animation frame (after React commits + DOM paints) and again at
+     ~220ms (after tab-switch transitions settle and any lazy-mounted form
+     inputs land). That's enough to catch both fast paints and slower ones
+     without thrashing render. */
+  useEffect(() => {
+    if (tourStep === 0) return undefined;
+    let cancelled = false;
+    const bump = () => { if (!cancelled) setTourResizeTick(t => t + 1); };
+    const raf = requestAnimationFrame(() => {
+      bump();
+      // Second pass a beat later for tab transitions / lazy mounts.
+      const t = setTimeout(bump, 220);
+      const t2 = setTimeout(bump, 520);
+      // Stash on the ref so the cleanup below can clear them.
+      tourRemeasureTimers.current = [t, t2];
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      (tourRemeasureTimers.current || []).forEach(clearTimeout);
+      tourRemeasureTimers.current = [];
+    };
+  }, [tourStep]);
+
+  /* Auto-scroll the tour target into view so the spotlight ring + the
+     element it's highlighting are both visible, regardless of where on
+     the page the user had previously scrolled. Without this, a step
+     that points at (say) the [+] New-goal button can land while the
+     user is scrolled halfway down the goals list — the ring gets drawn
+     viewport-relative to the target's rect, which is now ABOVE the
+     visible area. The user sees a tooltip, no spotlight, and has to
+     manually scroll to find what's being highlighted.
+
+     Behaviour:
+       • `block: "center"` so the target lands in the middle of the
+         viewport on most steps — gives the spotlight visual breathing
+         room both above and below.
+       • `block: "start"` for gated [+] steps (`pinBottom: true`) so
+         the button sits near the top of the viewport and the tooltip
+         docked at the bottom doesn't cover it.
+       • We retry once on rAF and again at 260ms to outrun tab-switch
+         transitions and lazy form mounts — same cadence as the
+         re-measure effect above.
+       • scrollIntoView is a no-op if the target is already in view, so
+         there's no jitter on steps where the user hasn't scrolled. */
+  useEffect(() => {
+    if (tourStep === 0) return undefined;
+    const step = TOUR_STEPS[tourStep - 1];
+    if (!step || !step.selector) return undefined;
+    const block = step.pinBottom ? "start" : "center";
+    const tryScroll = () => {
+      const el = document.querySelector(step.selector);
+      if (!el || typeof el.scrollIntoView !== "function") return;
+      try {
+        el.scrollIntoView({ block: block, inline: "nearest", behavior: "smooth" });
+      } catch (_e) {
+        // Safari <15.4 and some legacy browsers don't accept the options
+        // object. Fall back to the boolean form — `true` aligns the top
+        // of the element with the top of the scroll container, which is
+        // the closest analogue to block:"start".
+        el.scrollIntoView(step.pinBottom ? true : false);
+      }
+    };
+    const raf = requestAnimationFrame(() => {
+      tryScroll();
+      const t1 = setTimeout(tryScroll, 260);
+      const t2 = setTimeout(tryScroll, 560);
+      tourScrollTimers.current = [t1, t2];
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      (tourScrollTimers.current || []).forEach(clearTimeout);
+      tourScrollTimers.current = [];
     };
   }, [tourStep]);
   // Auto-switch the active tab as the tour advances. Any step can
@@ -5251,6 +5344,10 @@ function App() {
       title: "Write your goal",
       body: "One short sentence on what you want to accomplish. Keep it concrete — e.g. \u201CRun a half-marathon\u201D, not \u201CGet fit\u201D. Swipe when you're done.",
       selector: "[data-tour-id='goal-name']",
+      // Once text is typed and the gate passes, a dashed secondary ring
+      // lights up the form's Next button so the user can see exactly
+      // where to go next — swipe OR tap Next, either advances the tour.
+      extraSelector: "[data-tour-id='goal-next']",
       placement: "bottom",
       tab: "goals",
       formStep: true,
@@ -5275,11 +5372,19 @@ function App() {
       gateHint: "Pick an area of life.",
       autoAdvance: true
     },
-    // 5 — Goals: SMART details (informational, no gate)
+    // 5 — Goals: SMART details (informational, no gate). `extraSelector`
+    // paints a SECOND spotlight ring around the Add-Goal button so the
+    // user can tell at a glance where to tap once they've filled what
+    // they want to fill — the SMART stage is optional, and the previous
+    // tour had the Save button sitting un-highlighted while the SMART
+    // fields pulsed, which read as "you're required to fill this before
+    // saving." Extra ring is dashed (see renderTour) so it reads as
+    // secondary, not competing with the primary SMART-fields ring.
     {
       title: "Add SMART details (optional)",
-      body: "Specific, Measurable, Achievable, Relevant, Time-bound. Fill them in now or come back later. Swipe to continue.",
+      body: "Specific, Measurable, Achievable, Relevant, Time-bound. Fill them in now or tap Add Goal when you're ready — SMART is optional.",
       selector: "[data-tour-id='goal-smart']",
+      extraSelector: "[data-tour-id='goal-save']",
       placement: "top",
       tab: "goals",
       formStep: true
@@ -5846,7 +5951,13 @@ function App() {
           touchAction: "pan-y",
           transition: "all 0.2s ease"
         }
-      }, (gateBlocked || step.formStep === true) ? null : swipeHandlers))),
+      }, null))),
+      // ^^ Swipe gestures are handled by a SINGLE document-level listener
+      //    (component-level useEffect around line 2865). The dim panels and
+      //    tooltip used to carry their own React `swipeHandlers`, but that
+      //    doubled every swipe — native document listeners AND React
+      //    synthetic handlers both fired on the same gesture, advancing the
+      //    tour two steps. Keep swipe capture at exactly one layer.
       // Highlight ring — borderRadius matches the target's shape. See
       // `ringRadius` computation above: circular [+] buttons get a
       // perfect circle ring, pill buttons keep their capsule outline,
@@ -5865,6 +5976,58 @@ function App() {
           animation: "tourPulse 1.6s ease-in-out infinite"
         }
       }),
+      // Secondary spotlight — rendered when the step opts in via
+      // `extraSelector` AND the step's gate is currently passing (or
+      // the step has no gate). Dashed ring + no pulse so the user
+      // reads it as "here's where you CAN go next" rather than "you
+      // must tap this now." Picks up its own border-radius from the
+      // target's computed style so an elongated save-button pill still
+      // gets a pill-shaped outline, matching the primary ring logic.
+      // Gate-conditional so the ring on the form's Next button only
+      // appears after the user has filled the required field (e.g.
+      // typed a goal name) — before that, the Next button is disabled
+      // in the form anyway and highlighting it would invite a useless
+      // tap. Steps without a gate (e.g. SMART step 5) always show the
+      // extra ring because there's nothing to wait for.
+      (step.extraSelector && !gateBlocked) && (() => {
+        const el2 = document.querySelector(step.extraSelector);
+        if (!el2) return null;
+        const r2 = el2.getBoundingClientRect();
+        if (!r2 || (r2.width === 0 && r2.height === 0)) return null;
+        let r2Radius = "12px";
+        try {
+          const cs2 = window.getComputedStyle(el2);
+          const raw2 = [
+            cs2.borderTopLeftRadius,
+            cs2.borderTopRightRadius,
+            cs2.borderBottomRightRadius,
+            cs2.borderBottomLeftRadius
+          ];
+          const minSide2 = Math.min(r2.width, r2.height);
+          const parsed2 = raw2.map(v => {
+            if (!v) return 0;
+            if (v.endsWith("%")) return (parseFloat(v) / 100) * minSide2;
+            return parseFloat(v) || 0;
+          });
+          const allPill2 = parsed2.every(p => p >= minSide2 / 2 - 1);
+          const squareish2 = Math.abs(r2.width - r2.height) / Math.max(r2.width, r2.height, 1) < 0.12;
+          if (allPill2 && squareish2) r2Radius = "50%";
+          else if (allPill2) r2Radius = "9999px";
+          else r2Radius = parsed2.map(p => (p + pad) + "px").join(" ");
+        } catch (_e) { r2Radius = "12px"; }
+        return /*#__PURE__*/React.createElement("div", {
+          key: "extraRing",
+          style: {
+            position: "fixed",
+            left: r2.left - pad, top: r2.top - pad,
+            width: r2.width + pad * 2, height: r2.height + pad * 2,
+            border: "2px dashed #2d5a2d",
+            borderRadius: r2Radius,
+            boxShadow: "0 0 0 3px rgba(45,90,45,.18)",
+            pointerEvents: "none"
+          }
+        });
+      })(),
       // Gated-step callout: an upward-pointing arrow + small "Add a goal
       // to continue" / "Add a habit to continue" bubble, parked just
       // below the spotlighted [+] so the user's eye follows the bob up
@@ -5959,7 +6122,11 @@ function App() {
           touchAction: "pan-y",
           zIndex: 10000
         }
-      }, swipeHandlers),
+      }, null),
+      // ^^ Swipe gestures are captured by the document-level listener
+      //    (component-level useEffect around line 2865). Attaching swipe
+      //    handlers here too used to double-fire every gesture and jump
+      //    the tour two steps at a time.
         // Top-right "Hold to Exit" pill — only in demo mode. The main
         // yellow "Exit demo" bar sits behind the tour overlay (the
         // overlay's zIndex:10000 covers the zIndex:60 sticky bar), so
@@ -6092,12 +6259,15 @@ function App() {
       //      so the hint shouldn't look "bound" to the card.
       //   2. On gated Tap+ steps the card's internal height budget is
       //      tight; an external hint keeps the card copy clean.
-      // Hidden when gate is blocking (the gate callout says "Add a
-      // goal to continue" already) and on the final step (the Got it
-      // button is the only way out — no swipe needed). The wrapper is
-      // pointerEvents:none so the pill never blocks a tap on whatever
-      // sits beneath it (e.g. the bottom nav during tour steps 15+).
-      !isLast && !gateBlocked && /*#__PURE__*/React.createElement("div", {
+      // Hidden only on the final step (the Got it button is the only
+      // way out — no swipe needed). Gated steps KEEP the footer because
+      // backward swipes still work even while forward is gated, and
+      // because a permanently-visible swipe hint reads more cohesively
+      // than one that appears/disappears as the user walks through
+      // form-completion gates. The wrapper is pointerEvents:none so the
+      // pill never blocks a tap on whatever sits beneath it (bottom nav
+      // during tour steps 15+).
+      !isLast && /*#__PURE__*/React.createElement("div", {
         key: "swipeFooter",
         style: {
           position: "fixed", left: 0, right: 0,
@@ -9683,6 +9853,11 @@ function App() {
           style: { ...AB, background: "#f3f4f6", color: "#374151", padding: "8px 14px", fontSize: 12 }
         }, "Back"),
         goalFormStep < 2 && /*#__PURE__*/React.createElement("button", {
+          // data-tour-id so the guided tour can paint a secondary
+          // spotlight here once the user has filled the current step's
+          // required field — see `extraSelector` on TOUR_STEPS entries
+          // 3 and 4.
+          "data-tour-id": "goal-next",
           // Each Next is gated on the current step's required input.
           // Step 0: need non-empty name. Step 1: need Area of Life
           // picked (we surface the red-ring error instead of silently
