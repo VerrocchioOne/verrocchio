@@ -2831,7 +2831,16 @@ function App() {
       // state, a manual Firebase sign-in from an external context)
       // could leave "Demo" stuck on the profile avatar and route
       // saves into the in-memory demo bucket.
-      if (u) setDemoMode(false);
+      if (u) {
+        setDemoMode(false);
+        // Every sign-in lands on Home. React's `tab` state persists
+        // across the auth flip (the App component doesn't re-mount on
+        // auth change), so without this reset the user would see
+        // whichever tab they last visited under a prior account. Demo
+        // personas hit the same reset via this listener because they
+        // flow through onAuthStateChanged after the Firebase sign-in.
+        setTab("brief");
+      }
       if (!u) {
         setHasSeenWelcome(false);
         setSplashPhase("loading");
@@ -3577,6 +3586,11 @@ function App() {
   // Keyed by goalId so multiple goals can be expanded without losing input.
   const [goalTodoDraft, setGoalTodoDraft] = useState({});
   const [eTodoId, sETodoId] = useState(null);
+  // Per-todo expansion: when true the row opens a second line with
+  // the linked-goal chip (and, later, whatever else we attach to a
+  // todo). Default false keeps the task list compact — click the
+  // text area to reveal context, click again to tuck it back.
+  const [expTodoIds, setExpTodoIds] = useState({});
   const [eTodoTxt, sETodoTxt] = useState("");
   const [eTodoDue, sETodoDue] = useState("");
 
@@ -10905,130 +10919,97 @@ function App() {
       } = _ref3;
       const ds = dueStatus(todo.dueDate);
       const isE = eTodoId === todo.id;
+      const isTExp = !!expTodoIds[todo.id];
+      const linkedGoal = todo.goalId ? (data.goals || []).find(x => String(x.id) === String(todo.goalId)) : null;
+      // Row content (edit mode vs view mode) kept in a single variable
+      // so the outer shell can wrap it with an optional expansion block
+      // without a massive nested conditional.
+      const rowChildren = [
+        /*#__PURE__*/React.createElement("div", {
+          key: "chk",
+          onClick: (e) => { e.stopPropagation(); if (!isE) chkTodo(todo.id); },
+          style: {
+            width: 16, height: 16, borderRadius: 4,
+            border: "1.5px solid #d1d5db",
+            background: "white", cursor: "pointer", flexShrink: 0
+          }
+        }),
+        isE ? /*#__PURE__*/React.createElement("div", {
+          key: "edit",
+          style: { flex: 1, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }
+        },
+          /*#__PURE__*/React.createElement("input", {
+            value: eTodoTxt,
+            onChange: e => sETodoTxt(e.target.value),
+            onKeyDown: e => {
+              if (e.key === "Enter") e.preventDefault();
+              if (e.key === "Escape") sETodoId(null);
+            },
+            autoFocus: true,
+            style: { ...EI, flex: 1, minWidth: 120 }
+          }),
+          /*#__PURE__*/React.createElement("input", {
+            type: "date", value: eTodoDue,
+            onChange: e => sETodoDue(e.target.value),
+            style: { fontSize: 12, border: "1px solid #7c3aed", borderRadius: 6, padding: "5px 8px", color: "#7c3aed", background: "#faf5ff", outline: "none" }
+          }),
+          /*#__PURE__*/React.createElement(SC, { onSave: () => svETodo(todo.id), onCancel: () => sETodoId(null) })
+        ) : /*#__PURE__*/React.createElement(React.Fragment, { key: "view" },
+          /*#__PURE__*/React.createElement("div", {
+            onClick: () => setExpTodoIds(p => ({ ...p, [todo.id]: !p[todo.id] })),
+            style: { flex: 1, fontSize: 13, color: "var(--c-text-soft)", wordBreak: "break-word", cursor: linkedGoal ? "pointer" : "default" }
+          }, todo.text),
+          ds && /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 10, fontWeight: 600, color: ds.color, background: ds.bg, padding: "2px 8px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" }
+          }, ds.label),
+          /*#__PURE__*/React.createElement("button", {
+            className: "edit-btn",
+            onClick: () => sETodo(todo),
+            style: { background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 12, opacity: 0, padding: "4px" }
+          }, "\u270E"),
+          /*#__PURE__*/React.createElement("button", {
+            className: "del-btn",
+            onClick: () => delTodo(todo.id),
+            style: { background: "none", border: "none", cursor: "pointer", color: "#d1d5db", fontSize: 16, opacity: 0, lineHeight: 1 }
+          }, "\xD7")
+        )
+      ];
       return /*#__PURE__*/React.createElement("div", _extends({
         className: "hrow"
       }, isE ? {} : dp(idx, pending, reordTodos), {
         style: {
           display: "flex",
-          alignItems: "center",
-          gap: 8,
+          flexDirection: "column",
           background: "#fff",
           borderBottom: "1px solid #f3f4f6",
-          padding: "9px 10px",
-          minHeight: 42
+          padding: "9px 10px"
         }
-      }), /*#__PURE__*/React.createElement("div", {
-        onClick: () => !isE && chkTodo(todo.id),
-        style: {
-          width: 16,
-          height: 16,
-          borderRadius: 4,
-          border: "1.5px solid #d1d5db",
-          background: "white",
-          cursor: "pointer",
-          flexShrink: 0
-        }
-      }), isE ? /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          display: "flex",
-          gap: 6,
-          alignItems: "center",
-          flexWrap: "wrap"
-        }
-      }, /*#__PURE__*/React.createElement("input", {
-        value: eTodoTxt,
-        onChange: e => sETodoTxt(e.target.value),
-        // Enter is a no-op — the edit only commits when the user taps
-        // the save button. Escape still bails out of the edit row
-        // without saving, matching the old behavior.
-        onKeyDown: e => {
-          if (e.key === "Enter") e.preventDefault();
-          if (e.key === "Escape") sETodoId(null);
+      }),
+        // Main row — checkbox, text (click to expand), due pill, edit + delete.
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", gap: 8 }
+        }, rowChildren),
+        // Expanded row — the linked-goal chip lives here so the default
+        // task list stays compact. Only renders when the user has
+        // tapped the text area AND the todo actually has a linked goal.
+        isTExp && linkedGoal && !isE && /*#__PURE__*/React.createElement("div", {
+          style: { marginTop: 6, marginLeft: 24, display: "flex", alignItems: "center", gap: 8 }
         },
-        autoFocus: true,
-        style: {
-          ...EI,
-          flex: 1,
-          minWidth: 120
-        }
-      }), /*#__PURE__*/React.createElement("input", {
-        type: "date",
-        value: eTodoDue,
-        onChange: e => sETodoDue(e.target.value),
-        style: {
-          fontSize: 12,
-          border: "1px solid #7c3aed",
-          borderRadius: 6,
-          padding: "5px 8px",
-          color: "#7c3aed",
-          background: "#faf5ff",
-          outline: "none"
-        }
-      }), /*#__PURE__*/React.createElement(SC, {
-        onSave: () => svETodo(todo.id),
-        onCancel: () => sETodoId(null)
-      })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
-        style: {
-          flex: 1,
-          fontSize: 13,
-          color: "var(--c-text-soft)",
-          wordBreak: "break-word"
-        }
-      }, todo.text,
-        // Goal link chip — shows which goal this to-do is attached to (if
-        // any). Clicking jumps to the Goals tab so the user can see the
-        // full context.
-        todo.goalId && (() => {
-          const g = (data.goals || []).find(x => String(x.id) === String(todo.goalId));
-          if (!g) return null;
-          return /*#__PURE__*/React.createElement("button", {
-            onClick: () => { setTab("goals"); setExpGoalHabits(p => ({ ...p, [g.id]: true })); },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 9, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }
+          }, "Linked goal"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { setTab("goals"); setExpGoalHabits(p => ({ ...p, [linkedGoal.id]: true })); },
             title: "Open goal",
             style: {
-              marginLeft: 8, fontSize: 10, fontWeight: 600,
+              fontSize: 11, fontWeight: 600,
               color: "#2d5a2d", background: "var(--c-tint-green)",
               border: "1px solid #c6dfc6", borderRadius: 10,
-              padding: "1px 8px", cursor: "pointer", verticalAlign: "middle"
+              padding: "2px 10px", cursor: "pointer"
             }
-          }, "\uD83C\uDFAF ", g.text.length > 24 ? g.text.slice(0, 22) + "\u2026" : g.text);
-        })()
-      ), ds && /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 10,
-          fontWeight: 600,
-          color: ds.color,
-          background: ds.bg,
-          padding: "2px 8px",
-          borderRadius: 8,
-          flexShrink: 0,
-          whiteSpace: "nowrap"
-        }
-      }, ds.label), /*#__PURE__*/React.createElement("button", {
-        className: "edit-btn",
-        onClick: () => sETodo(todo),
-        style: {
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "#9ca3af",
-          fontSize: 12,
-          opacity: 0,
-          padding: "4px"
-        }
-      }, "\u270E"), /*#__PURE__*/React.createElement("button", {
-        className: "del-btn",
-        onClick: () => delTodo(todo.id),
-        style: {
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: "#d1d5db",
-          fontSize: 16,
-          opacity: 0,
-          lineHeight: 1
-        }
-      }, "\xD7")));
+          }, "\uD83C\uDFAF ", linkedGoal.text.length > 30 ? linkedGoal.text.slice(0, 28) + "\u2026" : linkedGoal.text)
+        )
+      );
     };
     // Collapsed header (matches the Habits/Goals pattern):
     //   [+ button] [All pill] [Today] [This Week] [This Month] [Later] [No Due]
