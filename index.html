@@ -351,6 +351,38 @@ body.dark .tour-exit-demo:hover{color:#fff;border-color:rgba(255,255,255,0.38)}
 body.dark .tour-exit-demo.holding{color:#fca5a5;border-color:rgba(252,165,165,0.6)}
 body.dark .tour-exit-demo.holding::after{background:rgba(252,165,165,0.18)}
 
+/* ── Path A: class-based tour spotlight ────────────────────────────
+   The old rect-tracking spotlight (getBoundingClientRect → 4 dim
+   panels carved around the rect + a ring drawn at the rect position)
+   was fragile in every possible way: targets not yet mounted on tour-
+   step change, tab transitions moving rects mid-render, scrolls
+   leaving the ring pinned to a stale position, nested scroll
+   containers requiring capture-phase listeners, form fields inside
+   the "hole" that still got the dim overlay on top of them. We
+   replaced the whole thing with two CSS classes toggled on the real
+   target DOM node:
+     • `.tour-target` lifts the element above a single full-screen
+       dim, draws a pulsing green ring via box-shadow, and scrolls it
+       into view — so the element IS the spotlight, no overlay math.
+     • `.tour-target-secondary` does the same but dashed + static —
+       used for the "you CAN tap here next" hint (e.g. the form's
+       Next button once a name is typed).
+   Because the element keeps its own position/size, resize and scroll
+   are handled for free by the browser's normal layout. No refs, no
+   re-measure effects, no dim panels. */
+.tour-dim{position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:9998;pointer-events:none}
+.tour-dim.form-step{background:rgba(0,0,0,0.22)}
+/* Note: no !important on the animated property (box-shadow).
+   Animations are clobbered by !important declarations on the same
+   property, so leaving box-shadow un-marked lets the tourPulse
+   keyframes take over during the spotlight. Position/z-index stay
+   !important so we always escape whatever stacking context the
+   target happens to sit in. */
+.tour-target{position:relative!important;z-index:9999!important;outline:2px solid #2d5a2d;outline-offset:3px;animation:tourPulse 1.6s ease-in-out infinite}
+.tour-target-secondary{position:relative!important;z-index:9999!important;outline:2px dashed #2d5a2d;outline-offset:3px;box-shadow:0 0 0 5px rgba(45,90,45,.14)}
+body.dark .tour-dim{background:rgba(0,0,0,0.62)}
+body.dark .tour-dim.form-step{background:rgba(0,0,0,0.40)}
+
 /* ── Dark-mode overrides for the liquid-glass header + bottom nav ──
    Both surfaces use inline `background: rgba(255,255,255,0.55)` with
    a heavy backdrop blur. In dark mode that near-white fill makes the
@@ -2548,9 +2580,6 @@ function App() {
   // State values: null = modal closed, "confirm" = phase 1,
   // "hint" = phase 2 (replay location).
   const [confirmExitDemo, setConfirmExitDemo] = useState(null);
-  // Forces a re-render when the viewport resizes (tooltip anchors use
-  // getBoundingClientRect on each render, so they'd otherwise go stale).
-  const [, setTourResizeTick] = useState(0);
   // Swipe-gesture tracking for the tour. Replaces explicit Back/Next
   // buttons: swipe right-to-left = advance, left-to-right = back.
   // Lives in a ref so re-renders mid-gesture don't reset the start point.
@@ -2563,11 +2592,8 @@ function App() {
   // these refs each time it runs.
   const tourAdvanceRef = useRef(null);
   const tourGoBackRef = useRef(null);
-  // Timers kept alive across the tour-step re-measure effect so the
-  // cleanup can clear them on a rapid step change. Array of timeout IDs
-  // (0..N) — see the "re-measure after tourStep change" effect below.
-  const tourRemeasureTimers = useRef([]);
-  // Same idea for the auto-scroll-target-into-view effect.
+  // Timers kept alive across the auto-scroll-target-into-view effect
+  // so the cleanup can clear them on a rapid step change.
   const tourScrollTimers = useRef([]);
 
   /* CONFETTI on first goal + first habit.
@@ -2746,80 +2772,63 @@ function App() {
     }, 1600);
     return () => clearTimeout(t);
   }, [tourStep]);
-  // Re-render when the window resizes OR anything scrolls — tooltip
-  // anchors use live getBoundingClientRect, which would otherwise go
-  // stale and leave the spotlight ring / dim panels / tooltip pinned
-  // to where the target USED to be. `capture: true` on the scroll
-  // listener catches scrolls inside nested scroll containers too
-  // (not just the window), which matters because the tab content
-  // scrolls in its own container, not the body.
-  useEffect(() => {
-    if (tourStep === 0) return;
-    const onR = () => setTourResizeTick(t => t + 1);
-    window.addEventListener("resize", onR);
-    window.addEventListener("scroll", onR, { capture: true, passive: true });
-    return () => {
-      window.removeEventListener("resize", onR);
-      window.removeEventListener("scroll", onR, { capture: true });
-    };
-  }, [tourStep]);
+  /* Path A spotlight — class-based. Instead of reading the target's
+     rect every render and painting a separate overlay ring + dim
+     panels around it (fragile: stale rects on scroll, missing rects
+     on late mounts, nested-scroll-container edge cases), we toggle
+     two CSS classes directly on the target element:
+       • .tour-target           — the primary focus for this step.
+                                  Lifts the element above a single
+                                  full-screen dim, paints a pulsing
+                                  green outline via box-shadow, and
+                                  scrolls itself into view.
+       • .tour-target-secondary — a dashed non-pulsing outline on the
+                                  "you CAN go here next" target (e.g.
+                                  the form's Next button once a name
+                                  is typed). Only applied when the
+                                  step's gate is passing so we don't
+                                  highlight a disabled button.
 
-  /* Re-measure target rect after a tour-step change commits.
-     renderTour resolves `step.selector` synchronously on the first render
-     after tourStep changes, but the target DOM element often isn't mounted
-     yet at that instant — e.g. a setTab(...) from the step-to-tab effect
-     fires in the SAME render cycle, so the goal-tab's [+] button hasn't
-     been painted when we querySelector for it. Result: rect = null → no
-     spotlight ring, no carved dim hole, no ring-shape computation. The
-     tooltip shows but the [+] sits unhighlighted until the user taps or
-     scrolls (which bumps tourResizeTick via the listener above) and forces
-     a re-measure.
-     Fix: after every tourStep change we bump the tick twice — once on the
-     next animation frame (after React commits + DOM paints) and again at
-     ~220ms (after tab-switch transitions settle and any lazy-mounted form
-     inputs land). That's enough to catch both fast paints and slower ones
-     without thrashing render. */
+     This effect runs on EVERY render (no dep array) so the secondary
+     class flips on the moment the user types enough to pass the gate
+     — the render that carries the new controlled-input value is the
+     same render the effect runs in, and we re-read the gate fresh.
+
+     The element keeps its own layout, so resize/scroll are handled
+     for free by the browser. No refs, no re-measure timers, no rect
+     math. Scroll-into-view lives in the separate [tourStep] effect
+     below so a keystroke doesn't yank the viewport. */
   useEffect(() => {
     if (tourStep === 0) return undefined;
-    let cancelled = false;
-    const bump = () => { if (!cancelled) setTourResizeTick(t => t + 1); };
-    const raf = requestAnimationFrame(() => {
-      bump();
-      // Second pass a beat later for tab transitions / lazy mounts.
-      const t = setTimeout(bump, 220);
-      const t2 = setTimeout(bump, 520);
-      // Stash on the ref so the cleanup below can clear them.
-      tourRemeasureTimers.current = [t, t2];
-    });
+    const step = TOUR_STEPS[tourStep - 1];
+    if (!step) return undefined;
+    const gateBlocked = typeof step.gate === "function" && !step.gate(data);
+    let primaryEl = null;
+    let secondaryEl = null;
+    if (step.selector) {
+      primaryEl = document.querySelector(step.selector);
+      if (primaryEl) primaryEl.classList.add("tour-target");
+    }
+    if (step.extraSelector && !gateBlocked) {
+      secondaryEl = document.querySelector(step.extraSelector);
+      if (secondaryEl && secondaryEl !== primaryEl) {
+        secondaryEl.classList.add("tour-target-secondary");
+      } else {
+        secondaryEl = null;
+      }
+    }
     return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      (tourRemeasureTimers.current || []).forEach(clearTimeout);
-      tourRemeasureTimers.current = [];
+      if (primaryEl) primaryEl.classList.remove("tour-target");
+      if (secondaryEl) secondaryEl.classList.remove("tour-target-secondary");
     };
-  }, [tourStep]);
+  });
 
-  /* Auto-scroll the tour target into view so the spotlight ring + the
-     element it's highlighting are both visible, regardless of where on
-     the page the user had previously scrolled. Without this, a step
-     that points at (say) the [+] New-goal button can land while the
-     user is scrolled halfway down the goals list — the ring gets drawn
-     viewport-relative to the target's rect, which is now ABOVE the
-     visible area. The user sees a tooltip, no spotlight, and has to
-     manually scroll to find what's being highlighted.
-
-     Behaviour:
-       • `block: "center"` so the target lands in the middle of the
-         viewport on most steps — gives the spotlight visual breathing
-         room both above and below.
-       • `block: "start"` for gated [+] steps (`pinBottom: true`) so
-         the button sits near the top of the viewport and the tooltip
-         docked at the bottom doesn't cover it.
-       • We retry once on rAF and again at 260ms to outrun tab-switch
-         transitions and lazy form mounts — same cadence as the
-         re-measure effect above.
-       • scrollIntoView is a no-op if the target is already in view, so
-         there's no jitter on steps where the user hasn't scrolled. */
+  /* Scroll the current tour target into view on step change.
+     scrollIntoView is a no-op if the element is already in view, so
+     there's no jitter when moving between adjacent steps on the same
+     page. Retry cadence (rAF + 260ms + 560ms) covers tab transitions
+     and lazy form mounts where the target isn't in the DOM on the
+     first render after tourStep flips. */
   useEffect(() => {
     if (tourStep === 0) return undefined;
     const step = TOUR_STEPS[tourStep - 1];
@@ -5601,104 +5610,31 @@ function App() {
     const step = TOUR_STEPS[tourStep - 1];
     if (!step) return null;
 
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const pad = 8;       // padding around the highlighted target
-    const tipW = Math.min(300, vw - 32);
-    const tipGap = 12;   // space between target and tooltip
-    // Gate check hoisted up here because tooltip placement depends on it —
-    // gated steps dock the tooltip to the bottom of the screen so the
-    // add-goal / add-habit form the user is about to open isn't covered.
+    // Gate check — gated steps dock the tooltip to the bottom of the
+    // screen so the add-goal / add-habit form the user is about to
+    // open isn't covered, and reveal the italic gateHint sub-line in
+    // the tooltip body.
     const gateBlocked = typeof step.gate === "function" && !step.gate(data);
 
-    let target = null;
-    if (step.selector) {
-      target = document.querySelector(step.selector);
-    }
-
-    let rect = null;
-    // ringRadius is the CSS border-radius to paint on the spotlight ring
-    // so it MATCHES the shape of the target element — circles ([+] add
-    // buttons) get a circular ring, inputs get their rounded-rectangle
-    // radius, etc. The old hard-coded 12px made a pill-capsule [+] sit
-    // inside a boxy square, which read as "the spotlight drifted off
-    // the button" even though it was centered. We grab the target's
-    // computed border-radius (using its four corner values so we don't
-    // get tripped up by shorthand quirks), treat 50% / values close to
-    // half the smallest side as "circle → render a perfect circle ring
-    // that hugs the button", and otherwise extend each corner radius by
-    // the overlay's pad so the widened ring still aligns with the
-    // target's curve instead of collapsing to a sharp outline.
-    let ringRadius = "12px";
-    if (target) {
-      const r = target.getBoundingClientRect();
-      rect = { top: r.top, left: r.left, width: r.width, height: r.height,
-               bottom: r.bottom, right: r.right };
-      try {
-        const cs = window.getComputedStyle(target);
-        const raw = [
-          cs.borderTopLeftRadius,
-          cs.borderTopRightRadius,
-          cs.borderBottomRightRadius,
-          cs.borderBottomLeftRadius
-        ];
-        const minSide = Math.min(r.width, r.height);
-        // A value ≥ half the smallest side means the corner is fully
-        // rounded (pill/circle). If ALL four corners hit that threshold
-        // AND the element is roughly square (within 10%), we paint a
-        // perfect circle ring hugging the button. Using 50% on a wide
-        // pill would produce an ellipse — that's desirable too, so pill-
-        // shaped buttons still get a pill ring.
-        const parsed = raw.map(v => {
-          if (!v) return 0;
-          if (v.endsWith("%")) return (parseFloat(v) / 100) * minSide;
-          return parseFloat(v) || 0;
-        });
-        const allPill = parsed.every(p => p >= minSide / 2 - 1);
-        const squareish = Math.abs(r.width - r.height) / Math.max(r.width, r.height, 1) < 0.12;
-        if (allPill && squareish) {
-          // Perfect circle — radius = half the widened (padded) side so
-          // the spotlight ring hugs the button edge without cutting in.
-          ringRadius = "50%";
-        } else if (allPill) {
-          // Pill / ellipse — keep it round-on-the-ends by using 9999px
-          // which CSS clamps to half-the-shorter-side, preserving the
-          // capsule look even after the ring is widened by pad.
-          ringRadius = "9999px";
-        } else {
-          // Rounded rectangle — extend each corner radius by `pad` so
-          // the ring's curve stays flush with the element's curve after
-          // the ring is grown outward.
-          ringRadius = parsed.map(p => (p + pad) + "px").join(" ");
-        }
-      } catch (_e) {
-        ringRadius = "12px";
-      }
-    }
-
-    // Form-walkthrough steps (pick area, SMART, save, etc.) dock at the
-    // top of the viewport just like the initial gated [+] step did, so
-    // the middle of the screen stays clear and the user can SEE + type
-    // into the form beneath. We treat any step flagged `formStep: true`
-    // as needing the top-dock treatment.
-    //
-    // `pinBottom: true` overrides that and pins the tooltip to the
-    // bottom of the viewport instead — used on the "Tap + to start"
-    // steps where the spotlight target is the [+] button near the top
-    // of the page. Top-docking would cover that button; bottom-docking
-    // keeps it unobstructed.
+    // Path A placement — no rect math. Three docking modes:
+    //   • pinBottom: for gated [+] steps where the target is near the
+    //     top of the page and the tooltip would otherwise cover it.
+    //   • topDock: for form-walkthrough steps where the target is
+    //     inside the new-goal / new-habit form and we want the middle
+    //     of the screen clear for the form itself.
+    //   • centered: for intro / outro / inline-form steps with no
+    //     selector on the page.
+    // Because the spotlight ring is drawn BY the target element (via
+    // the .tour-target class — see the class-toggle effect near the
+    // top of the component), the tooltip only has to stay out of the
+    // target's way. It never has to anchor to a rect.
     const pinBottom = step.pinBottom === true;
-    const topDock = !pinBottom && (gateBlocked || step.formStep === true);
+    const topDock = !pinBottom && (gateBlocked || step.formStep === true || !!step.selector);
 
-    // Decide tooltip position: if anchored, place above (default) or
-    // below depending on room + step.placement hint. If not anchored,
-    // center the tooltip in the viewport.
     let tipStyle = {};
     if (pinBottom) {
-      // The fixed-bottom swipe-footer pill occupies ~30px of height at
-      // `bottom: 14px`. Park the pin-bottom tooltip ABOVE the pill
-      // (footer height + gap + safe-area) so the user can see both the
-      // "Tap + to start" card AND the swipe hint on the same screen.
+      // Park the pin-bottom tooltip ABOVE the fixed swipe-footer pill
+      // so the user can see both pieces of chrome on the same screen.
       tipStyle = {
         position: "fixed",
         left: 12,
@@ -5707,42 +5643,19 @@ function App() {
         width: "auto"
       };
     } else if (topDock) {
-      // Gated / form-walkthrough steps — dock the tooltip across the TOP
-      // of the viewport, above the spotlighted [+] button or form field.
-      // Typical phone stack:
-      //   ┌ top band: "Pick an area of life" (this tooltip)
-      //   │ ...
-      //   │ [target field]  ← spotlight ring
-      //   │ "Pick an area of life" (callout, if gated)
-      //   │ ... middle of screen stays free to see / type into the form
-      //   └ bottom nav
-      // maxHeight clamps the tooltip so it can't extend down and cover
-      // the spotlighted target — that's what broke the old bottom-docked
-      // version, and it's what would break here too if the tooltip
-      // grew past the space above the target.
-      const availTop = rect
-        ? Math.max(110, rect.top - tipGap - 12)
-        : 220;
+      // Top-dock — tooltip sits across the top of the viewport,
+      // leaving the middle of the screen clear for the spotlit target.
       tipStyle = {
         position: "fixed",
         left: 12,
         right: 12,
         top: "calc(12px + env(safe-area-inset-top, 0px))",
-        width: "auto",
-        maxHeight: availTop + "px",
-        overflow: "hidden"
+        width: "auto"
       };
-    } else if (rect) {
-      const wantTop = step.placement === "top";
-      const fitsTop = rect.top - tipGap - 140 > 20;
-      const fitsBottom = rect.bottom + tipGap + 140 < vh - 20;
-      const placeTop = wantTop ? fitsTop : (fitsBottom ? false : fitsTop);
-      const centerX = rect.left + rect.width / 2;
-      const left = Math.max(12, Math.min(vw - tipW - 12, centerX - tipW / 2));
-      tipStyle = placeTop
-        ? { position: "fixed", left, bottom: vh - rect.top + tipGap, width: tipW }
-        : { position: "fixed", left, top: rect.bottom + tipGap, width: tipW };
     } else {
+      // Centered — intro, outro, and inline-form steps.
+      const vw = window.innerWidth;
+      const tipW = Math.min(300, vw - 32);
       tipStyle = {
         position: "fixed",
         left: "50%",
@@ -5751,37 +5664,6 @@ function App() {
         width: tipW
       };
     }
-
-    // Build the dim panels. When a rect is known we carve four panels
-    // around it so the target stays lit. When not, a single full-screen
-    // dim panel covers everything.
-    const panels = [];
-    if (rect) {
-      const tR = { top: rect.top - pad, left: rect.left - pad,
-                   right: rect.right + pad, bottom: rect.bottom + pad };
-      // top
-      panels.push({ left: 0, top: 0, width: vw, height: Math.max(0, tR.top) });
-      // bottom
-      panels.push({ left: 0, top: tR.bottom, width: vw, height: Math.max(0, vh - tR.bottom) });
-      // left strip
-      panels.push({ left: 0, top: tR.top, width: Math.max(0, tR.left), height: Math.max(0, tR.bottom - tR.top) });
-      // right strip
-      panels.push({ left: tR.right, top: tR.top, width: Math.max(0, vw - tR.right), height: Math.max(0, tR.bottom - tR.top) });
-    } else {
-      panels.push({ left: 0, top: 0, width: vw, height: vh });
-    }
-
-    // Dim opacity: the standard 0.58 dim reads as a strong "foreground
-    // spotlight" and was right for the initial [+] step (the user just
-    // needs to see WHERE to tap). But once the form is open and the
-    // user is reading / typing into fields, that same dim makes the
-    // form hard to read — the whole point of the walkthrough is that
-    // the background IS the content the user is operating on. So for
-    // form-walkthrough steps, drop to a much softer wash (0.22) that
-    // still separates layers visually but keeps the form legible.
-    const dimColor = step.formStep === true
-      ? "rgba(0,0,0,0.22)"
-      : "rgba(0,0,0,0.58)";
 
     const isLast = tourStep === TOUR_STEPS.length;
 
@@ -5815,43 +5697,15 @@ function App() {
     tourAdvanceRef.current = advance;
     tourGoBackRef.current = goBack;
 
-    // ── Swipe handlers — attached to the tooltip and the dim panels so
-    //    a horizontal swipe anywhere off the spotlight area navigates the
-    //    tour. Threshold is 45px horizontal with a clamp that requires
-    //    |dx| > |dy| so vertical scrolls inside the tooltip body don't
-    //    accidentally trigger nav. Form inputs and buttons inside the
-    //    tooltip stop-propagate so dragging a select / typing in the
-    //    home-location input never registers as a swipe.
-    const SWIPE_MIN = 45;
-    const onSwipeStart = (clientX, clientY) => {
-      tourSwipeRef.current = { x: clientX, y: clientY, t: Date.now(), active: true };
-    };
-    const onSwipeEnd = (clientX, clientY) => {
-      const s = tourSwipeRef.current;
-      if (!s || !s.active) return;
-      tourSwipeRef.current.active = false;
-      const dx = clientX - s.x;
-      const dy = clientY - s.y;
-      if (Math.abs(dx) < SWIPE_MIN) return;
-      if (Math.abs(dx) < Math.abs(dy)) return; // mostly vertical → ignore
-      if (dx < 0) advance();        // swipe left → next
-      else goBack();                 // swipe right → back
-    };
-    const swipeHandlers = {
-      onTouchStart: e => {
-        const t = e.touches && e.touches[0];
-        if (t) onSwipeStart(t.clientX, t.clientY);
-      },
-      onTouchEnd: e => {
-        const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
-        if (t) onSwipeEnd(t.clientX, t.clientY);
-      },
-      onMouseDown: e => onSwipeStart(e.clientX, e.clientY),
-      onMouseUp: e => onSwipeEnd(e.clientX, e.clientY)
-    };
-    // For tooltip-internal interactive widgets (form inputs, buttons),
-    // swallow pointerdown/touchstart so they don't seed a swipe. Buttons
-    // still fire onClick normally because we only intercept the start.
+    // Swipe gestures are captured by a single document-level listener
+    // (component-level useEffect earlier in the component). The old
+    // React synthetic swipeHandlers attached to the tooltip/panels
+    // used to double-fire every gesture alongside the native listener,
+    // jumping the tour two steps at a time — so we keep swipe capture
+    // at exactly one layer. Form inputs / buttons inside the tooltip
+    // still swallow pointerdown so dragging a <select> or typing in
+    // the home-location input never seeds a swipe at the document
+    // level either.
     const stopSwipeStart = {
       onTouchStart: e => e.stopPropagation(),
       onMouseDown: e => e.stopPropagation()
@@ -5924,183 +5778,23 @@ function App() {
       "data-tour-overlay": "1",
       style: { position: "fixed", inset: 0, zIndex: 9999, pointerEvents: "none" }
     },
-      // Dim panels. For non-gated steps they absorb taps so the user
-      // can't interact with the rest of the UI while the tour is
-      // active — the spotlight hole is the one exception because no
-      // panel covers it. For gated steps (the ones that require the
-      // user to tap a specific button to continue, e.g. "Add a goal
-      // to continue"), we switch the panels to `pointerEvents: none`
-      // so taps pass through to the underlying app. That guarantees
-      // the required button is always clickable even if its rect was
-      // computed slightly off, or the target wasn't in the DOM on the
-      // first render. Swipe navigation still works because the tooltip
-      // itself carries the same swipeHandlers.
-      ...panels.map((p, i) => /*#__PURE__*/React.createElement("div", Object.assign({
-        key: "p" + i,
-        style: {
-          position: "fixed",
-          left: p.left, top: p.top, width: p.width, height: p.height,
-          background: dimColor,
-          // Form-walkthrough steps (gated or not) let taps pass through
-          // so the user can interact with ANY field in the form, not
-          // just the spotlighted one. They might want to type the goal
-          // name, then the area, then the SMART fields — all without
-          // the dim panel blocking them. Swipe nav still works because
-          // the tooltip itself carries the swipeHandlers.
-          pointerEvents: (gateBlocked || step.formStep === true) ? "none" : "auto",
-          touchAction: "pan-y",
-          transition: "all 0.2s ease"
-        }
-      }, null))),
-      // ^^ Swipe gestures are handled by a SINGLE document-level listener
-      //    (component-level useEffect around line 2865). The dim panels and
-      //    tooltip used to carry their own React `swipeHandlers`, but that
-      //    doubled every swipe — native document listeners AND React
-      //    synthetic handlers both fired on the same gesture, advancing the
-      //    tour two steps. Keep swipe capture at exactly one layer.
-      // Highlight ring — borderRadius matches the target's shape. See
-      // `ringRadius` computation above: circular [+] buttons get a
-      // perfect circle ring, pill buttons keep their capsule outline,
-      // inputs / form fields get their own rounded-rectangle radius
-      // extended by `pad` so the ring still hugs the curve after it's
-      // widened outward.
-      rect && /*#__PURE__*/React.createElement("div", {
-        style: {
-          position: "fixed",
-          left: rect.left - pad, top: rect.top - pad,
-          width: rect.width + pad * 2, height: rect.height + pad * 2,
-          border: "2px solid #2d5a2d",
-          borderRadius: ringRadius,
-          boxShadow: "0 0 0 4px rgba(45,90,45,.25), 0 8px 24px rgba(0,0,0,.3)",
-          pointerEvents: "none",
-          animation: "tourPulse 1.6s ease-in-out infinite"
-        }
+      // Path A dim — one full-screen panel sitting BELOW the target
+      // (z-index 9998 vs the .tour-target class's 9999). No carved
+      // hole, no rect math. On form-walkthrough steps the dim drops
+      // from 0.42 to 0.22 so the user can still read the whole form
+      // around the spotlit field (via the .form-step modifier class).
+      // Always pointerEvents:none so the spotlit target is tappable
+      // and any other form field the user wants to interact with is
+      // tappable too — swipes are captured by the document-level
+      // listener, not the dim.
+      /*#__PURE__*/React.createElement("div", {
+        key: "dim",
+        className: "tour-dim" + (step.formStep === true ? " form-step" : "")
       }),
-      // Secondary spotlight — rendered when the step opts in via
-      // `extraSelector` AND the step's gate is currently passing (or
-      // the step has no gate). Dashed ring + no pulse so the user
-      // reads it as "here's where you CAN go next" rather than "you
-      // must tap this now." Picks up its own border-radius from the
-      // target's computed style so an elongated save-button pill still
-      // gets a pill-shaped outline, matching the primary ring logic.
-      // Gate-conditional so the ring on the form's Next button only
-      // appears after the user has filled the required field (e.g.
-      // typed a goal name) — before that, the Next button is disabled
-      // in the form anyway and highlighting it would invite a useless
-      // tap. Steps without a gate (e.g. SMART step 5) always show the
-      // extra ring because there's nothing to wait for.
-      (step.extraSelector && !gateBlocked) && (() => {
-        const el2 = document.querySelector(step.extraSelector);
-        if (!el2) return null;
-        const r2 = el2.getBoundingClientRect();
-        if (!r2 || (r2.width === 0 && r2.height === 0)) return null;
-        let r2Radius = "12px";
-        try {
-          const cs2 = window.getComputedStyle(el2);
-          const raw2 = [
-            cs2.borderTopLeftRadius,
-            cs2.borderTopRightRadius,
-            cs2.borderBottomRightRadius,
-            cs2.borderBottomLeftRadius
-          ];
-          const minSide2 = Math.min(r2.width, r2.height);
-          const parsed2 = raw2.map(v => {
-            if (!v) return 0;
-            if (v.endsWith("%")) return (parseFloat(v) / 100) * minSide2;
-            return parseFloat(v) || 0;
-          });
-          const allPill2 = parsed2.every(p => p >= minSide2 / 2 - 1);
-          const squareish2 = Math.abs(r2.width - r2.height) / Math.max(r2.width, r2.height, 1) < 0.12;
-          if (allPill2 && squareish2) r2Radius = "50%";
-          else if (allPill2) r2Radius = "9999px";
-          else r2Radius = parsed2.map(p => (p + pad) + "px").join(" ");
-        } catch (_e) { r2Radius = "12px"; }
-        return /*#__PURE__*/React.createElement("div", {
-          key: "extraRing",
-          style: {
-            position: "fixed",
-            left: r2.left - pad, top: r2.top - pad,
-            width: r2.width + pad * 2, height: r2.height + pad * 2,
-            border: "2px dashed #2d5a2d",
-            borderRadius: r2Radius,
-            boxShadow: "0 0 0 3px rgba(45,90,45,.18)",
-            pointerEvents: "none"
-          }
-        });
-      })(),
-      // Gated-step callout: an upward-pointing arrow + small "Add a goal
-      // to continue" / "Add a habit to continue" bubble, parked just
-      // below the spotlighted [+] so the user's eye follows the bob up
-      // to the button. Sits at its own zIndex below the tooltip but
-      // above the dim panels; pointer-events:none so taps hit the [+]
-      // underneath. Only rendered when there's a rect to anchor to AND
-      // the step has a gateHint (i.e. the Goals / Habits gated steps).
-      gateBlocked && rect && step.gateHint && (() => {
-        const bubbleW = Math.min(220, vw - 24);
-        const centerX = rect.left + rect.width / 2;
-        const bubbleLeft = Math.max(12, Math.min(vw - bubbleW - 12, centerX - bubbleW / 2));
-        // Arrow is positioned RELATIVE to the bubble container so that
-        // if the bubble gets clamped against a screen edge, the arrow
-        // still points at the real button. Clamp keeps the arrow tip
-        // inside the bubble's rounded-corner-safe range.
-        const arrowLeft = Math.max(14, Math.min(bubbleW - 24, centerX - bubbleLeft - 10));
-        return /*#__PURE__*/React.createElement("div", {
-          key: "gatedCallout",
-          className: "tour-callout",
-          style: {
-            position: "fixed",
-            left: bubbleLeft,
-            top: rect.bottom + 16,
-            width: bubbleW,
-            pointerEvents: "none",
-            zIndex: 9998
-          }
-        },
-          // Upward chevron — layered triangles give a 1px white outline
-          // against the dim backdrop so the arrow reads cleanly over
-          // both the dark dim panels and any light content behind.
-          /*#__PURE__*/React.createElement("div", {
-            style: {
-              position: "absolute",
-              left: arrowLeft - 1, top: -13,
-              width: 0, height: 0,
-              borderLeft: "11px solid transparent",
-              borderRight: "11px solid transparent",
-              borderBottom: "13px solid rgba(255,255,255,0.9)"
-            }
-          }),
-          /*#__PURE__*/React.createElement("div", {
-            style: {
-              position: "absolute",
-              left: arrowLeft, top: -11,
-              width: 0, height: 0,
-              borderLeft: "10px solid transparent",
-              borderRight: "10px solid transparent",
-              borderBottom: "12px solid #2d5a2d"
-            }
-          }),
-          // Bubble — brand green, white text, drop shadow so it floats
-          // clearly over the dim backdrop.
-          /*#__PURE__*/React.createElement("div", {
-            style: {
-              padding: "10px 14px",
-              background: "#2d5a2d",
-              color: "#fff",
-              borderRadius: 12,
-              fontSize: 13,
-              fontWeight: 700,
-              textAlign: "center",
-              letterSpacing: 0.1,
-              boxShadow: "0 10px 24px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.2)",
-              border: "1px solid rgba(255,255,255,.35)"
-            }
-          }, step.gateHint)
-        );
-      })(),
-      // Tooltip — also accepts swipes (so the user doesn't have to aim
-      // for the dim area). Form steps with native inputs (select / text)
-      // have those inputs swallow pointer-start so a drag inside them
-      // doesn't get read as a swipe.
+      // Tooltip — swipes are captured by the document-level listener,
+      // not by this element. Form inputs inside the tooltip (select /
+      // text) carry stopSwipeStart so dragging inside them doesn't
+      // accidentally trigger tour navigation.
       /*#__PURE__*/React.createElement("div", Object.assign({
         // Liquid-glass tour tooltip — the dim panels behind it are
         // already semi-transparent black, so the backdrop blur picks up
@@ -6199,11 +5893,17 @@ function App() {
         }, step.body),
         // Inline form (weekly review / home location).
         formNode,
-        // (The gateHint used to render here as an italic sub-line inside
-        //  the tooltip. It's now shown as a prominent arrow + bubble
-        //  callout anchored directly under the spotlighted [+] button —
-        //  see the `gatedCallout` block above in renderTour. Keeping the
-        //  hint in two places would be redundant.)
+        // gateHint — italic sub-line rendered only when the step's gate
+        // is currently blocking forward navigation. The target element
+        // itself is already spotlit (pulsing green outline via the
+        // .tour-target class), so this is just a text nudge telling the
+        // user what to DO with the spotlit thing to keep going.
+        gateBlocked && step.gateHint && /*#__PURE__*/React.createElement("div", {
+          className: "tour-tip-swipe",
+          style: {
+            fontSize: 12, fontStyle: "italic", marginTop: -4, marginBottom: 10
+          }
+        }, step.gateHint),
         // Footer — navigation is by swipe; there is no Skip. The tour
         // is short and load-bearing (it's how the user actually creates
         // their first goal, habit, weekly review, and home location), so
