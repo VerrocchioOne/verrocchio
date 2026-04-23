@@ -5637,46 +5637,73 @@ function App() {
   };
   // ── Sort utility ──
   // Returns a sorted COPY of `items`. `kind` selects the per-mode
-  // comparator so, e.g., "date" means goal.smart.timebound for goals
-  // and todo.dueDate for todos. Unknown modes fall back to `_order`
-  // (custom) so a forward-compat sortPref doesn't crash.
+  // comparator so, e.g., "date-asc" means goal.smart.timebound ascending
+  // for goals and todo.dueDate ascending for todos. Unknown modes fall
+  // back to `_order` (custom) so a forward-compat sortPref doesn't crash.
+  //
+  // Mode strings are now directional: `${axis}-${dir}` where axis ∈
+  // {alpha, created, date, streak} and dir ∈ {asc, desc}. Legacy single-
+  // word modes from older saves ("alpha", "created", "date", "streak")
+  // are aliased to the direction they originally shipped with so the
+  // previous behavior is preserved on read.
+  const SORT_LEGACY_ALIASES = {
+    alpha:   "alpha-asc",
+    created: "created-desc",
+    date:    "date-asc",
+    streak:  "streak-desc"
+  };
   const sortItems = (items, mode, kind) => {
     if (!Array.isArray(items)) return [];
     const copy = items.slice();
+    const norm = SORT_LEGACY_ALIASES[mode] || mode;
     const byOrder = (a, b) => (a._order ?? 999) - (b._order ?? 999);
     const byAlpha = (a, b) => String(a.text || "").localeCompare(String(b.text || ""), undefined, { sensitivity: "base" });
-    // `created` = newest first. Item ids come from Date.now(), so id is
-    // a monotonic proxy for creation time. Fall back to zero for any
-    // non-numeric id so the comparator is total.
-    const byCreated = (a, b) => (Number(b.id) || 0) - (Number(a.id) || 0);
+    // Item ids come from Date.now(), so id is a monotonic proxy for
+    // creation time. Fall back to zero for any non-numeric id so the
+    // comparator is total.
+    const byIdDesc = (a, b) => (Number(b.id) || 0) - (Number(a.id) || 0); // newest first
+    const byIdAsc  = (a, b) => (Number(a.id) || 0) - (Number(b.id) || 0); // oldest first
     const dateKey = (it) => {
       if (kind === "goal") return it.smart && it.smart.timebound ? it.smart.timebound : "";
       if (kind === "todo") return it.dueDate || "";
       return "";
     };
-    // Empty dates sort to the end so "Sort by date" shows dated items
-    // first, then undated — otherwise a page full of undated items
-    // looks broken.
-    const byDate = (a, b) => {
+    // Empty dates always sort to the end regardless of direction — a
+    // page full of undated items stacked at the top would read as
+    // broken, so we handle the missing-key case explicitly on both
+    // ascending and descending paths.
+    const byDateAsc = (a, b) => {
       const da = dateKey(a), db = dateKey(b);
       if (!da && !db) return byOrder(a, b);
       if (!da) return 1;
       if (!db) return -1;
       return da.localeCompare(db);
     };
-    const byStreak = (a, b) => getStreak(b) - getStreak(a);
-    switch (mode) {
-      case "alpha":   return copy.sort(byAlpha);
-      case "created": return copy.sort(byCreated);
-      case "date":    return copy.sort(byDate);
-      case "streak":  return kind === "habit" ? copy.sort(byStreak) : copy.sort(byOrder);
-      case "custom":  return copy.sort(byOrder);
+    const byDateDesc = (a, b) => {
+      const da = dateKey(a), db = dateKey(b);
+      if (!da && !db) return byOrder(a, b);
+      if (!da) return 1;
+      if (!db) return -1;
+      return db.localeCompare(da);
+    };
+    const byStreakDesc = (a, b) => getStreak(b) - getStreak(a);
+    const byStreakAsc  = (a, b) => getStreak(a) - getStreak(b);
+    switch (norm) {
+      case "alpha-asc":    return copy.sort(byAlpha);
+      case "alpha-desc":   return copy.sort((a, b) => -byAlpha(a, b));
+      case "created-desc": return copy.sort(byIdDesc);
+      case "created-asc":  return copy.sort(byIdAsc);
+      case "date-asc":     return copy.sort(byDateAsc);
+      case "date-desc":    return copy.sort(byDateDesc);
+      case "streak-desc":  return kind === "habit" ? copy.sort(byStreakDesc) : copy.sort(byOrder);
+      case "streak-asc":   return kind === "habit" ? copy.sort(byStreakAsc)  : copy.sort(byOrder);
+      case "custom":       return copy.sort(byOrder);
       case "default":
       default:
         // Default pick per kind: habits by section _order, goals by
         // creation (newest first), todos by due date ascending.
-        if (kind === "goal")  return copy.sort(byCreated);
-        if (kind === "todo")  return copy.sort(byDate);
+        if (kind === "goal")  return copy.sort(byIdDesc);
+        if (kind === "todo")  return copy.sort(byDateAsc);
         return copy.sort(byOrder);
     }
   };
@@ -5686,21 +5713,63 @@ function App() {
     save({ ...data, sortPrefs: { ...(data.sortPrefs || {}), [page]: mode } });
   };
   // ── SortMenu (per-page) ──
-  // Renders as a compact "⇅ Sort: <label>" button on each page; tapping
-  // opens a bottom-sheet list of modes. "Edit custom order…" at the
-  // bottom (goals / todos only) opens the reorder modal and flips the
-  // page's sort pref to "custom" on save.
+  // Renders as a compact "⇅ <mode label>" button on each page; tapping
+  // opens a bottom-sheet with one row per axis (Alphabetical, Creation,
+  // etc.). Each directional axis renders BOTH direction pills (e.g.
+  // "A → Z" and "Z → A") inside a single row, so the user can pick
+  // axis + direction in a single tap and flip direction without
+  // scrolling. "Default" and "Custom" are single-pill rows.
+  // "Edit custom order…" at the bottom (goals / todos only) opens the
+  // reorder modal and flips the page's sort pref to "custom" on save.
+  //
+  // Short labels (what the pill button itself reads) — used both in
+  // the sheet and in the collapsed "⇅ <label>" trigger on the page.
   const SORT_LABEL = {
-    default: "Default",
-    alpha: "A → Z",
-    created: "Newest first",
-    date: "By date",
-    streak: "By streak",
-    custom: "Custom"
+    default:       "Default",
+    "alpha-asc":   "A → Z",
+    "alpha-desc":  "Z → A",
+    "created-desc":"Newest",
+    "created-asc": "Oldest",
+    "date-asc":    "Earliest",
+    "date-desc":   "Latest",
+    "streak-desc": "Highest streak",
+    "streak-asc":  "Lowest streak",
+    custom:        "Custom"
   };
+  // Per-page axis config. Each entry is either `{ id, label }` for a
+  // singleton row (Default / Custom) or `{ axis, label, asc, desc }`
+  // for a directional pair — asc/desc hold the `${axis}-${dir}` mode
+  // strings and their short pill labels.
+  const SORT_GROUPS = {
+    habits: [
+      { id: "default", label: "Default" },
+      { axis: "alpha",   label: "Alphabetical", asc: { mode: "alpha-asc",    pill: "A → Z"    }, desc: { mode: "alpha-desc",   pill: "Z → A" } },
+      { axis: "created", label: "Creation",     asc: { mode: "created-asc",  pill: "Oldest"   }, desc: { mode: "created-desc", pill: "Newest" } },
+      { axis: "streak",  label: "Streak",       asc: { mode: "streak-asc",   pill: "Lowest"   }, desc: { mode: "streak-desc",  pill: "Highest" } },
+      { id: "custom",  label: "Custom" }
+    ],
+    goals: [
+      { id: "default", label: "Default" },
+      { axis: "alpha",   label: "Alphabetical", asc: { mode: "alpha-asc",    pill: "A → Z"    }, desc: { mode: "alpha-desc",   pill: "Z → A" } },
+      { axis: "created", label: "Creation",     asc: { mode: "created-asc",  pill: "Oldest"   }, desc: { mode: "created-desc", pill: "Newest" } },
+      { axis: "date",    label: "Target date",  asc: { mode: "date-asc",     pill: "Earliest" }, desc: { mode: "date-desc",    pill: "Latest" } },
+      { id: "custom",  label: "Custom" }
+    ],
+    todos: [
+      { id: "default", label: "Default" },
+      { axis: "alpha",   label: "Alphabetical", asc: { mode: "alpha-asc",    pill: "A → Z"    }, desc: { mode: "alpha-desc",   pill: "Z → A" } },
+      { axis: "created", label: "Creation",     asc: { mode: "created-asc",  pill: "Oldest"   }, desc: { mode: "created-desc", pill: "Newest" } },
+      { axis: "date",    label: "Due date",     asc: { mode: "date-asc",     pill: "Earliest" }, desc: { mode: "date-desc",    pill: "Latest" } },
+      { id: "custom",  label: "Custom" }
+    ]
+  };
+  // Resolve a stored pref into its canonical directional string so
+  // the sheet's active-row math works on both legacy ("alpha") and
+  // new ("alpha-asc") saves.
+  const canonicalSort = (mode) => SORT_LEGACY_ALIASES[mode] || mode || "default";
   const openSortMenuHandler = (page) => () => setOpenSortMenu(prev => prev === page ? null : page);
   const renderSortButton = (page) => {
-    const current = (data.sortPrefs && data.sortPrefs[page]) || "default";
+    const current = canonicalSort((data.sortPrefs && data.sortPrefs[page]) || "default");
     return /*#__PURE__*/React.createElement("button", {
       onClick: openSortMenuHandler(page),
       "aria-label": "Sort",
@@ -5718,18 +5787,11 @@ function App() {
       }
     }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "⇅"), SORT_LABEL[current] || "Default");
   };
-  // Per-page list of enabled modes. `streak` only makes sense for
-  // habits; `date` for goals and todos.
-  const SORT_OPTIONS = {
-    habits: ["default", "alpha", "created", "streak", "custom"],
-    goals:  ["default", "alpha", "created", "date",   "custom"],
-    todos:  ["default", "alpha", "created", "date",   "custom"]
-  };
   const renderSortSheet = () => {
     if (!openSortMenu) return null;
     const page = openSortMenu;
-    const modes = SORT_OPTIONS[page] || ["default"];
-    const current = (data.sortPrefs && data.sortPrefs[page]) || "default";
+    const groups = SORT_GROUPS[page] || [{ id: "default", label: "Default" }];
+    const current = canonicalSort((data.sortPrefs && data.sortPrefs[page]) || "default");
     const close = () => setOpenSortMenu(null);
     const pick = (mode) => { setSortPref(page, mode); close(); };
     const openReorder = () => {
@@ -5738,6 +5800,76 @@ function App() {
       else if (page === "todo" || page === "todos") openTodoReorder();
       // Habits custom order is edited per-section via long-press on
       // the section header — no single list to reorder at once.
+    };
+    // Shared styles for the two row flavors.
+    const rowShell = (active) => ({
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "10px 12px",
+      border: "1px solid " + (active ? "#2d5a2d" : "var(--c-border)"),
+      borderRadius: 10,
+      background: active ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+      gap: 10
+    });
+    const axisLabelStyle = (active) => ({
+      fontSize: 13,
+      fontWeight: active ? 700 : 500,
+      color: active ? "#2d5a2d" : "var(--c-text)"
+    });
+    // Directional pill — one of "asc" / "desc". `selected` paints the
+    // filled-green variant; the other pill is a hollow outline so the
+    // user can see both options and tap to toggle.
+    const dirPill = (pill, mode, selected) => /*#__PURE__*/React.createElement("button", {
+      key: mode,
+      type: "button",
+      onClick: (e) => { e.stopPropagation(); pick(mode); },
+      style: {
+        padding: "6px 12px",
+        border: "1px solid " + (selected ? "#2d5a2d" : "var(--c-border)"),
+        borderRadius: 999,
+        background: selected ? "#2d5a2d" : "transparent",
+        color: selected ? "#fff" : "#4b5563",
+        fontSize: 12, fontWeight: selected ? 700 : 500,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        WebkitTapHighlightColor: "transparent"
+      }
+    }, pill);
+    const renderGroup = (g) => {
+      if (g.id) {
+        // Singleton row — Default / Custom. Whole row is the tap target.
+        const active = current === g.id;
+        return /*#__PURE__*/React.createElement("button", {
+          key: g.id,
+          type: "button",
+          onClick: () => pick(g.id),
+          style: Object.assign(rowShell(active), {
+            textAlign: "left",
+            cursor: "pointer",
+            color: active ? "#2d5a2d" : "var(--c-text)",
+            fontSize: 13, fontWeight: active ? 700 : 500
+          })
+        }, /*#__PURE__*/React.createElement("span", null, g.label), active ? "✓" : "");
+      }
+      // Directional row — axis label on the left, two pills on the right.
+      // Row is "active" whenever current matches either direction so the
+      // full-row tint reads as a group selection. Tapping the axis label
+      // itself does nothing on its own — the two pills are the tap
+      // targets — which keeps the toggle explicit.
+      const ascSel  = current === g.asc.mode;
+      const descSel = current === g.desc.mode;
+      const active = ascSel || descSel;
+      return /*#__PURE__*/React.createElement("div", {
+        key: g.axis,
+        style: rowShell(active)
+      },
+        /*#__PURE__*/React.createElement("span", { style: axisLabelStyle(active) }, g.label),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 6, flexShrink: 0 }
+        },
+          dirPill(g.asc.pill,  g.asc.mode,  ascSel),
+          dirPill(g.desc.pill, g.desc.mode, descSel)
+        )
+      );
     };
     return /*#__PURE__*/React.createElement("div", {
       role: "dialog",
@@ -5754,23 +5886,8 @@ function App() {
           style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.3 }
         }, "Sort"),
         /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }
-        }, modes.map(m => /*#__PURE__*/React.createElement("button", {
-          key: m,
-          type: "button",
-          onClick: () => pick(m),
-          style: {
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            textAlign: "left",
-            padding: "11px 12px",
-            border: "1px solid " + (current === m ? "#2d5a2d" : "var(--c-border)"),
-            borderRadius: 10,
-            background: current === m ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
-            color: current === m ? "#2d5a2d" : "var(--c-text)",
-            fontSize: 13, fontWeight: current === m ? 700 : 500,
-            cursor: "pointer"
-          }
-        }, /*#__PURE__*/React.createElement("span", null, SORT_LABEL[m] || m), current === m ? "✓" : ""))),
+          style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 6 }
+        }, groups.map(renderGroup)),
         (page === "goals" || page === "todos") && /*#__PURE__*/React.createElement("button", {
           type: "button",
           onClick: openReorder,
