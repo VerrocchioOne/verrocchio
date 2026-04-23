@@ -3231,10 +3231,44 @@ function App() {
   const startDemo = () => {
     setAuthErr("");
     setAuthEmail(""); setAuthPass("");
-    // Start with an empty workspace so the new-user onboarding flow fires.
+    // Seed the demo with a fully-configured marathon goal + the four
+    // habits that would realistically support it (morning cardio,
+    // afternoon hydration, evening recovery, and one "avoid" habit).
+    // The prior behavior was an empty workspace that asked the user to
+    // walk the create-goal + create-habit tour sub-flows before they
+    // could see anything; for a preview that was busywork. With this
+    // seed in place the tour's skipIf predicates jump past the form
+    // walkthroughs and land the user on the showcase steps that
+    // explain how each piece is wired.
+    const demoGoalId = 901;
+    const demoGoal = {
+      id: demoGoalId,
+      text: "Run a marathon by December 31, 2026",
+      type: "Physical",
+      smart: {
+        specific: "Complete a full marathon (42 km) in one continuous effort",
+        measurable: "42",
+        measurableUnit: "km",
+        achievable: "Currently running 10 km comfortably — add ~10% weekly mileage with a down-week every fourth week",
+        relevant: "Capstone cardio goal for the year; builds discipline and cross-training carryover",
+        timebound: "2026-12-31"
+      },
+      completed: false,
+      _order: 0
+    };
+    const demoHabits = [
+      buildDemoHabit(911, "Morning cardio",           "morning",   "Physical", "Non-Negotiable",
+        { target: 30, unitLabel: "min",  increment: 10, goalId: demoGoalId, _order: 0 }),
+      buildDemoHabit(912, "Drink water",              "afternoon", "Physical", "Important",
+        { target:  8, unitLabel: "cups", increment:  1, goalId: demoGoalId, _order: 1 }),
+      buildDemoHabit(913, "Evening stretch routine",  "evening",   "Physical", "Additive",
+        { target: 10, unitLabel: "min",  increment:  5, goalId: demoGoalId, _order: 2 }),
+      buildDemoHabit(914, "No late-night snacks",     "avoid",     "Physical", "Important",
+        { goalId: demoGoalId, _order: 3 })
+    ];
     setData({
-      habits: [],
-      goals: [],
+      habits: demoHabits,
+      goals: [demoGoal],
       todos: [],
       customGoalTypes: [],
       customImportance: [],
@@ -4047,11 +4081,14 @@ function App() {
     //   16       Reflect
     //   17-24    header widgets / profile (no tab change)
     //   25       final "you're all set" (lands on brief)
+    // Updated indices: steps 7 (goal showcase) and 16 (habit showcase)
+    // are informational landings inserted AFTER the goal-save and
+    // habit-save steps; they push the downstream tab mapping by 2.
     const TOUR_TAB_BY_STEP = {
-      2: "goals", 3: "goals", 4: "goals", 5: "goals", 6: "goals",
-      7: "habits", 8: "habits", 9: "habits", 10: "habits", 11: "habits",
-      12: "habits", 13: "habits", 14: "habits",
-      15: "todos", 16: "reflection", 25: "brief"
+      2: "goals", 3: "goals", 4: "goals", 5: "goals", 6: "goals", 7: "goals",
+      8: "habits", 9: "habits", 10: "habits", 11: "habits", 12: "habits",
+      13: "habits", 14: "habits", 15: "habits", 16: "habits",
+      17: "todos", 18: "reflection", 27: "brief"
     };
     const wantTab = TOUR_TAB_BY_STEP[tourStep];
     if (wantTab && tab !== wantTab) setTab(wantTab);
@@ -4069,8 +4106,8 @@ function App() {
      Step indices track TOUR_STEPS:
        2  — "Let's start by adding a goal" → New-goal [+]
        6  — "Save your goal"               → Add-Goal button
-       7  — "Now add a habit"               → New-habit [+]
-       14 — "Save your habit"               → Add-Habit button
+       8  — "Now add a habit"               → New-habit [+]
+       15 — "Save your habit"               → Add-Habit button
      Re-run key includes goals.length / habits.length so the bounce stops
      the instant the user creates the first goal / habit and the form
      un-mounts (otherwise the class would stay stamped on a stale DOM
@@ -4086,8 +4123,8 @@ function App() {
     const GATED = {
       2:  { sel: "button[aria-label='New goal']",  open: goalsLen  === 0 },
       6:  { sel: "[data-tour-id='goal-save']",     open: goalsLen  === 0 },
-      7:  { sel: "button[aria-label='New habit']", open: habitsLen === 0 },
-      14: { sel: "[data-tour-id='habit-save']",    open: habitsLen === 0 }
+      8:  { sel: "button[aria-label='New habit']", open: habitsLen === 0 },
+      15: { sel: "[data-tour-id='habit-save']",    open: habitsLen === 0 }
     };
     const info = GATED[tourStep];
     if (!info || !info.open) return undefined;
@@ -6957,13 +6994,13 @@ function App() {
     // after the user has already done what it asked.
     // 2 — Goals: tap the [+] to open the new-goal form
     //
-    // skipIf: if the user ALREADY has goals (replaying the tour, signed in
-    // as a seeded persona, or returning after a previous session), the
-    // whole goal-form walkthrough (steps 2→6) is busywork — forcing them
-    // to tap [+] and fill another goal just to clear the tour would be
+    // skipIf: if the user ALREADY has goals (demo seed, replayed tour,
+    // seeded persona, or returning after a previous session), the whole
+    // goal-form walkthrough (steps 2→6) is busywork — forcing them to
+    // tap [+] and fill another goal just to clear the tour would be
     // hostile. skipIf returns true for that case and skipSteps:5 jumps
-    // straight to step 7 ("Now add a habit"), which has its own skipIf
-    // for the symmetric habit-already-exists case.
+    // straight to step 7 ("Your goal is set"), which is informational
+    // and centers the tooltip over whatever goal they already have.
     {
       title: "Let's start by adding a goal",
       body: "Tap the [+] above to open the new-goal form.",
@@ -7049,7 +7086,19 @@ function App() {
       gateHint: "Tap Add Goal to continue.",
       autoAdvance: true
     },
-    // ── Habits walkthrough (7-14) ────────────────────────────────────
+    // 6.5 — Goals: showcase the saved goal (landing target for the step-2
+    // skipIf). Centered, no selector, no gate — the goals tab is visible
+    // behind the tooltip and the user can see their goal card. This is
+    // where demo users who arrived with pre-seeded data or real users
+    // replaying the tour catch up on what "complete goal" means without
+    // having to fill a form that's already filled.
+    {
+      title: "Your goal is set",
+      body: "Every goal has a SMART breakdown: what you're doing, how much, whether it's realistic, why it matters, and when it's due. You can tap the goal card any time to edit.",
+      tab: "goals",
+      center: true
+    },
+    // ── Habits walkthrough (7-15) ────────────────────────────────────
     // Same shape as the goal walkthrough, expanded to hit every habit
     // field the user can set: tap +, name, link-to-goal FIRST (so area
     // auto-fills from the goal), area confirmation, importance, timing,
@@ -7057,12 +7106,12 @@ function App() {
     // Area of Life dropdown is locked to match the linked goal — walking
     // the user to "pick an area" before they've linked would have them
     // picking a value the next step about to overwrite.
-    // 7 — Habits: tap the [+] to open the new-habit form
+    // 8 — Habits: tap the [+] to open the new-habit form
     //
-    // skipIf mirrors step 2 — if the user already has habits, skipSteps:8
-    // jumps past the full habit-form walkthrough (7→14) to step 15
-    // ("To-Dos"). Without this, a returning user with habits would be
-    // trapped on "Tap + to start" indefinitely.
+    // skipIf mirrors the goal-add step — if the user already has habits,
+    // skipSteps:8 jumps past the full habit-form walkthrough (8→15) to
+    // step 16 ("Habits stack into a routine"). Without this, a returning
+    // user with habits would be trapped on "Tap + to start" indefinitely.
     {
       title: "Now add a habit",
       body: "Habits are the daily reps that move your goal forward. Tap the [+] above to set one up.",
@@ -7159,7 +7208,18 @@ function App() {
       gateHint: "Tap Add to continue.",
       autoAdvance: true
     },
-    // 12 — To-Dos
+    // 14.5 — Habits: showcase how the four support-habits map to the goal
+    // (landing target for the step-7 skipIf). Describes the morning /
+    // afternoon / evening / avoid grouping in the abstract — users with
+    // the demo seed can see the literal Morning Cardio / Drink Water /
+    // Evening Stretch / No Late-Night Snacks habits behind the tooltip.
+    {
+      title: "Habits stack into a routine",
+      body: "Every habit pairs with a goal and a time of day — morning, afternoon, evening, or an \u201Cavoid\u201D bucket for things to steer clear of. The demo comes with four that map to the marathon goal so you can see how the pieces click together.",
+      tab: "habits",
+      center: true
+    },
+    // 15 — To-Dos
     {
       title: "To-Dos \u2014 one-offs",
       body: "For tasks that don't repeat. Link a to-do to a goal and it shows up inside that goal's detail view too.",
