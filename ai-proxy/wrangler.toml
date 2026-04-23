@@ -1,0 +1,18 @@
+name = "verrocchio-ai-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# Set FIREBASE_PROJECT_ID to your Firebase project id (the one from
+# firebaseConfig.projectId in index.html — for the default Verrocchio
+# setup that's "verrocchio-1b116"). The Worker uses it to validate the
+# `aud` and `iss` claims on the Firebase ID token.
+#
+# ANTHROPIC_API_KEY is provisioned as a secret — DON'T put it here.
+# Run `npx wrangler secret put ANTHROPIC_API_KEY` and paste the key.
+#
+# ALLOWED_ORIGIN optionally restricts CORS to a single origin. Leave
+# unset (defaults to "*") during local testing; tighten to your app's
+# hosted URL (e.g. https://verrocchio-1b116.web.app) for production.
+[vars]
+FIREBASE_PROJECT_ID = "verrocchio-1b116"
+# ALLOWED_ORIGIN = "https://verrocchio-1b116.web.app"

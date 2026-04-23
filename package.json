@@ -1,0 +1,9 @@
+{
+  "name": "verrocchio",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Verrocchio habit tracker — static single-file SPA. package.json is here only to run the tiny Node test suite over utils.js.",
+  "scripts": {
+    "test": "node --test 'tests/*.test.mjs'"
+  }
+}

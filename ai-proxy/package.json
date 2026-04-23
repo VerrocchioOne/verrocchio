@@ -1,0 +1,13 @@
+{
+  "name": "verrocchio-ai-proxy",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Cloudflare Worker proxy for Anthropic API calls from the Verrocchio client.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  }
+}
