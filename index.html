@@ -2815,6 +2815,26 @@ function App() {
     }
     setAuthBusy(false);
   };
+  // Temporary one-tap sign-in for the seeded demo personas. Mirrors
+  // the emails and shared password from scripts/seed-demo-users.mjs.
+  // If the account doesn't exist yet we surface a clear error telling
+  // the user to run the seed script first instead of a raw Firebase
+  // "INVALID_LOGIN_CREDENTIALS". Remove this block before shipping.
+  const signInAsDemoUser = async (email) => {
+    setAuthErr("");
+    setAuthBusy(true);
+    try {
+      await auth.signInWithEmailAndPassword(email, "verrocchio-demo-1");
+    } catch (e) {
+      const msg = String(e && e.message || "");
+      if (/user-not-found|invalid-login-credentials|INVALID_LOGIN_CREDENTIALS/i.test(msg)) {
+        setAuthErr("Demo account not found. Run `node scripts/seed-demo-users.mjs` first.");
+      } else {
+        setAuthErr(msg.replace("Firebase: ", "") || "Sign-in failed.");
+      }
+    }
+    setAuthBusy(false);
+  };
   const doSignOut = () => {
     if (demoMode) { exitDemo(); return; }
     auth.signOut();
@@ -6106,7 +6126,42 @@ function App() {
         onClick: startDemo,
         style: { width: "100%", padding: "10px 12px", fontSize: 13, fontWeight: 600, color: "var(--c-text)", background: "#fff", border: "1px solid #d1d5db", borderRadius: 8, cursor: "pointer" }
       }, "\u2728 Try the demo"),
-      React.createElement("div", { key: "demoNote", style: { fontSize: 10.5, color: "#9ca3af", marginTop: 8, lineHeight: 1.4 } }, "Walk through onboarding with sample data. Nothing is saved.")
+      React.createElement("div", { key: "demoNote", style: { fontSize: 10.5, color: "#9ca3af", marginTop: 8, lineHeight: 1.4 } }, "Walk through onboarding with sample data. Nothing is saved."),
+      // Seeded-persona shortcuts \u2014 one tap signs in as the
+      // corresponding demo Firestore account. Emails + password must
+      // stay in sync with scripts/seed-demo-users.mjs. Temporary
+      // scaffolding; pull this block before a public launch.
+      React.createElement("div", {
+        key: "personas-lbl",
+        style: { fontSize: 10, color: "#9ca3af", marginTop: 14, marginBottom: 6, letterSpacing: 0.4, fontWeight: 600, textTransform: "uppercase" }
+      }, "Seeded demo users"),
+      React.createElement("div", {
+        key: "personas",
+        style: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }
+      },
+        [
+          { key: "alex",  label: "Alex (Morning)",  email: "alex.morning@demo.verrocchio.app"   },
+          { key: "blair", label: "Blair (Slipping)",email: "blair.slipping@demo.verrocchio.app" },
+          { key: "casey", label: "Casey (Steady)",  email: "casey.steady@demo.verrocchio.app"   },
+          { key: "dani",  label: "Dani (New)",      email: "dani.new@demo.verrocchio.app"       }
+        ].map(p => React.createElement("button", {
+          key: p.key,
+          onClick: () => signInAsDemoUser(p.email),
+          disabled: authBusy,
+          style: {
+            padding: "9px 10px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--c-text-soft)",
+            background: "var(--c-surface-raised)",
+            border: "1px solid var(--c-border)",
+            borderRadius: 8,
+            cursor: authBusy ? "default" : "pointer",
+            opacity: authBusy ? 0.6 : 1,
+            minHeight: 40
+          }
+        }, p.label))
+      )
     ]);
   }
 
