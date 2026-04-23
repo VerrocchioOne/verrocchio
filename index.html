@@ -2440,6 +2440,25 @@ function hydrateCloudDoc(p) {
   if (Array.isArray(p.habits)) {
     p.habits = p.habits.map(h => h && !h.frequency ? { ...h, frequency: { type: "daily", days: [], day: null } } : h);
   }
+  // `_order` backfill: habits have had it for a while (section-reorder);
+  // goals and todos didn't, but the sort feature needs one. Seed the
+  // field from current array position so the first render under
+  // "Custom" matches what the user sees today.
+  if (Array.isArray(p.goals)) {
+    p.goals = p.goals.map((g, i) => g && typeof g._order !== "number" ? { ...g, _order: i } : g);
+  }
+  if (Array.isArray(p.todos)) {
+    p.todos = p.todos.map((t, i) => t && typeof t._order !== "number" ? { ...t, _order: i } : t);
+  }
+  // Per-page sort preferences. Values: "default" | "alpha" | "created" |
+  // "date" | "streak" | "custom". `streak` only applies to habits;
+  // `date` means goal target / todo due date. Invalid values fall back
+  // to "default" at render time, so we can add new modes without a
+  // migration.
+  if (!p.sortPrefs || typeof p.sortPrefs !== "object") p.sortPrefs = {};
+  if (typeof p.sortPrefs.habits !== "string") p.sortPrefs.habits = "default";
+  if (typeof p.sortPrefs.goals  !== "string") p.sortPrefs.goals  = "default";
+  if (typeof p.sortPrefs.todos  !== "string") p.sortPrefs.todos  = "default";
   if (typeof p.onboardingComplete !== "boolean") {
     p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
   }
@@ -2815,13 +2834,17 @@ function App() {
   const [nHGoal, sNHGoal] = useState("");
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
-  // Section reorder: when non-null, holds the section value ("morning" |
-  // "afternoon" | "evening" | "avoid") whose habits the user is
-  // reordering. Opened by long-pressing a section header on the Habits
-  // tab; populated with a local draft list the user shuffles with up/
-  // down arrows before hitting Save.
-  const [reorderSection, setReorderSection] = useState(null);
-  const [reorderDraft, setReorderDraft] = useState([]); // [habitId, ...] in the new order
+  // Generic custom-order reorder modal. `reorderCtx` is null when
+  // closed, else an object describing what's being reordered:
+  //   { kind: "habitSection", section: "morning", label, icon, color }
+  //   { kind: "goal", label: "Goals" }
+  //   { kind: "todo", label: "Todos" }
+  // `reorderDraft` is the ordered id list the user is shuffling with
+  // the up/down arrows.
+  const [reorderCtx, setReorderCtx] = useState(null);
+  const [reorderDraft, setReorderDraft] = useState([]);
+  // Which page's sort menu is open: "habits" | "goals" | "todos" | null
+  const [openSortMenu, setOpenSortMenu] = useState(null);
   // Ref-flag that lets the section-header's short-click path know a
   // long-press just fired so it doesn't also toggle the collapse.
   const sectionLongPressRef = useRef({ timer: null, fired: false });
@@ -4630,30 +4653,60 @@ function App() {
       habits: allHabits
     });
   };
-  // Open the reorder modal for a section. Seeds the draft list from the
-  // section's current sort order (the same order the Habits page is
-  // showing), so the modal reflects what the user sees.
+  // Open the reorder modal for a Habits-page section. Seeds the draft
+  // from the section's current _order sort.
   const openSectionReorder = (sectionValue) => {
+    const sec = SECTIONS.find(s => s.value === sectionValue) || { value: sectionValue, label: sectionValue, icon: "", color: "#6b7280" };
     const inSection = (data.habits || [])
       .filter(h => h.section === sectionValue)
       .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
     setReorderDraft(inSection.map(h => h.id));
-    setReorderSection(sectionValue);
+    setReorderCtx({ kind: "habitSection", section: sectionValue, label: sec.label, icon: sec.icon, color: sec.color });
   };
-  // Commit the draft order: rewrite `_order` on every habit in the
-  // section to match its index in the draft list, leaving habits in
-  // other sections untouched. One save() call so all four headers
-  // re-render together.
-  const saveSectionOrder = () => {
-    if (!reorderSection) return;
+  // Open the reorder modal for Goals or Todos. Unlike habits, both are
+  // single flat lists with no sub-sections, so we just seed the draft
+  // from the current _order.
+  const openGoalReorder = () => {
+    const sorted = [...(data.goals || [])].sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    setReorderDraft(sorted.map(g => g.id));
+    setReorderCtx({ kind: "goal", label: "Goals", icon: "🎯" });
+  };
+  const openTodoReorder = () => {
+    const sorted = [...(data.todos || [])].sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    setReorderDraft(sorted.map(t => t.id));
+    setReorderCtx({ kind: "todo", label: "Tasks", icon: "✅" });
+  };
+  // Commit the draft order. Dispatches on kind: rewrite `_order` on
+  // every item in the target collection (or matching section) to match
+  // its draft index, leaving others untouched. Flipping sortPrefs to
+  // "custom" so the user immediately sees the effect — otherwise a
+  // just-edited order would be invisible behind a non-custom mode.
+  const saveReorder = () => {
+    if (!reorderCtx) return;
     const idOrder = new Map(reorderDraft.map((id, i) => [String(id), i]));
-    const next = (data.habits || []).map(h => {
-      if (h.section !== reorderSection) return h;
-      const idx = idOrder.get(String(h.id));
-      return idx == null ? h : { ...h, _order: idx };
-    });
-    save({ ...data, habits: next });
-    setReorderSection(null);
+    const next = { ...data };
+    if (reorderCtx.kind === "habitSection") {
+      next.habits = (data.habits || []).map(h => {
+        if (h.section !== reorderCtx.section) return h;
+        const idx = idOrder.get(String(h.id));
+        return idx == null ? h : { ...h, _order: idx };
+      });
+      next.sortPrefs = { ...(data.sortPrefs || {}), habits: "custom" };
+    } else if (reorderCtx.kind === "goal") {
+      next.goals = (data.goals || []).map(g => {
+        const idx = idOrder.get(String(g.id));
+        return idx == null ? g : { ...g, _order: idx };
+      });
+      next.sortPrefs = { ...(data.sortPrefs || {}), goals: "custom" };
+    } else if (reorderCtx.kind === "todo") {
+      next.todos = (data.todos || []).map(t => {
+        const idx = idOrder.get(String(t.id));
+        return idx == null ? t : { ...t, _order: idx };
+      });
+      next.sortPrefs = { ...(data.sortPrefs || {}), todos: "custom" };
+    }
+    save(next);
+    setReorderCtx(null);
     setReorderDraft([]);
   };
   const moveDraftItem = (id, dir) => {
@@ -4666,6 +4719,164 @@ function App() {
       next[j] = prev[i];
       return next;
     });
+  };
+  // ── Sort utility ──
+  // Returns a sorted COPY of `items`. `kind` selects the per-mode
+  // comparator so, e.g., "date" means goal.smart.timebound for goals
+  // and todo.dueDate for todos. Unknown modes fall back to `_order`
+  // (custom) so a forward-compat sortPref doesn't crash.
+  const sortItems = (items, mode, kind) => {
+    if (!Array.isArray(items)) return [];
+    const copy = items.slice();
+    const byOrder = (a, b) => (a._order ?? 999) - (b._order ?? 999);
+    const byAlpha = (a, b) => String(a.text || "").localeCompare(String(b.text || ""), undefined, { sensitivity: "base" });
+    // `created` = newest first. Item ids come from Date.now(), so id is
+    // a monotonic proxy for creation time. Fall back to zero for any
+    // non-numeric id so the comparator is total.
+    const byCreated = (a, b) => (Number(b.id) || 0) - (Number(a.id) || 0);
+    const dateKey = (it) => {
+      if (kind === "goal") return it.smart && it.smart.timebound ? it.smart.timebound : "";
+      if (kind === "todo") return it.dueDate || "";
+      return "";
+    };
+    // Empty dates sort to the end so "Sort by date" shows dated items
+    // first, then undated — otherwise a page full of undated items
+    // looks broken.
+    const byDate = (a, b) => {
+      const da = dateKey(a), db = dateKey(b);
+      if (!da && !db) return byOrder(a, b);
+      if (!da) return 1;
+      if (!db) return -1;
+      return da.localeCompare(db);
+    };
+    const byStreak = (a, b) => getStreak(b) - getStreak(a);
+    switch (mode) {
+      case "alpha":   return copy.sort(byAlpha);
+      case "created": return copy.sort(byCreated);
+      case "date":    return copy.sort(byDate);
+      case "streak":  return kind === "habit" ? copy.sort(byStreak) : copy.sort(byOrder);
+      case "custom":  return copy.sort(byOrder);
+      case "default":
+      default:
+        // Default pick per kind: habits by section _order, goals by
+        // creation (newest first), todos by due date ascending.
+        if (kind === "goal")  return copy.sort(byCreated);
+        if (kind === "todo")  return copy.sort(byDate);
+        return copy.sort(byOrder);
+    }
+  };
+  // Shared setter for the per-page sort pref. Routes through save so
+  // it syncs to Firestore + other tabs, same as any other edit.
+  const setSortPref = (page, mode) => {
+    save({ ...data, sortPrefs: { ...(data.sortPrefs || {}), [page]: mode } });
+  };
+  // ── SortMenu (per-page) ──
+  // Renders as a compact "⇅ Sort: <label>" button on each page; tapping
+  // opens a bottom-sheet list of modes. "Edit custom order…" at the
+  // bottom (goals / todos only) opens the reorder modal and flips the
+  // page's sort pref to "custom" on save.
+  const SORT_LABEL = {
+    default: "Default",
+    alpha: "A → Z",
+    created: "Newest first",
+    date: "By date",
+    streak: "By streak",
+    custom: "Custom"
+  };
+  const openSortMenuHandler = (page) => () => setOpenSortMenu(prev => prev === page ? null : page);
+  const renderSortButton = (page) => {
+    const current = (data.sortPrefs && data.sortPrefs[page]) || "default";
+    return /*#__PURE__*/React.createElement("button", {
+      onClick: openSortMenuHandler(page),
+      "aria-label": "Sort",
+      title: "Change sort order",
+      style: {
+        display: "flex", alignItems: "center", gap: 4,
+        padding: "4px 10px",
+        borderRadius: 20,
+        border: "1px solid var(--c-border)",
+        background: current !== "default" ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+        color: current !== "default" ? "#2d5a2d" : "#6b7280",
+        fontSize: 11, fontWeight: current !== "default" ? 700 : 500,
+        cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+        WebkitTapHighlightColor: "transparent", userSelect: "none"
+      }
+    }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "⇅"), SORT_LABEL[current] || "Default");
+  };
+  // Per-page list of enabled modes. `streak` only makes sense for
+  // habits; `date` for goals and todos.
+  const SORT_OPTIONS = {
+    habits: ["default", "alpha", "created", "streak", "custom"],
+    goals:  ["default", "alpha", "created", "date",   "custom"],
+    todos:  ["default", "alpha", "created", "date",   "custom"]
+  };
+  const renderSortSheet = () => {
+    if (!openSortMenu) return null;
+    const page = openSortMenu;
+    const modes = SORT_OPTIONS[page] || ["default"];
+    const current = (data.sortPrefs && data.sortPrefs[page]) || "default";
+    const close = () => setOpenSortMenu(null);
+    const pick = (mode) => { setSortPref(page, mode); close(); };
+    const openReorder = () => {
+      close();
+      if (page === "goal" || page === "goals") openGoalReorder();
+      else if (page === "todo" || page === "todos") openTodoReorder();
+      // Habits custom order is edited per-section via long-press on
+      // the section header — no single list to reorder at once.
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": "Sort options",
+      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 305, display: "flex", alignItems: "flex-end", justifyContent: "center" },
+      onClick: e => { if (e.target === e.currentTarget) close(); }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "18px 16px 22px", width: "100%", maxWidth: 520, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.3 }
+        }, "Sort"),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 6 }
+        }, modes.map(m => /*#__PURE__*/React.createElement("button", {
+          key: m,
+          type: "button",
+          onClick: () => pick(m),
+          style: {
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            textAlign: "left",
+            padding: "11px 12px",
+            border: "1px solid " + (current === m ? "#2d5a2d" : "var(--c-border)"),
+            borderRadius: 10,
+            background: current === m ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+            color: current === m ? "#2d5a2d" : "var(--c-text)",
+            fontSize: 13, fontWeight: current === m ? 700 : 500,
+            cursor: "pointer"
+          }
+        }, /*#__PURE__*/React.createElement("span", null, SORT_LABEL[m] || m), current === m ? "✓" : ""))),
+        (page === "goals" || page === "todos") && /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: openReorder,
+          style: {
+            width: "100%",
+            padding: "11px 12px",
+            marginTop: 6,
+            border: "1px dashed #2d5a2d",
+            borderRadius: 10,
+            background: "transparent",
+            color: "#2d5a2d",
+            fontSize: 13, fontWeight: 600,
+            cursor: "pointer",
+            textAlign: "center"
+          }
+        }, "Edit custom order…"),
+        page === "habits" && /*#__PURE__*/React.createElement("div", {
+          style: { marginTop: 8, padding: "8px 10px", fontSize: 11, color: "#6b7280", textAlign: "center" }
+        }, "To edit the custom order, long-press a section header on the Habits page.")
+      )
+    );
   };
 
   /* JOURNAL */
@@ -5232,10 +5443,15 @@ function App() {
   };
 
   /* GROUPED HABITS */
+  // Section grouping is unchanged (morning / afternoon / evening /
+  // avoid). Within each section, the sort mode comes from
+  // data.sortPrefs.habits; "custom" uses the manual _order set via
+  // the long-press section-reorder modal.
+  const habitSortMode = (data.sortPrefs && data.sortPrefs.habits) || "default";
   const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => ({
     ...sec,
-    habits: filtH.filter(h => h.section === sec.value).sort((a, b) => (a._order ?? 999) - (b._order ?? 999))
-  })).filter(g => g.habits.length > 0), [filtH, secFilter]);
+    habits: sortItems(filtH.filter(h => h.section === sec.value), habitSortMode, "habit")
+  })).filter(g => g.habits.length > 0), [filtH, secFilter, habitSortMode]);
 
   /* ── ONBOARDING: AUTH + WELCOME GATES ── */
   // Shared page shell for auth/welcome
@@ -7817,7 +8033,10 @@ function App() {
             style: { display: "inline-block", fontSize: 9, lineHeight: 1, marginLeft: 2, opacity: .7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }
           }, "\u25BE")
         );
-      })()
+      })(),
+      // Sort button — opens the bottom-sheet sort menu for the Habits
+      // page. Sits at the end of the filter pill row.
+      renderSortButton("habits")
     ),
     // (Time of Day expanded pill row removed — see comment above about
     // the Time compact toggle being removed in favor of collapsible
@@ -9085,7 +9304,9 @@ function App() {
               style: { fontSize: 8, opacity: 0.7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .18s ease", display: "inline-block", marginLeft: 2 }
             }, "\u25BC")
           );
-        })()
+        })(),
+        // Sort button for the Todos page.
+        renderSortButton("todos")
       ),
       // Section-filter pill row — each pill corresponds to one of SECS,
       // letting the user narrow to Today / This Week / etc. Visible
@@ -9184,7 +9405,7 @@ function App() {
           padding: "40px 0"
         }
       }, "No tasks yet"), SECS.filter(s => secFilterOn(s.key)).map(sec => {
-      const st = pending.filter(t => getSec(t) === sec.key);
+      const st = sortItems(pending.filter(t => getSec(t) === sec.key), (data.sortPrefs && data.sortPrefs.todos) || "default", "todo");
       if (!st.length) return null;
       return /*#__PURE__*/React.createElement("div", {
         key: sec.key,
@@ -9822,7 +10043,9 @@ function App() {
           style: { fontSize: 8, opacity: 0.7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .18s ease", display: "inline-block", marginLeft: 2 }
         }, "\u25BC")
       );
-    })()
+    })(),
+    // Sort button for the Goals page.
+    renderSortButton("goals")
   ),
   // Expanded row: goal-type pills. Auto-shown whenever a selection is active.
   (goalPillsOpen || goalTypeFilter.length > 0) && /*#__PURE__*/React.createElement("div", {
@@ -10099,7 +10322,7 @@ function App() {
       padding: "40px 0"
     }
   }, "No goals yet \u2014 tap + to add one"), HT.map(ht => {
-    const typeGoals = data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value)));
+    const typeGoals = sortItems(data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value))), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal");
     if (!typeGoals.length || (goalTypeFilter.length > 0 && !goalTypeFilter.includes(ht.value))) return null;
     return /*#__PURE__*/React.createElement("div", {
       key: ht.value,
@@ -10902,7 +11125,7 @@ function App() {
       flexDirection: "column",
       gap: 7
     }
-  }, data.goals.filter(g => !g.type).map(goal => {
+  }, sortItems(data.goals.filter(g => !g.type), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal").map(goal => {
     const isE = eGId === goal.id;
     const hasSm = goal.smart && Object.values(goal.smart).some(v => v && v.trim());
     return /*#__PURE__*/React.createElement("div", {
@@ -13228,13 +13451,24 @@ function App() {
       }, "Create Category")
     )
   )),
-  // ── Section reorder modal — opened by long-press on a Habits-page
-  //    section header. Lists the habits in that section (morning /
-  //    afternoon / evening / avoid) with up/down arrows per row and a
-  //    Save button that commits `_order` values back through save().
-  reorderSection && (() => {
-    const sec = SECTIONS.find(s => s.value === reorderSection);
-    const habitsById = new Map((data.habits || []).map(h => [String(h.id), h]));
+  // ── Sort bottom-sheet — opened by the per-page ⇅ Sort button.
+  //    Lists the allowed modes for that page; picking one sets the
+  //    pref and closes the sheet. "Edit custom order…" (goals / todos
+  //    only) opens the reorder modal.
+  renderSortSheet(),
+  // ── Custom-order reorder modal — opened by long-press on a Habits
+  //    section header, or by "Edit custom order…" in a page's sort
+  //    menu. `reorderCtx.kind` dispatches which collection is being
+  //    edited; the draft id list is shuffled by up/down arrows and
+  //    committed by saveReorder (which also flips that page's sort
+  //    pref to "custom" so the edit is immediately visible).
+  reorderCtx && (() => {
+    const ctx = reorderCtx;
+    const pool =
+      ctx.kind === "goal" ? (data.goals || [])
+      : ctx.kind === "todo" ? (data.todos || [])
+      : (data.habits || []);
+    const itemsById = new Map(pool.map(x => [String(x.id), x]));
     return /*#__PURE__*/React.createElement("div", {
       role: "dialog",
       "aria-modal": "true",
@@ -13248,7 +13482,7 @@ function App() {
         alignItems: "flex-end",
         justifyContent: "center"
       },
-      onClick: e => { if (e.target === e.currentTarget) { setReorderSection(null); setReorderDraft([]); } }
+      onClick: e => { if (e.target === e.currentTarget) { setReorderCtx(null); setReorderDraft([]); } }
     },
       /*#__PURE__*/React.createElement("div", {
         className: "fade-in",
@@ -13266,24 +13500,26 @@ function App() {
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }
         },
-          /*#__PURE__*/React.createElement("span", null, sec ? sec.icon : ""),
+          ctx.icon ? /*#__PURE__*/React.createElement("span", null, ctx.icon) : null,
           /*#__PURE__*/React.createElement("div", {
             id: "reorder-title",
             style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
-          }, "Reorder " + (sec ? sec.label : reorderSection))
+          }, "Reorder " + ctx.label)
         ),
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 12, color: "#6b7280", marginBottom: 14 }
-        }, "Use the arrows to set the order these habits appear in on the Habits page."),
+        }, ctx.kind === "habitSection"
+          ? "Use the arrows to set the order these habits appear in on the Habits page."
+          : `Use the arrows to set the custom order for your ${ctx.label.toLowerCase()}. Saving switches the sort mode to Custom.`),
         reorderDraft.length === 0
           ? /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 13, color: "#9ca3af", padding: "18px 4px" }
-            }, "No habits in this section yet.")
+            }, "Nothing to reorder yet.")
           : /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }
             }, reorderDraft.map((id, i) => {
-              const h = habitsById.get(String(id));
-              if (!h) return null;
+              const it = itemsById.get(String(id));
+              if (!it) return null;
               const isFirst = i === 0;
               const isLast = i === reorderDraft.length - 1;
               return /*#__PURE__*/React.createElement("div", {
@@ -13303,7 +13539,7 @@ function App() {
                 }, i + 1),
                 /*#__PURE__*/React.createElement("span", {
                   style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                }, h.text),
+                }, it.text),
                 /*#__PURE__*/React.createElement("button", {
                   type: "button",
                   "aria-label": "Move up",
@@ -13333,12 +13569,12 @@ function App() {
         },
           /*#__PURE__*/React.createElement("button", {
             type: "button",
-            onClick: () => { setReorderSection(null); setReorderDraft([]); },
+            onClick: () => { setReorderCtx(null); setReorderDraft([]); },
             style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
           }, "Cancel"),
           /*#__PURE__*/React.createElement("button", {
             type: "button",
-            onClick: saveSectionOrder,
+            onClick: saveReorder,
             disabled: reorderDraft.length === 0,
             style: { flex: 2, background: "#2d5a2d", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#fff", cursor: reorderDraft.length === 0 ? "default" : "pointer", opacity: reorderDraft.length === 0 ? 0.5 : 1 }
           }, "Save order")
