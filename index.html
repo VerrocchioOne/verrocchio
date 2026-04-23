@@ -566,6 +566,18 @@ const APP_VERSION = "0.1.0";
 // Replace with your real support alias when you have one; gmail
 // placeholder is OK for dev but will route to nowhere in production.
 const SUPPORT_EMAIL = "support@verrocchio.app";
+// Store review URLs. Placeholders until the app has an App Store /
+// Play Store listing. When running inside Capacitor, the review
+// button can swap these for the native in-app-review flow (see
+// @capacitor-community/in-app-review); in the meantime a plain
+// https:// link is the safest cross-platform fallback.
+const APP_STORE_URL  = "https://apps.apple.com/app/verrocchio";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=app.verrocchio";
+// Review-prompt milestones. Arrays of days-since-signup at which the
+// app should surface a one-time "leave a review" banner on Home.
+// Keeping this as a module-level const makes it trivial to A/B test
+// cadences later without touching component code.
+const REVIEW_PROMPT_DAYS = [7, 14, 30];
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
@@ -2491,6 +2503,16 @@ function hydrateCloudDoc(p) {
   // (middle tone) — neither cheerleading nor scolding — and unknown
   // values fall back to the default at read time.
   if (typeof p.aiTone !== "string") p.aiTone = "neutral";
+  // Signup timestamp (ms) — stamped on first hydration for accounts
+  // that don't have one. Drives the review-prompt milestones below.
+  // Never overwritten once set.
+  if (typeof p.signupAt !== "number") p.signupAt = Date.now();
+  // Review-prompt tracking: `dismissedDays` is the list of milestone
+  // day-counts (7/14/30) we've already surfaced and the user has
+  // either reviewed or dismissed. Silent after a user picks "Maybe
+  // later" so we don't nag the same day.
+  if (!p.reviewPrompt || typeof p.reviewPrompt !== "object") p.reviewPrompt = { dismissedDays: [] };
+  if (!Array.isArray(p.reviewPrompt.dismissedDays)) p.reviewPrompt.dismissedDays = [];
   // Location + notifications preferences. homeCoords is {lat, lng, capturedAt}
   // or null; captured by the user tapping "Set home location" in
   // settings (one-shot geolocation). locationOptIn gates automatic
@@ -2821,6 +2843,45 @@ function App() {
       setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
     }
     setAcctBusy(false);
+  };
+  // ── Review prompts ──
+  // Returns the milestone day-count (7/14/30) the user has crossed
+  // but hasn't been prompted for yet, else null. Falls silent once
+  // the user has dismissed every milestone. Gate at 1 day past each
+  // milestone so the banner doesn't fire mid-onboarding.
+  const pendingReviewPromptDay = () => {
+    if (!data || !data.signupAt) return null;
+    const daysSince = Math.floor((Date.now() - data.signupAt) / 86400000);
+    const dismissed = new Set((data.reviewPrompt && data.reviewPrompt.dismissedDays) || []);
+    for (const milestone of REVIEW_PROMPT_DAYS) {
+      if (daysSince >= milestone && !dismissed.has(milestone)) return milestone;
+    }
+    return null;
+  };
+  const dismissReviewPrompt = (milestone) => {
+    const dismissed = (data.reviewPrompt && data.reviewPrompt.dismissedDays) || [];
+    if (dismissed.includes(milestone)) return;
+    save({
+      ...data,
+      reviewPrompt: { ...(data.reviewPrompt || {}), dismissedDays: [...dismissed, milestone] }
+    });
+  };
+  // Platform-appropriate store URL. The User-Agent sniff is coarse on
+  // purpose — getting a specific platform wrong here just routes the
+  // user to the wrong store, which is easy to fix by tapping the
+  // other; the cost of false-precision on detection is never worth
+  // more complexity.
+  const storeUrlForPlatform = () => {
+    const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+    if (/iPhone|iPad|iPod|Mac/i.test(ua)) return APP_STORE_URL;
+    if (/Android/i.test(ua)) return PLAY_STORE_URL;
+    return APP_STORE_URL;
+  };
+  const openReviewLink = (milestoneDismiss) => {
+    try {
+      window.open(storeUrlForPlatform(), "_blank", "noopener,noreferrer");
+    } catch (e) {}
+    if (typeof milestoneDismiss === "number") dismissReviewPrompt(milestoneDismiss);
   };
   // Summary export — aggregates only, no identifiers or content. The
   // product rule: users should never be able to export their granular
@@ -8251,8 +8312,36 @@ function App() {
       style: { marginTop: 4 }
     }, bottomPills) : null;
 
+    // Review-prompt banner: fires at 1 / 2 / 4-week milestones once per
+    // milestone. Sits at the top of Home so it's visible but easy to
+    // dismiss with "Maybe later". Shows nothing during onboarding and
+    // nothing for demo-mode (no real account to review yet).
+    const reviewMilestone = !demoMode ? pendingReviewPromptDay() : null;
+    const reviewBanner = reviewMilestone ? /*#__PURE__*/React.createElement("div", {
+      key: "rev-banner-" + reviewMilestone,
+      style: { background: "linear-gradient(135deg, #2d5a2d, #3d7a3d)", borderRadius: 12, padding: "14px 16px", marginBottom: 12, color: "#fff", boxShadow: "0 2px 8px rgba(45,90,45,.15)" }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 15, fontWeight: 700, marginBottom: 4 } },
+        reviewMilestone === 7 ? "One week in — how's it feeling?"
+          : reviewMilestone === 14 ? "Two weeks of Verrocchio"
+          : "A month of Verrocchio"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, marginBottom: 10, color: "rgba(255,255,255,0.88)" } },
+        "If the app's been useful, a quick rating helps other people find it. Takes 30 seconds."),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => openReviewLink(reviewMilestone),
+          style: { background: "#fff", color: "#2d5a2d", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", minHeight: 36 }
+        }, "Leave a review"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => dismissReviewPrompt(reviewMilestone),
+          style: { background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", minHeight: 36 }
+        }, "Maybe later")
+      )
+    ) : null;
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
+      reviewBanner,
       briefingCard,
       yesterdayCard,
       goalsCard,
@@ -13249,6 +13338,19 @@ function App() {
           onClick: exportSummary,
           style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }
         }, "Download summary (.txt)")
+      ),
+      // ── Leave a review ──
+      // Always available in settings so the user can rate whenever —
+      // separate from the time-gated Home banner which only fires at
+      // the 1w / 2w / 1mo milestones.
+      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Leave a review"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "If Verrocchio's been useful, a rating helps other people find it."),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => openReviewLink(),
+          style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #2d5a2d", background: "var(--c-tint-green)", color: "#2d5a2d", fontSize: 13, fontWeight: 700, cursor: "pointer" }
+        }, "★ Rate Verrocchio")
       ),
       // ── About / support ──
       /*#__PURE__*/React.createElement("div", {
