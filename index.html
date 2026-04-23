@@ -2974,7 +2974,17 @@ function App() {
       await auth.signInWithEmailAndPassword(email, DEMO_PASSWORD);
     } catch (e) {
       const msg = String(e && e.message || "");
-      const notFound = /user-not-found|invalid-login-credentials|INVALID_LOGIN_CREDENTIALS/i.test(msg);
+      const code = String(e && e.code || "");
+      // Firebase Auth v10+ collapsed "user-not-found" and "wrong-password"
+      // into the unified "auth/invalid-credential" error for enumeration
+      // hardening. Treat every credential-failure code as "try to create
+      // the demo account" — the password is controlled by us, so a
+      // wrong-password false positive can only happen if someone
+      // externally changed the persona's password, which we'd want to
+      // recover from by recreating the account anyway.
+      const notFound =
+        /user-not-found|invalid-login-credentials|INVALID_LOGIN_CREDENTIALS|invalid-credential/i.test(msg) ||
+        /user-not-found|invalid-login-credentials|invalid-credential/i.test(code);
       if (!notFound) {
         setAuthErr(msg.replace("Firebase: ", "") || "Sign-in failed.");
         setAuthBusy(false);
@@ -3099,37 +3109,13 @@ function App() {
       featureAccess: { ...(cur.featureAccess || {}), [id]: now }
     });
   };
-  // Tab-visit instrumentation: when the user switches tabs, record the
-  // corresponding feature. This is the cheap path — every tab maps to
-  // one feature id and the effect fires exactly once per navigation.
-  useEffect(() => {
-    const map = { brief: "home.view", habits: "habits.view", goals: "goals.view", todos: "todos.view", reflect: "reflection.view" };
-    if (map[tab]) touchFeature(map[tab]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
-  // Profile-open instrumentation: separate effect since Profile is a
-  // modal overlay (showProfile), not a tab.
-  useEffect(() => {
-    if (showProfile) touchFeature("profile.view");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showProfile]);
-  // App Settings panel view (inside Profile).
-  useEffect(() => {
-    if (showProfile && profileSection === "settings") touchFeature("settings.view");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showProfile, profileSection]);
-  // Travel-day instrumentation: watch travelDays.length and touch the
-  // feature whenever it grows. Keeps the "mark a travel day" check
-  // correct regardless of which of the several calendar entry points
-  // fired the write.
+  // NOTE: feature-touch useEffects that read `tab`, `showProfile`,
+  // `profileSection`, and `data.travelDays` are declared AFTER those
+  // state hooks (search for "Feature-access tracking effects"). Inlining
+  // them here triggers a TDZ ReferenceError because React evaluates the
+  // dependency arrays at render time, before useState has initialized
+  // the referenced bindings.
   const travelCountRef = useRef(null);
-  useEffect(() => {
-    const len = (data && data.travelDays && data.travelDays.length) || 0;
-    const prev = travelCountRef.current;
-    if (prev != null && len > prev) touchFeature("travel.mark");
-    travelCountRef.current = len;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data && data.travelDays && data.travelDays.length]);
 
   // ── Review prompts ──
   // Returns the milestone day-count (7/14/30) the user has crossed
@@ -3606,6 +3592,41 @@ function App() {
   const [acctBusy, setAcctBusy] = useState(false);
   const [acctFeedback, setAcctFeedback] = useState(null); // {kind:"ok"|"err", msg}
   const [confirmDeleteAcct, setConfirmDeleteAcct] = useState(false);
+
+  // ── Feature-access tracking effects ──
+  // Positioned AFTER `tab`, `showProfile`, `profileSection` are declared
+  // to avoid the TDZ error that fires when these effects' dependency
+  // arrays are evaluated during the component body's top-down pass.
+  // Tab-visit instrumentation: when the user switches tabs, record the
+  // corresponding feature. This is the cheap path — every tab maps to
+  // one feature id and the effect fires exactly once per navigation.
+  useEffect(() => {
+    const map = { brief: "home.view", habits: "habits.view", goals: "goals.view", todos: "todos.view", reflect: "reflection.view" };
+    if (map[tab]) touchFeature(map[tab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+  // Profile-open instrumentation: separate effect since Profile is a
+  // modal overlay (showProfile), not a tab.
+  useEffect(() => {
+    if (showProfile) touchFeature("profile.view");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showProfile]);
+  // App Settings panel view (inside Profile).
+  useEffect(() => {
+    if (showProfile && profileSection === "settings") touchFeature("settings.view");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showProfile, profileSection]);
+  // Travel-day instrumentation: watch travelDays.length and touch the
+  // feature whenever it grows. Keeps the "mark a travel day" check
+  // correct regardless of which of the several calendar entry points
+  // fired the write. `travelCountRef` is declared near touchFeature.
+  useEffect(() => {
+    const len = (data && data.travelDays && data.travelDays.length) || 0;
+    const prev = travelCountRef.current;
+    if (prev != null && len > prev) touchFeature("travel.mark");
+    travelCountRef.current = len;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data && data.travelDays && data.travelDays.length]);
 
   /* GUIDED TOUR — Appcues-style first-login walkthrough. `tourStep` is
      0 when inactive, 1..TOUR_STEPS.length when showing that step. Auto-
