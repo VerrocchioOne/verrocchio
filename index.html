@@ -7812,13 +7812,15 @@ function App() {
         style: {
           position: "fixed",
           left: 0, right: 0,
-          // Hint lives on the OPPOSITE edge from the tooltip. Tooltip
-          // bottom → hint near top; tooltip top → hint near bottom;
-          // centered tooltip → hint near bottom (centered tooltips
-          // already dominate the middle, so bottom is cleanest).
-          [dockEdge === "bottom" ? "top" : "bottom"]: dockEdge === "bottom"
-            ? "calc(130px + env(safe-area-inset-top, 0px))"
-            : "calc(130px + env(safe-area-inset-bottom, 0px))",
+          // Vertically centered so it never collides with the sticky
+          // header (which is often the spotlit region — Profile, Streak,
+          // XP, Date, Calendar all live there) or the bottom tab bar.
+          // Previous rev offset 130px from whichever edge was opposite
+          // the tooltip, but that still clipped the header on the
+          // top-docked card paths. Centering splits the difference —
+          // always lands in the dim area, never over app chrome.
+          top: "50%",
+          transform: "translateY(-50%)",
           display: "flex", justifyContent: "center",
           pointerEvents: "none",
           zIndex: 10000
