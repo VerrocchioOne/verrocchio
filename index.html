@@ -4168,14 +4168,28 @@ function App() {
   // the conditional early-returns for onboarding / auth screens so
   // React's hook order stays stable across renders.
   //
-  // Returning-user guard: if the user already has any goals or habits
-  // AND isn't in demo mode, they've obviously used the app before —
-  // auto-firing the tour on them (and landing on "Your goal is set"
-  // via skipIf) is more intrusive than helpful. They can still replay
-  // the tour from App Settings. This is a belt on top of `tourDone`
-  // for cases where tourDone hasn't synced yet (fresh device) but the
-  // user's Firestore doc has goals/habits.
-  const hasAnyData = !demoMode && !!(data && ((data.goals && data.goals.length) || (data.habits && data.habits.length)));
+  // Returning-user guard: if ANY signal shows prior use of the app
+  // (goals, habits, todos, todo archive, journal entries, custom
+  // quotes, earned XP, or >1 day-visits), we treat the user as a
+  // returning user and do NOT auto-fire the tour. Previously this
+  // only checked goals+habits — an account that had only logged
+  // journal entries or completed some todos would still get the
+  // goal-form walkthrough, which is the "old tour model" users were
+  // complaining about. They can still replay the tour explicitly
+  // from App Settings → Guided Tour. This is a belt on top of
+  // `tourDone` for cases where tourDone hasn't synced yet across
+  // devices but the Firestore doc already shows activity.
+  const hasAnyData = !demoMode && !!(data && (
+    (data.goals && data.goals.length) ||
+    (data.habits && data.habits.length) ||
+    (data.todos && data.todos.length) ||
+    (data.archive && data.archive.length) ||
+    (data.goalArchive && data.goalArchive.length) ||
+    (data.journal && data.journal.length) ||
+    ((data.quotes || []).some(q => q && q.custom)) ||
+    ((data.dayVisits && data.dayVisits.length) || 0) > 1 ||
+    (data.xp || 0) > 0
+  ));
   useEffect(() => {
     if (tourDone) return;
     if (inPreApp) return;
