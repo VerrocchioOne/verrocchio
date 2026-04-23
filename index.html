@@ -280,20 +280,13 @@ textarea{resize:vertical}
    Linear timing end-to-end so the pen velocity never spikes. */
 .splashv4 .ink-v-wrap{position:absolute;top:98px;left:50%;transform:translateX(-50%);width:100px;height:78px;pointer-events:none;z-index:2}
 .splashv4 .ink-v-svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 2px 8px rgba(0,0,0,.22));shape-rendering:geometricPrecision}
-/* Two stacked V glyphs model a liquid-dynamics fill:
-     .v-green    — the static "liquid" layer rendered in brand green.
-                   Always visible underneath.
-     .v-air      — the "air" layer in the page's cream backdrop colour,
-                   sitting on top and revealed through a mask circle
-                   that expands from the V's top-left corner outward.
-   As the mask circle grows, more cream shows through, which reads as
-   air displacing green liquid — emptying the V from the top-left. The
-   feTurbulence displacement filter wobbles the mask edge so the
-   boundary between liquid and air looks organic, not geometric.
-   Easing is cubic-bezier(.55,.05,.25,1) — slow-start pump-in, quick
-   middle travel, gentle settle — which mimics a real fluid getting
-   displaced faster as the air pocket grows. */
-.splashv4 .ink-v-svg .v-green{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:92px;fill:#2d5a2d}
+/* Single cream V glyph, revealed through a mask that grows from the
+   top-left corner outward — reads as cream liquid flowing into the V's
+   shape against the green pyramid behind it. The feTurbulence
+   displacement filter wobbles the mask edge so the boundary between
+   filled and unfilled looks organic, not geometric. Easing is
+   cubic-bezier(.55,.05,.25,1) — slow-start pour, quick middle travel,
+   gentle settle — mimicking real liquid fill dynamics. */
 .splashv4 .ink-v-svg .v-air{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:92px;fill:#f4efe4}
 .splashv4 .ink-v-svg .v-air-bubble{will-change:r,cy;animation:splashv4AirPump 2.6s cubic-bezier(.55,.05,.25,1) .75s forwards}
 @keyframes splashv4AirPump{
@@ -366,10 +359,6 @@ body.dark .lg::before{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%
 .tour-tip-body{color:#4b5563}
 .tour-tip-swipe{color:#9ca3af}
 body.dark .tour-tip{background:rgba(22,24,27,0.82)!important;color:#e5e7eb!important;border-color:rgba(255,255,255,0.08)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(0,0,0,0.18),0 20px 48px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.24)!important}
-/* Fixed-bottom swipe-footer pill — dark-mode translucent surface
-   matching the .tour-tip treatment so both pieces of chrome read
-   consistently against a dark page. */
-body.dark .tour-swipe-footer{background:rgba(22,24,27,0.78)!important;color:#d1d5db!important;box-shadow:0 8px 24px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)!important}
 body.dark .tour-tip-title{color:#f3f4f6!important}
 body.dark .tour-tip-body{color:#d1d5db!important}
 body.dark .tour-tip-swipe{color:#6b7280!important}
@@ -828,9 +817,19 @@ const ACHIEVEMENTS = [
   { id:"xp-2500",   cat:"XP",         tier:"Silver",   icon:"⚡", name:"Level 6",          desc:"Reach Level 6 (2,500 XP).",                 threshold:2500,   stat:"xp" },
   { id:"xp-10000",  cat:"XP",         tier:"Gold",     icon:"⚡", name:"Level 21",         desc:"Earn 10,000 XP.",                           threshold:10000,  stat:"xp" },
   { id:"xp-50000",  cat:"XP",         tier:"Platinum", icon:"⚡", name:"Level 101",        desc:"Earn 50,000 XP.",                           threshold:50000,  stat:"xp" },
-  { id:"xp-250000", cat:"XP",         tier:"Diamond",  icon:"⚡", name:"XP Legend",        desc:"Earn 250,000 XP.",                          threshold:250000, stat:"xp" }
+  { id:"xp-250000", cat:"XP",         tier:"Diamond",  icon:"⚡", name:"XP Legend",        desc:"Earn 250,000 XP.",                          threshold:250000, stat:"xp" },
+  // EXPLORER — reward the user for discovering parts of the app. The
+  // underlying signal is `data.featureAccess` (touchFeature writes a
+  // timestamp the first time each FEATURES entry fires), and the stat
+  // `featuresExplored` counts how many of those timestamps exist. Tiers
+  // ladder from "tapped your first tab" all the way to "touched
+  // everything we built" so the shelf visibly rewards poking around.
+  { id:"explore-1",   cat:"Explorer",   tier:"Bronze",   icon:"🧭", name:"First Step",       desc:"Open any part of the app for the first time.",  threshold:1,                  stat:"featuresExplored" },
+  { id:"explore-5",   cat:"Explorer",   tier:"Silver",   icon:"🗺️", name:"Wandering In",     desc:"Try 5 different parts of the app.",              threshold:5,                  stat:"featuresExplored" },
+  { id:"explore-10",  cat:"Explorer",   tier:"Gold",     icon:"🔭", name:"Feature Finder",   desc:"Try 10 different parts of the app.",             threshold:10,                 stat:"featuresExplored" },
+  { id:"explore-all", cat:"Explorer",   tier:"Diamond",  icon:"🏅", name:"Completionist",    desc:"Unlock every part of the app.",                  threshold:FEATURES.length,    stat:"featuresExplored" }
 ];
-const ACHIEVEMENT_CATEGORIES = ["Dedication", "Streaks", "Achiever", "Builder", "XP"];
+const ACHIEVEMENT_CATEGORIES = ["Dedication", "Streaks", "Achiever", "Builder", "XP", "Explorer"];
 const MOODS = [{
   label: "Energized",
   icon: "⚡",
@@ -4905,6 +4904,13 @@ function App() {
     const activeGoalsCleared = (goalsArr.length === 0 && archiveArr.length >= 1) ? 1 : 0;
     const linkedGoalIds = new Set(habitsArr.map(h => h && h.goalId).filter(Boolean).map(String));
     const habitPerGoal = (goalsArr.length >= 1 && goalsArr.every(g => linkedGoalIds.has(String(g.id)))) ? 1 : 0;
+    // featuresExplored: number of FEATURES entries the user has actually
+    // touched at least once. touchFeature writes a timestamp into
+    // data.featureAccess keyed by feature id — so the count of non-empty
+    // entries is a direct read of "how much of the app has been
+    // discovered". Drives the Explorer achievement tier set.
+    const fa = (data && data.featureAccess) || {};
+    const featuresExplored = Object.keys(fa).filter(k => !!fa[k]).length;
     return {
       visits: ((data && data.dayVisits) || []).length,
       bestStreak: Math.max(currentBest, cachedBest),
@@ -4914,7 +4920,8 @@ function App() {
       smartGoals,
       goalsCreated,
       activeGoalsCleared,
-      habitPerGoal
+      habitPerGoal,
+      featuresExplored
     };
   }, [data]);
 
@@ -4953,7 +4960,7 @@ function App() {
     if (Object.keys(newly).length === 0) return;
     save({ ...data, achievementsUnlocked: { ...already, ...newly } });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [achievementStats.visits, achievementStats.bestStreak, achievementStats.goals, achievementStats.habitsActive, achievementStats.xp, achievementStats.smartGoals, achievementStats.goalsCreated, achievementStats.activeGoalsCleared, achievementStats.habitPerGoal]);
+  }, [achievementStats.visits, achievementStats.bestStreak, achievementStats.goals, achievementStats.habitsActive, achievementStats.xp, achievementStats.smartGoals, achievementStats.goalsCreated, achievementStats.activeGoalsCleared, achievementStats.habitPerGoal, achievementStats.featuresExplored]);
 
   /* Also keep data.bestStreaks up-to-date — whenever a habit's current
      streak exceeds its cached best, bump the cache so the achievement
@@ -7037,13 +7044,12 @@ function App() {
                   })
                 )
               ),
-              // Liquid (green) layer — always visible underneath.
-              React.createElement("text", {
-                className: "v-green",
-                x: "50", y: "68",
-                textAnchor: "middle"
-              }, "V"),
-              // Air (cream) layer — masked through the expanding bubble.
+              // Cream V — the only glyph drawn. Starts fully masked and
+              // fills in from the top-left corner through the expanding
+              // bubble, reading as liquid flowing into the V's shape
+              // against the green pyramid behind it. No separate green V
+              // layer — the pyramid is the backdrop, the cream V is the
+              // fill, and the bubble's growth IS the animation.
               React.createElement("text", {
                 className: "v-air",
                 x: "50", y: "68",
@@ -8152,20 +8158,43 @@ function App() {
           zIndex: 10000
         }
       }, null),
-        // (Removed the in-tooltip "Hold to Exit" pill. Shake-to-exit
-        // now covers the in-tour case — the gesture fires regardless
-        // of which overlay is on top, so a user stuck mid-walkthrough
-        // can still leave without a dedicated button. Desktop users
-        // who can't shake fall through to the top-bar "Exit demo"
-        // button; the tour overlay's z-index previously hid it, but
-        // tooltips now clear the top stripe enough to reach it.)
+        // Tap-to-exit affordance — tiny × in the top-right corner of the
+        // tooltip. Desktop users can't shake to exit and the tour's z-
+        // index sometimes obscures the demo-mode "Exit demo" pill, so a
+        // dedicated close button is the reliable path out at every step.
+        // finishTour() both clears the step AND persists v-tour-done so
+        // the tour doesn't re-fire on next load. Click, no hold — the
+        // dim-click minimize gesture already handles "pause the tour but
+        // keep it for later"; this button is for "I'm done, get rid of
+        // it". Absolute positioning inside the tooltip's padded box so
+        // the title text flows normally underneath.
+        /*#__PURE__*/React.createElement("button", Object.assign({
+          type: "button",
+          onClick: finishTour,
+          "aria-label": "Exit tour",
+          title: "Exit tour",
+          style: {
+            position: "absolute",
+            top: 6, right: 6,
+            width: 24, height: 24,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 0,
+            background: "transparent",
+            border: "none",
+            borderRadius: 999,
+            color: "#9ca3af",
+            fontSize: 16, lineHeight: 1, fontWeight: 500,
+            cursor: "pointer",
+            WebkitTapHighlightColor: "transparent"
+          }
+        }, stopSwipeStart), "\u00D7"),
         // No "Step X of Y" badge and no progress dots — the tour shouldn't
         // feel like a numbered checklist. Title + body + Back/Next row do
         // all the navigation framing on their own.
         /*#__PURE__*/React.createElement("div", {
           id: "tour-tip-title",
           className: "tour-tip-title",
-          style: { fontSize: 14, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 }
+          style: { fontSize: 14, fontWeight: 700, marginBottom: 4, lineHeight: 1.3, paddingRight: 22 }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-body",
@@ -14505,6 +14534,7 @@ function App() {
     const NAV_ITEMS = [
       { val: "account", label: "My Account", icon: "\uD83D\uDC64" },
       { val: "scorecard", label: "App Progress", icon: "\u2705" },
+      { val: "routines", label: "My Routines", icon: "\uD83D\uDDD3\uFE0F" },
       { val: "inspiration", label: "My Inspiration", icon: "\uD83D\uDCA1" },
       { val: "history", label: "Goal History", icon: "\uD83D\uDCDC" },
       { val: "reports", label: "Habit Reports", icon: "\uD83D\uDCCA" },
@@ -14591,80 +14621,11 @@ function App() {
           )
         );
       })(),
-      // ── Account ──
-      // Change email / change password / delete. All three require a
-      // fresh reauthentication (Firebase security model) — single
-      // "Current password" input is shared across them so the user
-      // doesn't type it twice in the same session.
-      (() => {
-        const fmtFeedback = acctFeedback
-          ? /*#__PURE__*/React.createElement("div", {
-              style: {
-                fontSize: 12, marginTop: 6, padding: "6px 10px", borderRadius: 6,
-                color: acctFeedback.kind === "ok" ? "#166534" : "#991b1b",
-                background: acctFeedback.kind === "ok" ? "#f0fdf4" : "#fef2f2",
-                border: "1px solid " + (acctFeedback.kind === "ok" ? "#86efac" : "#fca5a5")
-              }
-            }, acctFeedback.msg)
-          : null;
-        const smallBtn = (label, onClick, color) => /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick,
-          disabled: acctBusy,
-          style: {
-            minHeight: 40, padding: "9px 14px", borderRadius: 8,
-            border: "1px solid " + (color || "#2d5a2d"),
-            background: "transparent",
-            color: color || "#2d5a2d",
-            fontSize: 13, fontWeight: 700,
-            cursor: acctBusy ? "default" : "pointer", opacity: acctBusy ? 0.6 : 1,
-            flexShrink: 0
-          }
-        }, label);
-        if (!authUser) return null;
-        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
-          /*#__PURE__*/React.createElement("div", { style: labelS }, "Account"),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "Current password is required for each change."),
-          /*#__PURE__*/React.createElement("input", {
-            type: "password",
-            value: acctCurrentPw,
-            onChange: e => setAcctCurrentPw(e.target.value),
-            placeholder: "Current password",
-            autoComplete: "current-password",
-            style: { ...inputS, marginBottom: 10 }
-          }),
-          // Change email
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } },
-            /*#__PURE__*/React.createElement("input", {
-              type: "email",
-              value: acctNewEmail,
-              onChange: e => setAcctNewEmail(e.target.value),
-              placeholder: "New email",
-              autoComplete: "email",
-              style: { ...inputS, flex: 1 }
-            }),
-            smallBtn("Update email", doChangeEmail)
-          ),
-          // Change password
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 8 } },
-            /*#__PURE__*/React.createElement("input", {
-              type: "password",
-              value: acctNewPw,
-              onChange: e => setAcctNewPw(e.target.value),
-              placeholder: "New password (min 6 chars)",
-              autoComplete: "new-password",
-              style: { ...inputS, flex: 1 }
-            }),
-            smallBtn("Update password", doChangePassword)
-          ),
-          // Delete account
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
-            /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 12, color: "#6b7280", padding: "10px 2px" } }, "Permanently delete this account and all its data."),
-            smallBtn("Delete…", () => setConfirmDeleteAcct(true), "#991b1b")
-          ),
-          fmtFeedback
-        );
-      })(),
+      // Account management (change email / password / delete) was moved
+      // out of Profile — password reset lives on the login screen via the
+      // standard Firebase reset-email flow, and the in-app duplicate made
+      // Profile busier without adding anything that isn't already
+      // available before sign-in.
       // ── Summary export ──
       /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Export summary"),
@@ -14804,6 +14765,26 @@ function App() {
                 /*#__PURE__*/React.createElement("button", { onClick: () => delQ(q.id), style: { background: "none", border: "none", cursor: "pointer", color: "#d1d5db", fontSize: 15, padding: "2px", lineHeight: 1 } }, "\xD7"))))
           );
         }))
+    );
+    // My Routines — dedicated top-level Profile section that surfaces
+    // the Routine Compare view (week vs month common-vs-different habit
+    // cadence). Previously lived buried in App Settings; promoting it to
+    // its own nav slot makes the feature discoverable and reflects its
+    // status as a core analytics tool rather than an app-configuration
+    // setting. The heavy lift (the actual compare view) still lives
+    // elsewhere — this panel is just the entry point + one-line pitch.
+    const myRoutinesPanel = /*#__PURE__*/React.createElement("div", null,
+      sectionTitle("My Routines"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5, marginBottom: 14 }
+      }, "See which habits repeat every day of the week vs only on certain days, and which hit every week of the month vs only certain weeks."),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => { setShowProfile(false); setTimeout(() => setRoutineView("week"), 250); },
+        style: { width: "100%", background: "#2d5a2d", border: "none", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", marginBottom: 10 }
+      }, "Open Routine Compare"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "#9ca3af", lineHeight: 1.5 }
+      }, "Tip: the week view highlights habits that are part of your daily baseline, while the month view surfaces habits tied to specific weeks (e.g. pay-week errands, first-Monday reviews).")
     );
     const historyPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("Goal History"),
@@ -15422,15 +15403,10 @@ function App() {
             style: { width: "100%", background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 600, color: "#2d5a2d", cursor: "pointer" }
           }, "Replay Welcome Tour")
         ),
-        /*#__PURE__*/React.createElement("div", { style: { marginTop: 18, paddingTop: 16, borderTop: "1px solid #f3f4f6" } },
-          /*#__PURE__*/React.createElement("div", { style: labelS }, "Routine Compare"),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginBottom: 8, lineHeight: 1.45 } },
-            "See which habits repeat every day of the week vs only on certain days, and which hit every week of the month vs only certain weeks."),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => { setShowProfile(false); setTimeout(() => setRoutineView("week"), 250); },
-            style: { width: "100%", background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 600, color: "#2d5a2d", cursor: "pointer" }
-          }, "Open Routine Compare")
-        ),
+        // Routine Compare has moved out to its own top-level Profile nav
+        // section (My Routines). App Settings now only carries the things
+        // that are genuinely app-configuration (theme, accent, custom
+        // categories, guided tour replay).
         // Reset to defaults escape hatch
         isCustom ? /*#__PURE__*/React.createElement("button", {
           onClick: () => {
@@ -15509,7 +15485,7 @@ function App() {
         ))
       );
     })();
-    const panels = { account: accountPanel, scorecard: scorecardPanel, inspiration: inspirationPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
+    const panels = { account: accountPanel, scorecard: scorecardPanel, routines: myRoutinesPanel, inspiration: inspirationPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
     return /*#__PURE__*/React.createElement("div", {
       style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
       onClick: e => { if (e.target === e.currentTarget) setShowProfile(false); }
@@ -15887,6 +15863,9 @@ function App() {
           if (s === "goalsCreated") return achievementStats.goalsCreated + " goal" + (achievementStats.goalsCreated === 1 ? "" : "s") + " created";
           if (s === "activeGoalsCleared") return achievementStats.activeGoalsCleared ? "Clean slate reached" : "Active goals in play";
           if (s === "habitPerGoal") return achievementStats.habitPerGoal ? "Every goal has a habit" : "Some goals need a habit";
+          // Explorer category header: show discovery progress against
+          // the FEATURES catalog ("7 / 17 parts discovered").
+          if (s === "featuresExplored") return achievementStats.featuresExplored + " / " + FEATURES.length + " parts discovered";
           return "";
         })();
         return /*#__PURE__*/React.createElement("div", { key: cat },
