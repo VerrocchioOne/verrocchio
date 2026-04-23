@@ -3688,6 +3688,13 @@ function App() {
      from App Settings at any time. */
   const [tourStep, setTourStep] = useState(0);
   const [tourDone, setTourDone] = useState(() => localStorage.getItem("v-tour-done") === "1");
+  // Minimize-to-corner affordance. When true the full tooltip collapses
+  // to a small floating pill in the opposite corner of the spotlighted
+  // element so the user can freely interact with the page. Clicking the
+  // pill restores the full tooltip. Always resets to false on step
+  // change so each new step starts with the full card visible — a user
+  // who minimized step 2 shouldn't silently land on step 3 minimized.
+  const [tourMinimized, setTourMinimized] = useState(false);
   // Tour/demo control surfaces. `confirmExitDemo` drives a two-
   // phase modal: phase 1 asks the user to confirm leaving demo
   // mode; phase 2 shows them where the Replay Tour control lives
@@ -3967,8 +3974,19 @@ function App() {
      for free by the browser. No refs, no re-measure timers, no rect
      math. Scroll-into-view lives in the separate [tourStep] effect
      below so a keystroke doesn't yank the viewport. */
+  // Each new tour step starts non-minimized so the user always sees
+  // the full card + dim on first landing. Explicit effect (rather than
+  // inline at setTourStep call sites) so replays, back-swipes, and
+  // autoAdvance jumps all get the same reset for free.
+  useEffect(() => { setTourMinimized(false); }, [tourStep]);
   useEffect(() => {
     if (tourStep === 0) return undefined;
+    // When minimized, the whole point is to let the user interact with
+    // the page — skip the spotlight class-toggle + stacking-context
+    // lift so the target isn't visually re-pinned over app chrome.
+    // Flipping minimized → full re-runs this effect (render cycle),
+    // which re-adds the class and re-lifts the stack.
+    if (tourMinimized) return undefined;
     const step = TOUR_STEPS[tourStep - 1];
     if (!step) return undefined;
     const gateBlocked = typeof step.gate === "function" && !step.gate(data);
@@ -7475,6 +7493,78 @@ function App() {
     const step = TOUR_STEPS[tourStep - 1];
     if (!step) return null;
 
+    // Minimized branch — render ONLY a small floating pill in the
+    // opposite corner of the spotlighted element. No dim, no full
+    // tooltip, no .tour-target class on the page (the class-toggle
+    // effect above bails out when tourMinimized is true). This lets
+    // the user poke around the app; tapping the pill restores the
+    // full tour UI. Rendered first so the logic below (tipStyle,
+    // dim overlay, etc.) doesn't run unnecessarily.
+    if (tourMinimized) {
+      // Opposite-corner placement: find the spotlight target's rect,
+      // decide which quadrant of the viewport it's in, drop the pill
+      // in the opposite quadrant. Steps without a selector (intro,
+      // showcase, inline forms) default to bottom-right — it's out of
+      // the thumb-reach zone of the top nav and doesn't collide with
+      // the bottom tab bar.
+      let corner = { bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", right: 14 };
+      if (step.selector) {
+        const el = document.querySelector(step.selector);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const vw = window.innerWidth || 360;
+          const vh = window.innerHeight || 640;
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const inTop = cy < vh / 2;
+          const inLeft = cx < vw / 2;
+          corner = inTop && inLeft  ? { bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", right: 14 }
+                 : inTop && !inLeft ? { bottom: "calc(80px + env(safe-area-inset-bottom, 0px))", left: 14 }
+                 : !inTop && inLeft ? { top: "calc(12px + env(safe-area-inset-top, 0px))", right: 14 }
+                 :                    { top: "calc(12px + env(safe-area-inset-top, 0px))", left: 14 };
+        }
+      }
+      return /*#__PURE__*/React.createElement("div", {
+        "data-tour-overlay": "1",
+        "data-tour-minimized": "1",
+        style: Object.assign({
+          position: "fixed",
+          zIndex: 10001,
+          pointerEvents: "none"
+        }, corner)
+      },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => setTourMinimized(false),
+          "aria-label": "Resume tour",
+          className: "lg tour-tip",
+          style: {
+            pointerEvents: "auto",
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 14px",
+            borderRadius: 999,
+            border: "none",
+            background: "rgba(255,255,255,0.92)",
+            backdropFilter: "blur(20px) saturate(180%)",
+            WebkitBackdropFilter: "blur(20px) saturate(180%)",
+            boxShadow: "0 10px 28px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.9)",
+            fontSize: 12, fontWeight: 600, color: "#2d5a2d",
+            cursor: "pointer",
+            maxWidth: 240,
+            WebkitTapHighlightColor: "transparent"
+          }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, lineHeight: 1 } }, "\u{1F4D6}"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+          }, "Resume tour"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 14, lineHeight: 1, color: "#6b7280" }
+          }, "\u2192")
+        )
+      );
+    }
+
     // Gate check — gated steps dock the tooltip to the bottom of the
     // screen so the add-goal / add-habit form the user is about to
     // open isn't covered, and reveal the italic gateHint sub-line in
@@ -7741,6 +7831,32 @@ function App() {
         // The optional secondary action (e.g. "Add a to-do") appears
         // above the nav row because it's a DIFFERENT kind of action
         // (triggers an in-app behavior, not a tour step).
+        // "Click to explore page" affordance — visible on every non-
+        // final step. Lets the user minimize the tooltip to a corner
+        // pill, roam the app, then resume the tour by tapping the
+        // pill. Placed ABOVE the nav row so it reads as a mode-switch
+        // (exit into the app) rather than another piece of tour
+        // navigation. Hidden on the last step since there's nothing
+        // past it to resume to.
+        !isLast && /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", justifyContent: "center", marginBottom: 10 }
+        },
+          /*#__PURE__*/React.createElement("button", Object.assign({
+            type: "button",
+            onClick: () => setTourMinimized(true),
+            style: {
+              background: "transparent",
+              color: "#2d5a2d",
+              border: "1px dashed #2d5a2d",
+              borderRadius: 999,
+              padding: "6px 14px",
+              fontSize: 11, fontWeight: 600,
+              letterSpacing: 0.2,
+              cursor: "pointer",
+              textTransform: "uppercase"
+            }
+          }, stopSwipeStart), "Click to explore page")
+        ),
         isLast
           ? /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", justifyContent: "center" }
