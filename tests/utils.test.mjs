@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { dk, tk, dkTime, tkTime, pastDays, getStreak, daysSinceLast, getCR, getLast14 } = require("../utils.js");
+const { dk, tk, dkTime, tkTime, pastDays, getStreak, daysSinceLast, getCR, getLast14, parseClock, findCorrelations, detectOffSchedule, SECTION_CUTOFFS } = require("../utils.js");
 
 // Helper: freeze Date to a known local-time instant for the duration of
 // a test. Restores the original Date when the test returns. We use a
@@ -54,6 +54,150 @@ test("dkTime returns zero-padded HH:MM in 24-hour time", () => {
 test("tkTime tracks the fake clock", () => {
   withFakeNow("2026-04-23T14:07:00", () => {
     assert.equal(tkTime(), "14:07");
+  });
+});
+
+// ── parseClock ────────────────────────────────────────────────────
+test("parseClock returns minutes since midnight or null for bad input", () => {
+  assert.equal(parseClock("00:00"), 0);
+  assert.equal(parseClock("08:30"), 8 * 60 + 30);
+  assert.equal(parseClock("23:59"), 23 * 60 + 59);
+  assert.equal(parseClock("8:30"), null);   // not zero-padded
+  assert.equal(parseClock("24:00"), null);  // out of range
+  assert.equal(parseClock(null), null);
+  assert.equal(parseClock(""), null);
+});
+
+// ── findCorrelations ──────────────────────────────────────────────
+// Helper: build a habit with completions on the given ISO keys, each
+// stamped at the same HH:MM.
+function habitWith(id, section, text, completionsByKey) {
+  const completions = {};
+  const completionTimes = {};
+  for (const [k, t] of Object.entries(completionsByKey)) {
+    completions[k] = "done";
+    completionTimes[k] = t;
+  }
+  return { id, section, text, completions, completionTimes };
+}
+
+test("findCorrelations returns empty when no habit meets min support", () => {
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const A = habitWith("a", "morning", "Run", {}); // 0 days on-time
+    const B = habitWith("b", "evening", "Sleep early", {});
+    const out = findCorrelations([A, B]);
+    assert.deepEqual(out, []);
+  });
+});
+
+test("findCorrelations surfaces a pair whose conditional beats the base by min lift", () => {
+  // Construct 20 recent days. On the first 18 of them, A is done by
+  // 07:00 (morning section cutoff is noon, so on-time). On 17 of those
+  // 18 days, B is also done. On 2 more days, B is done without A. So:
+  //   support (A on-time) = 18
+  //   conditional P(B|A) = 17/18 ≈ 0.944
+  //   base P(B) = (17+2)/20 = 0.95 — whoops, that gives zero lift.
+  // Let me spread B so base is lower.
+  // Target: A done by cutoff on 16 days (support). B done on 14 of
+  // those. B done on 0 other days. So base = 14/20 = 0.70, conditional
+  // = 14/16 = 0.875, lift = 0.175 — BELOW threshold. Need more.
+  // Let me go: base = 10/20 = 0.5, conditional = 14/14 = 1.0. Lift 0.5.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const days60 = [];
+    const today = new Date(2026, 3, 23);
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days60.push(dk(d));
+    }
+    // A done by 07:00 on the 14 most recent days.
+    const aC = {};
+    for (let i = 0; i < 14; i++) aC[days60[i]] = "07:00";
+    // B done on the same 14 days.
+    const bC = {};
+    for (let i = 0; i < 14; i++) bC[days60[i]] = "22:00";
+    const A = habitWith("a", "morning", "Morning run", aC);
+    const B = habitWith("b", "evening", "Read before bed", bC);
+    const out = findCorrelations([A, B]);
+    // At least one direction: A → B should be detected.
+    const hit = out.find(r => r.aHabitId === "a" && r.bHabitId === "b");
+    assert.ok(hit, "expected A → B correlation in output");
+    assert.equal(hit.support, 14);
+    assert.equal(hit.conditional, 1); // B done every time A was on-time
+    assert.ok(hit.lift >= 0.20, `lift ${hit.lift} should meet threshold`);
+  });
+});
+
+test("findCorrelations never uses an avoid habit as the A (conditioning) side", () => {
+  // Avoid habits don't have a "done by cutoff" semantic — you can't
+  // finish resisting a temptation by 8am — so they must never appear
+  // as the A in "if A on-time, then B". They CAN appear as the B
+  // outcome ("if you do your run, you skip sugar 78% of the time")
+  // so we only assert the direction that violates the semantic.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 20; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const aC = {}; for (let i = 0; i < 14; i++) aC[days[i]] = "07:00";
+    const bC = {}; for (let i = 0; i < 14; i++) bC[days[i]] = "22:00";
+    const avoidH = habitWith("a", "avoid", "Skip sugar", aC);
+    const evening = habitWith("b", "evening", "Read", bC);
+    const out = findCorrelations([avoidH, evening]);
+    // No result should have aHabitId === "a" (the avoid habit).
+    assert.equal(out.filter(r => r.aHabitId === "a").length, 0);
+  });
+});
+
+// ── detectOffSchedule ─────────────────────────────────────────────
+test("detectOffSchedule flags a habit done late in most recent completions", () => {
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    // Morning habit logged at 15:00 on 6 of 7 recent completions.
+    const comps = {};
+    comps[days[0]] = "15:00";
+    comps[days[1]] = "16:00";
+    comps[days[2]] = "15:30";
+    comps[days[3]] = "14:00";
+    comps[days[4]] = "07:00"; // on-time outlier
+    comps[days[5]] = "15:00";
+    comps[days[6]] = "16:30";
+    const h = habitWith("h", "morning", "Run", comps);
+    const out = detectOffSchedule(h);
+    assert.ok(out, "expected off-schedule detection");
+    assert.equal(out.loggedCount, 7);
+    assert.equal(out.lateCount, 6);
+    assert.ok(out.lateRate > 0.6);
+  });
+});
+
+test("detectOffSchedule returns null when not enough recent completions", () => {
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const comps = {};
+    comps[days[0]] = "15:00";
+    comps[days[1]] = "15:30";
+    // only 2 completions, below minLogged = 4
+    const h = habitWith("h", "morning", "Run", comps);
+    assert.equal(detectOffSchedule(h), null);
+  });
+});
+
+test("detectOffSchedule returns null for avoid habits", () => {
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const h = habitWith("h", "avoid", "Skip sugar", {});
+    assert.equal(detectOffSchedule(h), null);
   });
 });
 
