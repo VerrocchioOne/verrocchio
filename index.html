@@ -15517,6 +15517,39 @@ function App() {
     const totalInRange = bars.reduce((s, b) => s + b.value, 0);
     const avg = Math.round(totalInRange / bars.length);
     const chartAccent = (settingsMode === "custom" && !themeLocked && accentColor) ? accentColor : "#2d5a2d";
+    // Comparison stats — "this period vs last period vs all-time avg".
+    // For day: today vs yesterday vs 30d avg.
+    // For week: this-week-so-far vs last-full-week vs 12w avg.
+    // For month: this-month-so-far vs last-full-month vs 12m avg.
+    // Helper to sum an inclusive [startDaysAgo, endDaysAgo] window.
+    const sumWindow = (startAgo, endAgo) => {
+      let s = 0;
+      for (let i = startAgo; i <= endAgo; i++) {
+        const d = new Date(today); d.setDate(today.getDate() - i);
+        s += xpByDay[dk(d)] || 0;
+      }
+      return s;
+    };
+    let curLabel, curVal, prevLabel, prevVal, avgLabel, avgVal;
+    if (xpChartGrain === "day") {
+      curLabel = "Today";     curVal = xpByDay[dk(today)] || 0;
+      const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+      prevLabel = "Yesterday"; prevVal = xpByDay[dk(yesterday)] || 0;
+      avgLabel = "30-day avg"; avgVal = avg;
+    } else if (xpChartGrain === "week") {
+      curLabel = "This week";  curVal = sumWindow(0, 6);
+      prevLabel = "Last week"; prevVal = sumWindow(7, 13);
+      avgLabel = "12-wk avg";  avgVal = Math.round(totalInRange / 12);
+    } else {
+      curLabel = "This month"; curVal = bars[bars.length - 1].value;
+      prevLabel = "Last month";prevVal = bars.length >= 2 ? bars[bars.length - 2].value : 0;
+      avgLabel = "12-mo avg";  avgVal = Math.round(totalInRange / 12);
+    }
+    const pctDelta = prevVal > 0 ? Math.round(((curVal - prevVal) / prevVal) * 100) : null;
+    const deltaArrow = pctDelta == null ? "" : pctDelta > 0 ? "\u2191" : pctDelta < 0 ? "\u2193" : "\u2192";
+    const deltaColor = pctDelta == null ? "#9ca3af" : pctDelta > 0 ? "#16a34a" : pctDelta < 0 ? "#dc2626" : "#9ca3af";
+    // Average line position (y) within the chart.
+    const avgLinePct = Math.min(1, avg / maxVal);
     const grainBtn = (id, label) => /*#__PURE__*/React.createElement("button", {
       key: id,
       type: "button",
@@ -15556,39 +15589,107 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", gap: 6, padding: "12px 18px 0" }
       }, grainBtn("day", "Day"), grainBtn("week", "Week"), grainBtn("month", "Month")),
-      // Chart
+      // Comparison row — current period, previous period, average, and
+      // the percent delta vs prior. Three stat tiles + a trend pill
+      // aligned under the granularity toggle. Values adapt to the
+      // chosen grain (today/yesterday vs this-week/last-week etc.).
       /*#__PURE__*/React.createElement("div", {
-        style: { padding: "18px 18px 8px", overflowX: "auto" }
+        style: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, padding: "10px 18px 0" }
       },
-        /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "flex-end", gap: 4, height: CHART_H, minWidth: "100%" }
-        }, bars.map(b => /*#__PURE__*/React.createElement("div", {
-          key: b.key,
-          title: b.value + " XP",
-          style: { flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-end" }
+        [
+          { label: curLabel,  val: curVal,  color: chartAccent },
+          { label: prevLabel, val: prevVal, color: "#6b7280"   },
+          { label: avgLabel,  val: avgVal,  color: "#6b7280"   }
+        ].map((s, i) => /*#__PURE__*/React.createElement("div", {
+          key: "stat-" + i,
+          style: {
+            padding: "8px 10px",
+            borderRadius: 8,
+            background: "var(--c-surface-raised)",
+            border: "1px solid var(--c-border)"
+          }
         },
           /*#__PURE__*/React.createElement("div", {
-            style: {
-              height: Math.max(2, Math.round((b.value / maxVal) * CHART_H)) + "px",
-              background: b.value > 0 ? "linear-gradient(180deg," + chartAccent + "," + chartAccent + "cc)" : "var(--c-border)",
-              borderRadius: "4px 4px 0 0",
-              transition: "height 0.35s ease"
-            }
-          })
-        )))
+            style: { fontSize: 9, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 3 }
+          }, s.label),
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 15, fontWeight: 700, color: s.color }
+          }, s.val.toLocaleString() + " XP")
+        ))
       ),
-      // X-axis labels — one per bar, compact. For the day view show
-      // every 5th label so they don't overlap at narrow widths.
+      pctDelta != null && /*#__PURE__*/React.createElement("div", {
+        style: { padding: "8px 18px 0", fontSize: 11, color: deltaColor, fontWeight: 600 }
+      }, deltaArrow + " " + Math.abs(pctDelta) + "% vs " + prevLabel.toLowerCase()),
+      // Chart row: left y-axis labels + scrollable chart.
+      // Y-axis shows 0 / mid / max so the user can eyeball values
+      // without reading every column's numeric label. The axis rail
+      // sits outside the scrollable area so it stays pinned when
+      // horizontal scrolling kicks in at dense day-view widths.
       /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", gap: 4, padding: "0 18px 12px", borderBottom: "1px solid #f3f4f6" }
-      }, bars.map((b, i) => /*#__PURE__*/React.createElement("div", {
-        key: b.key + "-lbl",
-        style: {
-          flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22, textAlign: "center",
-          fontSize: 9, color: "#9ca3af",
-          visibility: xpChartGrain === "day" && i % 5 !== 0 ? "hidden" : "visible"
-        }
-      }, b.label))),
+        style: { display: "flex", padding: "18px 18px 8px", gap: 10 }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: "flex", flexDirection: "column", justifyContent: "space-between",
+            height: CHART_H + 18, paddingBottom: 18,
+            fontSize: 9, color: "#9ca3af", textAlign: "right", minWidth: 28
+          }
+        },
+          /*#__PURE__*/React.createElement("div", null, maxVal.toLocaleString()),
+          /*#__PURE__*/React.createElement("div", null, Math.round(maxVal / 2).toLocaleString()),
+          /*#__PURE__*/React.createElement("div", null, "0")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { flex: 1, overflowX: "auto" }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", alignItems: "flex-end", gap: 4, height: CHART_H, minWidth: "100%" }
+          }, bars.map(b => /*#__PURE__*/React.createElement("div", {
+            key: b.key,
+            title: b.value + " XP",
+            style: { flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-end", position: "relative" }
+          },
+            // Value label on top of each non-zero column. Day-view
+            // numbers would overlap at narrow widths, so on Day we
+            // only label columns with the max value (peak days).
+            // Week + Month always label because they have room.
+            b.value > 0 && (xpChartGrain !== "day" || b.value === maxVal) && /*#__PURE__*/React.createElement("div", {
+              style: {
+                fontSize: 9, fontWeight: 700, color: chartAccent,
+                textAlign: "center", marginBottom: 2, whiteSpace: "nowrap"
+              }
+            }, b.value),
+            /*#__PURE__*/React.createElement("div", {
+              style: {
+                height: Math.max(2, Math.round((b.value / maxVal) * CHART_H)) + "px",
+                background: b.value > 0 ? "linear-gradient(180deg," + chartAccent + "," + chartAccent + "cc)" : "var(--c-border)",
+                borderRadius: "4px 4px 0 0",
+                transition: "height 0.35s ease"
+              }
+            })
+          ))),
+          // X-axis labels — one per bar, compact. For the day view
+          // show every 5th label so they don't overlap at narrow
+          // widths; week / month always fit.
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", gap: 4, marginTop: 6 }
+          }, bars.map((b, i) => /*#__PURE__*/React.createElement("div", {
+            key: b.key + "-lbl",
+            style: {
+              flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22, textAlign: "center",
+              fontSize: 9, color: "#9ca3af",
+              visibility: xpChartGrain === "day" && i % 5 !== 0 ? "hidden" : "visible"
+            }
+          }, b.label))),
+          // Axis titles below the bars for orientation.
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "1px solid #f3f4f6", fontSize: 10, color: "#9ca3af" }
+          },
+            /*#__PURE__*/React.createElement("span", null, xpChartGrain === "day" ? "Date" : xpChartGrain === "week" ? "Week ending" : "Month"),
+            /*#__PURE__*/React.createElement("span", null, "XP earned")
+          )
+        )
+      ),
       // Footer hint so people know tap-and-hold does a different thing.
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 11, color: "#9ca3af", textAlign: "center", padding: "10px 18px 16px" }
