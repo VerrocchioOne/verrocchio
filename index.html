@@ -2270,11 +2270,17 @@ const MomentumArrow = React.memo(function MomentumArrow({ habit }) {
 // cells, so each heatmap reads as a monochrome "chip" of the habit's
 // brand color. Missed days stay red so gone-sideways data is visible.
 // Fallbacks to Verrocchio green for uncategorized habits.
-const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 10, gap = 3, color }) {
+const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 10, gap = 3, color, range = "year" }) {
   const today = new Date();
   const cells = [];
-  // Align the grid so the current week ends on today's column.
-  const daysBack = 7 * 26 + today.getDay(); // 26 weeks back, aligned to current DOW
+  // Range controls how far back the grid looks:
+  //   week  — last 7 days, single column
+  //   month — last 28 days, 4 weeks wide
+  //   year  — 26 weeks + today's DOW offset (~6 months)
+  const daysBack =
+    range === "week"  ? 6
+    : range === "month" ? 27
+    : 7 * 26 + today.getDay();
   for (let i = daysBack; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
@@ -3584,6 +3590,10 @@ function App() {
   /* PROFILE */
   const [showProfile, setShowProfile] = useState(false);
   const [profileSection, setProfileSection] = useState("account"); // account | inspiration | history | reports | settings
+  // Range filter for the Habit Reports heatmaps. "year" shows the
+  // familiar ~26-week grid; "month" and "week" drop the window so
+  // recent trends read without horizontal scrolling.
+  const [reportHeatmapRange, setReportHeatmapRange] = useState("year");
   const [profileNavOpen, setProfileNavOpen] = useState(false);
   const [profileName, setProfileName] = useState(() => localStorage.getItem("v-profile-name") || "");
   const [profileGoal, setProfileGoal] = useState(() => localStorage.getItem("v-profile-goal") || "");
@@ -14015,6 +14025,24 @@ function App() {
       }))
     );
     const allHabitsForReport = (data.habits || []).slice().sort((a, b) => getStreak(b) - getStreak(a));
+    // Shared range for every heatmap in the reports panel. Persisted
+    // on the session via useState so flipping the toggle re-renders
+    // every row in sync.
+    const heatmapRange = reportHeatmapRange;
+    const rangeBtn = (val, label) => /*#__PURE__*/React.createElement("button", {
+      key: val,
+      type: "button",
+      onClick: () => setReportHeatmapRange(val),
+      style: {
+        flex: 1, minHeight: 32, padding: "6px 10px",
+        border: "1px solid " + (heatmapRange === val ? "#2d5a2d" : "var(--c-border)"),
+        borderRadius: 8,
+        background: heatmapRange === val ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+        color: heatmapRange === val ? "#2d5a2d" : "#6b7280",
+        fontSize: 12, fontWeight: heatmapRange === val ? 700 : 500,
+        cursor: "pointer"
+      }
+    }, label);
     const reportsPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("Habit Reports"),
       allHabitsForReport.length === 0 ? /*#__PURE__*/React.createElement("div", {
@@ -14041,6 +14069,21 @@ function App() {
             ));
           })()
         ),
+        // Range filter — applies to every habit heatmap below.
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 11, fontWeight: 600, color: "#6b7280", letterSpacing: 0.3, textTransform: "uppercase" }
+          }, "Range"),
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", gap: 4, flex: 1 }
+          },
+            rangeBtn("week",  "Week"),
+            rangeBtn("month", "Month"),
+            rangeBtn("year",  "Year")
+          )
+        ),
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
           allHabitsForReport.map(h => {
             const streak = getStreak(h);
@@ -14060,7 +14103,7 @@ function App() {
                 h.importance && /*#__PURE__*/React.createElement("span", null, h.importance)),
               /*#__PURE__*/React.createElement("div", {
                 style: { overflowX: "auto", WebkitOverflowScrolling: "touch", marginTop: 4 }
-              }, /*#__PURE__*/React.createElement(YearHeatmap, { habit: h }))
+              }, /*#__PURE__*/React.createElement(YearHeatmap, { habit: h, range: heatmapRange }))
             );
           }))
       )
