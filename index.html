@@ -2856,12 +2856,12 @@ function App() {
     setAuthBusy(false);
   };
   // Temporary one-tap sign-in for the seeded demo personas. Tapping a
-  // button tries to sign in; if the account doesn't exist it's
-  // created on the fly and the Firestore doc is populated with the
-  // persona's two-week seed directly from the browser — no need to
-  // run scripts/seed-demo-users.mjs first. The persona data mirrors
-  // the Node script so both paths produce identical accounts. Remove
-  // this block (and the persona builders below) before shipping.
+  // button creates the account if needed AND re-seeds the Firestore
+  // doc with fresh randomized content on EVERY tap — the personas are
+  // explicitly demo accounts, and the value of the button is showing
+  // a variety of habits / goals / todos / appearance each session
+  // rather than the same hardcoded set. Remove this block (and the
+  // pools below) before shipping a public build.
   const DEMO_PERSONAS = {
     "alex.morning@demo.verrocchio.app":   { recipe: "morning-consistent" },
     "blair.slipping@demo.verrocchio.app": { recipe: "falling-off"        },
@@ -2869,133 +2869,270 @@ function App() {
     "dani.new@demo.verrocchio.app":       { recipe: "brand-new"          }
   };
   const DEMO_PASSWORD = "verrocchio-demo-1";
-  const buildDemoHabit = (id, text, section, type, importance, extras) => ({
-    id, text, section, type, importance,
-    frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
-    completions: {}, completionTimes: {}, completionUnits: {},
-    notes: null, duration: null, goalId: null, location: "both",
-    icon: null, startDate: null,
-    target: null, unitLabel: null, increment: null,
-    _order: 0,
-    ...(extras || {})
-  });
-  const buildDemoSeed = (recipe) => {
+
+  // Content pools the randomizer picks from. Grouped by section for
+  // habits so each persona's time-of-day mix stays realistic.
+  const DEMO_HABIT_POOL = {
+    morning: [
+      { text: "Morning run",       type: "Physical", importance: "Non-Negotiable", target: 30, unitLabel: "min",  increment: 10 },
+      { text: "Meditate",          type: "Mental",   importance: "Important" },
+      { text: "Yoga flow",         type: "Physical", importance: "Important",      target: 20, unitLabel: "min",  increment: 5  },
+      { text: "Morning journal",   type: "Mental",   importance: "Additive" },
+      { text: "Take vitamins",     type: "Physical", importance: "Important" },
+      { text: "Sunlight exposure", type: "Physical", importance: "Additive" },
+      { text: "Cold shower",       type: "Physical", importance: "Additive" },
+      { text: "Morning stretch",   type: "Physical", importance: "Additive",       target: 10, unitLabel: "min",  increment: 5  }
+    ],
+    afternoon: [
+      { text: "Gym workout",       type: "Physical", importance: "Non-Negotiable", target: 45, unitLabel: "min",  increment: 15 },
+      { text: "Drink water",       type: "Physical", importance: "Important",      target: 8,  unitLabel: "cups", increment: 1  },
+      { text: "Spanish practice",  type: "Mental",   importance: "Additive",       target: 15, unitLabel: "min",  increment: 5  },
+      { text: "Walk outside",      type: "Physical", importance: "Important" },
+      { text: "Deep work block",   type: "Career",   importance: "Non-Negotiable", target: 90, unitLabel: "min",  increment: 30 },
+      { text: "Review day's tasks",type: "Career",   importance: "Important" }
+    ],
+    evening: [
+      { text: "Read before bed",   type: "Mental",   importance: "Important",      target: 20, unitLabel: "min",  increment: 5  },
+      { text: "Evening walk",      type: "Physical", importance: "Additive" },
+      { text: "Stretch routine",   type: "Physical", importance: "Additive",       target: 10, unitLabel: "min",  increment: 5  },
+      { text: "Call a friend",     type: "Social",   importance: "Additive" },
+      { text: "Plan tomorrow",     type: "Career",   importance: "Important" },
+      { text: "Piano practice",    type: "Creative", importance: "Additive",       target: 20, unitLabel: "min",  increment: 5  },
+      { text: "Gratitude journal", type: "Spiritual",importance: "Important" }
+    ],
+    avoid: [
+      { text: "No phone before bed",    type: "Mental",   importance: "Important" },
+      { text: "No added sugar",         type: "Physical", importance: "Important" },
+      { text: "No social media scroll", type: "Mental",   importance: "Additive"  },
+      { text: "No alcohol weeknights",  type: "Physical", importance: "Important" },
+      { text: "No late-night snacks",   type: "Physical", importance: "Important" },
+      { text: "No caffeine after 2pm",  type: "Physical", importance: "Important" }
+    ]
+  };
+  const DEMO_GOAL_POOL = [
+    { text: "Run a half-marathon this year",    type: "Physical",  smart: { specific: "Finish 21km in one continuous effort", measurable: "21", measurableUnit: "km",    achievable: "Building from 5k; +10%/wk",        relevant: "Cardio + mental resilience",    timebound: "2026-10-15" } },
+    { text: "Read 24 books in 12 months",       type: "Mental",    smart: { specific: "Finish 24 books across fiction + non-fic", measurable: "24", measurableUnit: "books", achievable: "~2/month, 20 min/day",           relevant: "Keep learning + thinking sharp", timebound: "2026-12-31" } },
+    { text: "Save $10,000 emergency fund",      type: "Career",    smart: { specific: "3-month fully funded emergency buffer", measurable: "10000", measurableUnit: "USD",  achievable: "~$850/mo auto-transfer",           relevant: "Financial stability",           timebound: "2026-12-31" } },
+    { text: "Learn conversational Spanish",     type: "Mental",    smart: { specific: "Hold a 10-min conversation on everyday topics", measurable: "B1", measurableUnit: "level", achievable: "15 min/day + 1 tutor/wk", relevant: "Travel + culture",              timebound: "2027-03-01" } },
+    { text: "Meditate 90 consecutive days",     type: "Spiritual", smart: { specific: "Daily 10-min sit, no gaps",              measurable: "90",  measurableUnit: "days",  achievable: "Stack to morning coffee",          relevant: "Stress + focus",                timebound: "2026-09-30" } },
+    { text: "Launch side project v1",           type: "Career",    smart: { specific: "Ship v1 to public",                      measurable: "1",   measurableUnit: "launch",achievable: "2 hrs/weeknight + weekends",       relevant: "Revenue + portfolio",           timebound: "2026-11-01" } },
+    { text: "Gain 10 lbs of muscle",            type: "Physical",  smart: { specific: "Add lean mass while holding body fat",   measurable: "10",  measurableUnit: "lbs",   achievable: "4x/wk gym + calorie surplus",      relevant: "Strength + metabolic health",   timebound: "2026-12-31" } },
+    { text: "Travel to 3 new countries",        type: "Social",    smart: { specific: "Visit 3 countries I've never been to",   measurable: "3",   measurableUnit: "countries", achievable: "PTO + off-peak flights",      relevant: "Perspective + stories",         timebound: "2026-12-31" } }
+  ];
+  const DEMO_TODO_POOL = [
+    { text: "Book dentist appointment",     dueIn: 7  },
+    { text: "Renew passport",               dueIn: 30 },
+    { text: "Call mom" },
+    { text: "Buy birthday gift",            dueIn: 3  },
+    { text: "Schedule annual checkup",      dueIn: 14 },
+    { text: "Research running shoes" },
+    { text: "Plan weekend trip",            dueIn: 14 },
+    { text: "Update resume" },
+    { text: "Review subscription services", dueIn: 10 },
+    { text: "Meal prep Sunday",             dueIn: 5  },
+    { text: "Pick up dry cleaning",         dueIn: 2  },
+    { text: "Write thank-you note" },
+    { text: "Set up auto-payments" },
+    { text: "Donate old clothes" },
+    { text: "Register for local race",      dueIn: 21 },
+    { text: "Organize photo library" }
+  ];
+  // Custom-appearance showcase entries. Each persona gets ONE extra
+  // goal type + ONE extra importance level added to their doc — that's
+  // enough to prove the feature exists without drowning the default set.
+  const DEMO_CUSTOM_GOAL_TYPES = [
+    { value: "Adventure", color: "#06b6d4", bg: "#ecfeff", border: "#a5f3fc" },
+    { value: "Family",    color: "#be123c", bg: "#fff1f2", border: "#fecdd3" },
+    { value: "Learning",  color: "#4f46e5", bg: "#eef2ff", border: "#c7d2fe" },
+    { value: "Home",      color: "#059669", bg: "#ecfdf5", border: "#a7f3d0" }
+  ];
+  const DEMO_CUSTOM_IMPORTANCE = [
+    { value: "Daily Must", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
+    { value: "Flexible",   color: "#475569", bg: "#f1f5f9", border: "#cbd5e1" }
+  ];
+  // Per-persona profile. `rate(daysAgo)` returns the probability a
+  // habit was completed on that day — shape encodes the persona's
+  // character (morning-consistent = flat high, falling-off = high
+  // then crashes in recent days, etc.). The custom `accentColor` is
+  // written to localStorage on sign-in so each persona lands in
+  // custom-appearance mode with their own tint.
+  const DEMO_PROFILES = {
+    "morning-consistent": {
+      accentColor: "#ea580c",
+      aiTone: "encouraging",
+      habitCounts: { morning: 2, afternoon: 1, evening: 2, avoid: 1 },
+      goalCount: 2, todoCount: 3, dayCount: 14,
+      rate: () => 0.88,
+      morningHour: () => 6, xpBase: 500, xpSpread: 300
+    },
+    "falling-off": {
+      accentColor: "#d97706",
+      aiTone: "tough-love",
+      habitCounts: { morning: 1, afternoon: 1, evening: 1, avoid: 1 },
+      goalCount: 1, todoCount: 5, dayCount: 14,
+      rate: (d) => d <= 6 ? 0.28 : 0.88,
+      morningHour: () => 7, xpBase: 180, xpSpread: 200
+    },
+    "steady-average": {
+      accentColor: "#0ea5e9",
+      aiTone: "neutral",
+      habitCounts: { morning: 2, afternoon: 1, evening: 1, avoid: 1 },
+      goalCount: 1, todoCount: 4, dayCount: 14,
+      rate: () => 0.68,
+      morningHour: () => 7, xpBase: 240, xpSpread: 180
+    },
+    "brand-new": {
+      accentColor: "#9333ea",
+      aiTone: "encouraging",
+      habitCounts: { morning: 1, afternoon: 1, evening: 1, avoid: 0 },
+      goalCount: 1, todoCount: 2, dayCount: 14,
+      rate: (d) => d <= 4 ? 0.55 : 0,
+      morningHour: () => 8, xpBase: 30, xpSpread: 60
+    }
+  };
+  // Small RNG helpers, scoped to the demo code.
+  const demoRandInt = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+  const demoPad = (n) => String(n).padStart(2, "0");
+  const demoPickN = (arr, n) => {
+    const s = arr.slice();
+    // Fisher-Yates on a copy
+    for (let i = s.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [s[i], s[j]] = [s[j], s[i]];
+    }
+    return s.slice(0, Math.min(n, s.length));
+  };
+  const demoPickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  // Build a fresh full Firestore doc for the persona, with randomized
+  // habits / goals / todos + 2 weeks of completion history matching the
+  // persona's shape. `_seedAccent` is stripped by signInAsDemoUser
+  // before the doc is written; it's only there to ferry the accent
+  // color from this pure function to the side-effect-ful sign-in path.
+  const buildRandomDemoDoc = (recipe) => {
+    const profile = DEMO_PROFILES[recipe];
+    if (!profile) return null;
     const today = new Date(); today.setHours(12, 0, 0, 0);
-    const days = Array.from({ length: 21 }, (_, i) => {
+    // Newest → oldest so index 0 is "today".
+    const days = Array.from({ length: profile.dayCount }, (_, i) => {
       const d = new Date(today); d.setDate(today.getDate() - i); return dk(d);
     });
-    if (recipe === "morning-consistent") {
-      const h = [
-        buildDemoHabit(101, "Morning Run", "morning", "Physical", "Non-Negotiable", { target: 30, unitLabel: "min", increment: 10 }),
-        buildDemoHabit(102, "Meditate", "morning", "Mental", "Important", { _order: 1 }),
-        buildDemoHabit(103, "Read before bed", "evening", "Mental", "Important"),
-        buildDemoHabit(104, "Drink Water", "afternoon", "Physical", "Additive", { target: 8, unitLabel: "cups", increment: 1 })
-      ];
-      for (let i = 0; i < 14; i++) {
-        const k = days[i];
-        const runEarly = i < 12;
-        if (runEarly) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "06:30"; h[0].completionUnits[k] = 30; }
-        if (i < 13) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "07:10"; }
-        if (runEarly && i !== 4 && i !== 8) { h[2].completions[k] = "done"; h[2].completionTimes[k] = "22:00"; }
-        const cups = (i % 7 < 2) ? 8 : 5 + (i % 3);
-        h[3].completionUnits[k] = cups; h[3].completionTimes[k] = "21:00";
-        if (cups >= 8) h[3].completions[k] = "done";
+    // ── Habits ──
+    let habitId = Date.now();
+    let order = 0;
+    const habits = [];
+    for (const section of ["morning", "afternoon", "evening", "avoid"]) {
+      const n = profile.habitCounts[section] || 0;
+      for (const p of demoPickN(DEMO_HABIT_POOL[section], n)) {
+        habits.push({
+          id: habitId++,
+          text: p.text, section, type: p.type, importance: p.importance,
+          frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+          completions: {}, completionTimes: {}, completionUnits: {},
+          notes: null, duration: null, goalId: null, location: "both",
+          icon: null, startDate: null,
+          target: p.target || null, unitLabel: p.unitLabel || null, increment: p.increment || null,
+          _order: order++
+        });
       }
-      return {
-        habits: h,
-        goals: [{ id: 201, text: "Complete a half-marathon", type: "Physical",
-          smart: { specific: "Finish an official half-marathon race", measurable: "42", measurableUnit: "km", achievable: "Currently running 20km/week", relevant: "Long-term cardio fitness goal", timebound: "2026-08-15" },
-          completed: false, _order: 0 }],
-        xp: 620, aiTone: "encouraging"
-      };
     }
-    if (recipe === "falling-off") {
-      const h = [
-        buildDemoHabit(111, "Gym workout", "afternoon", "Physical", "Important", { target: 45, unitLabel: "min", increment: 15 }),
-        buildDemoHabit(112, "Journal", "evening", "Mental", "Additive"),
-        buildDemoHabit(113, "Skip sugar", "avoid", "Physical", "Important")
-      ];
-      for (let i = 0; i < 14; i++) {
-        const k = days[i];
-        const oldWeek = i >= 7;
-        if (oldWeek) {
-          h[0].completions[k] = "done"; h[0].completionTimes[k] = "17:00"; h[0].completionUnits[k] = 45;
-          h[1].completions[k] = "done"; h[1].completionTimes[k] = "22:30";
-          if (i !== 10) { h[2].completions[k] = "done"; h[2].completionTimes[k] = "20:00"; }
-        } else {
-          if (i === 0 || i === 2) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "21:30"; h[0].completionUnits[k] = 45; }
-          else if (i === 4) { h[0].completions[k] = "missed"; h[0].completionTimes[k] = "23:00"; }
-          else if (i === 5) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "22:00"; h[0].completionUnits[k] = 45; }
-          if (i === 1) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "23:30"; }
-          if (i === 3) { h[2].completions[k] = "missed"; h[2].completionTimes[k] = "14:00"; }
+    // ── Goals ──
+    const goals = demoPickN(DEMO_GOAL_POOL, profile.goalCount).map((g, i) => ({
+      id: habitId + 100 + i,
+      text: g.text, type: g.type, smart: g.smart,
+      completed: false, _order: i
+    }));
+    // Link ~60% of habits to a random goal so progress rolls up.
+    if (goals.length > 0) {
+      for (const h of habits) {
+        if (Math.random() < 0.6) h.goalId = demoPickOne(goals).id;
+      }
+    }
+    // ── Completions ──
+    const mH = profile.morningHour();
+    for (const h of habits) {
+      for (let d = 0; d < days.length; d++) {
+        if (Math.random() >= profile.rate(d)) continue;
+        const k = days[d];
+        let hr;
+        if (h.section === "morning") hr = mH + demoRandInt(0, 2);
+        else if (h.section === "afternoon") hr = 12 + demoRandInt(0, 5);
+        else if (h.section === "evening") hr = 18 + demoRandInt(0, 4);
+        else hr = 20 + demoRandInt(0, 3); // avoid — bedtime-ish
+        h.completions[k] = "done";
+        h.completionTimes[k] = demoPad(hr) + ":" + demoPad(demoRandInt(0, 55));
+        if (h.target) {
+          // Hit target ±1 increment most days, occasionally under.
+          const jitter = (h.increment || 1);
+          const miss = Math.random() < 0.25;
+          const v = miss ? Math.max(jitter, h.target - jitter * demoRandInt(1, 2))
+                         : h.target + (Math.random() < 0.3 ? jitter : 0);
+          h.completionUnits[k] = Math.max(jitter, Math.round(v));
         }
       }
-      return {
-        habits: h,
-        goals: [{ id: 211, text: "Get back to 3 gym sessions a week", type: "Physical", smart: {}, completed: false, _order: 0 }],
-        xp: 240, aiTone: "tough-love"
-      };
     }
-    if (recipe === "steady-average") {
-      const h = [
-        buildDemoHabit(121, "Morning stretch", "morning", "Physical", "Additive"),
-        buildDemoHabit(122, "Read for 20 min", "evening", "Mental", "Important", { target: 20, unitLabel: "min", increment: 5 }),
-        buildDemoHabit(123, "Walk outside", "afternoon", "Physical", "Important"),
-        buildDemoHabit(124, "Call a friend", "evening", "Social", "Additive", { _order: 1 })
-      ];
-      for (let i = 0; i < 14; i++) {
-        const k = days[i];
-        if (i % 3 !== 0) { h[0].completions[k] = "done"; h[0].completionTimes[k] = "07:30"; }
-        if (i % 2 === 0) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "21:00"; h[1].completionUnits[k] = 20; }
-        if (i % 4 !== 3) { h[2].completions[k] = "done"; h[2].completionTimes[k] = "13:00"; }
-        if (i % 5 === 0) { h[3].completions[k] = "done"; h[3].completionTimes[k] = "19:00"; }
-      }
-      return {
-        habits: h,
-        goals: [{ id: 221, text: "Read 12 books this year", type: "Mental", smart: {}, completed: false, _order: 0 }],
-        xp: 310, aiTone: "neutral"
-      };
-    }
-    // brand-new
-    const h = [
-      buildDemoHabit(131, "Drink water", "morning", "Physical", "Important", { target: 8, unitLabel: "cups", increment: 1 }),
-      buildDemoHabit(132, "Go outside", "afternoon", "Physical", "Additive")
-    ];
-    for (let i = 0; i < 3; i++) {
-      const k = days[i];
-      h[0].completionUnits[k] = 3 + i; h[0].completionTimes[k] = "10:00";
-      if (i === 0) { h[1].completions[k] = "done"; h[1].completionTimes[k] = "14:00"; }
-    }
-    return { habits: h, goals: [], xp: 30, aiTone: "neutral" };
-  };
-  const buildDemoFullDoc = (recipe) => {
-    const seed = buildDemoSeed(recipe);
-    const dayCount = recipe === "brand-new" ? 3 : 14;
-    const now = new Date(); now.setHours(12, 0, 0, 0);
-    const visits = Array.from({ length: dayCount }, (_, i) => {
-      const d = new Date(now); d.setDate(now.getDate() - i); return dk(d);
-    });
+    // ── Todos ──
+    const todos = demoPickN(DEMO_TODO_POOL, profile.todoCount).map((t, i) => ({
+      id: habitId + 200 + i,
+      text: t.text,
+      done: Math.random() < 0.2,
+      dueDate: t.dueIn ? dk(new Date(today.getTime() + t.dueIn * 86400000)) : "",
+      goalId: goals.length > 0 && Math.random() < 0.35 ? demoPickOne(goals).id : null,
+      notes: "",
+      _order: i
+    }));
+    // ── Day visits — chronological oldest→newest ──
+    const visits = days.slice().reverse();
     return {
-      habits: seed.habits,
-      goals: seed.goals || [],
-      todos: [], journal: [], quotes: [], archive: [], goalArchive: [],
-      customGoalTypes: [], customImportance: [], customSections: [],
+      habits,
+      goals,
+      todos,
+      journal: [], quotes: [], archive: [], goalArchive: [],
+      customGoalTypes: [demoPickOne(DEMO_CUSTOM_GOAL_TYPES)],
+      customImportance: [demoPickOne(DEMO_CUSTOM_IMPORTANCE)],
+      customSections: [],
       dayVisits: visits,
-      bestStreaks: {}, achievementsUnlocked: {},
-      xp: seed.xp || 0,
+      bestStreaks: {},
+      achievementsUnlocked: {},
+      xp: profile.xpBase + demoRandInt(0, profile.xpSpread),
       dailyRitual: {},
       homeLocation: "", travelDays: [],
-      celebratedFirstGoal: (seed.goals || []).length > 0,
-      celebratedFirstHabit: (seed.habits || []).length > 0,
+      celebratedFirstGoal: goals.length > 0,
+      celebratedFirstHabit: habits.length > 0,
       onboardingComplete: true,
       sortPrefs: { habits: "default", goals: "default", todos: "default" },
-      aiTone: seed.aiTone || "neutral",
+      aiTone: profile.aiTone,
       homeCoords: null, locationOptIn: false, notifyOptIn: false,
       signupAt: Date.now(),
       reviewPrompt: { dismissedDays: [] },
       featureAccess: {},
+      _seedAccent: profile.accentColor,
       _updatedAt: Date.now()
     };
+  };
+  // Shared path: build the persona's fresh seed, flip on the custom
+  // appearance mode + accent color (localStorage, so it's device-local
+  // and any real account signing in next will overwrite these), then
+  // write the doc to Firestore. Called from BOTH the sign-in-succeeded
+  // and create-account-then-seed branches below so first-time-tap and
+  // repeat-tap behavior match exactly.
+  const seedDemoPersona = async (email) => {
+    const persona = DEMO_PERSONAS[email];
+    if (!persona || !auth.currentUser) return;
+    const seeded = buildRandomDemoDoc(persona.recipe);
+    if (!seeded) return;
+    const accent = seeded._seedAccent || "#2d5a2d";
+    try {
+      localStorage.setItem("v-settings-mode", "custom");
+      localStorage.setItem("v-accent-color", accent);
+      setSettingsMode("custom");
+      setAccentColor(accent);
+    } catch (e) {}
+    delete seeded._seedAccent;
+    // Write the seed directly via the SDK rather than through save() —
+    // save() depends on React state that hasn't landed yet right after
+    // auth flips. onSnapshot picks it up and flows into `data` on the
+    // next tick.
+    await userDoc(auth.currentUser.uid).set(seeded);
   };
   const signInAsDemoUser = async (email) => {
     setAuthErr("");
@@ -3010,6 +3147,11 @@ function App() {
     if (demoMode) setDemoMode(false);
     try {
       await auth.signInWithEmailAndPassword(email, DEMO_PASSWORD);
+      // Re-seed with fresh randomized data on every tap — the personas
+      // are explicit demo accounts, and the value of tapping them is
+      // seeing a variety of content. Users who want durable state should
+      // create a real account.
+      await seedDemoPersona(email);
     } catch (e) {
       const msg = String(e && e.message || "");
       const code = String(e && e.code || "");
@@ -3028,20 +3170,9 @@ function App() {
         setAuthBusy(false);
         return;
       }
-      // Account doesn't exist — create it and seed Firestore inline
-      // so the buttons Just Work without the user running the Node
-      // seed script first.
       try {
         await auth.createUserWithEmailAndPassword(email, DEMO_PASSWORD);
-        const persona = DEMO_PERSONAS[email];
-        if (persona && auth.currentUser) {
-          const seeded = buildDemoFullDoc(persona.recipe);
-          // Write the seed directly via the SDK rather than through
-          // save() — save() depends on React state that hasn't landed
-          // yet right after auth flips. onSnapshot picks it up and
-          // flows into `data` normally on the next tick.
-          await userDoc(auth.currentUser.uid).set(seeded);
-        }
+        await seedDemoPersona(email);
       } catch (e2) {
         setAuthErr(String(e2 && e2.message || "").replace("Firebase: ", "") || "Could not create demo account.");
       }
