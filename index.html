@@ -2965,6 +2965,38 @@ function App() {
     { value: "Daily Must", color: "#b91c1c", bg: "#fef2f2", border: "#fecaca" },
     { value: "Flexible",   color: "#475569", bg: "#f1f5f9", border: "#cbd5e1" }
   ];
+  // Journal-entry pool — short realistic reflections spanning the tags
+  // the Inspiration tab supports (general / reflection / gratitude /
+  // wins / challenges / ideas / feelings / learning). The randomizer
+  // picks a subset per persona, backdated across the history window so
+  // entries show up on the calendar view AND on the "entries today"
+  // card in the home ritual.
+  const DEMO_JOURNAL_POOL = [
+    { text: "Hit my morning run even with cold rain. Momentum > mood.", mood: "Energized", tag: "wins" },
+    { text: "Grateful for the quiet hour before the house wakes up.",   mood: "Grateful",  tag: "gratitude" },
+    { text: "Caught myself scrolling instead of reading. Phone goes in the drawer tomorrow.", mood: "Focused",  tag: "reflection" },
+    { text: "Idea: stack Spanish flashcards onto the post-lunch walk.", mood: "Curious",   tag: "ideas" },
+    { text: "Tough gym session — legs were jelly but showed up anyway.", mood: "Proud",     tag: "wins" },
+    { text: "Skipped meditation 3 days running. Re-committing tomorrow morning.", mood: "Frustrated", tag: "challenges" },
+    { text: "Noticed I read better when coffee comes AFTER the first 20 min, not before.", mood: "Focused", tag: "learning" },
+    { text: "Feeling stretched thin. Need to cut something — maybe evening email.", mood: "Tired", tag: "feelings" },
+    { text: "Great dinner with mom. Keep doing this monthly, not just when I remember.", mood: "Warm", tag: "gratitude" },
+    { text: "Realized my best deep-work is 9–11am. Blocking it on the calendar.", mood: "Clear", tag: "learning" },
+    { text: "Payday week — funneled savings transfer before the spending brain woke up.", mood: "Proud", tag: "wins" },
+    { text: "Sitting with the disappointment of missing the weekly long run.", mood: "Reflective", tag: "feelings" }
+  ];
+  // Seeded custom quotes pool so the Inspiration > Quotes tab has
+  // content on a fresh demo profile. `custom:true` at write time
+  // marks these as user-owned (editable / deletable) vs. collection
+  // quotes baked into the app.
+  const DEMO_QUOTES_POOL = [
+    { text: "Discipline is choosing between what you want now and what you want most.",           author: "Abraham Lincoln" },
+    { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.",        author: "Will Durant"     },
+    { text: "You do not rise to the level of your goals. You fall to the level of your systems.", author: "James Clear"     },
+    { text: "The secret of your future is hidden in your daily routine.",                         author: "Mike Murdock"    },
+    { text: "Small daily improvements are the key to staggering long-term results.",              author: "Robin Sharma"    },
+    { text: "Motion beats meditation when meditation becomes procrastination.",                   author: ""                }
+  ];
   // Per-persona profile. `rate(daysAgo)` returns the probability a
   // habit was completed on that day — shape encodes the persona's
   // character (morning-consistent = flat high, falling-off = high
@@ -2972,37 +3004,52 @@ function App() {
   // written to localStorage on sign-in so each persona lands in
   // custom-appearance mode with their own tint.
   const DEMO_PROFILES = {
+    // Heavy, deeply-populated profile — the "what the app looks like
+    // after months of use" showcase. Large history window so the Month
+    // tab of Routine Compare, Habit Reports charts, and the streak/XP
+    // views all have rich material.
     "morning-consistent": {
       accentColor: "#ea580c",
       aiTone: "encouraging",
-      habitCounts: { morning: 2, afternoon: 1, evening: 2, avoid: 1 },
-      goalCount: 2, todoCount: 3, dayCount: 14,
+      habitCounts: { morning: 6, afternoon: 5, evening: 5, avoid: 4 },
+      goalCount: 5, todoCount: 10, dayCount: 42,
+      archivedGoals: 3, archivedTodos: 6, journalEntries: 10, customQuotes: 4,
       rate: () => 0.88,
-      morningHour: () => 6, xpBase: 500, xpSpread: 300
+      morningHour: () => 6, xpBase: 1400, xpSpread: 400
     },
+    // Mid-volume profile with a collapse pattern — enough history to
+    // visibly show the slip in charts, enough breadth to surface the
+    // "pieces you were keeping up with" contrast.
     "falling-off": {
       accentColor: "#d97706",
       aiTone: "tough-love",
-      habitCounts: { morning: 1, afternoon: 1, evening: 1, avoid: 1 },
-      goalCount: 1, todoCount: 5, dayCount: 14,
+      habitCounts: { morning: 4, afternoon: 4, evening: 4, avoid: 3 },
+      goalCount: 4, todoCount: 9, dayCount: 35,
+      archivedGoals: 2, archivedTodos: 5, journalEntries: 7, customQuotes: 3,
       rate: (d) => d <= 6 ? 0.28 : 0.88,
-      morningHour: () => 7, xpBase: 180, xpSpread: 200
+      morningHour: () => 7, xpBase: 620, xpSpread: 200
     },
+    // Balanced, "typical engaged user" profile.
     "steady-average": {
       accentColor: "#0ea5e9",
       aiTone: "neutral",
-      habitCounts: { morning: 2, afternoon: 1, evening: 1, avoid: 1 },
-      goalCount: 1, todoCount: 4, dayCount: 14,
+      habitCounts: { morning: 5, afternoon: 4, evening: 4, avoid: 3 },
+      goalCount: 4, todoCount: 8, dayCount: 28,
+      archivedGoals: 2, archivedTodos: 4, journalEntries: 6, customQuotes: 3,
       rate: () => 0.68,
-      morningHour: () => 7, xpBase: 240, xpSpread: 180
+      morningHour: () => 7, xpBase: 540, xpSpread: 180
     },
+    // Smallest profile — but still meaningfully populated (a new user
+    // who's been active for ~3 weeks), so every page has SOMETHING to
+    // inspect without overwhelming the "just started" framing.
     "brand-new": {
       accentColor: "#9333ea",
       aiTone: "encouraging",
-      habitCounts: { morning: 1, afternoon: 1, evening: 1, avoid: 0 },
-      goalCount: 1, todoCount: 2, dayCount: 14,
-      rate: (d) => d <= 4 ? 0.55 : 0,
-      morningHour: () => 8, xpBase: 30, xpSpread: 60
+      habitCounts: { morning: 3, afternoon: 3, evening: 3, avoid: 2 },
+      goalCount: 2, todoCount: 5, dayCount: 21,
+      archivedGoals: 1, archivedTodos: 2, journalEntries: 4, customQuotes: 2,
+      rate: (d) => d <= 10 ? 0.55 : 0,
+      morningHour: () => 8, xpBase: 160, xpSpread: 80
     }
   };
   // Small RNG helpers, scoped to the demo code.
@@ -3032,16 +3079,35 @@ function App() {
       const d = new Date(today); d.setDate(today.getDate() - i); return dk(d);
     });
     // ── Habits ──
+    // Frequency variety matters: if every habit were "daily", the
+    // Routine Compare view's "Differs by weekday" bucket would always
+    // be empty. Roughly ~25% get a non-daily cadence so the month +
+    // week tabs actually have contrast to show.
     let habitId = Date.now();
     let order = 0;
     const habits = [];
     for (const section of ["morning", "afternoon", "evening", "avoid"]) {
       const n = profile.habitCounts[section] || 0;
       for (const p of demoPickN(DEMO_HABIT_POOL[section], n)) {
+        // Avoid-section stays daily — "no phone before bed" on only
+        // some weekdays wouldn't read right. For the others, sprinkle
+        // weekday-subset and weekly cadences.
+        let frequency = { type: "daily", days: [], day: null, monthDay: 1, month: 0 };
+        if (section !== "avoid") {
+          const roll = Math.random();
+          if (roll < 0.18) {
+            // Weekday-subset (e.g. Mon/Wed/Fri gym split).
+            const subset = demoPickN([1, 2, 3, 4, 5], 2 + demoRandInt(0, 2));
+            frequency = { type: "weekdays", days: subset.sort((a, b) => a - b), day: null, monthDay: 1, month: 0 };
+          } else if (roll < 0.28) {
+            // Weekly on a specific weekday (e.g. Sunday long-run).
+            frequency = { type: "weekly", days: [], day: demoRandInt(0, 6), monthDay: 1, month: 0 };
+          }
+        }
         habits.push({
           id: habitId++,
           text: p.text, section, type: p.type, importance: p.importance,
-          frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+          frequency,
           completions: {}, completionTimes: {}, completionUnits: {},
           notes: null, duration: null, goalId: null, location: "both",
           icon: null, startDate: null,
@@ -3051,23 +3117,47 @@ function App() {
       }
     }
     // ── Goals ──
-    const goals = demoPickN(DEMO_GOAL_POOL, profile.goalCount).map((g, i) => ({
+    // Pick enough goals for BOTH the active list and the archive in
+    // one shuffle so no goal is duplicated across the two buckets.
+    const archivedGoalCount = profile.archivedGoals || 0;
+    const goalShuffle = demoPickN(DEMO_GOAL_POOL, profile.goalCount + archivedGoalCount);
+    const goals = goalShuffle.slice(0, profile.goalCount).map((g, i) => ({
       id: habitId + 100 + i,
       text: g.text, type: g.type, smart: g.smart,
       completed: false, _order: i
     }));
-    // Link ~60% of habits to a random goal so progress rolls up.
+    // Link every habit whose roll hits 60% — but FORCE each goal to
+    // have at least one habit linked so the "link-per-goal" achievement
+    // has a fair path to unlock and the rollups aren't empty.
     if (goals.length > 0) {
       for (const h of habits) {
         if (Math.random() < 0.6) h.goalId = demoPickOne(goals).id;
       }
+      // Ensure at least one habit per goal.
+      const hasHabit = new Set(habits.filter(h => h.goalId != null).map(h => h.goalId));
+      for (const g of goals) {
+        if (hasHabit.has(g.id)) continue;
+        const candidate = habits[demoRandInt(0, habits.length - 1)];
+        if (candidate) candidate.goalId = g.id;
+      }
     }
     // ── Completions ──
+    // Respect each habit's frequency so schedule-vs-completion lines
+    // up (otherwise a "weekly" Sunday habit would have Mon-Fri done
+    // marks, which is nonsensical).
+    const dayOfWeek = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d).getDay(); };
     const mH = profile.morningHour();
     for (const h of habits) {
       for (let d = 0; d < days.length; d++) {
-        if (Math.random() >= profile.rate(d)) continue;
         const k = days[d];
+        const dow = dayOfWeek(k);
+        const fq = h.frequency || {};
+        const eligible =
+          fq.type === "weekdays" ? (fq.days || []).includes(dow) :
+          fq.type === "weekly"   ? (fq.day == null ? 1 : fq.day) === dow :
+          true; // daily
+        if (!eligible) continue;
+        if (Math.random() >= profile.rate(d)) continue;
         let hr;
         if (h.section === "morning") hr = mH + demoRandInt(0, 2);
         else if (h.section === "afternoon") hr = 12 + demoRandInt(0, 5);
@@ -3086,7 +3176,11 @@ function App() {
       }
     }
     // ── Todos ──
-    const todos = demoPickN(DEMO_TODO_POOL, profile.todoCount).map((t, i) => ({
+    // Over-sample from the pool so we can split into active + archive
+    // (archived todos live in data.archive with a done:true flag).
+    const archivedTodoCount = profile.archivedTodos || 0;
+    const todoShuffle = demoPickN(DEMO_TODO_POOL, profile.todoCount + archivedTodoCount);
+    const todos = todoShuffle.slice(0, profile.todoCount).map((t, i) => ({
       id: habitId + 200 + i,
       text: t.text,
       done: Math.random() < 0.2,
@@ -3095,15 +3189,77 @@ function App() {
       notes: "",
       _order: i
     }));
+    // ── Archive (completed goals + completed todos) ──
+    // Completed goals land in goalArchive with archivedAt + completedDate
+    // so Goal History renders entries with real dates. completedDate
+    // uses a random day within the persona's history window.
+    const goalArchive = goalShuffle.slice(profile.goalCount).map((g, i) => {
+      const ageDays = demoRandInt(2, Math.max(3, profile.dayCount - 1));
+      const completedAt = new Date(today.getTime() - ageDays * 86400000);
+      return {
+        id: habitId + 300 + i,
+        text: g.text, type: g.type, smart: g.smart,
+        completed: true,
+        archivedAt: completedAt.toISOString(),
+        completedDate: dk(completedAt),
+        _order: i
+      };
+    });
+    // Archived (completed) todos feed the "Completed (N)" section on
+    // the Tasks tab and the history-type flows.
+    const archive = todoShuffle.slice(profile.todoCount).map((t, i) => {
+      const ageDays = demoRandInt(1, Math.max(2, Math.floor(profile.dayCount / 2)));
+      const archivedAt = new Date(today.getTime() - ageDays * 86400000);
+      return {
+        id: habitId + 400 + i,
+        text: t.text,
+        done: true,
+        dueDate: "",
+        goalId: null,
+        notes: "",
+        archivedAt: archivedAt.toISOString(),
+        _order: i
+      };
+    });
+    // ── Journal entries ──
+    // Backdate across the history window so the calendar + Inspiration
+    // views show entries scattered over time instead of everything
+    // stamped "today". Tag mix is already varied by the pool.
+    const journalSeeds = demoPickN(DEMO_JOURNAL_POOL, profile.journalEntries || 0);
+    const journal = journalSeeds.map((j, i) => {
+      const ageDays = demoRandInt(0, Math.max(1, profile.dayCount - 1));
+      const at = new Date(today.getTime() - ageDays * 86400000);
+      return {
+        id: habitId + 500 + i,
+        text: j.text,
+        mood: j.mood,
+        tag: j.tag,
+        timestamp: at.toISOString(),
+        dateKey: dk(at)
+      };
+    });
+    // ── Custom quotes ──
+    const quoteSeeds = demoPickN(DEMO_QUOTES_POOL, profile.customQuotes || 0);
+    const quotes = quoteSeeds.map((q, i) => ({
+      id: habitId + 600 + i,
+      text: q.text,
+      author: q.author,
+      dateKey: dk(new Date(today.getTime() - demoRandInt(0, profile.dayCount) * 86400000)),
+      custom: true
+    }));
     // ── Day visits — chronological oldest→newest ──
     const visits = days.slice().reverse();
     return {
       habits,
       goals,
       todos,
-      journal: [], quotes: [], archive: [], goalArchive: [],
-      customGoalTypes: [demoPickOne(DEMO_CUSTOM_GOAL_TYPES)],
-      customImportance: [demoPickOne(DEMO_CUSTOM_IMPORTANCE)],
+      journal, quotes, archive, goalArchive,
+      // Seed TWO custom goal types + BOTH custom importance levels so
+      // the Profile > Settings preview of user-added options isn't
+      // one-entry-thin. Picks are deterministic enough for demo purposes
+      // (random across types, but always two of them).
+      customGoalTypes: demoPickN(DEMO_CUSTOM_GOAL_TYPES, 2),
+      customImportance: DEMO_CUSTOM_IMPORTANCE.slice(),
       customSections: [],
       dayVisits: visits,
       bestStreaks: {},
@@ -3678,9 +3834,12 @@ function App() {
   const [reorderDraft, setReorderDraft] = useState([]);
   // Which page's sort menu is open: "habits" | "goals" | "todos" | null
   const [openSortMenu, setOpenSortMenu] = useState(null);
-  // Routine-view modal: null = closed, else the current tab shape
-  // ("day" | "week" | "month").
-  const [routineView, setRoutineView] = useState(null);
+  // Routine-view tab selection. Was originally a modal (null = closed)
+  // but the Routine Compare view now lives inline inside the Profile's
+  // My Routines section, so this just tracks the active tab shape
+  // ("week" | "month"). Defaults to "week" so the panel always renders
+  // a valid tab when opened. Legacy "day" collapses to "week" downstream.
+  const [routineView, setRoutineView] = useState("week");
   // Ref-flag that lets the section-header's short-click path know a
   // long-press just fired so it doesn't also toggle the collapse.
   const sectionLongPressRef = useRef({ timer: null, fired: false });
@@ -9834,7 +9993,10 @@ function App() {
             WebkitTapHighlightColor: "transparent", userSelect: "none"
           }
         },
-          "Frequency",
+          // Shortened from "Frequency" → "Freq" so the Time / Priority /
+          // Goal / Freq / Duration filter pills all fit on a single row
+          // without wrapping on narrow viewports.
+          "Freq",
           count > 0 && /*#__PURE__*/React.createElement("span", {
             style: { background: "#1d4ed8", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
           }, count),
@@ -14766,26 +14928,124 @@ function App() {
           );
         }))
     );
-    // My Routines — dedicated top-level Profile section that surfaces
-    // the Routine Compare view (week vs month common-vs-different habit
-    // cadence). Previously lived buried in App Settings; promoting it to
-    // its own nav slot makes the feature discoverable and reflects its
-    // status as a core analytics tool rather than an app-configuration
-    // setting. The heavy lift (the actual compare view) still lives
-    // elsewhere — this panel is just the entry point + one-line pitch.
-    const myRoutinesPanel = /*#__PURE__*/React.createElement("div", null,
-      sectionTitle("My Routines"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5, marginBottom: 14 }
-      }, "See which habits repeat every day of the week vs only on certain days, and which hit every week of the month vs only certain weeks."),
-      /*#__PURE__*/React.createElement("button", {
-        onClick: () => { setShowProfile(false); setTimeout(() => setRoutineView("week"), 250); },
-        style: { width: "100%", background: "#2d5a2d", border: "none", borderRadius: 10, padding: "12px 14px", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer", marginBottom: 10 }
-      }, "Open Routine Compare"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 11, color: "#9ca3af", lineHeight: 1.5 }
-      }, "Tip: the week view highlights habits that are part of your daily baseline, while the month view surfaces habits tied to specific weeks (e.g. pay-week errands, first-Monday reviews).")
-    );
+    // My Routines — dedicated top-level Profile section that renders
+    // the Routine Compare view inline (week vs month common-vs-different
+    // habit cadence). Previously this panel was just a launcher that
+    // closed Profile and opened a standalone modal; the user asked for
+    // it to live within the Profile page, so the full compare UI now
+    // renders here. The helpers (tabBtn / habitChip / sectionHeader /
+    // renderWeekTab / renderMonthTab) were lifted verbatim from the
+    // old modal — no analytical change, just a container swap.
+    const myRoutinesPanel = (() => {
+      const DOW_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+      const hs = (data.habits || []).filter(h => h && h.section !== "avoid");
+      const tabBtn = (val, label) => /*#__PURE__*/React.createElement("button", {
+        key: val, type: "button",
+        onClick: () => setRoutineView(val),
+        style: {
+          flex: 1, minHeight: 36, padding: "7px 10px", borderRadius: 8,
+          border: "1px solid " + (routineView === val ? "#2d5a2d" : "var(--c-border)"),
+          background: routineView === val ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+          color: routineView === val ? "#2d5a2d" : "#6b7280",
+          fontSize: 12, fontWeight: routineView === val ? 700 : 500,
+          cursor: "pointer"
+        }
+      }, label);
+      const habitChip = (h, meta) => /*#__PURE__*/React.createElement("div", {
+        key: h.id,
+        style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, minHeight: 34 }
+      },
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } },
+          h.icon ? h.icon + " " : "", h.text),
+        meta ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, flexShrink: 0 } }, meta) : null
+      );
+      const rcSectionHeader = (title, count, color) => /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 16, marginBottom: 6 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: color || "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.35 } }, title),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", fontWeight: 500 } }, count + (count === 1 ? " habit" : " habits"))
+      );
+      const renderWeekTab = () => {
+        const eligibleOn = (h, dow) => {
+          const fq = getFreq(h);
+          if (fq.type === "daily") return true;
+          if (fq.type === "weekdays") return (fq.days || []).includes(dow);
+          if (fq.type === "weekly") return (fq.day == null ? 1 : fq.day) === dow;
+          return false;
+        };
+        const common = [], differing = [];
+        for (const h of hs) {
+          const days = [0,1,2,3,4,5,6].filter(d => eligibleOn(h, d));
+          if (days.length === 7) common.push(h);
+          else if (days.length >= 1) differing.push({ h, days });
+        }
+        return /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5 } },
+            "Comparing the habit cadence across all 7 weekdays."),
+          rcSectionHeader("Common — every day", common.length),
+          common.length
+            ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, common.map(h => habitChip(h, "Daily")))
+            : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — no habits fire every day."),
+          rcSectionHeader("Differs by weekday", differing.length, "#b45309"),
+          differing.length
+            ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
+                differing.map(({h, days}) => habitChip(h, days.map(d => DOW_LABELS[d].slice(0,1)).join("")))
+              )
+            : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — your weekly habits all repeat daily.")
+        );
+      };
+      const renderMonthTab = () => {
+        const today = new Date(); today.setHours(12, 0, 0, 0);
+        const first = new Date(today.getFullYear(), today.getMonth(), 1);
+        const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        const weeks = [];
+        const cursor = new Date(first);
+        while (cursor <= last) {
+          const weekStart = new Date(cursor);
+          const wBuckets = [];
+          for (let d = 0; d < 7; d++) {
+            if (cursor <= last && cursor.getMonth() === first.getMonth()) wBuckets.push(dk(cursor));
+            cursor.setDate(cursor.getDate() + 1);
+          }
+          if (wBuckets.length) weeks.push({ start: weekStart, keys: wBuckets });
+        }
+        const common = [], differing = [];
+        for (const h of hs) {
+          const comps = h.completions || {};
+          const hits = weeks.map(w => w.keys.some(k => comps[k] === "done"));
+          const nonZero = hits.filter(Boolean).length;
+          if (nonZero === 0) continue;
+          if (nonZero === weeks.length) common.push(h);
+          else differing.push({ h, hits });
+        }
+        const weekLabel = (i, hits) => hits.map((hit, idx) => hit ? "W" + (idx + 1) : "·").join(" ");
+        return /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5 } },
+            "Comparing which habits landed each week of ", /*#__PURE__*/React.createElement("strong", null, first.toLocaleDateString(undefined, { month: "long" })), " — ", weeks.length, " week", weeks.length === 1 ? "" : "s", " so far."),
+          rcSectionHeader("Common — every week", common.length),
+          common.length
+            ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, common.map(h => habitChip(h, weeks.map((_, i) => "W" + (i+1)).join(" "))))
+            : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — no habits hit every week this month."),
+          rcSectionHeader("Only certain weeks", differing.length, "#b45309"),
+          differing.length
+            ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
+                differing.map(({h, hits}) => habitChip(h, weekLabel(h.id, hits)))
+              )
+            : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — everything you logged hit every week.")
+        );
+      };
+      return /*#__PURE__*/React.createElement("div", null,
+        sectionTitle("My Routines"),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5, marginBottom: 12 }
+        }, "See which habits repeat every day of the week vs only on certain days, and which hit every week of the month vs only certain weeks."),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
+          tabBtn("week",  "Week"),
+          tabBtn("month", "Month")
+        ),
+        routineView === "month" ? renderMonthTab() : renderWeekTab()
+      );
+    })();
     const historyPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("Goal History"),
       (data.goalArchive || []).length === 0 ? /*#__PURE__*/React.createElement("div", {
@@ -16033,165 +16293,12 @@ function App() {
   //    pref and closes the sheet. "Edit custom order…" (goals / todos
   //    only) opens the reorder modal.
   renderSortSheet(),
-  // ── Routine view ──
-  //    Bottom-sheet that lets the user browse their habit schedule
-  //    by day (single weekday), week (Mon-Sun grid), or month
-  //    (monthly/quarterly/annual). Daily habits are shown on every
-  //    weekday; type=weekly is shown on its anchor day; type=weekdays
-  //    is shown on its selected days; month-frequency habits surface
-  //    on the month tab.
-  routineView && (() => {
-    // Routine Compare — surfaces which habits repeat uniformly across
-    // the chosen window vs which only show up in a subset of its slots.
-    //   Week tab:  "Common to every weekday" vs "Differs by weekday"
-    //   Month tab: "Every week this month"    vs "Only certain weeks"
-    // The Day view is gone — it was redundant with the Habits tab's
-    // today-centric default. The pill that used to live on the Habits
-    // filter row also moved here (Profile → App Settings → Routine
-    // Compare) so the filter row stays focused on filters.
-    const DOW_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-    const hs = (data.habits || []).filter(h => h && h.section !== "avoid");
-    const close = () => setRoutineView(null);
-    const tabBtn = (val, label) => /*#__PURE__*/React.createElement("button", {
-      key: val, type: "button",
-      onClick: () => setRoutineView(val),
-      style: {
-        flex: 1, minHeight: 36, padding: "7px 10px", borderRadius: 8,
-        border: "1px solid " + (routineView === val ? "#2d5a2d" : "var(--c-border)"),
-        background: routineView === val ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
-        color: routineView === val ? "#2d5a2d" : "#6b7280",
-        fontSize: 12, fontWeight: routineView === val ? 700 : 500,
-        cursor: "pointer"
-      }
-    }, label);
-    // Compact habit chip with optional right-side meta (e.g. which
-    // weekdays the habit fires, frequency cadence label).
-    const habitChip = (h, meta) => /*#__PURE__*/React.createElement("div", {
-      key: h.id,
-      style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, minHeight: 34 }
-    },
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } },
-        h.icon ? h.icon + " " : "", h.text),
-      meta ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, flexShrink: 0 } }, meta) : null
-    );
-    const sectionHeader = (title, count, color) => /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 16, marginBottom: 6 }
-    },
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: color || "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.35 } }, title),
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", fontWeight: 500 } }, count + (count === 1 ? " habit" : " habits"))
-    );
-    // Week tab: which habits occur on EVERY weekday (common) vs a
-    // subset (differing). Use the habit's scheduled frequency, not
-    // just observed completions — the point is to compare intended
-    // routine shape, not adherence.
-    const renderWeekTab = () => {
-      const eligibleOn = (h, dow) => {
-        const fq = getFreq(h);
-        if (fq.type === "daily") return true;
-        if (fq.type === "weekdays") return (fq.days || []).includes(dow);
-        if (fq.type === "weekly") return (fq.day == null ? 1 : fq.day) === dow;
-        return false;
-      };
-      const common = [], differing = [];
-      for (const h of hs) {
-        const days = [0,1,2,3,4,5,6].filter(d => eligibleOn(h, d));
-        if (days.length === 7) common.push(h);
-        else if (days.length >= 1) differing.push({ h, days });
-      }
-      return /*#__PURE__*/React.createElement("div", null,
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5 } },
-          "Comparing the habit cadence across all 7 weekdays."),
-        sectionHeader("Common — every day", common.length),
-        common.length
-          ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, common.map(h => habitChip(h, "Daily")))
-          : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — no habits fire every day."),
-        sectionHeader("Differs by weekday", differing.length, "#b45309"),
-        differing.length
-          ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
-              differing.map(({h, days}) => habitChip(h, days.map(d => DOW_LABELS[d].slice(0,1)).join("")))
-            )
-          : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — your weekly habits all repeat daily.")
-      );
-    };
-    // Month tab: for each active habit, did it fire in EVERY ISO
-    // week of the current calendar month (common) vs only some
-    // weeks (differing)? Uses observed completions, so the tab
-    // surfaces actual adherence patterns instead of scheduled
-    // cadence alone.
-    const renderMonthTab = () => {
-      const today = new Date(); today.setHours(12, 0, 0, 0);
-      const first = new Date(today.getFullYear(), today.getMonth(), 1);
-      const last = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      // Build week-buckets (Mon-anchored) within the month. Each
-      // bucket holds the date-keys that belong to that calendar week.
-      const weeks = [];
-      const cursor = new Date(first);
-      while (cursor <= last) {
-        const weekStart = new Date(cursor);
-        const wBuckets = [];
-        for (let d = 0; d < 7; d++) {
-          if (cursor <= last && cursor.getMonth() === first.getMonth()) wBuckets.push(dk(cursor));
-          cursor.setDate(cursor.getDate() + 1);
-        }
-        if (wBuckets.length) weeks.push({ start: weekStart, keys: wBuckets });
-      }
-      const common = [], differing = [];
-      for (const h of hs) {
-        const comps = h.completions || {};
-        const hits = weeks.map(w => w.keys.some(k => comps[k] === "done"));
-        const nonZero = hits.filter(Boolean).length;
-        if (nonZero === 0) continue;
-        if (nonZero === weeks.length) common.push(h);
-        else differing.push({ h, hits });
-      }
-      const weekLabel = (i, hits) => hits.map((hit, idx) => hit ? "W" + (idx + 1) : "·").join(" ");
-      return /*#__PURE__*/React.createElement("div", null,
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", lineHeight: 1.5 } },
-          "Comparing which habits landed each week of ", /*#__PURE__*/React.createElement("strong", null, first.toLocaleDateString(undefined, { month: "long" })), " — ", weeks.length, " week", weeks.length === 1 ? "" : "s", " so far."),
-        sectionHeader("Common — every week", common.length),
-        common.length
-          ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, common.map(h => habitChip(h, weeks.map((_, i) => "W" + (i+1)).join(" "))))
-          : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — no habits hit every week this month."),
-        sectionHeader("Only certain weeks", differing.length, "#b45309"),
-        differing.length
-          ? /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
-              differing.map(({h, hits}) => habitChip(h, weekLabel(h.id, hits)))
-            )
-          : /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", padding: "8px 2px" } }, "None — everything you logged hit every week.")
-      );
-    };
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-label": "Routine compare",
-      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 310, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-      onClick: e => { if (e.target === e.currentTarget) close(); }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        className: "fade-in",
-        style: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "18px 16px 22px", width: "100%", maxWidth: 520, maxHeight: "82vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
-      },
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
-          /*#__PURE__*/React.createElement("div", null,
-            /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)" } }, "Routine Compare"),
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, "What's common across the window vs what differs")
-          ),
-          /*#__PURE__*/React.createElement("button", {
-            type: "button", onClick: close, "aria-label": "Close",
-            style: { background: "none", border: "none", fontSize: 22, color: "#9ca3af", cursor: "pointer", lineHeight: 1, padding: 4 }
-          }, "×")
-        ),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
-          tabBtn("week",  "Week"),
-          tabBtn("month", "Month")
-        ),
-        routineView === "week"  ? renderWeekTab()  :
-        routineView === "month" ? renderMonthTab() :
-          // Legacy "day" value (from an older pref) collapses to Week.
-          renderWeekTab()
-      )
-    );
-  })(),
+  // ── Routine Compare now lives INLINE inside the Profile's My
+  //    Routines section (see `myRoutinesPanel` above). The standalone
+  //    bottom-sheet modal that used to render here has been removed.
+  //    The `routineView` state survives as a Week/Month tab selector
+  //    for the inline view — see the useState initializer near the top
+  //    of the component.
   // ── Time-entry modal for habit completion. Opened by a slow swipe
   //    (dwelling briefly before release) or long-press on a habit
   //    card. "Log now" is the default action so the common case stays
