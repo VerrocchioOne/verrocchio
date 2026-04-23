@@ -8327,14 +8327,64 @@ function App() {
       // habit that was missing its area / importance / schedule, which
       // read as the card closing on the user by accident.
       onKeyDown: e => { if (e.key === "Enter") e.preventDefault(); },
-      placeholder: "Habit name...",
+      // Inviting example to match the goal form's "e.g. Run a half-
+      // marathon" — a concrete action beats a bare "Habit name".
+      placeholder: "e.g. Run for 30 minutes",
       "data-tour-id": "habit-name",
       style: {
         ...IS,
         width: "100%",
-        marginBottom: 8
+        marginBottom: 4
       }
-    }), /*#__PURE__*/React.createElement("div", {
+    }),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 11, color: "#6b7280", marginBottom: 8 }
+    }, "Keep it concrete and short."), 
+    /*#__PURE__*/React.createElement("select", {
+      value: nHGoal,
+      onChange: e => {
+        if (e.target.value === "__new__") {
+          sNHGoal("");
+          setTab("goals");
+        } else {
+          const v = e.target.value;
+          sNHGoal(v);
+          // Auto-sync the habit's Area of Life to the linked goal's
+          // area so the two never drift. Clearing the link leaves the
+          // current area alone — the user can then pick any bucket.
+          if (v) {
+            const g = data.goals.find(x => String(x.id) === String(v));
+            if (g && g.type) sNHType(g.type);
+          }
+        }
+      },
+      "data-tour-id": "habit-goal",
+      style: {
+        ...S,
+        width: "100%",
+        marginBottom: 8,
+        color: nHGoal ? "#2d5a2d" : "#9ca3af"
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "\uD83C\uDFAF Link to a Goal (optional)"), /*#__PURE__*/React.createElement("option", {
+      value: "__new__"
+    }, "\uFF0B Create a new goal first"), HT.map(ht => {
+      const tg = data.goals.filter(g => g.type === ht.value);
+      if (!tg.length) return null;
+      return /*#__PURE__*/React.createElement("optgroup", {
+        key: ht.value,
+        label: ht.value
+      }, tg.map(g => /*#__PURE__*/React.createElement("option", {
+        key: g.id,
+        value: g.id
+      }, g.text)));
+    }), data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("optgroup", {
+      label: "General"
+    }, data.goals.filter(g => !g.type).map(g => /*#__PURE__*/React.createElement("option", {
+      key: g.id,
+      value: g.id
+    }, g.text)))),/*#__PURE__*/React.createElement("div", {
       "data-tour-id": "habit-timing",
       style: {
         display: "flex",
@@ -8418,51 +8468,7 @@ function App() {
     /*#__PURE__*/React.createElement("div", {
       "data-tour-id": "habit-schedule"
     }, renderFreqPicker(nHFreq, sNHFreq, nHStart, sNHStart)),
-    /*#__PURE__*/React.createElement("select", {
-      value: nHGoal,
-      onChange: e => {
-        if (e.target.value === "__new__") {
-          sNHGoal("");
-          setTab("goals");
-        } else {
-          const v = e.target.value;
-          sNHGoal(v);
-          // Auto-sync the habit's Area of Life to the linked goal's
-          // area so the two never drift. Clearing the link leaves the
-          // current area alone — the user can then pick any bucket.
-          if (v) {
-            const g = data.goals.find(x => String(x.id) === String(v));
-            if (g && g.type) sNHType(g.type);
-          }
-        }
-      },
-      "data-tour-id": "habit-goal",
-      style: {
-        ...S,
-        width: "100%",
-        marginBottom: 8,
-        color: nHGoal ? "#2d5a2d" : "#9ca3af"
-      }
-    }, /*#__PURE__*/React.createElement("option", {
-      value: ""
-    }, "\uD83C\uDFAF Link to a Goal (optional)"), /*#__PURE__*/React.createElement("option", {
-      value: "__new__"
-    }, "\uFF0B Create a new goal first"), HT.map(ht => {
-      const tg = data.goals.filter(g => g.type === ht.value);
-      if (!tg.length) return null;
-      return /*#__PURE__*/React.createElement("optgroup", {
-        key: ht.value,
-        label: ht.value
-      }, tg.map(g => /*#__PURE__*/React.createElement("option", {
-        key: g.id,
-        value: g.id
-      }, g.text)));
-    }), data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("optgroup", {
-      label: "General"
-    }, data.goals.filter(g => !g.type).map(g => /*#__PURE__*/React.createElement("option", {
-      key: g.id,
-      value: g.id
-    }, g.text)))), /*#__PURE__*/React.createElement("textarea", {
+/*#__PURE__*/React.createElement("textarea", {
       value: nHNotes,
       onChange: e => sNHNotes(e.target.value),
       placeholder: "Sub-components / notes \u2014 e.g. Sit-ups \xB7 Planks \xB7 Leg raises",
