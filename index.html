@@ -1992,6 +1992,372 @@ function getLast14(h) {
     };
   });
 }
+
+/* ── Habit visual helpers ─────────────────────────────────────────
+   All pure input→SVG functions used across habit cards, stats
+   modal, achievement shelf, and the Habits tab. Kept here (rather
+   than inside the main component) so the JSX factories are easy to
+   reason about and reusable — none of them need component state.
+   They use React.createElement directly so they can be invoked
+   from anywhere renderable. */
+
+// 14-day sparkline — tiny green-on-grey bar+line chart representing
+// the last two weeks. Done days draw a 2px bar + a connecting line
+// through the tops; missed/empty days leave a faint tick. Width is
+// configurable because it sits next to other card chrome and may
+// need to shrink on narrow cards.
+function Sparkline14({ habit, width = 72, height = 14, color = "#2d5a2d" }) {
+  const l14 = getLast14(habit);
+  const n = l14.length;
+  const step = width / n;
+  const top = 2, bot = height - 2;
+  const pts = l14.map((d, i) => [i * step + step / 2, d.done ? top : bot]);
+  const pathD = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  return React.createElement("svg", {
+    width, height, viewBox: `0 0 ${width} ${height}`, "aria-hidden": true,
+    style: { display: "block", flexShrink: 0 }
+  },
+    // Faint baseline
+    React.createElement("line", { x1: 0, y1: bot + 0.5, x2: width, y2: bot + 0.5, stroke: "#e5e7eb", strokeWidth: 1 }),
+    // Connecting line through day tops
+    React.createElement("path", { d: pathD, stroke: color, strokeWidth: 1.2, fill: "none", opacity: 0.55, strokeLinejoin: "round" }),
+    // Dots: filled on done days, empty ring on missed/empty
+    ...l14.map((d, i) => React.createElement("circle", {
+      key: i,
+      cx: (i * step + step / 2).toFixed(1),
+      cy: d.done ? top : bot,
+      r: d.done ? 1.6 : 1.1,
+      fill: d.done ? color : "#fff",
+      stroke: d.done ? color : "#d1d5db",
+      strokeWidth: 0.8
+    }))
+  );
+}
+
+// 7-day dot strip aligned to the current calendar week (Sun→Sat).
+// Cells: done = green solid, missed = red solid, today (not done
+// or missed yet) = green ring, future = grey ring, past-empty = grey ring.
+// Sits beneath the habit title as a glance-able weekly cadence.
+function WeekDots({ habit, size = 7, gap = 3 }) {
+  const today = new Date();
+  const dow = today.getDay(); // 0=Sun
+  // Build the 7 calendar dates for this week starting Sunday.
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - dow + i);
+    const k = d.toISOString().split("T")[0];
+    const isFuture = i > dow;
+    const isToday = i === dow;
+    const state = habit.completions?.[k];
+    days.push({ k, isFuture, isToday, state });
+  }
+  return React.createElement("div", {
+    style: { display: "flex", alignItems: "center", gap, flexShrink: 0 },
+    "aria-hidden": true
+  }, ...days.map((d, i) => {
+    let bg = "transparent", border = "#e5e7eb";
+    if (d.state === "done") { bg = "#22c55e"; border = "#22c55e"; }
+    else if (d.state === "missed") { bg = "#ef4444"; border = "#ef4444"; }
+    else if (d.isToday) { border = "#2d5a2d"; }
+    else if (d.isFuture) { border = "#f3f4f6"; }
+    return React.createElement("div", {
+      key: i,
+      style: {
+        width: size, height: size, borderRadius: "50%",
+        background: bg, border: `1px solid ${border}`,
+        boxSizing: "border-box"
+      }
+    });
+  }));
+}
+
+// Streak-chain glyph — replaces the emoji `🔥 N` pill with a row of
+// stylized flame SVGs that grow as the streak grows. Up to 5 are
+// drawn; after that we show `5+ · N` so the count still reads. Cold
+// state shows frosted "broken-link" glyphs with the days-since count.
+function StreakChain({ streak, cold }) {
+  if (streak > 0) {
+    const shown = Math.min(streak, 5);
+    // Flame colors ramp from amber → orange → red as the streak grows.
+    const hot = streak >= 30 ? "#dc2626" : streak >= 7 ? "#ea580c" : "#f59e0b";
+    return React.createElement("div", {
+      style: {
+        height: 16, display: "flex", alignItems: "center", gap: 1,
+        paddingLeft: 3, paddingRight: 5, background: "#fff7ed",
+        border: "1px solid #fed7aa", borderRadius: 4, flexShrink: 0
+      }
+    },
+      ...Array.from({ length: shown }, (_, i) => React.createElement("svg", {
+        key: i, width: 7, height: 10, viewBox: "0 0 7 10", "aria-hidden": true
+      },
+        React.createElement("path", {
+          d: "M3.5 0.5 C 5 2 6 3.5 6 5.5 C 6 7.8 4.8 9.3 3.5 9.3 C 2.2 9.3 1 7.8 1 5.5 C 1 4.2 1.8 3 3.5 0.5 Z",
+          fill: hot, opacity: 0.55 + (i / Math.max(shown - 1, 1)) * 0.45
+        })
+      )),
+      React.createElement("span", {
+        style: { fontSize: 8, fontWeight: 700, color: "#c2410c", marginLeft: 2 }
+      }, streak > 5 ? "\u00B7 " + streak : streak)
+    );
+  }
+  if (cold != null) {
+    return React.createElement("div", {
+      style: {
+        height: 16, display: "flex", alignItems: "center", gap: 2,
+        paddingLeft: 4, paddingRight: 5, background: "#eff6ff",
+        border: "1px solid #bfdbfe", borderRadius: 4, flexShrink: 0
+      }
+    },
+      React.createElement("svg", {
+        width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": true
+      },
+        // Broken chain — two small links with a gap
+        React.createElement("circle", { cx: 3, cy: 5, r: 1.8, fill: "none", stroke: "#3b82f6", strokeWidth: 1.2 }),
+        React.createElement("circle", { cx: 7, cy: 5, r: 1.8, fill: "none", stroke: "#3b82f6", strokeWidth: 1.2, opacity: 0.5 }),
+        React.createElement("line", { x1: 4.5, y1: 5, x2: 5.5, y2: 5, stroke: "#3b82f6", strokeWidth: 1.2, opacity: 0.35 })
+      ),
+      React.createElement("span", { style: { fontSize: 8, fontWeight: 700, color: "#1d4ed8" } }, cold)
+    );
+  }
+  return null;
+}
+
+// SproutAvatar — a tiny growth glyph that evolves with streak
+// milestones. 0 = seed, 3 = sprout, 7 = sapling, 30 = small tree,
+// 100 = laurel wreath. Feeds the "Verrocchio growth" brand so habits
+// carry a sense of accrual beyond the numeric streak.
+function SproutAvatar({ streak, size = 18 }) {
+  const GREEN = "#2d5a2d", SOFT = "#86b686";
+  const stage = streak >= 100 ? 4 : streak >= 30 ? 3 : streak >= 7 ? 2 : streak >= 3 ? 1 : 0;
+  const common = { width: size, height: size, viewBox: "0 0 18 18", "aria-hidden": true, style: { display: "block", flexShrink: 0 } };
+  if (stage === 0) {
+    // Seed — a single dot on soil
+    return React.createElement("svg", common,
+      React.createElement("ellipse", { cx: 9, cy: 15, rx: 5.5, ry: 1.2, fill: SOFT, opacity: 0.45 }),
+      React.createElement("circle", { cx: 9, cy: 13, r: 1.5, fill: "#8b5a2b" })
+    );
+  }
+  if (stage === 1) {
+    // Sprout — seed + a single curl
+    return React.createElement("svg", common,
+      React.createElement("ellipse", { cx: 9, cy: 15, rx: 5.5, ry: 1.2, fill: SOFT, opacity: 0.45 }),
+      React.createElement("path", { d: "M9 14 Q 9 10 6 8", stroke: GREEN, strokeWidth: 1.6, strokeLinecap: "round", fill: "none" }),
+      React.createElement("ellipse", { cx: 5.5, cy: 7.5, rx: 2, ry: 1.2, fill: GREEN, transform: "rotate(-30 5.5 7.5)" })
+    );
+  }
+  if (stage === 2) {
+    // Sapling — Y-shape with two leaves
+    return React.createElement("svg", common,
+      React.createElement("ellipse", { cx: 9, cy: 16, rx: 6, ry: 1.2, fill: SOFT, opacity: 0.45 }),
+      React.createElement("line", { x1: 9, y1: 15, x2: 9, y2: 7, stroke: GREEN, strokeWidth: 1.6, strokeLinecap: "round" }),
+      React.createElement("ellipse", { cx: 6, cy: 7, rx: 2.6, ry: 1.4, fill: GREEN, transform: "rotate(-30 6 7)" }),
+      React.createElement("ellipse", { cx: 12, cy: 7, rx: 2.6, ry: 1.4, fill: GREEN, transform: "rotate(30 12 7)" })
+    );
+  }
+  if (stage === 3) {
+    // Small tree — trunk + canopy
+    return React.createElement("svg", common,
+      React.createElement("ellipse", { cx: 9, cy: 16, rx: 6, ry: 1.2, fill: SOFT, opacity: 0.45 }),
+      React.createElement("rect", { x: 8, y: 10, width: 2, height: 6, rx: 0.5, fill: "#8b5a2b" }),
+      React.createElement("circle", { cx: 9, cy: 7.5, r: 5, fill: GREEN }),
+      React.createElement("circle", { cx: 6.5, cy: 6, r: 1, fill: "#fff", opacity: 0.25 })
+    );
+  }
+  // Laurel — two curved branches of leaves
+  return React.createElement("svg", common,
+    ...[-1, 1].map(side => React.createElement("g", { key: side, transform: `translate(9 9) scale(${side} 1)` },
+      React.createElement("path", { d: "M 0 6 C -5 3 -6 -2 -4 -6", stroke: GREEN, strokeWidth: 1.2, fill: "none" }),
+      ...[0, 1, 2, 3].map(i => React.createElement("ellipse", {
+        key: i, cx: -2 - i * 0.6, cy: 4 - i * 2.2,
+        rx: 1.6, ry: 0.9, fill: GREEN,
+        transform: `rotate(${-40 - i * 10} ${-2 - i * 0.6} ${4 - i * 2.2})`
+      }))
+    )),
+    React.createElement("circle", { cx: 9, cy: 9, r: 2.2, fill: "#fde68a", stroke: GREEN, strokeWidth: 1 })
+  );
+}
+
+// Momentum arrow — ▲ / ▼ / ▬ based on the delta between the last 7
+// days and the prior 7 days of completion. `value` optional (shown
+// as a percent delta if provided). Compact; lives next to a habit's
+// completion rate in the stats modal.
+function MomentumArrow({ habit }) {
+  const now = new Date();
+  const days = (offset, count) => {
+    let c = 0;
+    for (let i = offset; i < offset + count; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      if (habit.completions?.[d.toISOString().split("T")[0]] === "done") c++;
+    }
+    return c;
+  };
+  const recent = days(0, 7);
+  const prior = days(7, 7);
+  const delta = recent - prior;
+  const glyph = delta > 0 ? "\u25B2" : delta < 0 ? "\u25BC" : "\u2192";
+  const color = delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#9ca3af";
+  return React.createElement("span", {
+    title: `Last 7d: ${recent} · Prior 7d: ${prior}`,
+    style: { fontSize: 9, fontWeight: 700, color, marginLeft: 4 }
+  }, glyph, delta !== 0 ? " " + Math.abs(delta) : "");
+}
+
+// Year-heatmap — GitHub-style 7-row grid showing ~365 days of
+// completion for a single habit. Cells are 6px, intensity is
+// green for done. Rendered in the stats modal as a collapsible
+// per-habit drill-down.
+function YearHeatmap({ habit, cellSize = 7, gap = 2 }) {
+  const today = new Date();
+  const cells = [];
+  // Align the grid so the current week ends on today's column.
+  const daysBack = 7 * 26 + today.getDay(); // 26 weeks back, aligned to current DOW
+  for (let i = daysBack; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const k = d.toISOString().split("T")[0];
+    const state = habit.completions?.[k];
+    cells.push({ k, state });
+  }
+  // Lay out as 7 rows × N columns. First cell goes in row = DOW of earliest date.
+  const firstDow = new Date(cells[0].k + "T12:00:00").getDay();
+  const total = cells.length;
+  const cols = Math.ceil((firstDow + total) / 7);
+  const w = cols * (cellSize + gap);
+  const h = 7 * (cellSize + gap);
+  return React.createElement("svg", {
+    width: w, height: h, viewBox: `0 0 ${w} ${h}`, "aria-hidden": true,
+    style: { display: "block" }
+  }, cells.map((c, i) => {
+    const idx = firstDow + i;
+    const col = Math.floor(idx / 7);
+    const row = idx % 7;
+    const fill = c.state === "done" ? "#22c55e"
+               : c.state === "missed" ? "#fca5a5"
+               : "#f1f5f9";
+    return React.createElement("rect", {
+      key: i,
+      x: col * (cellSize + gap),
+      y: row * (cellSize + gap),
+      width: cellSize,
+      height: cellSize,
+      rx: 1.4,
+      fill
+    });
+  }));
+}
+
+// Empty-state illustration for "No habits yet" screens. Same
+// language as the onboarding illus* components at ~L5110 —
+// Verrocchio green strokes, 56×56 viewport, gentle. A stack of
+// three habit rows with a pulse through them so the shelf reads
+// as "future state" rather than "error state."
+function IllusHabitsEmpty({ size = 84 }) {
+  const GREEN = "#2d5a2d";
+  return React.createElement("svg", {
+    width: size, height: size, viewBox: "0 0 56 56", "aria-hidden": true
+  },
+    // Three stacked habit-row cards
+    ...[0, 1, 2].map(i => React.createElement("g", { key: i, opacity: 1 - i * 0.2 },
+      React.createElement("rect", {
+        x: 8, y: 12 + i * 11, width: 40, height: 8, rx: 3,
+        fill: "none", stroke: GREEN, strokeWidth: 1.2
+      }),
+      React.createElement("circle", {
+        cx: 13, cy: 16 + i * 11, r: 2, fill: i === 0 ? GREEN : "none",
+        stroke: GREEN, strokeWidth: 1.2
+      }),
+      React.createElement("line", {
+        x1: 18, y1: 16 + i * 11, x2: 28 + i * 4, y2: 16 + i * 11,
+        stroke: GREEN, strokeWidth: 1, opacity: 0.55
+      })
+    ))
+  );
+}
+
+// ── Achievement badge SVG. Replaces the emoji icon on each shelf
+//    row with a unified tier-colored shield carrying a category
+//    glyph. Stays small (44px wrapper already exists at the call
+//    site) and reads cohesively — a row of emojis mixed with a
+//    few SVGs always looked inconsistent.
+function AchievementBadge({ cat, tier, size = 30 }) {
+  const tierCol = ({
+    Bronze: "#a16207", Silver: "#6b7280", Gold: "#d97706",
+    Platinum: "#0891b2", Diamond: "#7c3aed"
+  })[tier] || "#6b7280";
+  const glyph = (() => {
+    const common = { stroke: tierCol, strokeWidth: 1.6, fill: "none", strokeLinecap: "round", strokeLinejoin: "round" };
+    if (cat === "Dedication") {
+      return React.createElement("g", null,
+        React.createElement("path", Object.assign({ d: "M4 18 Q 14 6 24 18" }, common)),
+        React.createElement("line", Object.assign({ x1: 4, y1: 21, x2: 24, y2: 21 }, common)),
+        ...[9, 14, 19].map((x, i) => React.createElement("line", Object.assign({ key: i, x1: x, y1: 10 - (i === 1 ? 2 : 0), x2: x, y2: 5 - (i === 1 ? 2 : 0) }, common)))
+      );
+    }
+    if (cat === "Streaks") {
+      return React.createElement("path", Object.assign({
+        d: "M14 3 C 18 8 21 11 21 16 C 21 21 17 24 14 24 C 11 24 7 21 7 16 C 7 12 10 9 14 3 Z"
+      }, common, { fill: tierCol, fillOpacity: 0.18 }));
+    }
+    if (cat === "Achiever") {
+      return React.createElement("g", null,
+        React.createElement("circle", Object.assign({ cx: 14, cy: 14, r: 9 }, common)),
+        React.createElement("circle", Object.assign({ cx: 14, cy: 14, r: 5 }, common)),
+        React.createElement("circle", { cx: 14, cy: 14, r: 2, fill: tierCol })
+      );
+    }
+    if (cat === "Builder") {
+      return React.createElement("g", null,
+        React.createElement("rect", Object.assign({ x: 4, y: 18, width: 20, height: 5, rx: 0.8 }, common)),
+        React.createElement("rect", Object.assign({ x: 6, y: 12, width: 16, height: 5, rx: 0.8 }, common)),
+        React.createElement("rect", Object.assign({ x: 9, y: 6, width: 10, height: 5, rx: 0.8 }, common))
+      );
+    }
+    // XP
+    return React.createElement("path", Object.assign({
+      d: "M16 4 L 8 16 L 14 16 L 12 24 L 20 12 L 14 12 Z"
+    }, common, { fill: tierCol, fillOpacity: 0.22 }));
+  })();
+  return React.createElement("svg", {
+    width: size, height: size, viewBox: "0 0 28 28",
+    "aria-hidden": true, style: { display: "block" }
+  },
+    // Outer shield
+    React.createElement("path", {
+      d: "M14 2 L 24 5 L 24 14 C 24 20 19 25 14 26 C 9 25 4 20 4 14 L 4 5 Z",
+      fill: "#fff", stroke: tierCol, strokeWidth: 1.6
+    }),
+    glyph
+  );
+}
+
+// Weekly completion wave — a gentle area chart showing the last 14
+// days' per-day completion rate across ALL habits. Sits at the top
+// of the Habits tab. `rates` is an array of 14 numbers in [0,1].
+function CompletionWave({ rates, width = 300, height = 40 }) {
+  if (!rates || rates.length === 0) return null;
+  const n = rates.length;
+  const step = width / (n - 1);
+  const pts = rates.map((r, i) => [i * step, height - r * (height - 4) - 2]);
+  const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+  const area = line + ` L ${width} ${height} L 0 ${height} Z`;
+  return React.createElement("svg", {
+    width: "100%", height, viewBox: `0 0 ${width} ${height}`,
+    preserveAspectRatio: "none",
+    "aria-hidden": true,
+    style: { display: "block" }
+  },
+    React.createElement("defs", null,
+      React.createElement("linearGradient", { id: "waveG", x1: 0, y1: 0, x2: 0, y2: 1 },
+        React.createElement("stop", { offset: "0%", stopColor: "#2d5a2d", stopOpacity: 0.35 }),
+        React.createElement("stop", { offset: "100%", stopColor: "#2d5a2d", stopOpacity: 0.02 })
+      )
+    ),
+    React.createElement("path", { d: area, fill: "url(#waveG)" }),
+    React.createElement("path", { d: line, stroke: "#2d5a2d", strokeWidth: 1.2, fill: "none", strokeLinejoin: "round" })
+  );
+}
 const _dr = {
   from: null,
   over: null
@@ -2580,16 +2946,12 @@ function App() {
   // State values: null = modal closed, "confirm" = phase 1,
   // "hint" = phase 2 (replay location).
   const [confirmExitDemo, setConfirmExitDemo] = useState(null);
-  // Swipe-gesture tracking for the tour. Replaces explicit Back/Next
-  // buttons: swipe right-to-left = advance, left-to-right = back.
-  // Lives in a ref so re-renders mid-gesture don't reset the start point.
-  const tourSwipeRef = useRef({ x: 0, y: 0, t: 0, active: false });
   // advance() / goBack() are defined inside renderTour (they close over
-  // the current step/gate/form state), but the GLOBAL swipe listener
-  // below needs to call them from a useEffect at component scope. We
-  // keep them on refs so the effect can invoke the latest versions
-  // without re-binding listeners on every render. renderTour updates
-  // these refs each time it runs.
+  // the current step/gate/form state). Kept as component-scoped refs so
+  // any future programmatic nav hook (autoAdvance, keyboard shortcuts,
+  // etc.) can fire the latest versions without re-binding. The former
+  // document-level swipe listener was removed — the tour is entirely
+  // button-driven now.
   const tourAdvanceRef = useRef(null);
   const tourGoBackRef = useRef(null);
   // Timers kept alive across the auto-scroll-target-into-view effect
@@ -2805,14 +3167,69 @@ function App() {
     const gateBlocked = typeof step.gate === "function" && !step.gate(data);
     let primaryEl = null;
     let secondaryEl = null;
+    /* Stacking-context escape. Bumping the target to z-index 9999 only
+       works if its nearest positioned ancestor with a z-index doesn't
+       TRAP it inside a lower stacking context. Problem targets here:
+         • Sticky header  (<div className="lg" style={{position:"sticky",
+           zIndex:50}}>)  — holds date / calendar / travel / xp /
+           streak / profile buttons.
+         • Fixed bottom nav (<div className="lg" style={{position:"fixed",
+           zIndex:100}}>)   — holds Home / Goals / Habits / Reflect.
+       A child painted inside either of these stacking contexts cannot
+       rise above the z=9998 dim overlay no matter its own z-index —
+       the dim covers it and the spotlight ring vanishes. So on every
+       class toggle we walk up the parent chain, find any ancestor that
+       establishes a stacking context below 10000, stash its inline
+       z-index / position on dataset, and lift it above the dim. Cleanup
+       restores the originals so the normal app chrome sits back at its
+       proper paint order once the step changes. */
+    const STACKING_POS = { fixed: 1, sticky: 1, absolute: 1, relative: 1 };
+    const liftedAncestors = [];
+    const liftStack = (el) => {
+      if (!el) return;
+      let p = el.parentElement;
+      while (p && p !== document.body && p !== document.documentElement) {
+        const cs = window.getComputedStyle(p);
+        const pos = cs.position;
+        const zi = cs.zIndex;
+        // Only treat ancestors that ACTUALLY create a stacking context
+        // as traps. Positioned + numeric z-index is the common case; we
+        // also catch transform / filter / will-change containers because
+        // those create contexts regardless of position.
+        const hasCtx =
+          (STACKING_POS[pos] && zi !== "auto" && !isNaN(parseInt(zi, 10))) ||
+          (cs.transform && cs.transform !== "none") ||
+          (cs.filter && cs.filter !== "none") ||
+          (cs.willChange && /transform|filter|opacity/.test(cs.willChange)) ||
+          (parseFloat(cs.opacity) < 1);
+        if (hasCtx) {
+          // Only lift if the current paint level is actually below the
+          // dim — lifting already-above-dim layers is pointless and risks
+          // stacking issues with modals at higher z-indexes.
+          const num = parseInt(zi, 10);
+          if (isNaN(num) || num < 10000) {
+            p.dataset.tourPrevZIndex = p.style.zIndex || "";
+            p.dataset.tourPrevPosition = p.style.position || "";
+            if (pos === "static") p.style.position = "relative";
+            p.style.zIndex = "10000";
+            liftedAncestors.push(p);
+          }
+        }
+        p = p.parentElement;
+      }
+    };
     if (step.selector) {
       primaryEl = document.querySelector(step.selector);
-      if (primaryEl) primaryEl.classList.add("tour-target");
+      if (primaryEl) {
+        primaryEl.classList.add("tour-target");
+        liftStack(primaryEl);
+      }
     }
     if (step.extraSelector && !gateBlocked) {
       secondaryEl = document.querySelector(step.extraSelector);
       if (secondaryEl && secondaryEl !== primaryEl) {
         secondaryEl.classList.add("tour-target-secondary");
+        liftStack(secondaryEl);
       } else {
         secondaryEl = null;
       }
@@ -2820,6 +3237,14 @@ function App() {
     return () => {
       if (primaryEl) primaryEl.classList.remove("tour-target");
       if (secondaryEl) secondaryEl.classList.remove("tour-target-secondary");
+      liftedAncestors.forEach(p => {
+        p.style.zIndex = p.dataset.tourPrevZIndex || "";
+        if (p.dataset.tourPrevPosition !== undefined) {
+          p.style.position = p.dataset.tourPrevPosition;
+        }
+        delete p.dataset.tourPrevZIndex;
+        delete p.dataset.tourPrevPosition;
+      });
     };
   });
 
@@ -2943,68 +3368,17 @@ function App() {
     };
   }, [tourStep, goalsLen, habitsLen]);
 
-  /* Global swipe listener (document-level) — swiping anywhere on the
-     app during the tour advances / rewinds. The old listener only fired
-     on the tooltip + dim panels, but form-walkthrough steps turn off
-     pointer events on the panels so the user can interact with fields
-     underneath — which meant a swipe over the form itself didn't
-     register. Now any horizontal swipe that started somewhere non-
-     interactive (not an input/select/button/textarea) advances the
-     tour, regardless of whether it crossed the card, the spotlight
-     ring, or the app chrome.
-
-     Rules:
-       • 60px horizontal threshold + |dx| > |dy| clamp so vertical
-         scrolls and small taps don't count.
-       • Swipes that START on an input/select/textarea/button are
-         ignored — dragging to select text or scrubbing a slider
-         shouldn't flip the tour step.
-       • The Hold-to-Exit pill carries `data-no-swipe` so the long-
-         press gesture there isn't hijacked by the swipe tracker.
-       • Handlers call tourAdvanceRef/tourGoBackRef, which point at
-         the latest closures inside renderTour, so gate checks and
-         form-saves still run correctly. */
-  useEffect(() => {
-    if (tourStep === 0) return undefined;
-    const SWIPE_MIN = 60;
-    let startX = 0, startY = 0, tracking = false;
-    const ignoreTarget = (t) => {
-      if (!t || !t.closest) return false;
-      // Let the Hold-to-Exit button, inline form inputs, and any
-      // explicit opt-outs manage their own pointer events.
-      if (t.closest("[data-no-swipe='1'], .tour-exit-demo")) return true;
-      if (t.closest("input, select, textarea, button, [contenteditable='true']")) return true;
-      return false;
-    };
-    const onStart = (x, y, t) => {
-      if (ignoreTarget(t)) { tracking = false; return; }
-      startX = x; startY = y; tracking = true;
-    };
-    const onEnd = (x, y) => {
-      if (!tracking) return;
-      tracking = false;
-      const dx = x - startX;
-      const dy = y - startY;
-      if (Math.abs(dx) < SWIPE_MIN) return;
-      if (Math.abs(dx) < Math.abs(dy)) return;
-      if (dx < 0) { if (tourAdvanceRef.current) tourAdvanceRef.current(); }
-      else        { if (tourGoBackRef.current)  tourGoBackRef.current();  }
-    };
-    const ts = (e) => { const p = e.touches && e.touches[0]; if (p) onStart(p.clientX, p.clientY, e.target); };
-    const te = (e) => { const p = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]); if (p) onEnd(p.clientX, p.clientY); };
-    const md = (e) => onStart(e.clientX, e.clientY, e.target);
-    const mu = (e) => onEnd(e.clientX, e.clientY);
-    document.addEventListener("touchstart", ts, { passive: true });
-    document.addEventListener("touchend", te, { passive: true });
-    document.addEventListener("mousedown", md);
-    document.addEventListener("mouseup", mu);
-    return () => {
-      document.removeEventListener("touchstart", ts);
-      document.removeEventListener("touchend", te);
-      document.removeEventListener("mousedown", md);
-      document.removeEventListener("mouseup", mu);
-    };
-  }, [tourStep]);
+  /* Tour navigation is button-driven (see Back/Next in the tooltip
+     footer). The previous build tried swipe-anywhere-to-navigate and it
+     kept tripping over embedded form inputs, modal overlays, and the
+     inline goal/habit wizards — swipes that were meant as selection,
+     scroll, or mis-taps would flip the tour step. Explicit buttons are
+     discoverable, unambiguous, and work identically in the tour, the
+     onboarding, and in the underlying forms themselves. The
+     tourAdvanceRef / tourGoBackRef refs are still populated inside
+     renderTour for any future programmatic nav (autoAdvance on gate
+     pass uses setTourStep directly, not the refs), but no document-
+     level listener reads from them. */
 
   /* Auto-advance + DOM gate re-evaluation.
 
@@ -4964,47 +5338,26 @@ function App() {
       });
     };
 
-    /* Swipe nav for onboarding (mirrors the in-app tour):
-       swipe ← advances, swipe → goes back. The shell wires the handlers
-       onto the card so a swipe anywhere on the panel navigates. Form
-       widgets inside the children should spread `onbStopSwipe` to keep
-       text selection / typing from registering as swipes. */
-    const ONB_SWIPE_MIN = 45;
-    const onbSwipeStart = (x, y) => {
-      tourSwipeRef.current = { x, y, t: Date.now(), active: true };
-    };
-    const onbSwipeEnd = (x, y, onAdvance, onBack) => {
-      const s = tourSwipeRef.current;
-      if (!s || !s.active) return;
-      tourSwipeRef.current.active = false;
-      const dx = x - s.x;
-      const dy = y - s.y;
-      if (Math.abs(dx) < ONB_SWIPE_MIN) return;
-      if (Math.abs(dx) < Math.abs(dy)) return;
-      if (dx < 0 && onAdvance) onAdvance();
-      else if (dx > 0 && onBack) onBack();
-    };
-    const onbSwipeHandlers = (onAdvance, onBack) => ({
-      onTouchStart: e => {
-        const t = e.touches && e.touches[0];
-        if (t) onbSwipeStart(t.clientX, t.clientY);
-      },
-      onTouchEnd: e => {
-        const t = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]);
-        if (t) onbSwipeEnd(t.clientX, t.clientY, onAdvance, onBack);
-      },
-      onMouseDown: e => onbSwipeStart(e.clientX, e.clientY),
-      onMouseUp: e => onbSwipeEnd(e.clientX, e.clientY, onAdvance, onBack)
-    });
+    /* Onboarding navigates via explicit Back / Next buttons (see
+       `navButtons` below). Swipes were removed across the onboarding
+       AND the in-app tour because the gesture kept tripping over inline
+       forms, textareas, and inputs: selecting text dragged the step
+       back, scrolling on short viewports flipped the step forward. A
+       tap-to-advance model is discoverable, unambiguous, and the same
+       muscle memory as every other button in the app.
+       `onbStopSwipe` is kept as an inert shim so the one remaining
+       spread on the intent textarea doesn't have to be torn out — it
+       just stops propagation for touchstart/mousedown, a no-op for
+       button-driven nav but harmless. */
     const onbStopSwipe = {
       onTouchStart: e => e.stopPropagation(),
       onMouseDown: e => e.stopPropagation()
     };
 
     // Wider shell for the onboarding — form-heavy screens need more room.
-    // `swipe` is `{ onAdvance, onBack }` — when present the inner card
-    // becomes swipe-navigable.
-    const onbShell = (children, swipe) => React.createElement("div", {
+    // Navigation is button-driven (see the `navButtons` row inside each
+    // slide's children), so the shell no longer wires swipe handlers.
+    const onbShell = (children) => React.createElement("div", {
       style: {
         background: "linear-gradient(180deg, #f8f7f4 0%, #efece5 100%)",
         minHeight: "100vh",
@@ -5015,7 +5368,7 @@ function App() {
         padding: "24px 16px",
         fontFamily: "system-ui,-apple-system,sans-serif"
       }
-    }, React.createElement("div", Object.assign({
+    }, React.createElement("div", {
       className: "lg",
       style: {
         width: "100%",
@@ -5032,32 +5385,47 @@ function App() {
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.03), 0 18px 40px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.04)",
         padding: "24px 22px 20px",
         display: "flex",
-        flexDirection: "column",
-        touchAction: "pan-y",
-        userSelect: "none",
-        WebkitUserSelect: "none"
+        flexDirection: "column"
       }
-    }, swipe ? onbSwipeHandlers(swipe.onAdvance, swipe.onBack) : null), children));
+    }, children));
 
-    // Centered "← swipe →" hint, used in place of Continue / Back
-    // buttons on the three onboarding cards. The word "swipe" rocks
-    // side to side (CSS .swipe-hint .swipe-word) so users unfamiliar
-    // with swipe-nav register the affordance at a glance. `canBack`
-    // is kept as a signal even though we show both arrows either way —
-    // first slide still cues "swipe either direction, we'll handle it."
-    const swipeHint = (_canBack) => React.createElement("div", {
-      key: "swipehint",
+    // Onboarding nav row — explicit Back / Next buttons, same pattern as
+    // the in-app tour. Replaced the former "← swipe →" hint because
+    // swipe-to-nav was easy to trigger accidentally (selecting text in
+    // the intent textarea, scrolling on short viewports) and harder to
+    // discover than a button. `onBack` may be null for the first slide;
+    // we render an empty span in its place so Next stays right-aligned.
+    // `nextLabel` defaults to "Next" but the last pre-app screen passes
+    // "Enter Verrocchio" so the handoff to the tour is explicit.
+    const navButtons = (onAdvance, onBack, nextLabel) => React.createElement("div", {
+      key: "nav",
       style: {
-        fontSize: 12, color: "#9ca3af", textAlign: "center",
-        fontWeight: 500, letterSpacing: .3, marginTop: 4,
-        display: "flex", justifyContent: "center"
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        gap: 10, marginTop: 4
       }
     },
-      React.createElement("span", { className: "swipe-hint" },
-        React.createElement("span", null, "\u2190"),
-        React.createElement("span", { className: "swipe-word" }, "swipe"),
-        React.createElement("span", null, "\u2192")
-      )
+      onBack
+        ? React.createElement("button", {
+            key: "back",
+            onClick: onBack,
+            style: {
+              background: "transparent", color: "#4b5563",
+              border: "1px solid #e5e7eb", borderRadius: 10,
+              padding: "10px 16px", fontSize: 14, fontWeight: 500,
+              cursor: "pointer"
+            }
+          }, "Back")
+        : React.createElement("span", { key: "back" }),
+      React.createElement("button", {
+        key: "next",
+        onClick: onAdvance,
+        style: {
+          background: "#2d5a2d", color: "#fff",
+          border: "none", borderRadius: 10,
+          padding: "10px 22px", fontSize: 14, fontWeight: 600,
+          cursor: "pointer", minWidth: 110
+        }
+      }, nextLabel || "Next")
     );
 
     // Progress dots for steps 0..2 (3 screens: carousel, balanced-life, intent).
@@ -5181,8 +5549,8 @@ function App() {
         s.illus(),
         React.createElement("div", { key: "ttl", style: { fontSize: 20, fontWeight: 700, color: "#1f2937", textAlign: "center", marginBottom: 10 } }, s.ttl),
         React.createElement("div", { key: "body", style: { fontSize: 14, color: "#4b5563", lineHeight: 1.55, textAlign: "center", marginBottom: 22, padding: "0 6px" } }, s.body),
-        swipeHint(!!back)
-      ], { onAdvance: advance, onBack: back });
+        navButtons(advance, back)
+      ]);
     }
 
     // STEP 1 — Balanced-life framework primer
@@ -5209,8 +5577,8 @@ function App() {
           }
         }, t.value))),
         React.createElement("div", { key: "hint", style: { fontSize: 11.5, color: "#6b7280", textAlign: "center", marginBottom: 14, fontStyle: "italic" } }, "You can rename or customize these later in Profile."),
-        swipeHint(true)
-      ], { onAdvance: () => setOnboardStep(2), onBack: () => setOnboardStep(0) });
+        navButtons(() => setOnboardStep(2), () => setOnboardStep(0))
+      ]);
     }
 
     // STEP 2 — Intent capture. Last pre-app screen; swipe ← hands off to
@@ -5250,8 +5618,8 @@ function App() {
             WebkitUserSelect: "text"
           }
         }, onbStopSwipe)),
-        swipeHint(true)
-      ], { onAdvance: finishOnboarding, onBack: () => setOnboardStep(1) });
+        navButtons(finishOnboarding, () => setOnboardStep(1), "Enter Verrocchio")
+      ]);
     }
 
     // Fallback — should never hit, but complete onboarding gracefully
@@ -5633,13 +6001,14 @@ function App() {
 
     let tipStyle = {};
     if (pinBottom) {
-      // Park the pin-bottom tooltip ABOVE the fixed swipe-footer pill
-      // so the user can see both pieces of chrome on the same screen.
+      // Park the pin-bottom tooltip near the bottom of the viewport —
+      // used on the gated "Tap +" steps so the [+] button at the top of
+      // the page isn't covered by the tooltip.
       tipStyle = {
         position: "fixed",
         left: 12,
         right: 12,
-        bottom: "calc(62px + env(safe-area-inset-bottom, 0px))",
+        bottom: "calc(18px + env(safe-area-inset-bottom, 0px))",
         width: "auto"
       };
     } else if (topDock) {
@@ -5690,22 +6059,19 @@ function App() {
     const goBack = () => {
       if (tourStep > 1) setTourStep(tourStep - 1);
     };
-    // Expose the latest closures so the component-level global-swipe
-    // useEffect can trigger them without re-binding document listeners
-    // on every step/state change. renderTour runs on every render, so
-    // these refs are always current when a swipe fires.
+    // Expose the latest closures on component-scoped refs. The former
+    // document-level swipe listener was removed (nav is button-driven
+    // now), but keeping these refs makes it cheap to wire keyboard
+    // shortcuts, programmatic replays, or future gesture integrations
+    // without touching renderTour again.
     tourAdvanceRef.current = advance;
     tourGoBackRef.current = goBack;
 
-    // Swipe gestures are captured by a single document-level listener
-    // (component-level useEffect earlier in the component). The old
-    // React synthetic swipeHandlers attached to the tooltip/panels
-    // used to double-fire every gesture alongside the native listener,
-    // jumping the tour two steps at a time — so we keep swipe capture
-    // at exactly one layer. Form inputs / buttons inside the tooltip
-    // still swallow pointerdown so dragging a <select> or typing in
-    // the home-location input never seeds a swipe at the document
-    // level either.
+    // Inert stopPropagation shim. It's spread onto inputs + Back/Next
+    // to preserve the old "don't let this element seed a nav gesture"
+    // invariant; with swipe removed it's effectively a no-op, but
+    // leaving the spread in place keeps the JSX diff-small if we ever
+    // reintroduce a gesture layer.
     const stopSwipeStart = {
       onTouchStart: e => e.stopPropagation(),
       onMouseDown: e => e.stopPropagation()
@@ -5791,10 +6157,10 @@ function App() {
         key: "dim",
         className: "tour-dim" + (step.formStep === true ? " form-step" : "")
       }),
-      // Tooltip — swipes are captured by the document-level listener,
-      // not by this element. Form inputs inside the tooltip (select /
-      // text) carry stopSwipeStart so dragging inside them doesn't
-      // accidentally trigger tour navigation.
+      // Tooltip — Back/Next buttons inside the footer drive navigation.
+      // pointerEvents:auto because the rest of the overlay is :none,
+      // so taps on the tooltip's own chrome (buttons, form inputs) need
+      // to reach their handlers.
       /*#__PURE__*/React.createElement("div", Object.assign({
         // Liquid-glass tour tooltip — the dim panels behind it are
         // already semi-transparent black, so the backdrop blur picks up
@@ -5817,10 +6183,6 @@ function App() {
           zIndex: 10000
         }
       }, null),
-      // ^^ Swipe gestures are captured by the document-level listener
-      //    (component-level useEffect around line 2865). Attaching swipe
-      //    handlers here too used to double-fire every gesture and jump
-      //    the tour two steps at a time.
         // Top-right "Hold to Exit" pill — only in demo mode. The main
         // yellow "Exit demo" bar sits behind the tour overlay (the
         // overlay's zIndex:10000 covers the zIndex:60 sticky bar), so
@@ -5871,8 +6233,8 @@ function App() {
           }
         }, stopSwipeStart), "Hold to Exit"),
         // No "Step X of Y" badge and no progress dots — the tour shouldn't
-        // feel like a numbered checklist. Title + body + swipe hint do all
-        // the navigation framing on their own.
+        // feel like a numbered checklist. Title + body + Back/Next row do
+        // all the navigation framing on their own.
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-title",
           // Reserve right-side room for the "Hold to Exit" pill so the
@@ -5885,10 +6247,10 @@ function App() {
           className: "tour-tip-body",
           style: {
             fontSize: 13, lineHeight: 1.5,
-            // Gated steps drop the swipe-hint footer row (see below), so
-            // no bottom margin is needed under the body — the tooltip's
-            // own padding carries the final 14px of breathing room.
-            marginBottom: gateBlocked ? 0 : (formNode ? 10 : 14)
+            // Gated steps keep the nav row visible (so Back still works)
+            // but Next is disabled — the gateHint sub-line does the
+            // heavy lifting to explain the block, so no extra margin.
+            marginBottom: formNode ? 10 : 14
           }
         }, step.body),
         // Inline form (weekly review / home location).
@@ -5897,23 +6259,29 @@ function App() {
         // is currently blocking forward navigation. The target element
         // itself is already spotlit (pulsing green outline via the
         // .tour-target class), so this is just a text nudge telling the
-        // user what to DO with the spotlit thing to keep going.
+        // user what to DO with the spotlit thing to keep the Next
+        // button active.
         gateBlocked && step.gateHint && /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-swipe",
           style: {
             fontSize: 12, fontStyle: "italic", marginTop: -4, marginBottom: 10
           }
         }, step.gateHint),
-        // Footer — navigation is by swipe; there is no Skip. The tour
-        // is short and load-bearing (it's how the user actually creates
-        // their first goal, habit, weekly review, and home location), so
-        // bailing partway through would leave them on an empty workspace
-        // they don't yet know how to use.
-        //   • swipe ← (right-to-left) → next  (blocked while gate is open)
-        //   • swipe → (left-to-right) → back  (no-op on step 1)
-        // The optional secondary action (e.g. "Add a to-do") stays as a
-        // button because it triggers an in-app action rather than nav.
-        // The last step shows a centered "Got it" — only way out.
+        // Footer — explicit Back / Next buttons. The prior build used
+        // horizontal swipes to navigate but that kept tripping over the
+        // inline forms the tour walks the user through (selecting text,
+        // scrubbing selects, accidental mis-taps all flipped steps).
+        // Buttons are discoverable, unambiguous, and work identically in
+        // the tour and the onboarding.
+        //   • Back — hidden on step 1 (nothing to go back to).
+        //   • Next — disabled while a gate is blocking (the gateHint
+        //     above explains what the user has to do to enable it);
+        //     autoAdvance steps flip the step automatically when the
+        //     gate passes, so the user rarely has to tap Next on those.
+        //   • Got it — last step only; terminal action.
+        // The optional secondary action (e.g. "Add a to-do") appears
+        // above the nav row because it's a DIFFERENT kind of action
+        // (triggers an in-app behavior, not a tour step).
         isLast
           ? /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", justifyContent: "center" }
@@ -5928,17 +6296,9 @@ function App() {
               }, stopSwipeStart), "Got it")
             )
           : /*#__PURE__*/React.createElement("div", null,
-              // The "← swipe →" hint that used to live here has moved
-              // to a fixed-bottom footer outside the tooltip (see the
-              // global swipe-footer render at the end of renderTour).
-              // Keeping it inside the card crowded the copy on the
-              // gated Tap+ steps AND made the gesture feel "bound" to
-              // the card — but swipes work anywhere on the app now, so
-              // the hint belongs at the bottom of the viewport where
-              // the gesture actually terminates.
-              // Optional secondary action only — Skip is intentionally absent.
+              // Optional secondary action (e.g. "Write a reflection").
               step.optionalActionKey && /*#__PURE__*/React.createElement("div", {
-                style: { display: "flex", justifyContent: "center" }
+                style: { display: "flex", justifyContent: "center", marginBottom: 8 }
               },
                 /*#__PURE__*/React.createElement("button", Object.assign({
                   onClick: runOptionalAction,
@@ -5948,48 +6308,39 @@ function App() {
                     fontWeight: 600, cursor: "pointer"
                   }
                 }, stopSwipeStart), step.optionalActionLabel || "Try it")
+              ),
+              // Nav row — Back on left, Next on right. Space-between so
+              // Next stays thumb-reachable at the right edge of the card
+              // even when Back is hidden.
+              /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }
+              },
+                tourStep > 1
+                  ? /*#__PURE__*/React.createElement("button", Object.assign({
+                      onClick: goBack,
+                      style: {
+                        background: "transparent", color: "#4b5563",
+                        border: "1px solid #e5e7eb", borderRadius: 8,
+                        padding: "8px 14px", fontSize: 13, fontWeight: 500,
+                        cursor: "pointer"
+                      }
+                    }, stopSwipeStart), "Back")
+                  : /*#__PURE__*/React.createElement("span", null),
+                /*#__PURE__*/React.createElement("button", Object.assign({
+                  onClick: advance,
+                  disabled: gateBlocked,
+                  style: {
+                    background: gateBlocked ? "#d1d5db" : "#2d5a2d",
+                    color: "#fff", border: "none",
+                    borderRadius: 8, padding: "9px 20px", fontSize: 13,
+                    fontWeight: 600,
+                    cursor: gateBlocked ? "not-allowed" : "pointer",
+                    opacity: gateBlocked ? 0.7 : 1
+                  }
+                }, stopSwipeStart), "Next")
               )
             )
-      ),
-      // ── Fixed-bottom swipe footer ──────────────────────────────────
-      // The ← swipe → hint lives OUTSIDE the tour card, pinned to the
-      // bottom of the viewport. Two reasons:
-      //   1. The gesture works anywhere on the app now (see the
-      //      document-level swipe listener earlier in the component),
-      //      so the hint shouldn't look "bound" to the card.
-      //   2. On gated Tap+ steps the card's internal height budget is
-      //      tight; an external hint keeps the card copy clean.
-      // Hidden only on the final step (the Got it button is the only
-      // way out — no swipe needed). Gated steps KEEP the footer because
-      // backward swipes still work even while forward is gated, and
-      // because a permanently-visible swipe hint reads more cohesively
-      // than one that appears/disappears as the user walks through
-      // form-completion gates. The wrapper is pointerEvents:none so the
-      // pill never blocks a tap on whatever sits beneath it (bottom nav
-      // during tour steps 15+).
-      !isLast && /*#__PURE__*/React.createElement("div", {
-        key: "swipeFooter",
-        style: {
-          position: "fixed", left: 0, right: 0,
-          bottom: "calc(14px + env(safe-area-inset-bottom, 0px))",
-          display: "flex", justifyContent: "center",
-          pointerEvents: "none", zIndex: 10001
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        className: "tour-swipe-footer",
-        style: {
-          padding: "6px 14px", borderRadius: 999,
-          background: "rgba(255,255,255,0.82)",
-          backdropFilter: "blur(16px) saturate(180%)",
-          WebkitBackdropFilter: "blur(16px) saturate(180%)",
-          boxShadow: "0 8px 24px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.9)",
-          fontSize: 12, fontWeight: 500, letterSpacing: .3, color: "#4b5563"
-        }
-      }, /*#__PURE__*/React.createElement("span", { className: "swipe-hint" },
-        /*#__PURE__*/React.createElement("span", null, "\u2190"),
-        /*#__PURE__*/React.createElement("span", { className: "swipe-word" }, "swipe"),
-        /*#__PURE__*/React.createElement("span", null, "\u2192")
-      )))
+      )
     );
   };
 
@@ -11014,7 +11365,7 @@ function App() {
       flexWrap: "wrap",
       marginBottom: 10
     }
-  }, ["🤝", "💪", "🏃", "📚", "🧘", "🎯", "🌱", "⚡", "🏠", "👥", "🔥", "🌟"].map(em => /*#__PURE__*/React.createElement("button", {
+  }, ["🤝", "💪", "🏃", "📚", "🧘", "🎯", "🌱", "⚡", "🏠", "👥", "🔥"].map(em => /*#__PURE__*/React.createElement("button", {
     key: em,
     onClick: () => setNewGroupEmoji(em),
     style: {
