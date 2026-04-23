@@ -2815,6 +2815,16 @@ function App() {
   const [nHGoal, sNHGoal] = useState("");
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
+  // Section reorder: when non-null, holds the section value ("morning" |
+  // "afternoon" | "evening" | "avoid") whose habits the user is
+  // reordering. Opened by long-pressing a section header on the Habits
+  // tab; populated with a local draft list the user shuffles with up/
+  // down arrows before hitting Save.
+  const [reorderSection, setReorderSection] = useState(null);
+  const [reorderDraft, setReorderDraft] = useState([]); // [habitId, ...] in the new order
+  // Ref-flag that lets the section-header's short-click path know a
+  // long-press just fired so it doesn't also toggle the collapse.
+  const sectionLongPressRef = useRef({ timer: null, fired: false });
   const [newGoalFromHabit, setNewGoalFromHabit] = useState(false);
   const [newGoalText, setNewGoalText] = useState("");
   const swipeRef = useRef({});
@@ -4618,6 +4628,43 @@ function App() {
     save({
       ...data,
       habits: allHabits
+    });
+  };
+  // Open the reorder modal for a section. Seeds the draft list from the
+  // section's current sort order (the same order the Habits page is
+  // showing), so the modal reflects what the user sees.
+  const openSectionReorder = (sectionValue) => {
+    const inSection = (data.habits || [])
+      .filter(h => h.section === sectionValue)
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    setReorderDraft(inSection.map(h => h.id));
+    setReorderSection(sectionValue);
+  };
+  // Commit the draft order: rewrite `_order` on every habit in the
+  // section to match its index in the draft list, leaving habits in
+  // other sections untouched. One save() call so all four headers
+  // re-render together.
+  const saveSectionOrder = () => {
+    if (!reorderSection) return;
+    const idOrder = new Map(reorderDraft.map((id, i) => [String(id), i]));
+    const next = (data.habits || []).map(h => {
+      if (h.section !== reorderSection) return h;
+      const idx = idOrder.get(String(h.id));
+      return idx == null ? h : { ...h, _order: idx };
+    });
+    save({ ...data, habits: next });
+    setReorderSection(null);
+    setReorderDraft([]);
+  };
+  const moveDraftItem = (id, dir) => {
+    setReorderDraft(prev => {
+      const i = prev.indexOf(id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      next[i] = prev[j];
+      next[j] = prev[i];
+      return next;
     });
   };
 
@@ -8693,7 +8740,45 @@ function App() {
           marginBottom: 22
         }
       }, /*#__PURE__*/React.createElement("div", {
-        onClick: () => setCollapsedSections(p => ({ ...p, [group.value]: !p[group.value] })),
+        // Short tap = toggle collapse (same as before). Long press
+        // (~600ms) opens the section-reorder modal. The pointer-based
+        // handlers replace the old onClick so we can distinguish the
+        // two gestures; the long-press timer fires open-reorder and
+        // sets a ref flag so the subsequent pointerup doesn't ALSO
+        // toggle collapse.
+        onPointerDown: e => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          sectionLongPressRef.current.fired = false;
+          if (sectionLongPressRef.current.timer) clearTimeout(sectionLongPressRef.current.timer);
+          sectionLongPressRef.current.timer = setTimeout(() => {
+            sectionLongPressRef.current.fired = true;
+            sectionLongPressRef.current.timer = null;
+            openSectionReorder(group.value);
+          }, 600);
+        },
+        onPointerUp: () => {
+          if (sectionLongPressRef.current.timer) {
+            clearTimeout(sectionLongPressRef.current.timer);
+            sectionLongPressRef.current.timer = null;
+            if (!sectionLongPressRef.current.fired) {
+              setCollapsedSections(p => ({ ...p, [group.value]: !p[group.value] }));
+            }
+          }
+        },
+        onPointerLeave: () => {
+          if (sectionLongPressRef.current.timer) {
+            clearTimeout(sectionLongPressRef.current.timer);
+            sectionLongPressRef.current.timer = null;
+          }
+        },
+        onPointerCancel: () => {
+          if (sectionLongPressRef.current.timer) {
+            clearTimeout(sectionLongPressRef.current.timer);
+            sectionLongPressRef.current.timer = null;
+          }
+        },
+        // Right-click as a desktop-friendly alternative to long-press.
+        onContextMenu: e => { e.preventDefault(); openSectionReorder(group.value); },
         style: {
           display: "flex",
           alignItems: "center",
@@ -8701,9 +8786,10 @@ function App() {
           marginBottom: 8,
           cursor: "pointer",
           userSelect: "none",
-          WebkitTapHighlightColor: "transparent"
+          WebkitTapHighlightColor: "transparent",
+          touchAction: "manipulation"
         },
-        title: collapsed ? "Expand " + group.label : "Collapse " + group.label
+        title: (collapsed ? "Expand " : "Collapse ") + group.label + " — hold to reorder"
       }, /*#__PURE__*/React.createElement("span", null, group.icon), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 11,
@@ -13141,7 +13227,126 @@ function App() {
         style:{flex:2,background:"#2d5a2d",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer"}
       }, "Create Category")
     )
-  )), editHabitModal && /*#__PURE__*/React.createElement("div", {
+  )),
+  // ── Section reorder modal — opened by long-press on a Habits-page
+  //    section header. Lists the habits in that section (morning /
+  //    afternoon / evening / avoid) with up/down arrows per row and a
+  //    Save button that commits `_order` values back through save().
+  reorderSection && (() => {
+    const sec = SECTIONS.find(s => s.value === reorderSection);
+    const habitsById = new Map((data.habits || []).map(h => [String(h.id), h]));
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "reorder-title",
+      style: {
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        zIndex: 310,
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center"
+      },
+      onClick: e => { if (e.target === e.currentTarget) { setReorderSection(null); setReorderDraft([]); } }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        className: "fade-in",
+        style: {
+          background: "var(--c-surface, #fff)",
+          borderRadius: "20px 20px 0 0",
+          padding: "20px 18px 22px",
+          width: "100%",
+          maxWidth: 520,
+          maxHeight: "80vh",
+          overflowY: "auto",
+          boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }
+        },
+          /*#__PURE__*/React.createElement("span", null, sec ? sec.icon : ""),
+          /*#__PURE__*/React.createElement("div", {
+            id: "reorder-title",
+            style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
+          }, "Reorder " + (sec ? sec.label : reorderSection))
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, color: "#6b7280", marginBottom: 14 }
+        }, "Use the arrows to set the order these habits appear in on the Habits page."),
+        reorderDraft.length === 0
+          ? /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 13, color: "#9ca3af", padding: "18px 4px" }
+            }, "No habits in this section yet.")
+          : /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }
+            }, reorderDraft.map((id, i) => {
+              const h = habitsById.get(String(id));
+              if (!h) return null;
+              const isFirst = i === 0;
+              const isLast = i === reorderDraft.length - 1;
+              return /*#__PURE__*/React.createElement("div", {
+                key: id,
+                style: {
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 10px",
+                  background: "var(--c-surface-raised)",
+                  border: "1px solid var(--c-border)",
+                  borderRadius: 8
+                }
+              },
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 11, fontWeight: 700, color: "#9ca3af", width: 22, textAlign: "center" }
+                }, i + 1),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                }, h.text),
+                /*#__PURE__*/React.createElement("button", {
+                  type: "button",
+                  "aria-label": "Move up",
+                  disabled: isFirst,
+                  onClick: () => moveDraftItem(id, -1),
+                  style: {
+                    background: "none", border: "1px solid var(--c-border)", borderRadius: 6,
+                    padding: "4px 8px", cursor: isFirst ? "default" : "pointer",
+                    opacity: isFirst ? 0.35 : 1, color: "var(--c-text-soft)", fontSize: 12, lineHeight: 1
+                  }
+                }, "▲"),
+                /*#__PURE__*/React.createElement("button", {
+                  type: "button",
+                  "aria-label": "Move down",
+                  disabled: isLast,
+                  onClick: () => moveDraftItem(id, 1),
+                  style: {
+                    background: "none", border: "1px solid var(--c-border)", borderRadius: 6,
+                    padding: "4px 8px", cursor: isLast ? "default" : "pointer",
+                    opacity: isLast ? 0.35 : 1, color: "var(--c-text-soft)", fontSize: 12, lineHeight: 1
+                  }
+                }, "▼")
+              );
+            })),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 8 }
+        },
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: () => { setReorderSection(null); setReorderDraft([]); },
+            style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
+          }, "Cancel"),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: saveSectionOrder,
+            disabled: reorderDraft.length === 0,
+            style: { flex: 2, background: "#2d5a2d", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#fff", cursor: reorderDraft.length === 0 ? "default" : "pointer", opacity: reorderDraft.length === 0 ? 0.5 : 1 }
+          }, "Save order")
+        )
+      )
+    );
+  })(),
+  editHabitModal && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
