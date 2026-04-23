@@ -2654,6 +2654,28 @@ const RadarChart = React.memo(function RadarChart(_ref) {
   });
 });
 
+/* Memoized shell around a single habit card. The render function
+   (App's renderCard) still does the heavy lifting and stays in the
+   monolith — extracting the 473-line body with a clean prop interface
+   is a larger refactor we didn't want to bundle with a UX change.
+   Instead we give each card a memoization boundary: the shell skips
+   re-rendering when BOTH the habit object identity and the `sig`
+   string are unchanged.
+
+   `sig` is computed by the parent from every piece of App state that
+   affects THIS card's rendering (selDate, edit state, swipe-anim,
+   expansion, linked goal text). If the sig matches and the habit ref
+   matches, nothing this card draws could have changed — skip.
+
+   Handler staleness is handled separately: togHabit now reads from
+   latestData.current instead of the outer `data` closure, so a tap
+   that fires from a skipped-over render still sees fresh state. Other
+   handlers (setSwipeAnim etc.) use functional setState which is
+   stale-safe by construction. */
+const HabitCardShell = React.memo(function HabitCardShell({ habit, sig, renderImpl }) {
+  return renderImpl(habit);
+}, (prev, next) => prev.habit === next.habit && prev.sig === next.sig);
+
 /* ── MAIN APP ── */
 function App() {
   /* AUTH */
@@ -4475,8 +4497,14 @@ function App() {
   };
   ;
   const togHabit = (id, fd, mode, atTime) => {
+    // Read from latestData.current (always the freshest state) rather
+    // than `data` (captured via the outer closure at render time). This
+    // lets the habit card be memoized — even when a handler fires from
+    // a skipped-over render, it still sees the current data, so a tap
+    // on habit A never clobbers a concurrent save on habit B.
+    const cur = latestData.current || data;
     const key = fd || tk();
-    const targetH = (data.habits || []).find(h => h.id === id);
+    const targetH = (cur.habits || []).find(h => h.id === id);
     if (!targetH) return;
     const prev = targetH.completions?.[key];
     const prevState = (prev === "done" || prev === true) ? "done" : (prev === "missed" ? "missed" : "none");
@@ -4487,7 +4515,7 @@ function App() {
     const resolvedTime = newState === "done" || newState === "missed"
       ? (atTime && /^\d{2}:\d{2}$/.test(atTime) ? atTime : tkTime())
       : null;
-    const habits = (data.habits || []).map(h => {
+    const habits = (cur.habits || []).map(h => {
       if (h.id !== id) return h;
       const c = { ...h.completions };
       const ct = { ...(h.completionTimes || {}) };
@@ -4501,12 +4529,12 @@ function App() {
     const unit = imp === "Non-Negotiable" ? 30 : imp === "Important" ? 20 : 10;
     const val = s => s === "done" ? unit : (s === "missed" ? -unit : 0);
     const xpDelta = val(newState) - val(prevState);
-    const newXp = Math.max(0, (data.xp || 0) + xpDelta);
+    const newXp = Math.max(0, (cur.xp || 0) + xpDelta);
     if (xpDelta !== 0) {
       setXpToast({ amount: xpDelta, id: Date.now() });
       setTimeout(() => setXpToast(null), 2200);
     }
-    save({ ...data, habits, xp: newXp });
+    save({ ...cur, habits, xp: newXp });
   };
   const isDone = (h, fd) => {
     const v = h.completions?.[fd || tk()];
@@ -9435,7 +9463,14 @@ function App() {
         }
       }, "\u25BE")),
       // Body: hidden when the section is collapsed.
-      !collapsed && /*#__PURE__*/React.createElement("div", null, group.habits.map(h => renderCard(h))));
+      !collapsed && /*#__PURE__*/React.createElement("div", null, group.habits.map(h => {
+        // Signature: every piece of App state that could affect how
+        // this specific card renders. If it matches last render, the
+        // shell's React.memo skips re-execution of the render body.
+        const goalText = h.goalId ? ((data.goals || []).find(g => String(g.id) === String(h.goalId))?.text || "") : "";
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + goalText;
+        return /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard });
+      })));
     }), filtH.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
