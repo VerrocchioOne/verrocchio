@@ -40,8 +40,19 @@ const RUNTIME_CACHEABLE_HOSTS = new Set([
 ]);
 
 self.addEventListener("install", event => {
+  // Per-file add rather than addAll: addAll rejects the entire
+  // install (leaving the app uncached) if a single URL 404s, and
+  // we'd rather ship with whatever precached successfully than fail
+  // closed. Warnings are best-effort; the SW console will show them
+  // without aborting activation.
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(APP_SHELL.map(url =>
+        cache.add(url).catch(err => {
+          try { console.warn("[sw] precache miss:", url, err && err.message); } catch (e) {}
+        })
+      ))
+    )
   );
   self.skipWaiting();
 });
