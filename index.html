@@ -10,8 +10,8 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='6' y='46' width='52' height='10' rx='2' fill='url(%23g)'/><rect x='12' y='34' width='40' height='10' rx='2' fill='url(%23g)'/><rect x='18' y='22' width='28' height='10' rx='2' fill='url(%23g)'/><rect x='24' y='10' width='16' height='10' rx='2' fill='url(%23g)'/><path d='M14 22 L32 54 L50 22 L44 22 L32 42 L20 22 Z' fill='%23f4efe4'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='18' y='130' width='144' height='28' rx='5' fill='url(%23g)'/><rect x='36' y='96' width='108' height='28' rx='5' fill='url(%23g)'/><rect x='54' y='62' width='72' height='28' rx='5' fill='url(%23g)'/><rect x='72' y='28' width='36' height='28' rx='5' fill='url(%23g)'/><path d='M42 62 L90 152 L138 62 L124 62 L90 120 L56 62 Z' fill='%23f4efe4'/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -507,6 +507,16 @@ const auth=firebase.auth();
    users/main doc is no longer read or written — any seed data that
    lived there stays untouched but is not surfaced to new users. */
 const userDoc = uid => db.collection("users").doc(uid);
+/* AI proxy: the daily briefing and journal-insights features need an
+   LLM. We cannot call api.anthropic.com directly from the browser — it
+   would require shipping an API key to every user, and CORS blocks the
+   request anyway. Set AI_BACKEND_URL to a server-side proxy (e.g. a
+   Cloudflare Worker or Cloud Function) that accepts the same
+   {model, max_tokens, messages} body and forwards it to Anthropic with
+   a private key. When null, the app falls back to a deterministic,
+   data-driven briefing and a clear "not configured" message for
+   insights — no failed network calls. */
+const AI_BACKEND_URL = null;
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
   useState,
@@ -1926,7 +1936,16 @@ const SEED_HABITS = [{
 }];
 
 /* ── UTILS ── */
-const tk = () => new Date().toISOString().split("T")[0];
+// Local YYYY-MM-DD for a Date. Using toISOString() here would convert to
+// UTC first, which silently shifts the "day" by ±1 near midnight for users
+// east/west of UTC — breaking streaks, "today" lookups, and calendar keys.
+const dk = d => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+const tk = () => dk(new Date());
 const fmtDur = v => {
   if (!v) return null;
   const n = parseInt(v);
@@ -1950,7 +1969,7 @@ function pastDays(n) {
   }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    return d.toISOString().split("T")[0];
+    return dk(d);
   });
 }
 function getStreak(h) {
@@ -1958,7 +1977,7 @@ function getStreak(h) {
   for (let i = 0; i < 365; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    if (h.completions?.[d.toISOString().split("T")[0]]) s++;else break;
+    if (h.completions?.[dk(d)]) s++;else break;
   }
   return s;
 }
@@ -1970,7 +1989,7 @@ function daysSinceLast(h) {
   for (let i = 1; i <= 365; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    if (h.completions?.[d.toISOString().split("T")[0]]) return i;
+    if (h.completions?.[dk(d)]) return i;
   }
   return null;
 }
@@ -1985,7 +2004,7 @@ function getLast14(h) {
   }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - (13 - i));
-    const k = d.toISOString().split("T")[0];
+    const k = dk(d);
     return {
       k,
       done: !!h.completions?.[k]
@@ -2046,7 +2065,7 @@ function WeekDots({ habit, size = 7, gap = 3 }) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - dow + i);
-    const k = d.toISOString().split("T")[0];
+    const k = dk(d);
     const isFuture = i > dow;
     const isToday = i === dow;
     const state = habit.completions?.[k];
@@ -2189,7 +2208,7 @@ function MomentumArrow({ habit }) {
     for (let i = offset; i < offset + count; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() - i);
-      if (habit.completions?.[d.toISOString().split("T")[0]] === "done") c++;
+      if (habit.completions?.[dk(d)] === "done") c++;
     }
     return c;
   };
@@ -2216,7 +2235,7 @@ function YearHeatmap({ habit, cellSize = 7, gap = 2 }) {
   for (let i = daysBack; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const k = d.toISOString().split("T")[0];
+    const k = dk(d);
     const state = habit.completions?.[k];
     cells.push({ k, state });
   }
@@ -2820,7 +2839,7 @@ function App() {
   const [nHFreq, sNHFreq] = useState({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
   // Start date for a new habit — defaults to today (ISO YYYY-MM-DD).
   // The user can pick a future date to delay the habit's activation.
-  const [nHStart, sNHStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [nHStart, sNHStart] = useState(() => dk(new Date()));
   const [hFilter, setHFilter] = useState([]);
   const [nHNotes, sNHNotes] = useState("");
   const [nHGoal, sNHGoal] = useState("");
@@ -2849,7 +2868,7 @@ function App() {
   const [eHGoal, sEHGoal] = useState("");
   const [eHLoc, sEHLoc] = useState("both");
   const [eHFreq, sEHFreq] = useState({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
-  const [eHStart, sEHStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [eHStart, sEHStart] = useState(() => dk(new Date()));
 
   /* JOURNAL */
   const [jTxt, sJTxt] = useState("");
@@ -3711,6 +3730,18 @@ function App() {
         if (!d.quotes) d.quotes = [];
         if (!d.todos) d.todos = [];
         if (!d.dailyRitual) d.dailyRitual = {};
+        // Same defensive hydration as loadData() — without these, a
+        // cloud-only user whose Firestore doc predates a given field
+        // hits "undefined.filter/map/length" crashes later.
+        if (!Array.isArray(d.customGoalTypes)) d.customGoalTypes = [];
+        if (!Array.isArray(d.customImportance)) d.customImportance = [];
+        if (!Array.isArray(d.customSections)) d.customSections = [];
+        if (!Array.isArray(d.dayVisits)) d.dayVisits = [];
+        if (!d.bestStreaks || typeof d.bestStreaks !== "object") d.bestStreaks = {};
+        if (!d.achievementsUnlocked || typeof d.achievementsUnlocked !== "object") d.achievementsUnlocked = {};
+        if (typeof d.xp !== "number") d.xp = 0;
+        if (typeof d.celebratedFirstGoal !== "boolean") d.celebratedFirstGoal = !!(d.goals && d.goals.length > 0);
+        if (typeof d.celebratedFirstHabit !== "boolean") d.celebratedFirstHabit = !!(d.habits && d.habits.length > 0);
         if (typeof d.homeLocation !== "string") d.homeLocation = "";
         if (!Array.isArray(d.travelDays)) d.travelDays = [];
         d.travelDays = d.travelDays.map(t => {
@@ -4216,7 +4247,7 @@ function App() {
         notes: nHNotes.trim() || null,
         goalId: nHGoal || null,
         location: "both",
-        startDate: nHStart || new Date().toISOString().slice(0, 10),
+        startDate: nHStart || dk(new Date()),
         frequency: {
           type: nHFreq.type,
           days: Array.isArray(nHFreq.days) ? nHFreq.days.slice() : [],
@@ -4233,7 +4264,7 @@ function App() {
     sNHNotes("");
     sNHGoal("");
     sNHFreq({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
-    sNHStart(new Date().toISOString().slice(0, 10));
+    sNHStart(dk(new Date()));
     // Close the inline form on successful save (mirrors addGoal's
     // setExpGForm(false) on its success path). The Add button's
     // onClick used to do this unconditionally, which swallowed
@@ -4303,7 +4334,7 @@ function App() {
     sEHGoal(h.goalId || "");
     sEHLoc(h.location || "both");
     sEHFreq(getFreq(h));
-    sEHStart(h.startDate || new Date().toISOString().slice(0, 10));
+    sEHStart(h.startDate || dk(new Date()));
     setEditHabitModal(h);
   };
   const svEHabit = id => {
@@ -4360,7 +4391,7 @@ function App() {
         notes: nextNotes,
         goalId: eHGoal || null,
         location: eHLoc || "both",
-        startDate: eHStart || h.startDate || new Date().toISOString().slice(0, 10),
+        startDate: eHStart || h.startDate || dk(new Date()),
         frequency: nextFreq,
         history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
       } : h)
@@ -4448,7 +4479,7 @@ function App() {
     const needsWeekChips = freq.type === "weekdays" || freq.type === "weekly";
     const needsMonthDay  = freq.type === "monthly";
     const needsDateAnchor = freq.type === "quarterly" || freq.type === "annual";
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = dk(new Date());
     return /*#__PURE__*/React.createElement("div", {
       style: { marginBottom: 8 }
     },
@@ -4661,8 +4692,13 @@ function App() {
     setInsV(true);
     setIns("");
     const prompt = `Analyze these journal entries and generate insights.\n\nENTRIES:\n${entries.slice(-30).map(e => `[${fmtD(e.timestamp)}] [${(e.tag || "reflection").toUpperCase()}]${e.mood ? ` [${e.mood}]` : ""}\n"${e.text}"`).join("\n\n")}\n\nGenerate:\n1. **Recurring Themes**\n2. **Emotional Patterns**\n3. **Key Wins & Growth**\n4. **Challenges to Watch**\n5. **Actionable Insights** (3 suggestions)\n6. **A Personal Note**\n\nUnder 400 words.`;
+    if (!AI_BACKEND_URL) {
+      setIns("AI insights require a server-side proxy. Set AI_BACKEND_URL in index.html to a backend that forwards requests to the Anthropic API with a private key.");
+      setInsL(false);
+      return;
+    }
     try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
+      const r = await fetch(AI_BACKEND_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -4813,8 +4849,30 @@ function App() {
       };
     }).filter(Boolean);
     const prompt = `You are a warm personal coach. Generate a brief, motivating morning briefing.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (30d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (30d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}\nQUOTE: ${q ? `"${q.text.slice(0, 120)}"${q.author ? ` — ${q.author}` : ""}` : "None"}\n\n3 paragraphs: 1) warm greeting referencing today's tasks/goals, 2) life balance insight based on habit patterns, 3) brief closing with motivation. Keep it personal and direct.`;
+    if (!AI_BACKEND_URL) {
+      // No backend proxy configured — produce a short deterministic briefing
+      // from the same data we'd have sent to the LLM. Keeps the Home tab
+      // populated instead of showing "Error generating brief."
+      const doneCt = dH.filter(h => isDone(h, td)).length;
+      const focused = tc.filter(t => t.pct >= 70).map(t => t.type);
+      const neglected = tc.filter(t => t.pct < 40).map(t => t.type);
+      const parts = [];
+      parts.push(`Good morning. ${pend.length ? `You have ${pend.length} task${pend.length === 1 ? "" : "s"} open${pend.length <= 3 ? `: ${pend.map(t => t.text).join(", ")}` : "."}` : "Nothing urgent on the task list — clear runway."} ${dH.length ? `Today's habits: ${doneCt}/${dH.length} logged.` : ""}`.trim());
+      if (focused.length || neglected.length) {
+        const bits = [];
+        if (focused.length) bits.push(`you've been consistent with ${focused.join(", ").toLowerCase()}`);
+        if (neglected.length) bits.push(`${neglected.join(", ").toLowerCase()} ${neglected.length === 1 ? "has" : "have"} slipped`);
+        parts.push(`Over the last 30 days, ${bits.join(", and ")}.`);
+      }
+      if (q && q.text) parts.push(`"${q.text.slice(0, 200)}"${q.author ? ` — ${q.author}` : ""}`);
+      const txt = parts.join("\n\n");
+      setBriefTxt(txt);
+      updateRitual({ briefing: txt });
+      setBriefing(false);
+      return;
+    }
     try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
+      const r = await fetch(AI_BACKEND_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -4915,7 +4973,7 @@ function App() {
     const d = new Date(lo + "T12:00:00");
     const endD = new Date(hi + "T12:00:00");
     while (d <= endD) {
-      dates.push(d.toISOString().split("T")[0]);
+      dates.push(dk(d));
       d.setDate(d.getDate() + 1);
     }
     const existingDates = new Set((data.travelDays || []).map(t => t.date));
@@ -5025,7 +5083,7 @@ function App() {
   }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const val = d.toISOString().split("T")[0];
+    const val = dk(d);
     const label = i === 0 ? "Today" : i === 1 ? "Yesterday" : d.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
@@ -6439,7 +6497,7 @@ function App() {
       for (let i = 0; i < 365; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
-        const key = d.toISOString().split("T")[0];
+        const key = dk(d);
         const any = hs.some(h => h.completions && h.completions[key]);
         if (any) { appStreak++; started = true; }
         else if (started) break;
@@ -6694,7 +6752,7 @@ function App() {
       onClick: () => {
         const d = new Date(selDate + "T12:00:00");
         d.setMonth(d.getMonth() - 1);
-        setSelDate(d.toISOString().split("T")[0]);
+        setSelDate(dk(d));
       },
       style: {
         background: "none",
@@ -6717,7 +6775,7 @@ function App() {
       onClick: () => {
         const d = new Date(selDate + "T12:00:00");
         d.setMonth(d.getMonth() + 1);
-        setSelDate(d.toISOString().split("T")[0]);
+        setSelDate(dk(d));
       },
       style: {
         background: "none",
@@ -6771,7 +6829,7 @@ function App() {
     }, (_, i) => {
       const day = i + 1;
       const d = new Date(yr, mo, day);
-      const val = d.toISOString().split("T")[0];
+      const val = dk(d);
       const isT = val === tk();
       const isSel = val === selDate;
       const isFut = val > tk();
@@ -6790,8 +6848,8 @@ function App() {
       // render a track-shaped pill instead of a circle.
       const col = (first + i) % 7;
       const myTrip = tripIdByDate.get(val) || null;
-      const prevVal = new Date(yr, mo, day - 1).toISOString().split("T")[0];
-      const nextVal = new Date(yr, mo, day + 1).toISOString().split("T")[0];
+      const prevVal = dk(new Date(yr, mo, day - 1));
+      const nextVal = dk(new Date(yr, mo, day + 1));
       const trackLeft  = !!(myTrip && col !== 0 && tripIdByDate.get(prevVal) === myTrip);
       const trackRight = !!(myTrip && col !== 6 && tripIdByDate.get(nextVal) === myTrip);
       const isContinuous = trackLeft || trackRight;
@@ -7088,7 +7146,7 @@ function App() {
     const today7 = Array.from({ length: 7 }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().split("T")[0];
+      return dk(d);
     });
     const activeH = habits.filter(h => h.section !== "avoid" && matchesRoutine(h));
     const todayDone = activeH.filter(h => isDone(h, tk())).length;
@@ -10016,8 +10074,8 @@ function App() {
         let total = 0, days = 0;
         for (let i = 0; i < 7; i++) {
           const d2 = new Date(); d2.setDate(d2.getDate() - i);
-          const dk = d2.toISOString().split("T")[0];
-          const done = linkedHabits.filter(h => isDone(h, dk)).length;
+          const k = dk(d2);
+          const done = linkedHabits.filter(h => isDone(h, k)).length;
           total += done / linkedTotal; days++;
         }
         const avg = days ? total / days : 0;
@@ -11510,7 +11568,7 @@ function App() {
     }, (_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().split("T")[0];
+      return dk(d);
     });
     const activeH = habits.filter(h => h.section !== "avoid");
     const sorted = [...activeH].sort((a, b) => {
