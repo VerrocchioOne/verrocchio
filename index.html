@@ -2802,6 +2802,17 @@ function App() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(u => {
       setAuthUser(u || null);
+      // Mutual-exclusion invariant: a real signed-in user and demo mode
+      // must never coexist. If Firebase resolves to an authenticated
+      // user (persisted session, persona tap, normal login), force
+      // demoMode off so the Profile modal, header pill, save() path,
+      // and every other demoMode-gated surface render the real-account
+      // experience. Without this belt, rare edge paths (persona tapped
+      // while demoMode was already true, dev hot reload preserving
+      // state, a manual Firebase sign-in from an external context)
+      // could leave "Demo" stuck on the profile avatar and route
+      // saves into the in-memory demo bucket.
+      if (u) setDemoMode(false);
       if (!u) {
         setHasSeenWelcome(false);
         setSplashPhase("loading");
@@ -2970,6 +2981,14 @@ function App() {
   const signInAsDemoUser = async (email) => {
     setAuthErr("");
     setAuthBusy(true);
+    // Hard guarantee: the seeded-persona path is a REAL Firebase account,
+    // not demo mode. If demoMode is somehow still true when this runs
+    // (e.g. the user tapped a persona button from a code path that
+    // bypassed the normal login screen), flip it off here so Profile,
+    // save(), the header pill, and every other demoMode-gated view
+    // render the real-account experience. See the matching effect near
+    // authUser wiring for the same invariant enforced on auth flips.
+    if (demoMode) setDemoMode(false);
     try {
       await auth.signInWithEmailAndPassword(email, DEMO_PASSWORD);
     } catch (e) {
