@@ -2475,6 +2475,17 @@ function hydrateCloudDoc(p) {
   // (middle tone) — neither cheerleading nor scolding — and unknown
   // values fall back to the default at read time.
   if (typeof p.aiTone !== "string") p.aiTone = "neutral";
+  // Location + notifications preferences. homeCoords is {lat, lng, capturedAt}
+  // or null; captured by the user tapping "Set home location" in
+  // settings (one-shot geolocation). locationOptIn gates automatic
+  // home/away detection on app open. notifyOptIn gates showing local
+  // notifications (and will gate push notifications once Capacitor's
+  // @capacitor/push-notifications is wired). Defaults are all opt-out
+  // so nothing moves without the user's explicit consent — important
+  // for app-store review and trust.
+  if (!p.homeCoords || typeof p.homeCoords !== "object") p.homeCoords = null;
+  if (typeof p.locationOptIn !== "boolean") p.locationOptIn = false;
+  if (typeof p.notifyOptIn !== "boolean")   p.notifyOptIn   = false;
   if (typeof p.onboardingComplete !== "boolean") {
     p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
   }
@@ -2877,6 +2888,12 @@ function App() {
     lastShake: 0
   });
   const [swipeAnim, setSwipeAnim] = useState({});
+  // Derived current location. "home" / "away" / "unknown". Updated on
+  // app mount (and whenever the user refreshes) when locationOptIn is
+  // true and homeCoords is set. Drives home-tab prioritization of
+  // location-tagged habits and, when notifyOptIn is also true, fires
+  // a one-shot "away" notification.
+  const [geoLocation, setGeoLocation] = useState("unknown");
   // Time-entry modal context. Opens when a user does a slow swipe or
   // long-presses a habit: lets them log the habit at a custom time
   // instead of "now". Shape: null | { habitId, dateKey, mode } where
@@ -4742,6 +4759,103 @@ function App() {
   // input with the current local time as the default — one tap on "Log
   // now" and the user is done, so adding the modal doesn't punish the
   // "I'm logging this right now" common case.
+  // ── Location service ──
+  // Thin wrapper over navigator.geolocation so the rest of the app
+  // doesn't touch the browser API directly. When the app is wrapped
+  // by Capacitor for native deploy, swap the implementation here
+  // (e.g. import Geolocation from '@capacitor/geolocation') without
+  // touching any callers. Haversine distance is approximate (spherical
+  // earth) but fine for "am I within N meters of home?" checks.
+  const locationService = useMemo(() => {
+    const haversineMeters = (a, b) => {
+      if (!a || !b) return Infinity;
+      const R = 6371000;
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(b.lat - a.lat);
+      const dLng = toRad(b.lng - a.lng);
+      const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+      const x = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+      return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    };
+    return {
+      supported: typeof navigator !== "undefined" && "geolocation" in navigator,
+      getCurrent: () => new Promise((resolve, reject) => {
+        if (!("geolocation" in navigator)) return reject(new Error("geolocation_unsupported"));
+        navigator.geolocation.getCurrentPosition(
+          p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, capturedAt: Date.now() }),
+          err => reject(err),
+          { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 }
+        );
+      }),
+      haversineMeters
+    };
+  }, []);
+
+  // ── Notification service ──
+  // Wrapper over the Web Notification API + a Capacitor hook. Local
+  // notifications (while the page is open) work everywhere the API is
+  // supported. Push when the app is closed requires @capacitor/push-
+  // notifications on native — the service here is shaped so we can
+  // route to Capacitor's Local/Push plugins later by swapping the
+  // `notify` implementation.
+  const notificationService = useMemo(() => ({
+    supported: typeof window !== "undefined" && "Notification" in window,
+    permission: () => (typeof Notification !== "undefined" ? Notification.permission : "denied"),
+    requestPermission: async () => {
+      if (!("Notification" in window)) return "denied";
+      try { return await Notification.requestPermission(); }
+      catch { return "denied"; }
+    },
+    notify: (title, body, opts) => {
+      if (!("Notification" in window) || Notification.permission !== "granted") return false;
+      try {
+        new Notification(title, { body, icon: "apple-touch-icon.png", ...(opts || {}) });
+        return true;
+      } catch { return false; }
+    }
+  }), []);
+
+  // On mount (and whenever the opt-ins / homeCoords change), check
+  // whether the user is home or away. One-shot per app open — NOT a
+  // polling loop, which would drain battery on mobile. For real
+  // background geofencing on iOS/Android we'll register a native
+  // geofence via Capacitor in a future revision; until then this
+  // gives the home-tab enough signal to prioritize away-habits and
+  // fire a single "you're away" notification when appropriate.
+  useEffect(() => {
+    if (demoMode) return;
+    if (!data || !data.locationOptIn) return;
+    if (!data.homeCoords || typeof data.homeCoords.lat !== "number") return;
+    if (!locationService.supported) return;
+    let cancelled = false;
+    locationService.getCurrent().then(pos => {
+      if (cancelled) return;
+      const meters = locationService.haversineMeters(pos, data.homeCoords);
+      const state = meters > 250 ? "away" : "home"; // 250m ≈ "off the block"
+      setGeoLocation(state);
+      // One-shot "you're away" nudge: fires only if the user has
+      // enabled notifications AND we haven't already fired for this
+      // session. Session-scoped flag in sessionStorage so closing &
+      // reopening the app within the same outing doesn't spam.
+      try {
+        if (state === "away" && data.notifyOptIn && notificationService.permission() === "granted") {
+          const fired = sessionStorage.getItem("v-away-notif") === "1";
+          if (!fired) {
+            const awayHabits = (data.habits || []).filter(h => h.location === "away" || h.location === "travel");
+            const n = awayHabits.length;
+            notificationService.notify(
+              "You're out — keep your habits going",
+              n ? `${n} habit${n === 1 ? "" : "s"} tagged for away — tap to open Verrocchio` : "Tap to open Verrocchio and log on the go."
+            );
+            sessionStorage.setItem("v-away-notif", "1");
+          }
+        }
+      } catch {}
+    }).catch(() => { if (!cancelled) setGeoLocation("unknown"); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data && data.locationOptIn, data && data.homeCoords, data && data.notifyOptIn, demoMode]);
+
   const openTimeEntry = (habitId, dateKey, mode) => {
     setTimeEntryValue(tkTime());
     setTimeEntryCtx({ habitId, dateKey: dateKey || tk(), mode: mode || "done" });
@@ -13244,6 +13358,98 @@ function App() {
             row("morning",   "\uD83C\uDF05", "Morning"),
             row("afternoon", "\u2600\uFE0F", "Afternoon"),
             row("evening",   "\uD83C\uDF19", "Evening")
+          );
+        })(),
+        // Location & Notifications — scaffolded for Capacitor. The
+        // "Set home location" button captures a one-shot GPS fix via
+        // the Web Geolocation API (Capacitor's @capacitor/geolocation
+        // plugin will transparently override it on native). The two
+        // toggles gate ANY automatic behavior so users who don't want
+        // the app touching location or notifications don't get them.
+        (() => {
+          const coords = data.homeCoords;
+          const hasCoords = !!(coords && typeof coords.lat === "number");
+          const notifPerm = notificationService.permission();
+          const captureHome = async () => {
+            try {
+              const pos = await locationService.getCurrent();
+              save({ ...data, homeCoords: pos });
+            } catch (e) {
+              alert("Couldn't capture location. Check that location access is allowed for this app.");
+            }
+          };
+          const clearHome = () => save({ ...data, homeCoords: null, locationOptIn: false });
+          const toggleLoc = (v) => save({ ...data, locationOptIn: !!v });
+          const toggleNotif = async (v) => {
+            if (v && notifPerm !== "granted") {
+              const res = await notificationService.requestPermission();
+              save({ ...data, notifyOptIn: res === "granted" });
+            } else {
+              save({ ...data, notifyOptIn: !!v });
+            }
+          };
+          const rowS = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, marginBottom: 8, minHeight: 44 };
+          const toggleStyle = (on) => ({
+            width: 44, height: 26, borderRadius: 13, border: "1px solid " + (on ? "#2d5a2d" : "var(--c-border)"),
+            background: on ? "#2d5a2d" : "var(--c-surface, #fff)",
+            position: "relative", cursor: "pointer", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", padding: 0
+          });
+          const knobStyle = (on) => ({
+            position: "absolute", top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: 10,
+            background: on ? "#fff" : "#6b7280", transition: "left .15s"
+          });
+          return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+            /*#__PURE__*/React.createElement("div", { style: labelS }, "Location & Notifications"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "Optional. Track habits by location and get a nudge when you leave home."),
+            // Home location row
+            /*#__PURE__*/React.createElement("div", { style: rowS },
+              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "var(--c-text)", fontWeight: 600 } }, "Home location"),
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } },
+                  hasCoords
+                    ? `Saved ${new Date(coords.capturedAt).toLocaleDateString()} · ${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)}`
+                    : "Not set")
+              ),
+              /*#__PURE__*/React.createElement("button", {
+                type: "button",
+                onClick: hasCoords ? clearHome : captureHome,
+                style: { minHeight: 36, padding: "7px 12px", borderRadius: 8, border: "1px solid " + (hasCoords ? "#991b1b" : "#2d5a2d"), background: "transparent", color: hasCoords ? "#991b1b" : "#2d5a2d", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }
+              }, hasCoords ? "Clear" : "Capture")
+            ),
+            // Auto-detect toggle
+            /*#__PURE__*/React.createElement("div", { style: rowS },
+              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "var(--c-text)", fontWeight: 600 } }, "Detect when I'm away"),
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, "One location check per app open. Battery-safe.")
+              ),
+              /*#__PURE__*/React.createElement("button", {
+                type: "button",
+                "aria-pressed": !!data.locationOptIn,
+                "aria-label": "Toggle away detection",
+                disabled: !hasCoords,
+                onClick: () => toggleLoc(!data.locationOptIn),
+                style: { ...toggleStyle(!!data.locationOptIn), opacity: hasCoords ? 1 : 0.4 }
+              }, /*#__PURE__*/React.createElement("span", { style: knobStyle(!!data.locationOptIn) }))
+            ),
+            // Notifications toggle
+            /*#__PURE__*/React.createElement("div", { style: rowS },
+              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "var(--c-text)", fontWeight: 600 } }, "Notifications"),
+                /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } },
+                  notifPerm === "denied"
+                    ? "Blocked by browser — enable in site settings."
+                    : "Heads-up when you leave home; habit reminders later.")
+              ),
+              /*#__PURE__*/React.createElement("button", {
+                type: "button",
+                "aria-pressed": !!data.notifyOptIn,
+                "aria-label": "Toggle notifications",
+                disabled: notifPerm === "denied",
+                onClick: () => toggleNotif(!data.notifyOptIn),
+                style: { ...toggleStyle(!!data.notifyOptIn), opacity: notifPerm === "denied" ? 0.4 : 1 }
+              }, /*#__PURE__*/React.createElement("span", { style: knobStyle(!!data.notifyOptIn) }))
+            )
           );
         })(),
         // Briefing tone — shapes the voice of the daily briefing
