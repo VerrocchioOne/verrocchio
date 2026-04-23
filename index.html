@@ -7604,35 +7604,58 @@ function App() {
     // the .tour-target class — see the class-toggle effect near the
     // top of the component), the tooltip only has to stay out of the
     // target's way. It never has to anchor to a rect.
+    // Dock edge: top, bottom, or centered. Previously this was a simple
+    // "has selector → top-dock" rule, which put the tooltip over the
+    // header when the spotlit target was in the header (Profile, Streak,
+    // XP, etc.). Now we measure the target's vertical center: target in
+    // top half → dock tooltip at bottom; target in bottom half → dock at
+    // top. The pinBottom flag still wins when explicitly set (gated +
+    // steps where the [+] is in the header). No selector means centered.
     const pinBottom = step.pinBottom === true;
-    const topDock = !pinBottom && (gateBlocked || step.formStep === true || !!step.selector);
-
-    let tipStyle = {};
+    let dockEdge = null; // "top" | "bottom" | null (centered)
     if (pinBottom) {
-      // Park the pin-bottom tooltip near the bottom of the viewport —
-      // used on the gated "Tap +" steps so the [+] button at the top of
-      // the page isn't covered by the tooltip.
+      dockEdge = "bottom";
+    } else if (step.selector || gateBlocked || step.formStep === true) {
+      let targetInTopHalf = true; // safe default
+      if (step.selector) {
+        const el = document.querySelector(step.selector);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const vh = window.innerHeight || 640;
+          targetInTopHalf = (rect.top + rect.height / 2) < vh / 2;
+        }
+      }
+      dockEdge = targetInTopHalf ? "bottom" : "top";
+    }
+
+    // Compact tour card: max 340px wide, snug padding, smaller text. The
+    // previous full-width card (left:12, right:12) always ran edge-to-
+    // edge which (a) felt heavier than the page chrome and (b) guaranteed
+    // the card couldn't sit "away" from the spotlight horizontally. Now
+    // it centers in a 340px lane; on narrow phones it still has 12px
+    // safe margins.
+    const TIP_MAX = 340;
+    let tipStyle = {};
+    if (dockEdge === "bottom") {
       tipStyle = {
         position: "fixed",
-        left: 12,
-        right: 12,
+        left: "50%",
         bottom: "calc(18px + env(safe-area-inset-bottom, 0px))",
-        width: "auto"
+        transform: "translateX(-50%)",
+        width: "min(" + TIP_MAX + "px, calc(100vw - 24px))"
       };
-    } else if (topDock) {
-      // Top-dock — tooltip sits across the top of the viewport,
-      // leaving the middle of the screen clear for the spotlit target.
+    } else if (dockEdge === "top") {
       tipStyle = {
         position: "fixed",
-        left: 12,
-        right: 12,
+        left: "50%",
         top: "calc(12px + env(safe-area-inset-top, 0px))",
-        width: "auto"
+        transform: "translateX(-50%)",
+        width: "min(" + TIP_MAX + "px, calc(100vw - 24px))"
       };
     } else {
       // Centered — intro, outro, and inline-form steps.
       const vw = window.innerWidth;
-      const tipW = Math.min(300, vw - 32);
+      const tipW = Math.min(TIP_MAX, vw - 32);
       tipStyle = {
         position: "fixed",
         left: "50%",
@@ -7789,7 +7812,11 @@ function App() {
         style: {
           position: "fixed",
           left: 0, right: 0,
-          [pinBottom ? "top" : "bottom"]: pinBottom
+          // Hint lives on the OPPOSITE edge from the tooltip. Tooltip
+          // bottom → hint near top; tooltip top → hint near bottom;
+          // centered tooltip → hint near bottom (centered tooltips
+          // already dominate the middle, so bottom is cleanest).
+          [dockEdge === "bottom" ? "top" : "bottom"]: dockEdge === "bottom"
             ? "calc(130px + env(safe-area-inset-top, 0px))"
             : "calc(130px + env(safe-area-inset-bottom, 0px))",
           display: "flex", justifyContent: "center",
@@ -7836,9 +7863,9 @@ function App() {
           ...tipStyle,
           backdropFilter: "blur(28px) saturate(180%)",
           WebkitBackdropFilter: "blur(28px) saturate(180%)",
-          borderRadius: 18,
-          padding: "16px 18px 14px 18px",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.32), 0 2px 8px rgba(0,0,0,.08)",
+          borderRadius: 14,
+          padding: "12px 14px 10px 14px",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 16px 36px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.08)",
           pointerEvents: "auto",
           touchAction: "pan-y",
           zIndex: 10000
@@ -7857,16 +7884,16 @@ function App() {
         /*#__PURE__*/React.createElement("div", {
           id: "tour-tip-title",
           className: "tour-tip-title",
-          style: { fontSize: 17, fontWeight: 700, marginBottom: 6 }
+          style: { fontSize: 14, fontWeight: 700, marginBottom: 4, lineHeight: 1.3 }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-body",
           style: {
-            fontSize: 13, lineHeight: 1.5,
+            fontSize: 12, lineHeight: 1.45,
             // Gated steps keep the nav row visible (so Back still works)
             // but Next is disabled — the gateHint sub-line does the
             // heavy lifting to explain the block, so no extra margin.
-            marginBottom: formNode ? 10 : 14
+            marginBottom: formNode ? 8 : 10
           }
         }, step.body),
         // Inline form (weekly review / home location).
@@ -7912,7 +7939,7 @@ function App() {
                 onClick: advance,
                 style: {
                   background: "#2d5a2d", color: "#fff", border: "none",
-                  borderRadius: 8, padding: "9px 22px", fontSize: 13,
+                  borderRadius: 7, padding: "7px 18px", fontSize: 12,
                   fontWeight: 600, cursor: "pointer"
                 }
               }, stopSwipeStart), "Got it")
@@ -7942,8 +7969,8 @@ function App() {
                       onClick: goBack,
                       style: {
                         background: "transparent", color: "#4b5563",
-                        border: "1px solid #e5e7eb", borderRadius: 8,
-                        padding: "8px 14px", fontSize: 13, fontWeight: 500,
+                        border: "1px solid #e5e7eb", borderRadius: 7,
+                        padding: "6px 12px", fontSize: 12, fontWeight: 500,
                         cursor: "pointer"
                       }
                     }, stopSwipeStart), "Back")
@@ -7954,7 +7981,7 @@ function App() {
                   style: {
                     background: gateBlocked ? "#d1d5db" : "#2d5a2d",
                     color: "#fff", border: "none",
-                    borderRadius: 8, padding: "9px 20px", fontSize: 13,
+                    borderRadius: 7, padding: "7px 16px", fontSize: 12,
                     fontWeight: 600,
                     cursor: gateBlocked ? "not-allowed" : "pointer",
                     opacity: gateBlocked ? 0.7 : 1
