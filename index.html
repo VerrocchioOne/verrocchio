@@ -418,6 +418,14 @@ body.dark .tour-exit-demo.holding::after{background:rgba(252,165,165,0.18)}
 .tour-target-secondary{position:relative!important;z-index:9999!important;outline:2px dashed #2d5a2d;outline-offset:3px;box-shadow:0 0 0 5px rgba(45,90,45,.14)}
 body.dark .tour-dim{background:rgba(0,0,0,0.62)}
 body.dark .tour-dim.form-step{background:rgba(0,0,0,0.40)}
+/* Floating "tap anywhere to explore" hint — gentle pulse that bobs
+   vertically and fades the pill so it reads as an invitation without
+   demanding attention. Pointer-events:none on the wrapper keeps the
+   hint from swallowing the dim-click that minimizes the tooltip. */
+@keyframes tourExploreBob{0%{transform:translateY(0);opacity:.72}50%{transform:translateY(-4px);opacity:1}100%{transform:translateY(0);opacity:.72}}
+.tour-explore-hint>div{animation:tourExploreBob 2.2s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.tour-explore-hint>div{animation:none;opacity:.9}}
+body.dark .tour-explore-hint>div{background:rgba(22,24,27,0.82)!important;color:#d1d5db!important;box-shadow:0 8px 22px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)!important}
 
 /* ── Dark-mode overrides for the liquid-glass header + bottom nav ──
    Both surfaces use inline `background: rgba(255,255,255,0.55)` with
@@ -7736,14 +7744,60 @@ function App() {
       // hole, no rect math. On form-walkthrough steps the dim drops
       // from 0.42 to 0.22 so the user can still read the whole form
       // around the spotlit field (via the .form-step modifier class).
-      // Always pointerEvents:none so the spotlit target is tappable
-      // and any other form field the user wants to interact with is
-      // tappable too — swipes are captured by the document-level
-      // listener, not the dim.
+      //
+      // Click-to-minimize: tapping the dim collapses the full tooltip
+      // to a corner "Resume tour" pill. The spotlit target (.tour-
+      // target at z-index 9999) sits above the dim in paint order AND
+      // lives outside this overlay in the DOM, so its clicks never
+      // hit the dim. The tooltip is a sibling of the dim (not a
+      // descendant), so clicks inside the tooltip don't bubble into
+      // this handler. Net effect: tap the dimmed region → minimize;
+      // tap the card or the spotlit target → normal behavior.
       /*#__PURE__*/React.createElement("div", {
         key: "dim",
-        className: "tour-dim" + (step.formStep === true ? " form-step" : "")
+        className: "tour-dim" + (step.formStep === true ? " form-step" : ""),
+        onClick: () => setTourMinimized(true),
+        style: { pointerEvents: "auto", cursor: "pointer" }
       }),
+      // Floating "tap anywhere to explore" hint — lives OUTSIDE the
+      // tooltip card so it reads as a page-level affordance rather
+      // than another button in the tour UI. Animated pulse is a
+      // gentle fade+bob to draw the eye without being noisy. Position
+      // flips to the opposite edge from the tooltip (tooltip at
+      // bottom → hint ~middle-upper, and vice versa) so the hint
+      // never overlaps the card itself. The offset (~130px) clears
+      // both the sticky header AND the bottom tab bar so the hint
+      // always lands in the dim area instead of covering app chrome.
+      // Pointer-events:none so the hint doesn't swallow the dim-click
+      // that minimizes the tour.
+      /*#__PURE__*/React.createElement("div", {
+        key: "explore-hint",
+        className: "tour-explore-hint",
+        style: {
+          position: "fixed",
+          left: 0, right: 0,
+          [pinBottom ? "top" : "bottom"]: pinBottom
+            ? "calc(130px + env(safe-area-inset-top, 0px))"
+            : "calc(130px + env(safe-area-inset-bottom, 0px))",
+          display: "flex", justifyContent: "center",
+          pointerEvents: "none",
+          zIndex: 10000
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: {
+            padding: "7px 14px",
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.82)",
+            backdropFilter: "blur(18px) saturate(180%)",
+            WebkitBackdropFilter: "blur(18px) saturate(180%)",
+            boxShadow: "0 8px 22px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.9)",
+            fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+            color: "#4b5563",
+            textTransform: "uppercase"
+          }
+        }, "\u{1F446} Tap anywhere to explore")
+      ),
       // Tooltip — Back/Next buttons inside the footer drive navigation.
       // pointerEvents:auto because the rest of the overlay is :none,
       // so taps on the tooltip's own chrome (buttons, form inputs) need
@@ -7831,32 +7885,12 @@ function App() {
         // The optional secondary action (e.g. "Add a to-do") appears
         // above the nav row because it's a DIFFERENT kind of action
         // (triggers an in-app behavior, not a tour step).
-        // "Click to explore page" affordance — visible on every non-
-        // final step. Lets the user minimize the tooltip to a corner
-        // pill, roam the app, then resume the tour by tapping the
-        // pill. Placed ABOVE the nav row so it reads as a mode-switch
-        // (exit into the app) rather than another piece of tour
-        // navigation. Hidden on the last step since there's nothing
-        // past it to resume to.
-        !isLast && /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", justifyContent: "center", marginBottom: 10 }
-        },
-          /*#__PURE__*/React.createElement("button", Object.assign({
-            type: "button",
-            onClick: () => setTourMinimized(true),
-            style: {
-              background: "transparent",
-              color: "#2d5a2d",
-              border: "1px dashed #2d5a2d",
-              borderRadius: 999,
-              padding: "6px 14px",
-              fontSize: 11, fontWeight: 600,
-              letterSpacing: 0.2,
-              cursor: "pointer",
-              textTransform: "uppercase"
-            }
-          }, stopSwipeStart), "Click to explore page")
-        ),
+        // The "tap anywhere to explore" affordance is now an animated
+        // floating hint OUTSIDE this card (see the overlay render
+        // below), and the minimize trigger is a click on the dim layer
+        // itself rather than a button inside the tooltip. Kept this
+        // comment as a breadcrumb so future edits don't try to restore
+        // the in-tooltip button.
         isLast
           ? /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", justifyContent: "center" }
