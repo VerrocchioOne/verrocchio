@@ -6364,12 +6364,18 @@ function App() {
     const pend = data.todos.filter(t => !t.done);
     const q = todayQ();
     const l30 = pastDays(30);
+    // Actual window length — users with <30 days of history would
+    // otherwise see deflated completion percentages (dividing by 30
+    // when only 14 days of data exist makes a 100% user look like 47%).
+    // Cap the denominator at the number of days we've actually
+    // observed so percentages reflect real behavior.
+    const dataDays = Math.max(1, Math.min(l30.length, completionDayCount()));
     const tc = HT.map(t => {
       const g = dH.filter(h => h.type === t.value);
       if (!g.length) return null;
       return {
         type: t.value,
-        pct: Math.round(g.reduce((s, h) => s + l30.filter(d => h.completions?.[d]).length, 0) / (g.length * 30) * 100)
+        pct: Math.round(g.reduce((s, h) => s + l30.filter(d => h.completions?.[d]).length, 0) / (g.length * dataDays) * 100)
       };
     }).filter(Boolean);
     // Correlations from the last 60 days of completion-time data — the
@@ -6392,27 +6398,85 @@ function App() {
           : "You are a neutral analyst. Summarize the user's day factually without cheerleading or criticism. Plain language, no emotional framing.";
     const prompt = `${toneLine} Generate a brief, motivating morning briefing.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (30d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (30d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}${corrHints.length ? `\nPATTERNS DETECTED: ${corrHints.join(" | ")}` : ""}\nQUOTE: ${q ? `"${q.text.slice(0, 120)}"${q.author ? ` — ${q.author}` : ""}` : "None"}\n\n3 paragraphs: 1) greeting referencing today's tasks/goals, 2) life balance insight — weave in any PATTERNS DETECTED naturally if present, 3) brief closing. Match the tone above exactly.`;
     if (!AI_BACKEND_URL) {
-      // No backend proxy configured — produce a short deterministic briefing
-      // from the same data we'd have sent to the LLM. Keeps the Home tab
-      // populated instead of showing "Error generating brief."
+      // No backend proxy configured — produce a richer deterministic
+      // briefing from the same data we'd have sent to the LLM. Adds
+      // persona-tailored specifics (streak + peak habit + trend line
+      // + off-track habit) so the Home tab reads like an analysis
+      // rather than a one-liner, AND the demo personas with their 14
+      // days of synthetic data get a briefing that actually uses the
+      // synthetic pattern their profile was designed around.
       const doneCt = dH.filter(h => isDone(h, td)).length;
       const focused = tc.filter(t => t.pct >= 70).map(t => t.type);
       const neglected = tc.filter(t => t.pct < 40).map(t => t.type);
       const topCorr = memoedCorrelations[0];
       const tone = data.aiTone || "neutral";
+      // Per-habit completion counts over the active window (capped at
+      // dataDays so the "top" habit is the most-consistent, not just
+      // the one with the most history).
+      const habitScores = dH.map(h => {
+        const cnt = l30.filter(d => h.completions?.[d]).length;
+        return { h, cnt, pct: Math.round(cnt / dataDays * 100) };
+      }).sort((a, b) => b.cnt - a.cnt);
+      const topHabit = habitScores[0];
+      const offHabit = [...habitScores].sort((a, b) => a.cnt - b.cnt)[0];
+      // Trend: compare last-7-days completion rate to the prior window.
+      const sumWindow = (from, to) => {
+        const w = l30.slice(from, to);
+        return dH.reduce((s, h) => s + w.filter(d => h.completions?.[d]).length, 0);
+      };
+      const thisWk = sumWindow(0, Math.min(7, dataDays));
+      const prevWk = sumWindow(7, Math.min(14, dataDays));
+      const trend = prevWk > 0 ? Math.round(((thisWk - prevWk) / prevWk) * 100) : null;
+      // Current streak — consecutive days ending today with at least
+      // one completion across any active habit.
+      const streak = (() => {
+        let s = 0;
+        for (let i = 0; i < l30.length; i++) {
+          const any = dH.some(h => h.completions?.[l30[i]]);
+          if (!any) break;
+          s++;
+        }
+        return s;
+      })();
       const opening = tone === "tough-love"
         ? "Morning. Here's where you stand:"
         : tone === "neutral"
           ? "Today's status:"
           : "Good morning.";
       const parts = [];
-      parts.push(`${opening} ${pend.length ? `${pend.length} task${pend.length === 1 ? "" : "s"} open${pend.length <= 3 ? ` — ${pend.map(t => t.text).join(", ")}` : "."}` : (tone === "tough-love" ? "Task list is clear — no excuses." : "Nothing urgent on the task list — clear runway.")} ${dH.length ? `Habits today: ${doneCt}/${dH.length} logged.` : ""}`.trim());
+      parts.push(`${opening} ${pend.length ? `${pend.length} task${pend.length === 1 ? "" : "s"} open${pend.length <= 3 ? ` — ${pend.map(t => t.text).join(", ")}` : "."}` : (tone === "tough-love" ? "Task list is clear — no excuses." : "Nothing urgent on the task list — clear runway.")} ${dH.length ? `Habits today: ${doneCt}/${dH.length} logged.` : ""}${streak > 0 ? ` Streak: ${streak} day${streak === 1 ? "" : "s"}.` : ""}`.trim());
+      // Second paragraph — a data-driven insight specific to the
+      // user's persona/pattern. Pick the most relevant of: peak
+      // habit, off-track habit, area balance, weekly trend.
+      const insightBits = [];
+      if (topHabit && topHabit.cnt >= Math.ceil(dataDays * 0.6)) {
+        insightBits.push(tone === "tough-love"
+          ? `"${topHabit.h.text}" is your anchor — ${topHabit.pct}% over ${dataDays} days. Everything else should be at least this reliable.`
+          : tone === "neutral"
+            ? `Most consistent: "${topHabit.h.text}" at ${topHabit.pct}%.`
+            : `Your anchor habit is "${topHabit.h.text}" — ${topHabit.pct}% over the last ${dataDays} days. Build off that.`);
+      }
+      if (offHabit && topHabit && offHabit.h.id !== topHabit.h.id && offHabit.pct < 40) {
+        insightBits.push(tone === "tough-love"
+          ? `"${offHabit.h.text}" is slipping at ${offHabit.pct}%. Fix it this week.`
+          : tone === "neutral"
+            ? `Lowest: "${offHabit.h.text}" at ${offHabit.pct}%.`
+            : `"${offHabit.h.text}" could use some love — sitting at ${offHabit.pct}%.`);
+      }
+      if (trend != null && Math.abs(trend) >= 15) {
+        insightBits.push(tone === "tough-love"
+          ? `${trend > 0 ? `Up ${trend}%` : `Down ${Math.abs(trend)}%`} vs last week. ${trend < 0 ? "Reverse it." : "Hold it."}`
+          : tone === "neutral"
+            ? `This week vs last: ${trend > 0 ? "+" : ""}${trend}%.`
+            : `${trend > 0 ? `This week is up ${trend}%` : `This week is down ${Math.abs(trend)}%`} vs last. ${trend > 0 ? "Nice rhythm" : "Gentle reset"}.`);
+      }
       if (focused.length || neglected.length) {
         const bits = [];
-        if (focused.length) bits.push(tone === "neutral" ? `${focused.join(", ").toLowerCase()} consistent` : `you've been consistent with ${focused.join(", ").toLowerCase()}`);
-        if (neglected.length) bits.push(tone === "tough-love" ? `${neglected.join(", ").toLowerCase()} is slipping — this is the week to fix that` : `${neglected.join(", ").toLowerCase()} ${neglected.length === 1 ? "has" : "have"} slipped`);
-        parts.push(`${tone === "neutral" ? "30-day:" : "Over the last 30 days,"} ${bits.join(", and ")}.`);
+        if (focused.length) bits.push(tone === "neutral" ? `${focused.join(", ").toLowerCase()} consistent` : `consistent with ${focused.join(", ").toLowerCase()}`);
+        if (neglected.length) bits.push(tone === "tough-love" ? `${neglected.join(", ").toLowerCase()} is slipping` : `${neglected.join(", ").toLowerCase()} ${neglected.length === 1 ? "has" : "have"} slipped`);
+        insightBits.push(`Across areas: ${bits.join(", ")}.`);
       }
+      if (insightBits.length > 0) parts.push(insightBits.join(" "));
       if (topCorr) {
         const hr = topCorr.aCutoffHour === 12 ? "by noon" : topCorr.aCutoffHour === 18 ? "by 6pm" : "before bed";
         parts.push(`Pattern: when you finish "${topCorr.aText}" ${hr}, "${topCorr.bText}" lands ${Math.round(topCorr.conditional * 100)}% of the time (vs ${Math.round(topCorr.base * 100)}% normally).`);
