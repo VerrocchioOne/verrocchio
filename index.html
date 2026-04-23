@@ -7237,16 +7237,15 @@ function App() {
       autoAdvance: true
     },
     // 6.5 — Goals: showcase the saved goal (landing target for the step-2
-    // skipIf). Centered, no selector, no gate — the goals tab is visible
-    // behind the tooltip and the user can see their goal card. This is
-    // where demo users who arrived with pre-seeded data or real users
-    // replaying the tour catch up on what "complete goal" means without
-    // having to fill a form that's already filled.
+    // skipIf). Bottom-pinned so the goal card up top stays fully visible
+    // — the whole point of this step is to let the user READ their goal
+    // while the tooltip narrates the SMART fields. Centering the tip
+    // would cover the content it's describing.
     {
       title: "Your goal is set",
       body: "Every goal has a SMART breakdown: what you're doing, how much, whether it's realistic, why it matters, and when it's due. You can tap the goal card any time to edit.",
       tab: "goals",
-      center: true
+      pinBottom: true
     },
     // ── Habits walkthrough (7-15) ────────────────────────────────────
     // Same shape as the goal walkthrough, expanded to hit every habit
@@ -7359,15 +7358,16 @@ function App() {
       autoAdvance: true
     },
     // 14.5 — Habits: showcase how the four support-habits map to the goal
-    // (landing target for the step-7 skipIf). Describes the morning /
-    // afternoon / evening / avoid grouping in the abstract — users with
-    // the demo seed can see the literal Morning Cardio / Drink Water /
-    // Evening Stretch / No Late-Night Snacks habits behind the tooltip.
+    // (landing target for the step-7 skipIf). Bottom-pinned (not
+    // centered) so the four habit rows stay readable above the tooltip.
+    // A centered tip here covered MORNING + AFTERNOON + EVENING + AVOID
+    // sections so the user couldn't see the routine the step was
+    // narrating — defeats the purpose of a "showcase" step.
     {
       title: "Habits stack into a routine",
       body: "Every habit pairs with a goal and a time of day — morning, afternoon, evening, or an \u201Cavoid\u201D bucket for things to steer clear of. The demo comes with four that map to the marathon goal so you can see how the pieces click together.",
       tab: "habits",
-      center: true
+      pinBottom: true
     },
     // 15 — To-Dos
     {
