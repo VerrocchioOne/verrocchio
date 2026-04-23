@@ -9,8 +9,17 @@
 <meta name="theme-color" content="#2d5a2d">
 <link rel="manifest" href="manifest.json">
 <title>Verrocchio</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='6' y='46' width='52' height='10' rx='2' fill='url(%23g)'/><rect x='12' y='34' width='40' height='10' rx='2' fill='url(%23g)'/><rect x='18' y='22' width='28' height='10' rx='2' fill='url(%23g)'/><rect x='24' y='10' width='16' height='10' rx='2' fill='url(%23g)'/><path d='M14 22 L32 54 L50 22 L44 22 L32 42 L20 22 Z' fill='%23f4efe4'/></svg>">
-<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%23f8f7f4'/><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%232d5a2d'/><stop offset='1' stop-color='%233d7a3d'/></linearGradient></defs><rect x='18' y='130' width='144' height='28' rx='5' fill='url(%23g)'/><rect x='36' y='96' width='108' height='28' rx='5' fill='url(%23g)'/><rect x='54' y='62' width='72' height='28' rx='5' fill='url(%23g)'/><rect x='72' y='28' width='36' height='28' rx='5' fill='url(%23g)'/><path d='M42 62 L90 152 L138 62 L124 62 L90 120 L56 62 Z' fill='%23f4efe4'/></svg>">
+<!-- iOS "Add to Home Screen" requires a raster apple-touch-icon; Safari
+     silently ignores data:image/svg+xml here and falls back to a
+     screenshot-of-the-page icon, which is what the previous build
+     shipped. Pointing at the 180×180 PNG (plus the 1024×1024 for
+     high-DPI spring loaders) renders the real logo on the home
+     screen. Favicon link uses the same PNGs so browser tabs and the
+     saved-page thumbnail stay on-brand. -->
+<link rel="icon" type="image/png" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="1024x1024" href="apple-touch-icon-1024.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="1024x1024" href="apple-touch-icon-1024.png">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
