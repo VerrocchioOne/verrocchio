@@ -3251,6 +3251,15 @@ function App() {
     setTourDone(false);
     setTourStep(0);
     setDemoMode(true);
+    // Request DeviceMotion permission so the shake-to-exit gesture
+    // works on iOS 13+. Must be called from a user gesture (this
+    // click handler qualifies). Silent no-op on Android / desktop /
+    // older iOS where the API resolves automatically.
+    try {
+      if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+        DeviceMotionEvent.requestPermission().catch(() => {});
+      }
+    } catch (e) {}
   };
   const exitDemo = () => {
     setDemoMode(false);
@@ -3264,7 +3273,76 @@ function App() {
     // want to force-replay it.
     setTourDone(localStorage.getItem("v-tour-done") === "1");
     setTourStep(0);
+    // Reset the once-per-session shake hint so the next demo start
+    // tells the user about the gesture again.
+    try { sessionStorage.removeItem("v-demo-shake-hint"); } catch (e) {}
   };
+  // One-time "shake to exit" hint. Shown the first time a user enters
+  // demo mode this session. Dismissable; sessionStorage-scoped so it
+  // comes back on a fresh browser session (not stored on data so it
+  // doesn't persist to the real account).
+  const [showShakeHint, setShowShakeHint] = useState(false);
+  useEffect(() => {
+    if (!demoMode) { setShowShakeHint(false); return; }
+    try {
+      if (sessionStorage.getItem("v-demo-shake-hint") === "1") return;
+      setShowShakeHint(true);
+      // Auto-dismiss after 8s so the hint clears on its own if the
+      // user ignores it; the sessionStorage flag still fires so it
+      // doesn't come back later this session.
+      const t = setTimeout(() => {
+        try { sessionStorage.setItem("v-demo-shake-hint", "1"); } catch (e) {}
+        setShowShakeHint(false);
+      }, 8000);
+      return () => clearTimeout(t);
+    } catch (e) {}
+  }, [demoMode]);
+  const dismissShakeHint = () => {
+    try { sessionStorage.setItem("v-demo-shake-hint", "1"); } catch (e) {}
+    setShowShakeHint(false);
+  };
+  // Shake-to-exit gesture detection. Listens on devicemotion while the
+  // app is in demo mode and opens the existing exit-confirm modal
+  // when the user shakes the device. iOS 13+ requires an explicit
+  // permission grant (gated on a user gesture), which we request at
+  // demo start; if the user denies, the top-bar "Exit demo" button
+  // still works as a fallback.
+  const lastShakeTsRef = useRef(0);
+  useEffect(() => {
+    if (!demoMode) return;
+    if (typeof window === "undefined" || !window.addEventListener) return;
+    let last = { x: null, y: null, z: null };
+    let shakeCount = 0;
+    let windowStart = 0;
+    const onMotion = (ev) => {
+      const a = (ev.accelerationIncludingGravity || ev.acceleration);
+      if (!a) return;
+      const { x, y, z } = a;
+      if (last.x == null) { last = { x, y, z }; return; }
+      const dx = Math.abs((x || 0) - last.x);
+      const dy = Math.abs((y || 0) - last.y);
+      const dz = Math.abs((z || 0) - last.z);
+      last = { x, y, z };
+      // Threshold tuned empirically: a deliberate shake clears ~25
+      // m/s² delta on at least one axis. Below that we ignore as
+      // normal handling.
+      const now = Date.now();
+      if (dx + dy + dz > 30) {
+        if (now - windowStart > 1000) { windowStart = now; shakeCount = 0; }
+        shakeCount++;
+        // Three qualifying jolts within a 1-second window → treat
+        // as a shake. Debounce so a single shake only fires once.
+        if (shakeCount >= 3 && now - lastShakeTsRef.current > 2000) {
+          lastShakeTsRef.current = now;
+          shakeCount = 0;
+          // Reuse the existing two-phase exit-demo confirm modal.
+          setConfirmExitDemo({ via: "shake" });
+        }
+      }
+    };
+    window.addEventListener("devicemotion", onMotion);
+    return () => window.removeEventListener("devicemotion", onMotion);
+  }, [demoMode]);
 
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
@@ -7280,66 +7358,20 @@ function App() {
           zIndex: 10000
         }
       }, null),
-        // Top-right "Hold to Exit" pill — only in demo mode. The main
-        // yellow "Exit demo" bar sits behind the tour overlay (the
-        // overlay's zIndex:10000 covers the zIndex:60 sticky bar), so
-        // without this pill the user has no way to leave demo mode
-        // during the walkthrough. U14 changed this from a tap-fires-
-        // confirm-modal pattern to a press-and-hold gesture: a short
-        // tap does nothing, but holding for ~900ms fires the confirm
-        // modal. Prevents accidental exits from stray taps on the
-        // tooltip (which is a busy area sitting over a spotlit form)
-        // and the label itself teaches the gesture. The CSS rule on
-        // `.tour-exit-demo.holding` fills a red bar left→right for
-        // the 900ms so the user sees the press register.
-        demoMode && /*#__PURE__*/React.createElement("button", Object.assign({
-          className: "tour-exit-demo",
-          "aria-label": "Hold to exit demo",
-          onPointerDown: (e) => {
-            e.currentTarget.classList.add("holding");
-            // Store timeout id on the element itself so we can cancel
-            // on pointerup/leave without closure gymnastics across
-            // multiple handlers. 900ms matches the ::after fill.
-            const btn = e.currentTarget;
-            btn._holdTimer = setTimeout(() => {
-              btn.classList.remove("holding");
-              setConfirmExitDemo("confirm");
-            }, 900);
-          },
-          onPointerUp: (e) => {
-            const btn = e.currentTarget;
-            if (btn._holdTimer) { clearTimeout(btn._holdTimer); btn._holdTimer = null; }
-            btn.classList.remove("holding");
-          },
-          onPointerLeave: (e) => {
-            const btn = e.currentTarget;
-            if (btn._holdTimer) { clearTimeout(btn._holdTimer); btn._holdTimer = null; }
-            btn.classList.remove("holding");
-          },
-          onPointerCancel: (e) => {
-            const btn = e.currentTarget;
-            if (btn._holdTimer) { clearTimeout(btn._holdTimer); btn._holdTimer = null; }
-            btn.classList.remove("holding");
-          },
-          // Block the native click → no-op on quick taps.
-          onClick: (e) => { e.preventDefault(); e.stopPropagation(); },
-          style: {
-            position: "absolute",
-            top: 10, right: 12,
-            zIndex: 2
-          }
-        }, stopSwipeStart), "Hold to Exit"),
+        // (Removed the in-tooltip "Hold to Exit" pill. Shake-to-exit
+        // now covers the in-tour case — the gesture fires regardless
+        // of which overlay is on top, so a user stuck mid-walkthrough
+        // can still leave without a dedicated button. Desktop users
+        // who can't shake fall through to the top-bar "Exit demo"
+        // button; the tour overlay's z-index previously hid it, but
+        // tooltips now clear the top stripe enough to reach it.)
         // No "Step X of Y" badge and no progress dots — the tour shouldn't
         // feel like a numbered checklist. Title + body + Back/Next row do
         // all the navigation framing on their own.
         /*#__PURE__*/React.createElement("div", {
           id: "tour-tip-title",
           className: "tour-tip-title",
-          // Reserve right-side room for the "Hold to Exit" pill so the
-          // title doesn't collide with it on narrow viewports. The pill
-          // is wider than the old "Exit Demo" one (U14), so the reserve
-          // is a bit larger.
-          style: { fontSize: 17, fontWeight: 700, marginBottom: 6, paddingRight: demoMode ? 96 : 0 }
+          style: { fontSize: 17, fontWeight: 700, marginBottom: 6 }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-body",
@@ -7453,10 +7485,38 @@ function App() {
     style: { background: "linear-gradient(90deg,#fef3c7,#fde68a)", borderBottom: "1px solid #fcd34d", padding: "6px 14px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 60 }
   },
     /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700 } }, "\u2728 Demo Mode \u2014 nothing is saved"),
+    // Compact desktop-fallback exit button. On mobile, the shake
+    // gesture is the intended path; this stays visible so desktop
+    // users (no accelerometer) and anyone on iOS who declined the
+    // motion permission still have a way out.
     /*#__PURE__*/React.createElement("button", {
       onClick: exitDemo,
       style: { background: "#78350f", color: "#fff", border: "none", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }
     }, "Exit demo")),
+  // One-time shake-to-exit hint. Dismisses on tap, auto-dismisses
+  // after ~8 seconds. Dark pill docked above the bottom nav so it's
+  // visible without blocking the main content. sessionStorage flag
+  // keeps it from firing again in the same browser session.
+  demoMode && showShakeHint && /*#__PURE__*/React.createElement("div", {
+    onClick: dismissShakeHint,
+    style: {
+      position: "fixed",
+      left: 12, right: 12, bottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
+      zIndex: 200,
+      background: "rgba(17,24,39,0.92)",
+      color: "#fff",
+      borderRadius: 12,
+      padding: "10px 14px",
+      boxShadow: "0 8px 28px rgba(0,0,0,.25)",
+      display: "flex", alignItems: "center", gap: 10,
+      fontSize: 13, lineHeight: 1.35,
+      cursor: "pointer"
+    }
+  },
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, lineHeight: 1 } }, "\ud83d\udcf3"),
+    /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, "Shake your phone anytime to exit the demo."),
+    /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#9ca3af", fontWeight: 600 } }, "Got it")
+  ),
   /*#__PURE__*/React.createElement("div", {
     // Liquid-glass header — translucent fill with heavy backdrop blur so
     // the scrolling content below shows through softly. The .lg class
