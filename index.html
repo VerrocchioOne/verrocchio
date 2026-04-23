@@ -2469,6 +2469,11 @@ function hydrateCloudDoc(p) {
   if (typeof p.sortPrefs.habits !== "string") p.sortPrefs.habits = "default";
   if (typeof p.sortPrefs.goals  !== "string") p.sortPrefs.goals  = "default";
   if (typeof p.sortPrefs.todos  !== "string") p.sortPrefs.todos  = "default";
+  // AI tone for the daily briefing. Values: "encouraging" | "tough-love"
+  // | "neutral". Used by genBrief to shape the prompt sent to the
+  // backend proxy AND the deterministic fallback. Invalid values fall
+  // back to "encouraging" at read time.
+  if (typeof p.aiTone !== "string") p.aiTone = "encouraging";
   if (typeof p.onboardingComplete !== "boolean") {
     p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
   }
@@ -5131,7 +5136,24 @@ function App() {
         pct: Math.round(g.reduce((s, h) => s + l30.filter(d => h.completions?.[d]).length, 0) / (g.length * 30) * 100)
       };
     }).filter(Boolean);
-    const prompt = `You are a warm personal coach. Generate a brief, motivating morning briefing.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (30d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (30d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}\nQUOTE: ${q ? `"${q.text.slice(0, 120)}"${q.author ? ` — ${q.author}` : ""}` : "None"}\n\n3 paragraphs: 1) warm greeting referencing today's tasks/goals, 2) life balance insight based on habit patterns, 3) brief closing with motivation. Keep it personal and direct.`;
+    // Correlations from the last 60 days of completion-time data — the
+    // LLM sees them alongside goals/habits so it can weave them into
+    // the narrative instead of listing them mechanically.
+    const corrHints = findCorrelations(data.habits || []).slice(0, 3).map(r => {
+      const hrLabel = r.aCutoffHour === 12 ? "by noon" : r.aCutoffHour === 18 ? "by 6pm" : "by midnight";
+      const pct = Math.round((r.lift) * 100);
+      return `When "${r.aText}" is done ${hrLabel}, "${r.bText}" is ${pct}pp more likely to happen (${Math.round(r.conditional*100)}% vs ${Math.round(r.base*100)}% base)`;
+    });
+    // AI tone → prompt-shaping preamble. "Encouraging" is the default
+    // warm coach. "Tough love" gives direct feedback — still caring,
+    // not mean. "Neutral" is data-summary mode with no cheerleading.
+    const toneLine =
+      (data.aiTone === "tough-love")
+        ? "You are a direct, no-nonsense coach who holds the user accountable without being cruel. Call out slipping habits plainly and expect better. Skip the pep talk."
+        : (data.aiTone === "neutral")
+          ? "You are a neutral analyst. Summarize the user's day factually without cheerleading or criticism. Plain language, no emotional framing."
+          : "You are a warm personal coach.";
+    const prompt = `${toneLine} Generate a brief, motivating morning briefing.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (30d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (30d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}${corrHints.length ? `\nPATTERNS DETECTED: ${corrHints.join(" | ")}` : ""}\nQUOTE: ${q ? `"${q.text.slice(0, 120)}"${q.author ? ` — ${q.author}` : ""}` : "None"}\n\n3 paragraphs: 1) greeting referencing today's tasks/goals, 2) life balance insight — weave in any PATTERNS DETECTED naturally if present, 3) brief closing. Match the tone above exactly.`;
     if (!AI_BACKEND_URL) {
       // No backend proxy configured — produce a short deterministic briefing
       // from the same data we'd have sent to the LLM. Keeps the Home tab
@@ -5139,15 +5161,26 @@ function App() {
       const doneCt = dH.filter(h => isDone(h, td)).length;
       const focused = tc.filter(t => t.pct >= 70).map(t => t.type);
       const neglected = tc.filter(t => t.pct < 40).map(t => t.type);
+      const topCorr = findCorrelations(data.habits || [])[0];
+      const tone = data.aiTone || "encouraging";
+      const opening = tone === "tough-love"
+        ? "Morning. Here's where you stand:"
+        : tone === "neutral"
+          ? "Today's status:"
+          : "Good morning.";
       const parts = [];
-      parts.push(`Good morning. ${pend.length ? `You have ${pend.length} task${pend.length === 1 ? "" : "s"} open${pend.length <= 3 ? `: ${pend.map(t => t.text).join(", ")}` : "."}` : "Nothing urgent on the task list — clear runway."} ${dH.length ? `Today's habits: ${doneCt}/${dH.length} logged.` : ""}`.trim());
+      parts.push(`${opening} ${pend.length ? `${pend.length} task${pend.length === 1 ? "" : "s"} open${pend.length <= 3 ? ` — ${pend.map(t => t.text).join(", ")}` : "."}` : (tone === "tough-love" ? "Task list is clear — no excuses." : "Nothing urgent on the task list — clear runway.")} ${dH.length ? `Habits today: ${doneCt}/${dH.length} logged.` : ""}`.trim());
       if (focused.length || neglected.length) {
         const bits = [];
-        if (focused.length) bits.push(`you've been consistent with ${focused.join(", ").toLowerCase()}`);
-        if (neglected.length) bits.push(`${neglected.join(", ").toLowerCase()} ${neglected.length === 1 ? "has" : "have"} slipped`);
-        parts.push(`Over the last 30 days, ${bits.join(", and ")}.`);
+        if (focused.length) bits.push(tone === "neutral" ? `${focused.join(", ").toLowerCase()} consistent` : `you've been consistent with ${focused.join(", ").toLowerCase()}`);
+        if (neglected.length) bits.push(tone === "tough-love" ? `${neglected.join(", ").toLowerCase()} is slipping — this is the week to fix that` : `${neglected.join(", ").toLowerCase()} ${neglected.length === 1 ? "has" : "have"} slipped`);
+        parts.push(`${tone === "neutral" ? "30-day:" : "Over the last 30 days,"} ${bits.join(", and ")}.`);
       }
-      if (q && q.text) parts.push(`"${q.text.slice(0, 200)}"${q.author ? ` — ${q.author}` : ""}`);
+      if (topCorr) {
+        const hr = topCorr.aCutoffHour === 12 ? "by noon" : topCorr.aCutoffHour === 18 ? "by 6pm" : "before bed";
+        parts.push(`Pattern: when you finish "${topCorr.aText}" ${hr}, "${topCorr.bText}" lands ${Math.round(topCorr.conditional * 100)}% of the time (vs ${Math.round(topCorr.base * 100)}% normally).`);
+      }
+      if (q && q.text && tone !== "neutral") parts.push(`"${q.text.slice(0, 200)}"${q.author ? ` — ${q.author}` : ""}`);
       const txt = parts.join("\n\n");
       setBriefTxt(txt);
       updateRitual({ briefing: txt });
@@ -7454,7 +7487,42 @@ function App() {
     const bestStreak = activeH.length > 0 ? Math.max(0, ...activeH.map(h => getStreak(h))) : 0;
     const perfect7 = today7.filter(d => activeH.length > 0 && activeH.every(h => isDone(h, d))).length;
 
+    // Tips engine: each source contributes data-driven entries. Order
+    // matters — the first three that survive dedupe + slicing are what
+    // the user sees. Highest-signal sources go first (off-schedule
+    // nudges and observed correlations beat generic SMART reminders
+    // because they reflect the user's actual behavior).
     const smartTips = [];
+    // Off-schedule: habits the user is consistently logging AFTER their
+    // section cutoff (e.g. a "morning run" done most days after noon).
+    // Surfaces one nudge per qualifying habit, capped at 2.
+    const offSchedHits = activeH
+      .map(h => detectOffSchedule(h))
+      .filter(Boolean)
+      .slice(0, 2);
+    for (const o of offSchedHits) {
+      const secLabel = o.section.charAt(0).toUpperCase() + o.section.slice(1);
+      const suggestSec = o.section === "morning" ? "afternoon" : o.section === "afternoon" ? "evening" : "morning";
+      smartTips.push({
+        icon: "🕘",
+        title: `"${o.habitText.slice(0, 30)}" keeps landing later`,
+        body: `${o.lateCount}/${o.loggedCount} of the last logged ${secLabel} sessions were after the cutoff. Consider moving it to ${suggestSec}.`,
+        action: () => { setEditHabitModal((data.habits || []).find(x => x.id === o.habitId) || null); }
+      });
+    }
+    // Observed correlations: top 1 pair by lift. Only surfaced once
+    // we have the 14-day support — so it stays silent until data
+    // accumulates.
+    const topCorrTip = findCorrelations(data.habits || [])[0];
+    if (topCorrTip) {
+      const hrLabel = topCorrTip.aCutoffHour === 12 ? "by noon" : topCorrTip.aCutoffHour === 18 ? "by 6pm" : "before bed";
+      smartTips.push({
+        icon: "🔗",
+        title: "Pattern: habits move together",
+        body: `When you do "${topCorrTip.aText.slice(0, 30)}" ${hrLabel}, "${topCorrTip.bText.slice(0, 30)}" lands ${Math.round(topCorrTip.conditional * 100)}% of the time (vs ${Math.round(topCorrTip.base * 100)}% otherwise).`,
+        action: null
+      });
+    }
     const noSmartGoal = data.goals.find(g => !g.smart || !Object.values(g.smart).some(v => v && v.trim()));
     if (noSmartGoal) smartTips.push({ icon: "🎯", title: "Add S.M.A.R.T. details", body: `Your goal "${noSmartGoal.text.slice(0, 40)}…" has no SMART framework. Tap to add specifics.`, action: () => setTab("goals") });
     const lowHabit = activeH.find(h => getCR(h).pct < 30);
@@ -7558,12 +7626,54 @@ function App() {
         ]
       ));
     }
+    // Tone pill row — lets the user flip the briefing voice between
+    // encouraging / tough-love / neutral. Persists on data.aiTone so
+    // the pick carries across sessions + devices. Regenerate button
+    // re-runs genBrief with the new tone when a briefing already
+    // exists for today.
+    const currentTone = data.aiTone || "encouraging";
+    const toneOpts = [
+      { v: "encouraging", label: "Warm" },
+      { v: "tough-love",  label: "Tough love" },
+      { v: "neutral",     label: "Neutral" }
+    ];
+    const toneRow = /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 12 }
+    }, toneOpts.map(t => {
+      const on = currentTone === t.v;
+      return /*#__PURE__*/React.createElement("button", {
+        key: t.v,
+        type: "button",
+        onClick: () => {
+          save({ ...data, aiTone: t.v });
+          // If today's briefing is already cached, regenerate so the
+          // user sees the new voice immediately.
+          if (briefTxt) { updateRitual({ briefing: "" }); setBriefTxt(""); setTimeout(() => genBrief(), 50); }
+        },
+        style: {
+          padding: "3px 9px", borderRadius: 20,
+          border: "1px solid " + (on ? "#2d5a2d" : "var(--c-border)"),
+          background: on ? "var(--c-tint-green)" : "var(--c-surface, #fff)",
+          color: on ? "#2d5a2d" : "#6b7280",
+          fontSize: 10, fontWeight: on ? 700 : 500,
+          cursor: "pointer", whiteSpace: "nowrap",
+          WebkitTapHighlightColor: "transparent"
+        },
+        title: "Briefing tone: " + t.label
+      }, t.label);
+    }));
+
     const briefingCard = briefReviewed
       ? null
       : /*#__PURE__*/React.createElement("div", { key: "brief", style: cardStyle },
           /*#__PURE__*/React.createElement("div", {
-            style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12 }
-          }, "Your Daily Briefing"),
+            style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)" }
+            }, "Your Daily Briefing"),
+            toneRow
+          ),
           briefing && /*#__PURE__*/React.createElement("div", {
             className: "pulsing",
             style: { textAlign: "center", padding: "28px 0", color: "#9ca3af", fontSize: 13 }
