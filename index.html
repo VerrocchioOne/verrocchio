@@ -2263,11 +2263,14 @@ const MomentumArrow = React.memo(function MomentumArrow({ habit }) {
   }, glyph, delta !== 0 ? " " + Math.abs(delta) : "");
 });
 
-// Year-heatmap — GitHub-style 7-row grid showing ~365 days of
-// completion for a single habit. Cells are 6px, intensity is
-// green for done. Rendered in the stats modal as a collapsible
-// per-habit drill-down.
-const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 7, gap = 2 }) {
+// Year-heatmap — dense 7-row grid showing ~365 days of completion
+// for a single habit, styled after HabitKit's dot-matrix blocks. When
+// the habit has a type (Area of Life) we use that area's color for
+// "done" cells and a low-opacity tint of the same color for empty
+// cells, so each heatmap reads as a monochrome "chip" of the habit's
+// brand color. Missed days stay red so gone-sideways data is visible.
+// Fallbacks to Verrocchio green for uncategorized habits.
+const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 10, gap = 3, color }) {
   const today = new Date();
   const cells = [];
   // Align the grid so the current week ends on today's column.
@@ -2279,12 +2282,20 @@ const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 7, gap =
     const state = habit.completions?.[k];
     cells.push({ k, state });
   }
+  // Resolve the "done" fill: explicit prop > habit-type color > brand green.
+  const typeColor = color || (habit && habit.type ? (HT.find(t => t.value === habit.type) || {}).color : null) || "#2d5a2d";
+  // Low-opacity version of the same hue for empty cells. Preserves
+  // the HabitKit "monochrome chip" look where empty is a very light
+  // tint instead of a neutral gray.
+  const emptyFill = typeColor + "1A"; // ~10% alpha via appended hex
+  const missedFill = "#fca5a5";
   // Lay out as 7 rows × N columns. First cell goes in row = DOW of earliest date.
   const firstDow = new Date(cells[0].k + "T12:00:00").getDay();
   const total = cells.length;
   const cols = Math.ceil((firstDow + total) / 7);
   const w = cols * (cellSize + gap);
   const h = 7 * (cellSize + gap);
+  const r = Math.max(1.5, Math.round(cellSize * 0.25));
   return React.createElement("svg", {
     width: w, height: h, viewBox: `0 0 ${w} ${h}`, "aria-hidden": true,
     style: { display: "block" }
@@ -2292,16 +2303,16 @@ const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 7, gap =
     const idx = firstDow + i;
     const col = Math.floor(idx / 7);
     const row = idx % 7;
-    const fill = c.state === "done" ? "#22c55e"
-               : c.state === "missed" ? "#fca5a5"
-               : "#f1f5f9";
+    const fill = c.state === "done" ? typeColor
+               : c.state === "missed" ? missedFill
+               : emptyFill;
     return React.createElement("rect", {
       key: i,
       x: col * (cellSize + gap),
       y: row * (cellSize + gap),
       width: cellSize,
       height: cellSize,
-      rx: 1.4,
+      rx: r,
       fill
     });
   }));
