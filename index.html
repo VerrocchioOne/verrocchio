@@ -7779,6 +7779,74 @@ function App() {
         }
       }));
     })),
+    // Month stats \u2014 total-done %, all-done streak, best streak, and
+    // counts of perfect / zero-completion days. Computed over the
+    // month currently on screen, up to today (future days are
+    // excluded so an empty future doesn't tank the percentage).
+    (() => {
+      const activeH = (data.habits || []).filter(h => h.section !== "avoid");
+      const today = tk();
+      const daysThisMonth = [];
+      for (let d = 1; d <= dim; d++) {
+        const k = dk(new Date(yr, mo, d));
+        if (k > today) break;
+        daysThisMonth.push(k);
+      }
+      let perfect = 0, zero = 0, anyCount = 0;
+      for (const k of daysThisMonth) {
+        const done = activeH.filter(h => {
+          const c = h.completions && h.completions[k];
+          return c === "done" || c === true;
+        }).length;
+        if (activeH.length && done === activeH.length) perfect++;
+        if (done === 0) zero++;
+        if (done > 0) anyCount++;
+      }
+      const totalDonePct = daysThisMonth.length ? Math.round(anyCount / daysThisMonth.length * 100) : 0;
+      // All-done streak: count back from today through consecutive perfect days.
+      let allDoneStreak = 0;
+      for (let i = 0; i < 365 && activeH.length; i++) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        const k = dk(d);
+        const done = activeH.filter(h => {
+          const c = h.completions && h.completions[k];
+          return c === "done" || c === true;
+        }).length;
+        if (done === activeH.length) allDoneStreak++;
+        else break;
+      }
+      const bestStreak = activeH.length ? Math.max(0, ...activeH.map(h => getStreak(h)), ...Object.values(data.bestStreaks || {})) : 0;
+      const card = (value, label, color) => /*#__PURE__*/React.createElement("div", {
+        style: { flex: 1, minWidth: 0, padding: "8px 10px", background: "var(--c-surface, #fff)", border: "1px solid var(--c-border)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }
+      },
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" } }, label),
+        /*#__PURE__*/React.createElement("span", { style: { fontFamily: "'Lora',serif", fontSize: 14, fontWeight: 700, color: color || "var(--c-text)" } }, value)
+      );
+      return /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 6 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { flex: "0 0 auto", width: 72, padding: "8px 10px", background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 10, textAlign: "center" }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "#2d5a2d", lineHeight: 1 } }, totalDonePct, "%"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: "#2d5a2d", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3, marginTop: 4 } }, "Total done")
+          ),
+          /*#__PURE__*/React.createElement("div", {
+            style: { flex: 1, display: "flex", flexDirection: "column", gap: 4 }
+          },
+            card(allDoneStreak + "d", "All-done streak", "#2d5a2d"),
+            card(bestStreak + "d", "Best streak", "#d97706")
+          )
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
+          card(perfect + "d", "All done", "#16a34a"),
+          card(zero + "d", "Zero done", "#991b1b")
+        )
+      );
+    })(),
     /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", gap: 10, justifyContent: "center", marginTop: 8, fontSize: 10, color: "#6b7280" }
     },
