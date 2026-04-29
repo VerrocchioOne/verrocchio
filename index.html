@@ -8718,7 +8718,14 @@ function App() {
       : sd.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
     return /*#__PURE__*/React.createElement("button", {
       onClick: () => setSelDate(tk()),
-      title: isTodaySel ? "Showing today" : "Jump to today",
+      // Double-click / double-tap forces an immediate save() — flushes
+      // pending writes to localStorage + Firestore and pulses the
+      // "Saved" indicator. Useful as a manual "did that change actually
+      // land?" affordance. touchAction:"manipulation" suppresses the
+      // browser's double-tap-to-zoom on mobile so the second tap
+      // reaches our handler instead of the viewport.
+      onDoubleClick: () => save(data),
+      title: isTodaySel ? "Showing today (double-click to save)" : "Jump to today (double-click to save)",
       "data-tour": "header-date",
       style: {
         background: isTodaySel ? "#2d5a2d" : "var(--c-tint-green)",
@@ -8729,7 +8736,10 @@ function App() {
         fontWeight: 700,
         color: isTodaySel ? "#fff" : "#2d5a2d",
         cursor: "pointer",
-        whiteSpace: "nowrap"
+        whiteSpace: "nowrap",
+        touchAction: "manipulation",
+        userSelect: "none",
+        WebkitUserSelect: "none"
       }
     }, label);
   })(), /*#__PURE__*/React.createElement("div", {
