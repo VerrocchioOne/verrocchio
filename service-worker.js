@@ -16,7 +16,7 @@
 // Bump CACHE_NAME whenever the precache list meaningfully changes so
 // old caches get purged on next activation.
 
-const CACHE_NAME = "verrocchio-shell-v1";
+const CACHE_NAME = "verrocchio-shell-v2";
 
 const APP_SHELL = [
   "./",
@@ -71,10 +71,19 @@ self.addEventListener("fetch", event => {
 
   const url = new URL(req.url);
 
-  // Same-origin: serve from cache first (SPA shell), fall through to
-  // network on miss, and opportunistically populate the cache.
+  // Same-origin strategy split:
+  //   • Navigation / HTML requests → network-first. Cache-first on the
+  //     SPA shell trapped users on whichever index.html happened to be
+  //     cached — fresh deploys never reached anyone with the worker
+  //     installed. Network-first means online users always see the
+  //     latest HTML; offline users still fall back to the cached shell.
+  //   • Everything else (utils.js, manifest, icons, splash) → cache-first.
+  //     These are precached and rarely change; serving them from cache
+  //     keeps cold-start fast.
   if (url.origin === self.location.origin) {
-    event.respondWith(cacheFirst(req));
+    const isNav = req.mode === "navigate"
+      || (req.headers.get("accept") || "").includes("text/html");
+    event.respondWith(isNav ? networkFirst(req) : cacheFirst(req));
     return;
   }
 
@@ -85,6 +94,23 @@ self.addEventListener("fetch", event => {
     return;
   }
 });
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const resp = await fetch(req);
+    if (resp.ok) cache.put(req, resp.clone()).catch(() => {});
+    return resp;
+  } catch (err) {
+    const cached = await cache.match(req);
+    if (cached) return cached;
+    if (req.mode === "navigate") {
+      const shell = await cache.match("./index.html");
+      if (shell) return shell;
+    }
+    throw err;
+  }
+}
 
 async function cacheFirst(req) {
   const cache = await caches.open(CACHE_NAME);
