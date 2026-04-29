@@ -16539,6 +16539,19 @@ function App() {
       togHabit(ctx.habitId, ctx.dateKey, ctx.mode, atTime);
       setTimeEntryCtx(null);
     };
+    // Display helper: tkTime() returns "HH:MM" in 24-hour format because
+    // that's the canonical storage shape (matches <input type="time">
+    // and survives locale changes). For user-visible buttons we want
+    // 12-hour with AM/PM, so format at the display site only.
+    const to12h = t => {
+      const m = /^(\d{1,2}):(\d{2})$/.exec(t || "");
+      if (!m) return t;
+      let h = parseInt(m[1], 10);
+      const mins = m[2];
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12; if (h === 0) h = 12;
+      return h + ":" + mins + " " + ampm;
+    };
     return /*#__PURE__*/React.createElement("div", {
       role: "dialog",
       "aria-modal": "true",
@@ -16562,7 +16575,7 @@ function App() {
           type: "button",
           onClick: () => commit(tkTime()),
           style: { width: "100%", minHeight: 44, padding: "12px 14px", borderRadius: 10, border: "none", background: ctx.mode === "missed" ? "#991b1b" : "#2d5a2d", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 10 }
-        }, "Log now (" + tkTime() + ")"),
+        }, "Log now (" + to12h(tkTime()) + ")"),
         // Secondary — pick a custom time, then Save.
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }
@@ -16781,12 +16794,13 @@ function App() {
       marginBottom: 10
     }
   }),
-  // Sub-unit target row sits right under the habit name (and above
-  // Time of Day / Duration) so it's the second thing the user sees on
-  // long-press to edit. Leaving Target blank keeps the habit as a
-  // simple binary done/not-done.
+  // Sub-unit target rows. The previous single 3-column row (Target /
+  // Unit / +/tap) wrapped awkwardly on narrow phones where Unit was
+  // squeezed and +/tap's placeholder text overflowed. Split into two
+  // rows: Target + Unit on top with more breathing room, +/tap on
+  // its own row below with a fuller "+ per tap" label.
   /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", gap: 6, marginBottom: 4 }
+    style: { display: "flex", gap: 6, marginBottom: 6 }
   },
     /*#__PURE__*/React.createElement("input", {
       type: "number",
@@ -16795,24 +16809,31 @@ function App() {
       value: eHTarget,
       onChange: e => sEHTarget(e.target.value.replace(/[^0-9]/g, "")),
       placeholder: "Target",
-      style: { ...IS, flex: 1 }
+      style: { ...IS, flex: 1, minWidth: 0 }
     }),
     /*#__PURE__*/React.createElement("input", {
       type: "text",
       value: eHUnitLabel,
       onChange: e => sEHUnitLabel(e.target.value),
       placeholder: "Unit (cups, min…)",
-      style: { ...IS, flex: 2 }
-    }),
+      style: { ...IS, flex: 2, minWidth: 0 }
+    })
+  ),
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }
+  },
     /*#__PURE__*/React.createElement("input", {
       type: "number",
       min: 1,
       inputMode: "numeric",
       value: eHIncrement,
       onChange: e => sEHIncrement(e.target.value.replace(/[^0-9]/g, "")),
-      placeholder: "+/tap",
-      style: { ...IS, flex: 1 }
-    })
+      placeholder: "1",
+      style: { ...IS, width: 60, textAlign: "center" }
+    }),
+    /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 12, color: "#6b7280", flex: 1 }
+    }, "units added per tap (default 1)")
   ),
   /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
