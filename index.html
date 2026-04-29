@@ -3796,6 +3796,18 @@ function App() {
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
   const [saved, setSaved] = useState(false);
+  // Manual-save flash for the header Today button. Double-clicking the
+  // pill triggers save(data) and we want a visible confirmation that
+  // the write reached Firestore — value transitions:
+  //   null      → idle (nothing rendered)
+  //   "saving"  → shown while the debounced save is in flight
+  //   "synced"  → shown for ~2s after Firestore confirms
+  //   "offline" → shown for ~3s if the write fails
+  const [manualSyncFlash, setManualSyncFlash] = useState(null);
+  // Tracks the timestamp of the most recent tap on the header date
+  // pill. Used to detect double-tap manually (browsers don't always
+  // fire dblclick reliably on touch). Window: 350ms.
+  const todayPillLastTapRef = useRef(0);
   const [selDate, setSelDate] = useState(tk());
 
   /* TODOS */
@@ -4292,6 +4304,22 @@ function App() {
   // load + save effects below all access it at runtime, so they are
   // unaffected by the move.
   const [syncState, setSyncState] = useState("loading"); // loading | synced | saving | offline
+  // Drive the header date pill's manual-sync flash from the underlying
+  // syncState. When the user double-clicks "Today" the click handler
+  // sets manualSyncFlash to "saving"; once syncState reflects the
+  // result of that write, transition the flash to "synced" or
+  // "offline" and clear it after a short window. Demo mode and any
+  // already-terminal flash value bypass this logic.
+  useEffect(() => {
+    if (manualSyncFlash !== "saving") return;
+    if (syncState === "synced") setManualSyncFlash("synced");
+    else if (syncState === "offline") setManualSyncFlash("offline");
+  }, [syncState, manualSyncFlash]);
+  useEffect(() => {
+    if (manualSyncFlash !== "synced" && manualSyncFlash !== "offline") return;
+    const t = setTimeout(() => setManualSyncFlash(null), manualSyncFlash === "synced" ? 2000 : 3000);
+    return () => clearTimeout(t);
+  }, [manualSyncFlash]);
   useEffect(() => {
     if (tourDone) return;
     if (inPreApp) return;
@@ -8826,32 +8854,66 @@ function App() {
     const label = isTodaySel
       ? "Today"
       : sd.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-    return /*#__PURE__*/React.createElement("button", {
-      onClick: () => setSelDate(tk()),
-      // Double-click / double-tap forces an immediate save() — flushes
-      // pending writes to localStorage + Firestore and pulses the
-      // "Saved" indicator. Useful as a manual "did that change actually
-      // land?" affordance. touchAction:"manipulation" suppresses the
-      // browser's double-tap-to-zoom on mobile so the second tap
-      // reaches our handler instead of the viewport.
-      onDoubleClick: () => save(data),
-      title: isTodaySel ? "Showing today (double-click to save)" : "Jump to today (double-click to save)",
-      "data-tour": "header-date",
-      style: {
-        background: isTodaySel ? "#2d5a2d" : "var(--c-tint-green)",
-        border: "1px solid #c6dfc6",
-        borderRadius: 20,
-        padding: "5px 14px",
-        fontSize: 11,
-        fontWeight: 700,
-        color: isTodaySel ? "#fff" : "#2d5a2d",
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        touchAction: "manipulation",
-        userSelect: "none",
-        WebkitUserSelect: "none"
-      }
-    }, label);
+    const flashLabel = manualSyncFlash === "saving" ? "Saving…"
+                     : manualSyncFlash === "synced"  ? "✓ Synced"
+                     : manualSyncFlash === "offline" ? "Offline"
+                     : null;
+    const flashColor = manualSyncFlash === "synced"  ? "#2d5a2d"
+                     : manualSyncFlash === "offline" ? "#b91c1c"
+                     : "#6b7280";
+    // Wrap the date pill + manual-sync flash in a flex container so the
+    // "Synced" confirmation lands directly to the right of the Today
+    // button. The flash is rendered as a sibling (not inside the
+    // button) so it doesn't widen the pill or capture pointer events.
+    return /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", gap: 8 }
+    },
+      /*#__PURE__*/React.createElement("button", {
+        // Single-tap jumps the selected date to today. A second tap
+        // within 350ms is treated as the manual-save gesture: trigger
+        // save() and flash a "Saving…" / "✓ Synced" / "Offline" label
+        // to the right of the pill. Custom timer-based detection is
+        // used because mobile browsers don't fire dblclick reliably
+        // on touch even with touchAction:manipulation.
+        onClick: () => {
+          const now = Date.now();
+          if (now - todayPillLastTapRef.current < 350) {
+            todayPillLastTapRef.current = 0;
+            setManualSyncFlash("saving");
+            save(data);
+            return;
+          }
+          todayPillLastTapRef.current = now;
+          setSelDate(tk());
+        },
+        title: isTodaySel ? "Showing today (double-click to save)" : "Jump to today (double-click to save)",
+        "data-tour": "header-date",
+        style: {
+          background: isTodaySel ? "#2d5a2d" : "var(--c-tint-green)",
+          border: "1px solid #c6dfc6",
+          borderRadius: 20,
+          padding: "5px 14px",
+          fontSize: 11,
+          fontWeight: 700,
+          color: isTodaySel ? "#fff" : "#2d5a2d",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          touchAction: "manipulation",
+          userSelect: "none",
+          WebkitUserSelect: "none"
+        }
+      }, label),
+      flashLabel && /*#__PURE__*/React.createElement("span", {
+        className: "fade-in",
+        style: {
+          fontSize: 11,
+          fontWeight: 600,
+          color: flashColor,
+          letterSpacing: 0.2,
+          whiteSpace: "nowrap"
+        }
+      }, flashLabel)
+    );
   })(), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
