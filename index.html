@@ -4304,17 +4304,15 @@ function App() {
   // load + save effects below all access it at runtime, so they are
   // unaffected by the move.
   const [syncState, setSyncState] = useState("loading"); // loading | synced | saving | offline
-  // Drive the header date pill's manual-sync flash from the underlying
-  // syncState. When the user double-clicks "Today" the click handler
-  // sets manualSyncFlash to "saving"; once syncState reflects the
-  // result of that write, transition the flash to "synced" or
-  // "offline" and clear it after a short window. Demo mode and any
-  // already-terminal flash value bypass this logic.
-  useEffect(() => {
-    if (manualSyncFlash !== "saving") return;
-    if (syncState === "synced") setManualSyncFlash("synced");
-    else if (syncState === "offline") setManualSyncFlash("offline");
-  }, [syncState, manualSyncFlash]);
+  // Auto-clear the manual-sync flash once it lands on a terminal value.
+  // Transitioning the flash forward from "saving" is now done inline by
+  // the double-tap handler (it awaits its own Firestore .set() promise)
+  // rather than watching the global syncState, which had a race: if
+  // the realtime listener had set syncState to "offline" before the
+  // user double-tapped, the watcher latched "offline" the moment
+  // manualSyncFlash flipped to "saving", before the actual write had
+  // even fired. Driving the transition off the write's own promise
+  // makes the indicator accurate regardless of other syncState noise.
   useEffect(() => {
     if (manualSyncFlash !== "synced" && manualSyncFlash !== "offline") return;
     const t = setTimeout(() => setManualSyncFlash(null), manualSyncFlash === "synced" ? 2000 : 3000);
@@ -8870,17 +8868,41 @@ function App() {
     },
       /*#__PURE__*/React.createElement("button", {
         // Single-tap jumps the selected date to today. A second tap
-        // within 350ms is treated as the manual-save gesture: trigger
-        // save() and flash a "Saving…" / "✓ Synced" / "Offline" label
-        // to the right of the pill. Custom timer-based detection is
-        // used because mobile browsers don't fire dblclick reliably
-        // on touch even with touchAction:manipulation.
+        // within 350ms is treated as the manual-save gesture: bypass
+        // the 800ms debounce and write to Firestore right now, then
+        // reflect that specific write's outcome ("Saving…" → "✓ Synced"
+        // or "Offline") in the pill flash. Custom timer-based detection
+        // because mobile browsers don't fire dblclick reliably on touch.
         onClick: () => {
           const now = Date.now();
           if (now - todayPillLastTapRef.current < 350) {
             todayPillLastTapRef.current = 0;
+            // Stamp + commit to React state and localStorage immediately.
+            const stamped = { ...data, _updatedAt: Date.now() };
+            setData(stamped);
+            latestData.current = stamped;
+            try { localStorage.setItem(lsKey, JSON.stringify(stamped)); } catch (e) {}
+            // Cancel any pending debounced auto-save — we are about to
+            // do an immediate write that supersedes it.
+            if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
             setManualSyncFlash("saving");
-            save(data);
+            if (demoMode) {
+              // Demo mode never touches Firestore; treat as instant success.
+              setManualSyncFlash("synced");
+              return;
+            }
+            if (!uid) {
+              setManualSyncFlash("offline");
+              return;
+            }
+            setSyncState("saving");
+            userDoc(uid).set(stamped).then(() => {
+              setSyncState("synced");
+              setManualSyncFlash("synced");
+            }).catch(() => {
+              setSyncState("offline");
+              setManualSyncFlash("offline");
+            });
             return;
           }
           todayPillLastTapRef.current = now;
