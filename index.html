@@ -4214,11 +4214,43 @@ function App() {
     ((data.dayVisits && data.dayVisits.length) || 0) > 1 ||
     (data.xp || 0) > 0
   ));
+  // Persist tourDone the first time we see real activity. The stateless
+  // hasAnyData guard in the auto-start effect bails per render, but a
+  // fresh device or cleared cache can still queue the 1200ms timer in
+  // the brief window between sign-in and Firestore hydration. Promoting
+  // tourDone the moment any activity is observed permanently kills the
+  // timer (its early `if (tourDone) return` wins) AND mirrors the
+  // decision to localStorage + the cloud doc so the tour can't reappear
+  // on another device. Demo mode is intentionally excluded — demo
+  // always replays the tour as part of its preview-the-new-user role.
+  useEffect(() => {
+    if (demoMode) return;
+    if (tourDone) return;
+    if (!hasAnyData) return;
+    setTourDone(true);
+    try { localStorage.setItem("v-tour-done", "1"); } catch (e) {}
+    if (data && !data.tourDone) {
+      try { save({ ...data, tourDone: true }); } catch (e) {}
+    }
+  }, [hasAnyData, tourDone, demoMode]);
   useEffect(() => {
     if (tourDone) return;
     if (inPreApp) return;
     if (tourStep !== 0) return;
     if (hasAnyData) return;
+    // Hard gate on Firestore reconciliation. `syncState` starts at
+    // "loading" on every sign-in, flips to "synced" only after the
+    // initial userDoc(uid).get() resolves. Before that flip `data` is
+    // the blank default (DD) — which makes both `hasAnyData` and
+    // `tourDone` read false even for a returning user whose cloud doc
+    // has plenty of activity. Without this gate the 1200ms timer below
+    // would fire inside that loading window and yank the account
+    // straight into the tour. Deferring until "synced" lets the .get()
+    // land, hydrates real data + tourDone, and the other guards above
+    // take over naturally. "offline" is intentionally NOT a green light
+    // here: if we can't reach Firestore we'd rather fall back to
+    // whatever localStorage cached than misfire the tour.
+    if (syncState !== "synced") return;
     // Defer a beat so the nav + render tree have landed in the DOM
     // before the tour tries to anchor to nav-button selectors. Longer
     // delay here (1200ms vs the old 400ms) gives Firestore a window to
@@ -4227,10 +4259,17 @@ function App() {
     // cross-device sync effect above promotes tourDone.
     const t = setTimeout(() => {
       if (tourDone) return;
+      // Re-check syncState at fire time: the effect cleanup runs when
+      // any dep changes, but a sync flip from "synced" back to
+      // "offline" (mid-timer network blip) won't clear the timer on
+      // its own. Belt-and-braces read from the closure-captured value
+      // is fine here — a flip to offline while the timer is pending
+      // should abort the fire, not force it through.
+      if (syncState !== "synced") return;
       setTourStep(1);
     }, 1200);
     return () => clearTimeout(t);
-  }, [tourDone, inPreApp, tourStep, hasAnyData]);
+  }, [tourDone, inPreApp, tourStep, hasAnyData, syncState]);
 
   // Keyboard support for the guided tour: left/right arrows drive
   // Back/Next via the refs that renderTour keeps up to date. Lets
@@ -8039,31 +8078,63 @@ function App() {
           pointerEvents: "none"
         }, corner)
       },
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: () => setTourMinimized(false),
-          "aria-label": "Resume tour",
+        // Two-button pill: Resume on the left, × on the right with a
+        // hairline divider. The previous single-button pill had no exit
+        // affordance from the minimized state — once a user tapped the
+        // dim (which minimizes), the only path back was Resume → tiny ×
+        // in the tooltip. Splitting "resume" and "exit" into co-located
+        // targets gives an unmistakable escape from any tour state.
+        /*#__PURE__*/React.createElement("div", {
           className: "lg tour-tip tour-resume-pill",
           style: {
             pointerEvents: "auto",
-            display: "flex", alignItems: "center", gap: 8,
-            padding: "8px 14px",
+            display: "flex", alignItems: "stretch",
             borderRadius: 999,
-            border: "none",
             background: "rgba(255,255,255,0.92)",
             backdropFilter: "blur(20px) saturate(180%)",
             WebkitBackdropFilter: "blur(20px) saturate(180%)",
             boxShadow: "0 10px 28px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.9)",
-            fontSize: 12, fontWeight: 600, color: "#2d5a2d",
-            cursor: "pointer",
-            maxWidth: 240,
-            WebkitTapHighlightColor: "transparent"
+            maxWidth: 280,
+            overflow: "hidden"
           }
         },
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, lineHeight: 1 } }, "\u{1F4D6}"),
-          /*#__PURE__*/React.createElement("span", {
-            style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
-          }, "Resume tour")
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: () => setTourMinimized(false),
+            "aria-label": "Resume tour",
+            style: {
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 12px",
+              border: "none",
+              background: "transparent",
+              fontSize: 12, fontWeight: 600, color: "#2d5a2d",
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent"
+            }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, lineHeight: 1 } }, "\u{1F4D6}"),
+            /*#__PURE__*/React.createElement("span", {
+              style: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }
+            }, "Resume tour")
+          ),
+          /*#__PURE__*/React.createElement("div", {
+            style: { width: 1, background: "rgba(0,0,0,0.08)" }
+          }),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: finishTour,
+            "aria-label": "Exit tour",
+            title: "Exit tour",
+            style: {
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 40,
+              border: "none",
+              background: "transparent",
+              fontSize: 20, fontWeight: 600, color: "#374151",
+              cursor: "pointer",
+              WebkitTapHighlightColor: "transparent"
+            }
+          }, "×")
         )
       );
     }
@@ -8355,7 +8426,7 @@ function App() {
           zIndex: 10000
         }
       }, null),
-        // Tap-to-exit affordance — tiny × in the top-right corner of the
+        // Tap-to-exit affordance — × in the top-right corner of the
         // tooltip. Desktop users can't shake to exit and the tour's z-
         // index sometimes obscures the demo-mode "Exit demo" pill, so a
         // dedicated close button is the reliable path out at every step.
@@ -8363,8 +8434,10 @@ function App() {
         // the tour doesn't re-fire on next load. Click, no hold — the
         // dim-click minimize gesture already handles "pause the tour but
         // keep it for later"; this button is for "I'm done, get rid of
-        // it". Absolute positioning inside the tooltip's padded box so
-        // the title text flows normally underneath.
+        // it". Sized at 36x36 with a soft chip background so it reads
+        // as an unmistakable target on a phone — the prior 24x24
+        // transparent variant blended into the tooltip glass and users
+        // were getting stuck unable to dismiss the walkthrough.
         /*#__PURE__*/React.createElement("button", Object.assign({
           type: "button",
           onClick: finishTour,
@@ -8372,15 +8445,15 @@ function App() {
           title: "Exit tour",
           style: {
             position: "absolute",
-            top: 6, right: 6,
-            width: 24, height: 24,
+            top: 4, right: 4,
+            width: 36, height: 36,
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: 0,
-            background: "transparent",
-            border: "none",
+            background: "rgba(0,0,0,0.06)",
+            border: "1px solid rgba(0,0,0,0.08)",
             borderRadius: 999,
-            color: "#9ca3af",
-            fontSize: 16, lineHeight: 1, fontWeight: 500,
+            color: "#374151",
+            fontSize: 22, lineHeight: 1, fontWeight: 600,
             cursor: "pointer",
             WebkitTapHighlightColor: "transparent"
           }
@@ -8391,7 +8464,7 @@ function App() {
         /*#__PURE__*/React.createElement("div", {
           id: "tour-tip-title",
           className: "tour-tip-title",
-          style: { fontSize: 14, fontWeight: 700, marginBottom: 4, lineHeight: 1.3, paddingRight: 22 }
+          style: { fontSize: 14, fontWeight: 700, marginBottom: 4, lineHeight: 1.3, paddingRight: 40 }
         }, step.title),
         /*#__PURE__*/React.createElement("div", {
           className: "tour-tip-body",
