@@ -5037,12 +5037,34 @@ function App() {
         return;
       }
       if (snap.exists) {
-        const d = hydrateCloudDoc(snap.data());
-        setData(d);
-        latestData.current = d;
+        const remote = hydrateCloudDoc(snap.data());
+        const remoteTs = (remote && remote._updatedAt) || 0;
+        // Compare against the localStorage snapshot. If THIS device made
+        // changes that never reached Firestore (debounce dropped on
+        // tab close, offline at the time, etc.), localStorage is newer
+        // than cloud — adopting cloud wholesale would silently throw
+        // those edits away. Push the local version up instead and keep
+        // it as the in-memory state. If cloud is newer (typical
+        // cross-device case: I edited on phone, now opening on
+        // desktop), we adopt cloud as before.
+        let localTs = 0;
+        let localData = null;
         try {
-          localStorage.setItem(lsKey, JSON.stringify(d));
+          const r = localStorage.getItem(lsKey);
+          if (r) {
+            localData = JSON.parse(r);
+            localTs = (localData && localData._updatedAt) || 0;
+          }
         } catch (e) {}
+        if (localTs > remoteTs && localData) {
+          setData(localData);
+          latestData.current = localData;
+          try { userDoc(uid).set(localData).catch(() => {}); } catch (e) {}
+        } else {
+          setData(remote);
+          latestData.current = remote;
+          try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
+        }
       } else {
         // Brand-new account — no doc yet. Leave `data` at the blank
         // default set above so the onboarding flow runs for them.
@@ -5111,6 +5133,7 @@ function App() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     const writeUid = uid; // capture so a post-signout flush can't misroute
     saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
       userDoc(writeUid).set(latestData.current).then(() => {
         setSyncState("synced");
       }).catch(() => {
@@ -5118,6 +5141,41 @@ function App() {
       });
     }, 800);
   }, [demoMode, uid, lsKey]);
+
+  // Flush pending Firestore writes when the page is hidden or unloaded.
+  // The 800ms save() debounce coalesces rapid edits, but mobile
+  // browsers (iOS Safari especially) suspend JS aggressively when the
+  // user backgrounds the app or closes the tab — the timer never
+  // fires and the write never reaches Firestore. On the next session
+  // we'd then load older cloud data and the local edits would look
+  // lost. Reading "hidden"/"pagehide" and force-firing the queued
+  // .set() closes that gap so cross-device sync is reliable.
+  useEffect(() => {
+    if (demoMode) return;
+    if (!uid) return;
+    const flush = () => {
+      if (!saveTimerRef.current) return;
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+      if (!latestData.current) return;
+      try { userDoc(uid).set(latestData.current).catch(() => {}); } catch (e) {}
+    };
+    const onVis = () => { if (typeof document !== "undefined" && document.hidden) flush(); };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVis);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", flush);
+    }
+    return () => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVis);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pagehide", flush);
+      }
+    };
+  }, [uid, demoMode]);
 
   /* ── Day-visit tracking ──
      Append today's date key to data.dayVisits the first time the user
