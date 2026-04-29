@@ -2517,8 +2517,15 @@ const DD = {
 // hydrated copy (mutates for performance; caller has already cloned if
 // they care).
 function hydrateCloudDoc(p) {
-  if (!p.habits || p.habits.length === 0) p.habits = SEED_HABITS;
-  if (!p.goals || p.goals.length === 0) p.goals = SEED_GOALS;
+  // Only seed when the field is MISSING or not an array. The previous
+  // `|| .length === 0` clause re-seeded any time the cloud doc came
+  // back with an empty array — which is exactly what the user produces
+  // when they delete their last habit or last goal. The realtime
+  // listener would then replace [] with the SEED list and write that
+  // back to Firestore, making the deletion appear to roll itself back.
+  // A deliberate empty array is now preserved.
+  if (!Array.isArray(p.habits)) p.habits = SEED_HABITS;
+  if (!Array.isArray(p.goals))  p.goals  = SEED_GOALS;
   if (!p.journal) p.journal = [];
   if (!p.archive) p.archive = [];
   if (!p.quotes) p.quotes = [];
@@ -5818,7 +5825,11 @@ function App() {
 
      `freq` is the full `{ type, days, day, monthDay, month }` object.
      `start` is a string; `setStart` takes a string. */
-  const renderFreqPicker = (freq, setFreq, start, setStart) => {
+  const renderFreqPicker = (freq, setFreq, start, setStart, opts) => {
+    // includeStart defaults to true to preserve the add-habit form's
+    // existing layout. The edit-habit modal passes false so the Starts
+    // row can be rendered separately as the last field before save.
+    const includeStart = !opts || opts.includeStart !== false;
     // Small helper: does a given day-count make sense for the chosen
     // month? Used to clamp monthDay so picking e.g. "Feb 30" snaps to
     // a valid day.
@@ -5835,14 +5846,15 @@ function App() {
     return /*#__PURE__*/React.createElement("div", {
       style: { marginBottom: 8 }
     },
-      // --- Starts row ---
-      /*#__PURE__*/React.createElement("div", {
+      // --- Starts row (skipped when includeStart is false; the
+      //     edit-habit modal renders it separately at the bottom) ---
+      includeStart && /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11, fontWeight: 600, color: "#6b7280",
           marginBottom: 4, letterSpacing: .2
         }
       }, "Starts"),
-      /*#__PURE__*/React.createElement("div", {
+      includeStart && /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 10 }
       },
         /*#__PURE__*/React.createElement("input", {
@@ -16773,6 +16785,108 @@ function App() {
   /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
+  // Link to Goal sits as the third field (after habit name + target
+  // row) so the most-edited connections are all near the top. The
+  // inline "+ Create a new linked goal" branch renders directly under
+  // the select when newGoalFromHabit is true.
+  /*#__PURE__*/React.createElement("select", {
+    value: eHGoal,
+    onChange: e => {
+      if (e.target.value === "__new__") {
+        setNewGoalFromHabit(true);
+      } else {
+        const v = e.target.value;
+        sEHGoal(v);
+        setNewGoalFromHabit(false);
+        // Mirror the add-habit flow: sync Area of Life to the linked
+        // goal's area so they can't diverge.
+        if (v) {
+          const g = data.goals.find(x => String(x.id) === String(v));
+          if (g && g.type) sEHType(g.type);
+        }
+      }
+    },
+    style: {
+      ...S,
+      width: "100%",
+      marginBottom: newGoalFromHabit ? 6 : 10,
+      color: eHGoal ? "#2d5a2d" : "#9ca3af"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "🎯 Link to a Goal"), /*#__PURE__*/React.createElement("option", {
+    value: "__new__"
+  }, "＋ Create a new linked goal"), HT.map(ht => {
+    const tg = data.goals.filter(g => g.type === ht.value);
+    if (!tg.length) return null;
+    return /*#__PURE__*/React.createElement("optgroup", {
+      key: ht.value,
+      label: ht.value
+    }, tg.map(g => /*#__PURE__*/React.createElement("option", {
+      key: g.id,
+      value: g.id
+    }, g.text)));
+  }), data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("optgroup", {
+    label: "General"
+  }, data.goals.filter(g => !g.type).map(g => /*#__PURE__*/React.createElement("option", {
+    key: g.id,
+    value: g.id
+  }, g.text)))),
+  newGoalFromHabit && /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: newGoalText,
+    onChange: e => setNewGoalText(e.target.value),
+    placeholder: "New goal name...",
+    style: {
+      ...IS,
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (!newGoalText.trim()) return;
+      // Goals now require an Area of Life. Inline goal creation from
+      // the edit-habit card inherits the habit's current area — if
+      // the habit doesn't have one yet, bail and prompt the user to
+      // pick one on the habit before creating the linked goal.
+      if (!eHType) {
+        alert("Pick an Area of Life on the habit before creating a linked goal.");
+        return;
+      }
+      const ng = {
+        id: Date.now(),
+        text: newGoalText.trim(),
+        type: eHType,
+        smart: {
+          specific: "",
+          measurable: "",
+          measurableUnit: "",
+          achievable: "",
+          relevant: "",
+          timebound: ""
+        }
+      };
+      const newData = {
+        ...data,
+        goals: [...data.goals, ng]
+      };
+      save(newData);
+      sEHGoal(String(ng.id));
+      setNewGoalText("");
+      setNewGoalFromHabit(false);
+    },
+    style: {
+      ...AB,
+      padding: "9px 14px",
+      fontSize: 12,
+      background: "#2d5a2d"
+    }
+  }, "Add")),
   /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -16844,7 +16958,7 @@ function App() {
     value: i.value
   }, i.value)))),
   // Frequency picker (edit modal mirror of the add-habit flow).
-  renderFreqPicker(eHFreq, sEHFreq, eHStart, sEHStart),
+  renderFreqPicker(eHFreq, sEHFreq, eHStart, sEHStart, { includeStart: false }),
   /*#__PURE__*/React.createElement("select", {
     value: eHLoc,
     onChange: e => sEHLoc(e.target.value),
@@ -16852,103 +16966,8 @@ function App() {
   }, /*#__PURE__*/React.createElement("option", { value: "both" }, "\uD83D\uDCCD Available: Home & Travel"),
      /*#__PURE__*/React.createElement("option", { value: "home" }, "\uD83C\uDFE0 Home only"),
      /*#__PURE__*/React.createElement("option", { value: "travel" }, "\u2708 Travel only")
-  ), /*#__PURE__*/React.createElement("select", {
-    value: eHGoal,
-    onChange: e => {
-      if (e.target.value === "__new__") {
-        setNewGoalFromHabit(true);
-      } else {
-        const v = e.target.value;
-        sEHGoal(v);
-        setNewGoalFromHabit(false);
-        // Mirror the add-habit flow: sync Area of Life to the linked
-        // goal's area so they can't diverge.
-        if (v) {
-          const g = data.goals.find(x => String(x.id) === String(v));
-          if (g && g.type) sEHType(g.type);
-        }
-      }
-    },
-    style: {
-      ...S,
-      width: "100%",
-      marginBottom: newGoalFromHabit ? 6 : 10,
-      color: eHGoal ? "#2d5a2d" : "#9ca3af"
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\uD83C\uDFAF Link to a Goal"), /*#__PURE__*/React.createElement("option", {
-    value: "__new__"
-  }, "\uFF0B Create a new linked goal"), HT.map(ht => {
-    const tg = data.goals.filter(g => g.type === ht.value);
-    if (!tg.length) return null;
-    return /*#__PURE__*/React.createElement("optgroup", {
-      key: ht.value,
-      label: ht.value
-    }, tg.map(g => /*#__PURE__*/React.createElement("option", {
-      key: g.id,
-      value: g.id
-    }, g.text)));
-  }), data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("optgroup", {
-    label: "General"
-  }, data.goals.filter(g => !g.type).map(g => /*#__PURE__*/React.createElement("option", {
-    key: g.id,
-    value: g.id
-  }, g.text)))), newGoalFromHabit && /*#__PURE__*/React.createElement("div", {
-    className: "fade-in",
-    style: {
-      display: "flex",
-      gap: 8,
-      marginBottom: 10
-    }
-  }, /*#__PURE__*/React.createElement("input", {
-    value: newGoalText,
-    onChange: e => setNewGoalText(e.target.value),
-    placeholder: "New goal name...",
-    style: {
-      ...IS,
-      flex: 1
-    }
-  }), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      if (!newGoalText.trim()) return;
-      // Goals now require an Area of Life. Inline goal creation from
-      // the edit-habit card inherits the habit's current area — if
-      // the habit doesn't have one yet, bail and prompt the user to
-      // pick one on the habit before creating the linked goal.
-      if (!eHType) {
-        alert("Pick an Area of Life on the habit before creating a linked goal.");
-        return;
-      }
-      const ng = {
-        id: Date.now(),
-        text: newGoalText.trim(),
-        type: eHType,
-        smart: {
-          specific: "",
-          measurable: "",
-          measurableUnit: "",
-          achievable: "",
-          relevant: "",
-          timebound: ""
-        }
-      };
-      const newData = {
-        ...data,
-        goals: [...data.goals, ng]
-      };
-      save(newData);
-      sEHGoal(String(ng.id));
-      setNewGoalText("");
-      setNewGoalFromHabit(false);
-    },
-    style: {
-      ...AB,
-      padding: "9px 14px",
-      fontSize: 12,
-      background: "#2d5a2d"
-    }
-  }, "Add")), /*#__PURE__*/React.createElement("div", {
+  ),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 10
     }
@@ -17066,6 +17085,38 @@ function App() {
       lineHeight: 1.5
     }
   }),
+  // Starts row (last field before save). Pulled out of renderFreqPicker
+  // for the edit-habit modal because the user wants the start date to
+  // be the final thing they touch before committing changes.
+  /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11, fontWeight: 600, color: "#6b7280",
+      marginBottom: 4, letterSpacing: .2
+    }
+  }, "Starts"),
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }
+  },
+    /*#__PURE__*/React.createElement("input", {
+      type: "date",
+      value: eHStart || dk(new Date()),
+      onChange: e => sEHStart(e.target.value || dk(new Date())),
+      style: { ...S, flex: 1, color: "var(--c-text-soft)" }
+    }),
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => sEHStart(dk(new Date())),
+      title: "Start today",
+      style: {
+        padding: "6px 11px", borderRadius: 10,
+        border: eHStart === dk(new Date()) ? "1px solid var(--accent, #2d5a2d)" : "1px solid #d1d5db",
+        background: eHStart === dk(new Date()) ? "var(--accent, #2d5a2d)" : "#fff",
+        color: eHStart === dk(new Date()) ? "#fff" : "var(--c-text-soft)",
+        fontSize: 11, fontWeight: 700, cursor: "pointer",
+        WebkitTapHighlightColor: "transparent", whiteSpace: "nowrap"
+      }
+    }, "Today")
+  ),
   /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
