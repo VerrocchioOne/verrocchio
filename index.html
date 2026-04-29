@@ -4246,6 +4246,13 @@ function App() {
       try { save({ ...data, tourDone: true }); } catch (e) {}
     }
   }, [hasAnyData, tourDone, demoMode]);
+  // syncState lives here (instead of with the rest of the FIREBASE SYNC
+  // block further down) because the auto-start tour effect's dependency
+  // array reads it during render — declaring it later put it in the
+  // temporal dead zone and crashed the app on first paint. The Firestore
+  // load + save effects below all access it at runtime, so they are
+  // unaffected by the move.
+  const [syncState, setSyncState] = useState("loading"); // loading | synced | saving | offline
   useEffect(() => {
     if (tourDone) return;
     if (inPreApp) return;
@@ -4922,7 +4929,8 @@ function App() {
   };
 
   /* FIREBASE SYNC */
-  const [syncState, setSyncState] = useState("loading"); // loading | synced | saving | offline
+  // syncState is declared earlier (above the auto-start tour effect)
+  // so its dependency array can read it without a TDZ.
   const saveTimerRef = useRef(null);
   const latestData = useRef(null);
 
