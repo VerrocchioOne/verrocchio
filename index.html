@@ -3695,9 +3695,16 @@ function App() {
   // user denies, the tour's × button and the demo's top-bar "Exit
   // demo" button still work as fallbacks.
   const lastShakeTsRef = useRef(0);
-  const shakeActive = demoMode || tourStep > 0;
+  // tourStep is co-declared here (rather than further down with the
+  // rest of the tour state) because the shake-to-exit useEffect's
+  // dependency array reads `tourStep` synchronously during render —
+  // declaring it later would put it in the temporal dead zone and
+  // crash the entire app on first paint with "Cannot access 'tourStep'
+  // before initialization". tourDone / tourMinimized stay below
+  // because they are only accessed at runtime through finishTour().
+  const [tourStep, setTourStep] = useState(0);
   useEffect(() => {
-    if (!shakeActive) return;
+    if (!demoMode && tourStep === 0) return;
     if (typeof window === "undefined" || !window.addEventListener) return;
     // Request DeviceMotion permission the first time the listener
     // mounts for a tour — demoMode already requests it on entry
@@ -3752,7 +3759,7 @@ function App() {
     };
     window.addEventListener("devicemotion", onMotion);
     return () => window.removeEventListener("devicemotion", onMotion);
-  }, [shakeActive, demoMode, tourStep]);
+  }, [demoMode, tourStep]);
 
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
@@ -4040,11 +4047,12 @@ function App() {
   }, [data && data.travelDays && data.travelDays.length]);
 
   /* GUIDED TOUR — Appcues-style first-login walkthrough. `tourStep` is
+     declared earlier in this function (just above the shake-to-exit
+     useEffect) so its dependency array can read it without a TDZ.
      0 when inactive, 1..TOUR_STEPS.length when showing that step. Auto-
      starts once the user has cleared the splash + onboarding; persists
      the "don't nag me again" decision in localStorage. Users can replay
      from App Settings at any time. */
-  const [tourStep, setTourStep] = useState(0);
   const [tourDone, setTourDone] = useState(() => localStorage.getItem("v-tour-done") === "1");
   // Minimize-to-corner affordance. When true the full tooltip collapses
   // to a small floating pill in the opposite corner of the spotlighted
