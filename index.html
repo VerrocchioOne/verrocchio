@@ -262,13 +262,38 @@ textarea{resize:vertical}
    animation. If you need to restore them, their commit is in git. */
 .splashv4{position:fixed;inset:0;background:#faf8f3;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:9999}
 .splashv4 .stage{position:relative;flex:0 0 auto;width:320px;height:280px}
-.splashv4 .pyramid{position:absolute;top:66px;left:50%;width:200px;height:112px;transform:translateX(-50%)}
-.splashv4 .block{position:absolute;left:50%;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);transform:translate(-50%,-34px) scale(.92);opacity:0;animation:splashv4Stack .42s cubic-bezier(.2,.8,.2,1) forwards;will-change:transform,opacity}
-.splashv4 .b1{bottom:0;width:200px;animation-delay:.05s}
-.splashv4 .b2{bottom:28px;width:150px;animation-delay:.22s}
-.splashv4 .b3{bottom:56px;width:100px;animation-delay:.39s}
-.splashv4 .b4{bottom:84px;width:50px;animation-delay:.56s}
-@keyframes splashv4Stack{0%{transform:translate(-50%,-34px) scale(.92);opacity:0}70%{opacity:1}100%{transform:translate(-50%,0) scale(1);opacity:1}}
+/* Pyramid built from 10 individual square-ish blocks arranged 4-3-2-1
+   from bottom to top. Replaces the old four-bar version where each row
+   was one solid wide rectangle — the discrete blocks read as a stacked
+   constructed pyramid rather than a stepped wedge. Block size 44x26
+   with an 8px horizontal gap puts the bottom row at the same 200px
+   width the old layout used, so the V glyph sitting on top still
+   lines up. Vertical gap is 4px between rows. */
+.splashv4 .pyramid{position:absolute;top:66px;left:50%;width:200px;height:120px;transform:translateX(-50%)}
+.splashv4 .block{position:absolute;width:44px;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);opacity:0;animation:splashv4BlockPop .5s cubic-bezier(.34,1.56,.64,1) forwards;will-change:transform,opacity;transform-origin:50% 100%}
+/* Row 1 (4 blocks, bottom). 4*44 + 3*8 = 200 */
+.splashv4 .b1{bottom:0;left:0;animation-delay:.05s}
+.splashv4 .b2{bottom:0;left:52px;animation-delay:.10s}
+.splashv4 .b3{bottom:0;left:104px;animation-delay:.15s}
+.splashv4 .b4{bottom:0;left:156px;animation-delay:.20s}
+/* Row 2 (3 blocks). Offset 26px to center over row 1. */
+.splashv4 .b5{bottom:30px;left:26px;animation-delay:.27s}
+.splashv4 .b6{bottom:30px;left:78px;animation-delay:.32s}
+.splashv4 .b7{bottom:30px;left:130px;animation-delay:.37s}
+/* Row 3 (2 blocks). Offset 52px. */
+.splashv4 .b8{bottom:60px;left:52px;animation-delay:.44s}
+.splashv4 .b9{bottom:60px;left:104px;animation-delay:.49s}
+/* Row 4 (apex, 1 block). Offset 78px to center. */
+.splashv4 .b10{bottom:90px;left:78px;animation-delay:.56s}
+/* Pop-in animation replacing the old "drop from above" stack: each
+   block grows from 0 with a slight pre-rotation, overshoots its final
+   size via a back-curve easing, and settles at 1×. Reads as blocks
+   snapping into place like puzzle pieces rather than dropping in. */
+@keyframes splashv4BlockPop{
+  0%   {opacity:0;transform:scale(0) rotate(-10deg)}
+  55%  {opacity:1;transform:scale(1.12) rotate(3deg)}
+  100% {opacity:1;transform:scale(1) rotate(0)}
+}
 /* Playfair serif V revealed by a two-stroke pen-draw.
    The V itself is an SVG <text> element in Playfair Display 900 — the
    exact same glyph as the in-app brand-mark. An SVG <mask> with two
@@ -7256,10 +7281,17 @@ function App() {
         React.createElement("div", { className: "stage" },
           React.createElement("div", { className: "brand-wordmark" }, "Verrocchio"),
           React.createElement("div", { className: "pyramid" },
+            // 4-3-2-1 stack: 10 blocks total. Row 1 = bottom.
             React.createElement("div", { className: "block b1" }),
             React.createElement("div", { className: "block b2" }),
             React.createElement("div", { className: "block b3" }),
-            React.createElement("div", { className: "block b4" })
+            React.createElement("div", { className: "block b4" }),
+            React.createElement("div", { className: "block b5" }),
+            React.createElement("div", { className: "block b6" }),
+            React.createElement("div", { className: "block b7" }),
+            React.createElement("div", { className: "block b8" }),
+            React.createElement("div", { className: "block b9" }),
+            React.createElement("div", { className: "block b10" })
           ),
           // Fluid-dynamics V. Start state: a serif Playfair V rendered
           // in brand-green — the "liquid" at rest inside the glyph
