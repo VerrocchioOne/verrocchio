@@ -563,8 +563,13 @@ const auth=firebase.auth();
 // Register the service worker for offline app-shell caching. Guarded on
 // HTTPS / localhost because browsers only allow SW registration in
 // secure contexts — no-op on file:// or plain-http test servers.
+//   updateViaCache:"none" makes the browser bypass its HTTP cache when
+//   checking for an updated service-worker.js. GitHub Pages serves the
+//   file with Cache-Control: max-age=600, which would otherwise delay
+//   SW updates by up to 10 minutes after a deploy. With "none" the
+//   check is fresh on every navigation.
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-  navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+  navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" }).catch(()=>{});
 }
 /* Multi-user scoping: each signed-in Firebase user gets their own
    Firestore document at users/<uid>. `userDoc(uid)` is a helper so
