@@ -2521,7 +2521,11 @@ const DD = {
   journal: [],
   quotes: [],
   archive: [],
-  dailyRitual: {}
+  dailyRitual: {},
+  // User-added one-off important dates surfaced in the home-page
+  // Key Upcoming Dates section alongside goal target deadlines.
+  // Each entry: { id, text, date: "YYYY-MM-DD" }.
+  upcomingDates: []
 };
 // Single source of truth for "did this doc come from an older schema".
 // Called from BOTH the localStorage load and the Firestore read/listener
@@ -2547,6 +2551,7 @@ function hydrateCloudDoc(p) {
   if (!Array.isArray(p.customImportance)) p.customImportance = [];
   if (!Array.isArray(p.customSections)) p.customSections = [];
   if (!Array.isArray(p.dayVisits)) p.dayVisits = [];
+  if (!Array.isArray(p.upcomingDates)) p.upcomingDates = [];
   // Stricter than `typeof x !== "object"` — arrays ARE objects in JS,
   // so a malicious (or just corrupt) remote write of [] here would
   // pass the typeof guard and then break Object.entries / lookups
@@ -3967,6 +3972,9 @@ function App() {
   const [jTag, sJTag] = useState("reflection");
   const [jFil, sJFil] = useState("today");
   const [jExp, sJExp] = useState(null);
+  // Draft state for the home-page Key Upcoming Dates inline add row.
+  // Cleared on commit; lives on App so it survives Home-tab re-renders.
+  const [upDateDraft, setUpDateDraft] = useState({ text: "", date: "" });
   const [eJId, sEJId] = useState(null);
   const [eJTxt, sEJTxt] = useState("");
   const [eJMood, sEJMood] = useState("");
@@ -10280,12 +10288,166 @@ function App() {
       )
     ) : null;
 
+    // ── KEY UPCOMING DATES ────────────────────────────────────────
+    // Combines every goal's Time-bound deadline with user-added one-off
+    // dates from data.upcomingDates, sorted ascending. Goal-derived
+    // entries can't be deleted from here (the goal itself owns that
+    // date); custom entries get an inline × delete. An add row at the
+    // bottom takes a description + a calendar date to create new
+    // custom entries. Hidden entirely if there's nothing to show AND
+    // the input is empty, so a brand-new account doesn't see a stub.
+    const upcomingDatesCard = (() => {
+      const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+      const goalDates = (data.goals || [])
+        .map(g => {
+          const raw = g && g.smart && g.smart.timebound || "";
+          const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+          if (!m) return null;
+          return {
+            kind: "goal",
+            id: "g-" + g.id,
+            text: g.text,
+            date: m[1] + "-" + m[2] + "-" + m[3]
+          };
+        })
+        .filter(Boolean);
+      const customDates = (data.upcomingDates || []).map(u => ({
+        kind: "custom",
+        id: "u-" + u.id,
+        rawId: u.id,
+        text: u.text,
+        date: u.date
+      }));
+      const all = [...goalDates, ...customDates].sort((a, b) => a.date.localeCompare(b.date));
+      const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const fmt = ymd => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
+        if (!m) return ymd;
+        return MONTHS[+m[2] - 1] + ". " + (+m[3]) + ", " + m[1];
+      };
+      const daysUntil = ymd => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd);
+        if (!m) return 0;
+        const t = new Date(+m[1], +m[2] - 1, +m[3]); t.setHours(0, 0, 0, 0);
+        return Math.round((t - today0) / 86400000);
+      };
+      const commitDate = () => {
+        const text = (upDateDraft.text || "").trim();
+        const date = (upDateDraft.date || "").trim();
+        if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+        save({
+          ...data,
+          upcomingDates: [...(data.upcomingDates || []), { id: Date.now(), text, date }]
+        });
+        setUpDateDraft({ text: "", date: "" });
+      };
+      const removeCustomDate = (rawId) => {
+        save({
+          ...data,
+          upcomingDates: (data.upcomingDates || []).filter(u => u.id !== rawId)
+        });
+      };
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "#fff",
+          border: "1px solid var(--c-border)",
+          borderRadius: 12,
+          padding: "12px 14px",
+          marginBottom: 12,
+          boxShadow: "0 1px 2px rgba(0,0,0,.04)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }
+        }, "Key Upcoming Dates"),
+        all.length === 0
+          ? /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#9ca3af", marginBottom: 10 }
+            }, "No dates yet — add a goal target or a one-off below.")
+          : /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }
+            },
+              all.map(item => {
+                const days = daysUntil(item.date);
+                const past = days < 0;
+                const soon = !past && days <= 7;
+                const color = past ? "#b91c1c" : soon ? "#b45309" : "#4b5563";
+                return /*#__PURE__*/React.createElement("div", {
+                  key: item.id,
+                  style: {
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 8px",
+                    background: "var(--c-surface-raised)",
+                    border: "1px solid var(--c-border)",
+                    borderRadius: 8
+                  }
+                },
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 9, fontWeight: 700, color: item.kind === "goal" ? "#2d5a2d" : "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }
+                  }, item.kind === "goal" ? "Goal" : "Date"),
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                  }, item.text),
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 10, color: color, fontWeight: 600, whiteSpace: "nowrap" }
+                  }, fmt(item.date)),
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 10, color: color, fontWeight: 700, whiteSpace: "nowrap" }
+                  }, Math.abs(days) + "d"),
+                  item.kind === "custom" && /*#__PURE__*/React.createElement("button", {
+                    onClick: () => removeCustomDate(item.rawId),
+                    title: "Remove",
+                    style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 14, cursor: "pointer", padding: "0 2px", lineHeight: 1 }
+                  }, "×")
+                );
+              })
+            ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 6, alignItems: "center" }
+        },
+          /*#__PURE__*/React.createElement("input", {
+            type: "text",
+            value: upDateDraft.text,
+            onChange: e => setUpDateDraft(d => ({ ...d, text: e.target.value })),
+            placeholder: "Description (e.g. Anniversary)",
+            style: {
+              flex: 2, background: "#fff", border: "1px solid var(--c-border)",
+              borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none",
+              minWidth: 0
+            }
+          }),
+          /*#__PURE__*/React.createElement("input", {
+            type: "date",
+            value: upDateDraft.date,
+            onChange: e => setUpDateDraft(d => ({ ...d, date: e.target.value })),
+            style: {
+              flex: 1, background: "#fff", border: "1px solid var(--c-border)",
+              borderRadius: 8, padding: "7px 8px", fontSize: 12, outline: "none",
+              minWidth: 0, color: "var(--c-text-soft)"
+            }
+          }),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: commitDate,
+            disabled: !(upDateDraft.text.trim() && /^\d{4}-\d{2}-\d{2}$/.test(upDateDraft.date)),
+            style: {
+              background: (upDateDraft.text.trim() && /^\d{4}-\d{2}-\d{2}$/.test(upDateDraft.date)) ? "#2d5a2d" : "#9ca3af",
+              color: "#fff", border: "none", borderRadius: 8,
+              padding: "7px 12px", fontSize: 12, fontWeight: 600,
+              cursor: (upDateDraft.text.trim() && /^\d{4}-\d{2}-\d{2}$/.test(upDateDraft.date)) ? "pointer" : "default",
+              whiteSpace: "nowrap"
+            }
+          }, "Add")
+        )
+      );
+    })();
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
       briefingCard,
       yesterdayCard,
       goalsCard,
+      upcomingDatesCard,
       intentionInput,
       progressCard,
       pillsSection,
