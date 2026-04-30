@@ -13171,6 +13171,16 @@ function App() {
         const habitsOpen = isGoalSubOpen(goal.id, "habits");
         const todosOpen  = isGoalSubOpen(goal.id, "todos");
         return (linked.length > 0 || linkedTodos.length > 0) ? /*#__PURE__*/React.createElement("div", {
+          // Stop pointer events from bubbling up to the goal card's
+          // onPointerDown/Up handlers — those toggle the card's
+          // expansion, so without this guard a tap on the to-do input
+          // (or any control inside this expanded section) would
+          // collapse the card mid-interaction. Children that need
+          // their own pointer handling (linked-habit checkboxes,
+          // section-toggle headers) still receive their direct events;
+          // only the bubble path to the goal card is severed.
+          onPointerDown: e => e.stopPropagation(),
+          onPointerUp: e => e.stopPropagation(),
           style: {
             borderTop: "1px solid #f3f4f6",
             padding: "10px 14px",
@@ -13320,6 +13330,11 @@ function App() {
         // to-do to this specific goal without switching tabs.
         renderGoalTodoQuickAdd(goal)
         ) : /*#__PURE__*/React.createElement("div", {
+          // Same anti-bubble guard as the populated branch — keeps a
+          // tap on the empty-state quick-add row from collapsing the
+          // goal card.
+          onPointerDown: e => e.stopPropagation(),
+          onPointerUp: e => e.stopPropagation(),
           style: {
             borderTop: "1px solid #f3f4f6",
             padding: "10px 14px",
