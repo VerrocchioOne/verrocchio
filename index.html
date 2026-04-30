@@ -2652,6 +2652,11 @@ function hydrateCloudDoc(p) {
   if (typeof p.onboardingComplete !== "boolean") {
     p.onboardingComplete = (p.habits && p.habits.length > 0) || (p.goals && p.goals.length > 0);
   }
+  // Backfill tourDone on legacy docs so a returning user with a
+  // pre-tourDone-field cloud doc doesn't re-trigger the guided tour
+  // on a new device. New accounts get true via DD; this catches
+  // existing accounts whose docs predate the field entirely.
+  if (typeof p.tourDone !== "boolean") p.tourDone = true;
   if (typeof p.celebratedFirstGoal !== "boolean") {
     p.celebratedFirstGoal = !!(p.goals && p.goals.length > 0);
   }
@@ -3342,7 +3347,10 @@ function App() {
     // Write the seed directly via the SDK rather than through save() —
     // save() depends on React state that hasn't landed yet right after
     // auth flips. onSnapshot picks it up and flows into `data` on the
-    // next tick.
+    // next tick. Stamp _updatedAt so the realtime listener's echo-
+    // detection has a real baseline (without it, localTs=0 and the
+    // listener would treat any cached snapshot as newer).
+    seeded._updatedAt = Date.now();
     await userDoc(auth.currentUser.uid).set(seeded);
   };
   const signInAsDemoUser = async (email) => {
@@ -5093,6 +5101,10 @@ function App() {
           localStorage.setItem(lsKey, legacyLocal);
           localStorage.setItem(migrationFlag, "1");
           const parsed = JSON.parse(legacyLocal);
+          // Stamp _updatedAt so the realtime listener can correctly
+          // echo-detect this migration write rather than seeing
+          // remoteTs=0 and treating cached snapshots as newer.
+          if (typeof parsed._updatedAt !== "number") parsed._updatedAt = Date.now();
           setData(parsed);
           latestData.current = parsed;
           userDoc(uid).set(sanitizeForFirestore(parsed)).catch(() => {});
@@ -5121,6 +5133,10 @@ function App() {
           }
         } catch (e) {}
         if (localTs > remoteTs && localData) {
+          // Defensive: if local is somehow newer-shaped without a
+          // valid _updatedAt, stamp one before pushing to cloud so
+          // the doc Firestore receives carries a baseline timestamp.
+          if (typeof localData._updatedAt !== "number") localData._updatedAt = localTs || Date.now();
           setData(localData);
           latestData.current = localData;
           try { userDoc(uid).set(sanitizeForFirestore(localData)).catch(() => {}); } catch (e) {}
@@ -5707,7 +5723,18 @@ function App() {
     pushUndo(`Deleted goal: ${g.text.slice(0, 30)}`, JSON.parse(JSON.stringify(data)));
     save({
       ...data,
-      goals: data.goals.filter(x => x.id !== id)
+      goals: data.goals.filter(x => x.id !== id),
+      // Unlink any habits that pointed at this goal so they don't
+      // dangle with a goalId that no longer resolves. The habits
+      // themselves stay (the user may want them as standalones);
+      // only the link is severed.
+      habits: (data.habits || []).map(h =>
+        String(h.goalId) === String(id) ? { ...h, goalId: null } : h
+      ),
+      // Same for any todos that had this goalId on them.
+      todos: (data.todos || []).map(t =>
+        String(t.goalId) === String(id) ? { ...t, goalId: null } : t
+      )
     });
   };
   const reordGoals = l => save({
