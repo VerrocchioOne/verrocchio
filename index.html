@@ -5006,15 +5006,30 @@ function App() {
     setSyncState("loading");
     // Prefer a local cached copy of *this* user's data for instant paint,
     // then reconcile with Firestore below.
+    //
+    // Critical: set `latestData.current` HERE (not just in the .get()
+    // callback). Otherwise the realtime onSnapshot listener — which
+    // attaches below and can fire immediately with whatever stale
+    // snapshot Firestore's IndexedDB cache has — would see
+    // latestData.current as null, compute localTs = 0, treat any cloud
+    // value as "newer", and overwrite the freshly-loaded localStorage
+    // state. With offline persistence enabled that cached snapshot is
+    // often the last-seen-cloud from a previous session; on next-day
+    // load the listener would silently roll the doc back. Seeding
+    // latestData.current with the localStorage timestamp closes that
+    // window so echo-detection compares against the right baseline.
     try {
       const r = localStorage.getItem(lsKey);
       if (r) {
         const d = JSON.parse(r);
         setData(d);
+        latestData.current = d;
       } else {
         // First time on this device for this user: start from a blank
         // default so onboarding fires instead of the seed workspace.
-        setData(JSON.parse(JSON.stringify(DD)));
+        const blank = JSON.parse(JSON.stringify(DD));
+        setData(blank);
+        latestData.current = blank;
       }
     } catch (e) {}
     // One-time legacy migration: the pre-multi-user build wrote to the
@@ -5143,7 +5158,13 @@ function App() {
       saveTimerRef.current = null;
       userDoc(writeUid).set(latestData.current).then(() => {
         setSyncState("synced");
-      }).catch(() => {
+      }).catch(err => {
+        // Same rationale as the manual-save catch: surface the actual
+        // error so a deterministic reject (rules, auth, invalid data
+        // shape) doesn't silently masquerade as a transient offline
+        // blip. The realtime listener's catch sets offline too, so
+        // logging here is the only signal pointing at the write side.
+        try { console.warn("[verrocchio] debounced save rejected:", err && err.code, err && err.message, err); } catch (e) {}
         setSyncState("offline");
       });
     }, 800);
@@ -8830,7 +8851,14 @@ function App() {
             userDoc(uid).set(stamped).then(() => {
               setSyncState("synced");
               setManualSyncFlash("synced");
-            }).catch(() => {
+            }).catch(err => {
+              // Surface the actual Firestore error to the console — the
+              // flash always landing on "Offline" usually means a
+              // deterministic reject (rules, auth-token expired, an
+              // undefined-valued field that Firestore won't accept,
+              // etc.) rather than real network-down. The error code
+              // is the fastest way to tell which.
+              try { console.warn("[verrocchio] manual save rejected:", err && err.code, err && err.message, err); } catch (e) {}
               setSyncState("offline");
               setManualSyncFlash("offline");
             });
