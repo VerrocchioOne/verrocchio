@@ -2525,7 +2525,17 @@ const DD = {
   // User-added one-off important dates surfaced in the home-page
   // Key Upcoming Dates section alongside goal target deadlines.
   // Each entry: { id, text, date: "YYYY-MM-DD" }.
-  upcomingDates: []
+  upcomingDates: [],
+  // New sign-ups skip the 3-screen onboarding carousel (and the
+  // intent-capture prompt that lived inside it) and the guided
+  // tour. The user explicitly opted out of those for both first-
+  // time and returning sessions, so the defaults flip from undefined
+  // (which `inPreApp` and the auto-start-tour effect read as "show")
+  // to true. Existing cloud docs retain their own flags via
+  // hydrateCloudDoc so users mid-onboarding from before this change
+  // still see what their doc says.
+  onboardingComplete: true,
+  tourDone: true
 };
 // Single source of truth for "did this doc come from an older schema".
 // Called from BOTH the localStorage load and the Firestore read/listener
