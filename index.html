@@ -4857,6 +4857,12 @@ function App() {
   const [durRange, setDurRange] = useState([DUR_MIN, DUR_MAX]);
   const [swipeFeedback, setSwipeFeedback] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
+  // Two-stage "wipe all data" gate. null = idle. "1" = first warning
+  // (Cancel / Continue). "2" = final confirmation (typed "DELETE" or
+  // a second deliberate tap). Resetting to null at any modal layer
+  // backs the user out without changes.
+  const [confirmWipe, setConfirmWipe] = useState(null);
+  const [confirmWipeTyped, setConfirmWipeTyped] = useState("");
   const [showGoalArchive, setShowGoalArchive] = useState(false);
   const [completeGoalModal, setCompleteGoalModal] = useState(null);
   const [nextGoalTxt, setNextGoalTxt] = useState("");
@@ -5236,6 +5242,49 @@ function App() {
       }
     };
   }, [uid, demoMode]);
+
+  // Auto-save heartbeat. Every 30s while the app is foregrounded and
+  // signed in, push the current `latestData.current` snapshot to
+  // Firestore. The regular save() path already writes on every edit;
+  // this is a safety net for the rare case where a save was missed
+  // (timer killed, transient network failure, browser suspension).
+  // Cheap: a redundant write of identical data with no real change
+  // resolves on the server quickly. Skips when `data._updatedAt`
+  // hasn't changed since the previous heartbeat to avoid pointless
+  // writes when the user is idle.
+  const lastHeartbeatTsRef = useRef(0);
+  useEffect(() => {
+    if (demoMode) return;
+    if (!uid) return;
+    const tick = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      const cur = latestData.current;
+      if (!cur || !cur._updatedAt) return;
+      if (cur._updatedAt === lastHeartbeatTsRef.current) return;
+      lastHeartbeatTsRef.current = cur._updatedAt;
+      try { userDoc(uid).set(sanitizeForFirestore(cur)).catch(() => {}); } catch (e) {}
+    };
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, [uid, demoMode]);
+
+  // Wipe-all-data action. Resets every content array on the user's
+  // doc back to its blank-default shape but keeps onboardingComplete
+  // + tourDone true (the user has already done both — no point
+  // re-running them) and preserves the auth identity. Goes through
+  // the regular save() path so the empty doc lands in localStorage
+  // and Firestore atomically; the realtime listener on other devices
+  // will pick up the wipe within seconds. Tied to a two-stage
+  // confirmation in the profile UI; this function is the terminal
+  // action.
+  const wipeAllData = () => {
+    const blank = JSON.parse(JSON.stringify(DD));
+    blank.onboardingComplete = true;
+    blank.tourDone = true;
+    save(blank);
+    setConfirmWipe(null);
+    setConfirmWipeTyped("");
+  };
 
   /* ── Day-visit tracking ──
      Append today's date key to data.dayVisits the first time the user
@@ -15223,6 +15272,30 @@ function App() {
           style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #2d5a2d", background: "var(--c-tint-green)", color: "#2d5a2d", fontSize: 13, fontWeight: 700, cursor: "pointer" }
         }, "★ Rate Verrocchio")
       ),
+      // ── Danger zone — wipe all data ──
+      // Two-stage confirmation lives in the modal at the bottom of the
+      // tree (see confirmWipe rendering near the other delete modals).
+      // This is just the entry point: a clearly-destructive button at
+      // the end of the My Account panel.
+      !demoMode && /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }
+        }, "Danger Zone"),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, color: "#9ca3af", marginBottom: 8, lineHeight: 1.5 }
+        }, "Permanently erase every goal, habit, to-do, journal entry, and saved date on this account. Your sign-in stays intact — only the data is wiped."),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => { setConfirmWipeTyped(""); setConfirmWipe("1"); },
+          style: {
+            background: "#fef2f2", border: "1px solid #fecaca",
+            color: "#b91c1c", borderRadius: 8,
+            padding: "8px 14px", fontSize: 12, fontWeight: 700,
+            cursor: "pointer"
+          }
+        }, "Delete All Data")
+      ),
       // ── About / support ──
       /*#__PURE__*/React.createElement("div", {
         style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)", fontSize: 11, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }
@@ -16659,6 +16732,68 @@ function App() {
   //    uses the acctCurrentPw input the user already typed in the
   //    Account section, but rendering the warning in a dedicated
   //    modal avoids the common "I clicked the wrong thing" path.
+  // Wipe-all-data two-stage modal. Stage "1" is a clear warning with
+  // Cancel / Continue. Stage "2" is a typed-DELETE confirmation —
+  // only the literal uppercase word DELETE enables the final button.
+  // Reaching this modal is intentionally deliberate; both stages can
+  // be backed out by tapping Cancel or the dim.
+  confirmWipe && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "wipe-title",
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
+    onClick: e => { if (e.target === e.currentTarget) { setConfirmWipe(null); setConfirmWipeTyped(""); } }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", width: "100%", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        id: "wipe-title",
+        style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "#b91c1c", marginBottom: 8 }
+      }, confirmWipe === "1" ? "Delete all data?" : "Final confirmation"),
+      confirmWipe === "1"
+        ? /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 18 }
+          }, "This will permanently erase every goal, habit, to-do, journal entry, and saved date on your account. Your sign-in stays intact — but the data cannot be recovered.")
+        : /*#__PURE__*/React.createElement(React.Fragment, null,
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 12 }
+            }, "Type ", /*#__PURE__*/React.createElement("strong", { style: { color: "#b91c1c" } }, "DELETE"), " in capital letters to confirm. This cannot be undone."),
+            /*#__PURE__*/React.createElement("input", {
+              type: "text",
+              value: confirmWipeTyped,
+              onChange: e => setConfirmWipeTyped(e.target.value),
+              autoFocus: true,
+              placeholder: "Type DELETE",
+              style: { width: "100%", padding: "10px 12px", border: "1px solid var(--c-border)", borderRadius: 8, fontSize: 14, marginBottom: 18, outline: "none", background: "var(--c-surface-raised)" }
+            })
+          ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 8, justifyContent: "flex-end" }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => { setConfirmWipe(null); setConfirmWipeTyped(""); },
+          style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
+        }, "Cancel"),
+        confirmWipe === "1"
+          ? /*#__PURE__*/React.createElement("button", {
+              onClick: () => { setConfirmWipeTyped(""); setConfirmWipe("2"); },
+              style: { background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }
+            }, "Continue")
+          : /*#__PURE__*/React.createElement("button", {
+              onClick: wipeAllData,
+              disabled: confirmWipeTyped !== "DELETE",
+              style: {
+                background: confirmWipeTyped === "DELETE" ? "#b91c1c" : "#9ca3af",
+                color: "#fff", border: "none", borderRadius: 8,
+                padding: "9px 16px", fontSize: 13, fontWeight: 700,
+                cursor: confirmWipeTyped === "DELETE" ? "pointer" : "not-allowed"
+              }
+            }, "Delete All Data")
+      )
+    )
+  ),
   confirmDeleteAcct && /*#__PURE__*/React.createElement("div", {
     role: "dialog",
     "aria-modal": "true",
