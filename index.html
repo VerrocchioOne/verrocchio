@@ -5053,7 +5053,7 @@ function App() {
           const parsed = JSON.parse(legacyLocal);
           setData(parsed);
           latestData.current = parsed;
-          userDoc(uid).set(parsed).catch(() => {});
+          userDoc(uid).set(sanitizeForFirestore(parsed)).catch(() => {});
         } catch (e) {}
         setSyncState("synced");
         return;
@@ -5081,7 +5081,7 @@ function App() {
         if (localTs > remoteTs && localData) {
           setData(localData);
           latestData.current = localData;
-          try { userDoc(uid).set(localData).catch(() => {}); } catch (e) {}
+          try { userDoc(uid).set(sanitizeForFirestore(localData)).catch(() => {}); } catch (e) {}
         } else {
           setData(remote);
           latestData.current = remote;
@@ -5123,6 +5123,19 @@ function App() {
     });
     return () => { try { unsubRealtime(); } catch (e) {} };
   }, [uid, demoMode]);
+  // Strip undefined-valued fields recursively before sending to
+  // Firestore. Firestore .set() rejects ANY document containing an
+  // undefined anywhere in the tree (with code "invalid-argument" or
+  // "Function DocumentReference.set() called with invalid data.
+  // Unsupported field value: undefined"). When that happens the
+  // entire write fails — including from this device's localStorage to
+  // the cloud — which is why doubles-taps were always landing on
+  // Offline and why cross-device propagation could quietly stop.
+  // JSON round-trip drops undefined values (kept null/0/"") and
+  // collapses Date / Map / Set / class instances into plain objects.
+  const sanitizeForFirestore = obj => {
+    try { return JSON.parse(JSON.stringify(obj)); } catch (e) { return obj; }
+  };
   const save = useCallback(d => {
     // Stamp every save with a monotonic local timestamp. The realtime
     // onSnapshot listener uses this to distinguish echoes of our own
@@ -5156,7 +5169,7 @@ function App() {
     const writeUid = uid; // capture so a post-signout flush can't misroute
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
-      userDoc(writeUid).set(latestData.current).then(() => {
+      userDoc(writeUid).set(sanitizeForFirestore(latestData.current)).then(() => {
         setSyncState("synced");
       }).catch(err => {
         // Same rationale as the manual-save catch: surface the actual
@@ -5186,7 +5199,7 @@ function App() {
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = null;
       if (!latestData.current) return;
-      try { userDoc(uid).set(latestData.current).catch(() => {}); } catch (e) {}
+      try { userDoc(uid).set(sanitizeForFirestore(latestData.current)).catch(() => {}); } catch (e) {}
     };
     const onVis = () => { if (typeof document !== "undefined" && document.hidden) flush(); };
     if (typeof document !== "undefined") {
@@ -8848,7 +8861,7 @@ function App() {
               return;
             }
             setSyncState("saving");
-            userDoc(uid).set(stamped).then(() => {
+            userDoc(uid).set(sanitizeForFirestore(stamped)).then(() => {
               setSyncState("synced");
               setManualSyncFlash("synced");
             }).catch(err => {
