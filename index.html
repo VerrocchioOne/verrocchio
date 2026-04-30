@@ -5254,21 +5254,42 @@ function App() {
   // device — re-writing this device's stale snapshot would clobber
   // the cloud. Less code, fewer cross-device hiccups.
 
-  // Wipe-all-data action. Resets every content array on the user's
-  // doc back to its blank-default shape but keeps onboardingComplete
-  // + tourDone true (the user has already done both — no point
-  // re-running them) and preserves the auth identity.
+  // Wipe-all-data action. Truly empties every content array — does
+  // NOT clone DD because DD's defaults include SEED_GOALS and
+  // SEED_HABITS (the example "Run a half-marathon" / "Morning run"
+  // entries). Cloning DD would leave the user staring at seed
+  // examples instead of an empty workspace, which they read as
+  // "delete didn't work". Build the blank doc from scratch with
+  // empty arrays for every collection.
   //
-  // Writes directly to localStorage + Firestore in this function
-  // rather than going through save() so a broken save() path can't
-  // silently swallow the wipe. We also log every step so any failure
-  // shows up explicitly in DevTools console under [verrocchio wipe].
+  // Writes directly to localStorage + Firestore rather than going
+  // through save() so a broken save path can't silently swallow the
+  // wipe. Each step logs to [verrocchio wipe] for debug.
   const wipeAllData = async () => {
     try { console.log("[verrocchio wipe] start"); } catch (e) {}
-    const blank = JSON.parse(JSON.stringify(DD));
-    blank.onboardingComplete = true;
-    blank.tourDone = true;
-    blank._updatedAt = Date.now();
+    const blank = {
+      goals: [],
+      habits: [],
+      todos: [],
+      journal: [],
+      quotes: [],
+      archive: [],
+      goalArchive: [],
+      dailyRitual: {},
+      upcomingDates: [],
+      dayVisits: [],
+      bestStreaks: {},
+      achievementsUnlocked: {},
+      customGoalTypes: [],
+      customImportance: [],
+      customSections: [],
+      travelDays: [],
+      homeLocation: "",
+      xp: 0,
+      onboardingComplete: true,
+      tourDone: true,
+      _updatedAt: Date.now()
+    };
     // 1. In-memory React state.
     try { setData(blank); } catch (e) { try { console.warn("[verrocchio wipe] setData failed", e); } catch (_) {} }
     latestData.current = blank;
