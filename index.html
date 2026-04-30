@@ -12604,37 +12604,12 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }
   }, SF_FIELDS.map(f => {
-    // See the edit-goal variant for the rationale on splitting M into
-    // (number, unit) and turning T into a native date picker.
-    if (f.key === "measurable") {
-      return /*#__PURE__*/React.createElement("div", {
-        key: f.key
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          fontWeight: 600,
-          color: "#6b7280",
-          marginBottom: 2
-        }
-      }, f.label), /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", gap: 6 }
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "number",
-        inputMode: "decimal",
-        className: "sf",
-        value: nGSmart.measurable,
-        onChange: e => sNGSmart(p => ({ ...p, measurable: e.target.value })),
-        placeholder: "Amount",
-        style: { width: 110 }
-      }), /*#__PURE__*/React.createElement("input", {
-        type: "text",
-        className: "sf",
-        value: nGSmart.measurableUnit || "",
-        onChange: e => sNGSmart(p => ({ ...p, measurableUnit: e.target.value })),
-        placeholder: "Unit (e.g. miles / week)",
-        style: { flex: 1 }
-      })));
-    }
+    // Measurable used to be split into (number, unit) inputs; it's now
+    // a single free-text field — falls through to the default textarea
+    // render below alongside Specific / Achievable / Relevant. The
+    // legacy `measurableUnit` value on stored goals is preserved (the
+    // display path concatenates it for backward compat) but no new
+    // value is written there.
     if (f.key === "timebound") {
       return /*#__PURE__*/React.createElement("div", {
         key: f.key
@@ -12947,40 +12922,9 @@ function App() {
           marginBottom: 8
         }
       }, SF_FIELDS.map(f => {
-        // Custom renderers for the M (measurable) and T (timebound) rows.
-        // M splits into two inputs: a numeric amount and a free-text unit
-        // (e.g. "10" + "miles / week"). T becomes a native date picker
-        // storing YYYY-MM-DD. Other letters stay as textareas.
-        if (f.key === "measurable") {
-          return /*#__PURE__*/React.createElement("div", {
-            key: f.key
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {
-              fontSize: 9,
-              fontWeight: 600,
-              color: "#2d5a2d",
-              marginBottom: 3,
-              textTransform: "uppercase"
-            }
-          }, f.label), /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", gap: 6 }
-          }, /*#__PURE__*/React.createElement("input", {
-            type: "number",
-            inputMode: "decimal",
-            className: "sf",
-            value: eGSmart.measurable || "",
-            onChange: e => sEGSmart(p => ({ ...p, measurable: e.target.value })),
-            placeholder: "Amount",
-            style: { width: 110 }
-          }), /*#__PURE__*/React.createElement("input", {
-            type: "text",
-            className: "sf",
-            value: eGSmart.measurableUnit || "",
-            onChange: e => sEGSmart(p => ({ ...p, measurableUnit: e.target.value })),
-            placeholder: "Unit (e.g. miles / week)",
-            style: { flex: 1 }
-          })));
-        }
+        // Measurable falls through to the default textarea (single
+        // free-text box) — see the add-goal variant for the same
+        // simplification. T becomes a native date picker.
         if (f.key === "timebound") {
           return /*#__PURE__*/React.createElement("div", {
             key: f.key
