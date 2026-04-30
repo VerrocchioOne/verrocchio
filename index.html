@@ -3841,6 +3841,14 @@ function App() {
     relevant: "",
     timebound: ""
   });
+  // A goal is meaningless without at least one habit to drive it, so
+  // the new-goal flow now requires the user to also name the first
+  // habit before the goal can be saved. Both records are created
+  // atomically when "Add Goal" fires (see addGoal). Stored as plain
+  // text — the rest of the habit's fields (section, importance,
+  // frequency, etc.) are filled with sensible defaults at save time
+  // and the user can refine them later from the habits tab.
+  const [nGFirstHabit, sNGFirstHabit] = useState("");
   const [eGId, sEGId] = useState(null);
   const [eGTxt, sEGTxt] = useState("");
   const [eGType, sEGType] = useState("");
@@ -5520,18 +5528,49 @@ function App() {
       setGoalAreaErr(true);
       return;
     }
+    // Require at least one underlying habit. A goal with no driving
+    // habit is just a wish; the user has explicitly opted into pairing
+    // each new goal with a concrete first habit. If the user clears
+    // it, we abort and the gated Save button (already disabled) catches
+    // the rest. Both records are created in a single save() call so
+    // they land in localStorage + Firestore atomically and the habit's
+    // goalId never points at a missing goal.
+    if (!nGFirstHabit.trim()) return;
+    const goalId = Date.now();
+    const habitId = goalId + 1;
+    const todayISO = dk(new Date());
     save({
       ...data,
       goals: [...data.goals, {
-        id: Date.now(),
+        id: goalId,
         text: nGoal.trim(),
         type: nGType,
         smart: {
           ...nGSmart
         }
+      }],
+      habits: [...(data.habits || []), {
+        id: habitId,
+        text: nGFirstHabit.trim(),
+        // Inherit area from the goal so habit + goal share a category.
+        type: nGType,
+        section: "morning",
+        importance: "Important",
+        notes: null,
+        frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+        location: "both",
+        startDate: todayISO,
+        goalId: goalId,
+        completions: {},
+        completionTimes: {},
+        completionUnits: {},
+        target: null,
+        unitLabel: null,
+        increment: null
       }]
     });
     touchFeature("goal.create");
+    touchFeature("habit.create");
     sNGoal("");
     sNGType("");
     sNGSmart({
@@ -5542,6 +5581,7 @@ function App() {
       relevant: "",
       timebound: ""
     });
+    sNGFirstHabit("");
     setGoalAreaErr(false);
     setGoalFormStep(0);
     setExpGForm(false);
@@ -12637,7 +12677,26 @@ function App() {
       })),
       placeholder: f.ph
     }));
-  }))
+  })),
+      // First habit (required). A goal without a driving habit is
+      // inert, so the new-goal flow blocks the save until the user
+      // names at least one habit. The rest of the habit's properties
+      // (section, frequency, target) get sensible defaults at save
+      // time and can be refined from the habits tab afterward.
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginTop: 14, marginBottom: 4 }
+      }, "First habit (required)"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: "#6b7280", marginBottom: 6 }
+      }, "Every goal needs at least one habit driving it. Name the first one — you can refine details later."),
+      /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        className: "sf",
+        value: nGFirstHabit,
+        onChange: e => sNGFirstHabit(e.target.value),
+        placeholder: "e.g. Run 30 min, Meditate, Read 20 pages",
+        style: { width: "100%" }
+      })
     ),
     // Dynamic nav row. Cancel is always on the far left. Back appears
     // once we're past step 0. The primary action is Next until the
@@ -12693,7 +12752,18 @@ function App() {
         goalFormStep === 2 && /*#__PURE__*/React.createElement("button", {
           "data-tour-id": "goal-save",
           onClick: addGoal,
-          style: { ...AB, padding: "8px 18px", fontSize: 12 }
+          // Block the save until the first-habit field has a value —
+          // matches the same gating pattern as Step 0's empty-name
+          // check and gives the user a visible cue that the habit is
+          // required, not just a silent no-op when they tap it.
+          disabled: !nGFirstHabit.trim(),
+          style: {
+            ...AB,
+            padding: "8px 18px",
+            fontSize: 12,
+            background: nGFirstHabit.trim() ? "#2d5a2d" : "#9ca3af",
+            cursor: nGFirstHabit.trim() ? "pointer" : "default"
+          }
         }, "Add Goal")
       )
     )
