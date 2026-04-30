@@ -985,6 +985,40 @@ const freqRank = h => {
   const row = FREQ.find(f => f.value === t);
   return row ? row.rank : 1;
 };
+// Whether a habit is "due" on a given date based on its frequency.
+// Handles every cadence the FREQ list supports:
+//   daily      → always due
+//   weekdays   → today's day-of-week is in the days array
+//   weekly     → today's day-of-week === fq.day
+//   monthly    → today's date === fq.monthDay
+//   quarterly  → today's month is on the 3-month cadence from fq.month
+//                AND today's date === fq.monthDay
+//   annual     → today's month === fq.month AND today's date === fq.monthDay
+// Legacy habits without a frequency field default to "daily" (always due).
+const isHabitDueOn = (h, dateKey) => {
+  const fq = getFreq(h);
+  if (!fq || fq.type === "daily") return true;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey || "");
+  if (!m) return true; // unparsable date → don't hide
+  const dt = new Date(+m[1], +m[2] - 1, +m[3]);
+  const dow = dt.getDay();
+  const day = dt.getDate();
+  const mon = dt.getMonth();
+  if (fq.type === "weekdays") return Array.isArray(fq.days) && fq.days.includes(dow);
+  if (fq.type === "weekly")   return (fq.day == null ? 1 : fq.day) === dow;
+  if (fq.type === "monthly")  return (fq.monthDay || 1) === day;
+  if (fq.type === "quarterly") {
+    const anchorMonth = fq.month == null ? 0 : fq.month;
+    const anchorDay   = fq.monthDay || 1;
+    return ((mon - anchorMonth) % 3 + 3) % 3 === 0 && anchorDay === day;
+  }
+  if (fq.type === "annual") {
+    const anchorMonth = fq.month == null ? 0 : fq.month;
+    const anchorDay   = fq.monthDay || 1;
+    return mon === anchorMonth && day === anchorDay;
+  }
+  return true;
+};
 const freqLabel = h => {
   const fq = getFreq(h);
   if (fq.type === "weekdays") {
@@ -4845,6 +4879,12 @@ function App() {
   // (Habit.type maps to the HT array: Physical / Mental / Career / …)
   // Kept separate from `goalTypeFilter`, which is the Goals-tab filter.
   const [habGoalFilter, setHabGoalFilter] = useState([]);
+  // "Today's Habits" / "Not Today" / "All" toggle for the habits page.
+  // Default is "today" — habits whose frequency doesn't include the
+  // selected date are hidden. Was a real bug: a Mon/Wed habit would
+  // still show on Thursday with no completion option matching its
+  // schedule. Two-state ring through "today" → "other" → "all".
+  const [dueFilter, setDueFilter] = useState("today");
   const [habGoalPillsOpen, setHabGoalPillsOpen] = useState(false);
   // Habits-tab "Frequency" filter = filter by habit.frequency.type
   // (matches the FREQ array values: daily / weekdays / weekly / …).
@@ -7316,6 +7356,16 @@ function App() {
       }
     }
     if (!matchesRoutine(h)) return false;
+    // "Today's Habits" / "Not Today" / "All" filter. selDate drives
+    // it so the user can also scroll to a past day and see only the
+    // habits that were due that day. Avoid-section habits are
+    // exempted because "due today" doesn't really apply to a habit
+    // you're supposed to NOT do — they should always show up.
+    if (h.section !== "avoid" && dueFilter !== "all") {
+      const due = isHabitDueOn(h, selDate);
+      if (dueFilter === "today" && !due) return false;
+      if (dueFilter === "other" && due) return false;
+    }
     return true;
   });
   const dateOpts = Array.from({
@@ -10597,6 +10647,30 @@ function App() {
       // habits page; left in place to preserve any callers outside this
       // view and avoid a broader refactor.
       // Compact "Priority" toggle.
+      // Today's Habits / Not Today / All toggle. Cycles on each tap.
+      // "Today" hides habits whose frequency doesn't include the
+      // selected date (a Mon/Wed weekly habit on Thursday, etc.).
+      // "Not Today" inverts. "All" disables the filter entirely.
+      (() => {
+        const labelMap = { today: "Today", other: "Not Today", all: "All" };
+        const isFiltering = dueFilter !== "all";
+        const next = dueFilter === "today" ? "other" : dueFilter === "other" ? "all" : "today";
+        return /*#__PURE__*/React.createElement("button", {
+          onClick: () => setDueFilter(next),
+          title: "Cycle: Today's Habits → Not Today → All",
+          style: {
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 9px",
+            borderRadius: 20,
+            border: `1px solid ${isFiltering ? "#86efac" : "var(--c-border)"}`,
+            background: isFiltering ? "#f0fdf4" : "#fff",
+            color: isFiltering ? "#166534" : "#6b7280",
+            fontSize: 11, fontWeight: isFiltering ? 700 : 500,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", userSelect: "none"
+          }
+        }, labelMap[dueFilter]);
+      })(),
       (() => {
         const active = impFilter.length > 0;
         const expanded = impPillsOpen || active;
