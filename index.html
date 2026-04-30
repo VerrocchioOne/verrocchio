@@ -3903,13 +3903,6 @@ function App() {
   const [nHGoal, sNHGoal] = useState("");
   const [showAddHabit, setShowAddHabit] = useState(false);
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
-  // Icon picker in the edit-habit modal stays collapsed by default —
-  // ~70 emoji buttons used to render unconditionally and dominated the
-  // sheet on mobile. Now a single chip shows the current icon + a
-  // "Change" hint; tapping expands the full grid. Reset to false every
-  // time the modal opens or closes (see sEHabit and the modal's close
-  // handler) so the next open starts collapsed regardless of prior state.
-  const [showHabitIconPicker, setShowHabitIconPicker] = useState(false);
   // Generic custom-order reorder modal. `reorderCtx` is null when
   // closed, else an object describing what's being reordered:
   //   { kind: "habitSection", section: "morning", label, icon, color }
@@ -5794,7 +5787,6 @@ function App() {
     sEHTarget(typeof h.target === "number" && h.target > 0 ? String(h.target) : "");
     sEHUnitLabel(h.unitLabel || "");
     sEHIncrement(typeof h.increment === "number" && h.increment > 0 ? String(h.increment) : "");
-    setShowHabitIconPicker(false);
     setEditHabitModal(h);
   };
   const svEHabit = id => {
@@ -11012,7 +11004,7 @@ function App() {
             style: {flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4}
           }, /*#__PURE__*/React.createElement("div", {
             style: {fontSize: 13, fontWeight: 500, color: d ? "#15803d" : missed ? "#991b1b" : "var(--c-text-soft)", textDecoration: d || missed ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
-          }, habit.icon && /*#__PURE__*/React.createElement("span", {style: {marginRight: 4}}, habit.icon), habit.text),
+          }, habit.text),
           habit.notes && /*#__PURE__*/React.createElement("div", {
             style: {fontSize: 11, color: "#6b7280", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
           }, habit.notes),
@@ -11288,11 +11280,7 @@ function App() {
             overflow: "hidden",
             textOverflow: "ellipsis"
           }
-        }, habit.icon && /*#__PURE__*/React.createElement("span", {
-          style: {
-            marginRight: 4
-          }
-        }, habit.icon), habit.text),
+        }, habit.text),
         // Sub-unit progress line: "4/8 cups". Shown only when a target
         // is configured AND the habit isn't already fully done (done
         // case is conveyed by the line-through on the name). Intentionally
@@ -12658,15 +12646,20 @@ function App() {
           marginBottom: 2
         }
       }, f.label), /*#__PURE__*/React.createElement("input", {
-        // datetime-local so the user can pick both the target DATE
-        // and the target TIME of day. Stored as "YYYY-MM-DDTHH:MM".
-        // The display path upgrades older date-only values ("YYYY-MM-DD")
-        // to still render, so legacy data keeps working.
-        type: "datetime-local",
+        // Date-only target. The previous datetime-local picker was
+        // dropped in favor of a calendar date — Time-bound is a
+        // calendar deadline, not a time-of-day deadline. The value
+        // accepts the legacy "YYYY-MM-DDTHH:MM" shape (truncated to
+        // its date part) so existing goals don't lose their target.
+        type: "date",
         className: "sf",
-        value: /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(nGSmart.timebound) ? nGSmart.timebound : "",
+        value: (() => {
+          const v = nGSmart.timebound || "";
+          const m = /^(\d{4}-\d{2}-\d{2})/.exec(v);
+          return m ? m[1] : "";
+        })(),
         onChange: e => sNGSmart(p => ({ ...p, timebound: e.target.value })),
-        placeholder: "Target date & time",
+        placeholder: "Target date",
         style: { width: "100%" }
       }));
     }
@@ -12989,13 +12982,17 @@ function App() {
               textTransform: "uppercase"
             }
           }, f.label), /*#__PURE__*/React.createElement("input", {
-            // Match the add-goal variant: datetime-local so the user
-            // can pin a target date AND time. Accepts legacy date-only.
-            type: "datetime-local",
+            // Date-only Time-bound (matches the add-goal variant).
+            // Truncates legacy "YYYY-MM-DDTHH:MM" values to their date.
+            type: "date",
             className: "sf",
-            value: /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(eGSmart.timebound || "") ? eGSmart.timebound : "",
+            value: (() => {
+              const v = eGSmart.timebound || "";
+              const m = /^(\d{4}-\d{2}-\d{2})/.exec(v);
+              return m ? m[1] : "";
+            })(),
             onChange: e => sEGSmart(p => ({ ...p, timebound: e.target.value })),
-            placeholder: "Target date & time",
+            placeholder: "Target date",
             style: { width: "100%" }
           }));
         }
@@ -13019,61 +13016,7 @@ function App() {
           })),
           placeholder: f.ph
         }));
-      })), /*#__PURE__*/React.createElement("div", {
-        style: {
-          marginBottom: 8
-        }
-      }, /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          fontWeight: 600,
-          color: "#6b7280",
-          marginBottom: 5,
-          textTransform: "uppercase"
-        }
-      }, "Icon"), /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex",
-          gap: 3,
-          flexWrap: "wrap"
-        }
-      }, /*#__PURE__*/React.createElement("button", {
-        onClick: () => save({
-          ...data,
-          goals: data.goals.map(g => g.id === goal.id ? {
-            ...g,
-            icon: null
-          } : g)
-        }),
-        style: {
-          width: 28,
-          height: 28,
-          borderRadius: 5,
-          border: `1px solid ${!goal.icon ? "#2d5a2d" : "var(--c-border)"}`,
-          background: !goal.icon ? "var(--c-tint-green)" : "var(--c-surface-raised)",
-          fontSize: 10,
-          cursor: "pointer",
-          color: "#9ca3af"
-        }
-      }, "\u2014"), HABIT_ICONS.slice(0, 30).map(ic => /*#__PURE__*/React.createElement("button", {
-        key: ic,
-        onClick: () => save({
-          ...data,
-          goals: data.goals.map(g => g.id === goal.id ? {
-            ...g,
-            icon: ic
-          } : g)
-        }),
-        style: {
-          width: 28,
-          height: 28,
-          borderRadius: 5,
-          border: `1px solid ${goal.icon === ic ? "#2d5a2d" : "var(--c-border)"}`,
-          background: goal.icon === ic ? "var(--c-tint-green)" : "var(--c-surface-raised)",
-          fontSize: 14,
-          cursor: "pointer"
-        }
-      }, ic)))), /*#__PURE__*/React.createElement(SC, {
+      })), /*#__PURE__*/React.createElement(SC, {
         onSave: () => svEGoal(goal.id),
         onCancel: () => sEGId(null)
       })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
@@ -13087,9 +13030,7 @@ function App() {
           overflow: "hidden",
           textOverflow: "ellipsis"
         }
-      }, goal.icon && /*#__PURE__*/React.createElement("span", {
-        style: {marginRight: 5}
-      }, goal.icon), goal.text)), momentum && /*#__PURE__*/React.createElement("span", {
+      }, goal.text)), momentum && /*#__PURE__*/React.createElement("span", {
         style: {fontSize:14,flexShrink:0,color:momentum==="up"?"#16a34a":momentum==="down"?"#dc2626":"#d97706",lineHeight:1,pointerEvents:"none"}
       }, momentum==="up"?"↑":momentum==="down"?"↓":"→"), gt && /*#__PURE__*/React.createElement("div", {
         style: {
@@ -13175,20 +13116,12 @@ function App() {
           if (amt || unit) shown = [amt, unit].filter(Boolean).join(" ");
         } else if (f.key === "timebound") {
           const raw = goal.smart?.timebound || "";
-          // Two accepted formats:
-          //   "YYYY-MM-DD"         → legacy date-only value
-          //   "YYYY-MM-DDTHH:MM"   → datetime-local (date + time)
-          // Display with time only when one was actually captured.
-          const mDT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(raw);
-          const mD = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-          if (mDT) {
-            const dt = new Date(+mDT[1], +mDT[2] - 1, +mDT[3], +mDT[4], +mDT[5]);
-            shown = dt.toLocaleString(undefined, {
-              year: "numeric", month: "short", day: "numeric",
-              hour: "numeric", minute: "2-digit"
-            });
-          } else if (mD) {
-            const dt = new Date(+mD[1], +mD[2] - 1, +mD[3]);
+          // Time-bound is a calendar date. Legacy values may carry a
+          // "THH:MM" suffix from the old datetime-local picker; those
+          // get truncated so the display always shows date only.
+          const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+          if (m) {
+            const dt = new Date(+m[1], +m[2] - 1, +m[3]);
             shown = dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
           } else if (raw) {
             shown = raw;
@@ -13313,11 +13246,7 @@ function App() {
               fontWeight: 500,
               textDecoration: d || m ? "line-through" : "none"
             }
-          }, h.icon && /*#__PURE__*/React.createElement("span", {
-            style: {
-              marginRight: 3
-            }
-          }, h.icon), h.text), /*#__PURE__*/React.createElement("span", {
+          }, h.text), /*#__PURE__*/React.createElement("span", {
             style: {
               marginLeft: "auto",
               fontSize: 9,
@@ -13551,7 +13480,7 @@ function App() {
               },
                 /*#__PURE__*/React.createElement("div", {
                   style: { fontSize: 11, fontWeight: 600, color: "var(--c-text-soft)", marginBottom: 4 }
-                }, h.icon ? h.icon + " " : "", h.text, " ",
+                }, h.text, " ",
                   /*#__PURE__*/React.createElement("span", {
                     style: { fontSize: 9, color: "#9ca3af", fontWeight: 500 }
                   }, "(" + hist.length + ")")),
@@ -14435,11 +14364,7 @@ function App() {
           overflow: "hidden",
           textOverflow: "ellipsis"
         }
-      }, h.icon && /*#__PURE__*/React.createElement("span", {
-        style: {
-          marginRight: 3
-        }
-      }, h.icon), h.text.length > 16 ? h.text.slice(0, 16) + "…" : h.text), today7.map(d => {
+      }, h.text.length > 16 ? h.text.slice(0, 16) + "…" : h.text), today7.map(d => {
         const done = isDone(h, d);
         const miss = isMissed(h, d);
         return /*#__PURE__*/React.createElement("td", {
@@ -14845,11 +14770,7 @@ function App() {
       fontWeight: 600,
       color: "var(--c-text)"
     }
-  }, completeGoalModal.icon && /*#__PURE__*/React.createElement("span", {
-    style: {
-      marginRight: 6
-    }
-  }, completeGoalModal.icon), completeGoalModal.text)), /*#__PURE__*/React.createElement("div", {
+  }, completeGoalModal.text)), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 16
     }
@@ -15030,11 +14951,7 @@ function App() {
         color: "var(--c-text-soft)",
         marginBottom: nextGoal ? 8 : 0
       }
-    }, g.icon && /*#__PURE__*/React.createElement("span", {
-      style: {
-        marginRight: 5
-      }
-    }, g.icon), g.text), nextGoal && /*#__PURE__*/React.createElement("div", {
+    }, g.text), nextGoal && /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
@@ -15323,7 +15240,7 @@ function App() {
         style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, minHeight: 34 }
       },
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 } },
-          h.icon ? h.icon + " " : "", h.text),
+          h.text),
         meta ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, flexShrink: 0 } }, meta) : null
       );
       const rcSectionHeader = (title, count, color) => /*#__PURE__*/React.createElement("div", {
@@ -15437,7 +15354,7 @@ function App() {
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", marginLeft: "auto" } }, g.completedDate || g.archivedAt?.split("T")[0])),
           /*#__PURE__*/React.createElement("div", {
             style: { fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", marginBottom: nextGoal ? 8 : 0 }
-          }, g.icon && /*#__PURE__*/React.createElement("span", { style: { marginRight: 5 } }, g.icon), g.text),
+          }, g.text),
           nextGoal && /*#__PURE__*/React.createElement("div", {
             style: { display: "flex", alignItems: "center", gap: 6, background: "var(--c-tint-green)", borderRadius: 8, padding: "8px 10px" }
           }, /*#__PURE__*/React.createElement("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "#2d5a2d", strokeWidth: "2" }, /*#__PURE__*/React.createElement("polyline", { points: "9 18 15 12 9 6" })),
@@ -15515,7 +15432,6 @@ function App() {
               style: { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px" }
             },
               /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 } },
-                h.icon && /*#__PURE__*/React.createElement("span", { style: { fontSize: 15 } }, h.icon),
                 /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, h.text),
                 isAvoid && /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, color: "#991b1b", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 8, padding: "1px 6px" } }, "AVOID")),
               /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 14, fontSize: 11, color: "#6b7280" } },
@@ -16167,7 +16083,7 @@ function App() {
       style:{background:"#fff",borderRadius:"20px 20px 0 0",padding:"24px 20px",width:"100%",maxWidth:640,boxShadow:"0 -8px 40px rgba(0,0,0,.2)"}
     },
       /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-        /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, _g.icon?_g.icon+" ":"", _g.text),
+        /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, _g.text),
         /*#__PURE__*/React.createElement("button", {onClick:()=>setGoalMoreMenu(null),style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
       ),
       /*#__PURE__*/React.createElement("div", {style:{height:1,background:"var(--c-surface-muted)",margin:"14px 0"}}),
@@ -17162,112 +17078,7 @@ function App() {
      /*#__PURE__*/React.createElement("option", { value: "home" }, "\uD83C\uDFE0 Home only"),
      /*#__PURE__*/React.createElement("option", { value: "travel" }, "\u2708 Travel only")
   ),
-  /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 10
-    }
-  },
-    // Collapsed-by-default disclosure row. Tapping the whole row
-    // toggles the icon grid below; the row itself shows the currently
-    // selected icon (or "\u2014" when none) and a chevron, so the user can
-    // tell at a glance what's set without expanding ~70 emoji buttons.
-    /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => setShowHabitIconPicker(v => !v),
-      "aria-expanded": showHabitIconPicker ? "true" : "false",
-      style: {
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        width: "100%",
-        padding: "6px 10px",
-        marginBottom: showHabitIconPicker ? 8 : 0,
-        background: "var(--c-surface-raised)",
-        border: "1px solid var(--c-border)",
-        borderRadius: 8,
-        cursor: "pointer",
-        textAlign: "left"
-      }
-    },
-      /*#__PURE__*/React.createElement("span", {
-        style: {
-          fontSize: 11,
-          fontWeight: 600,
-          color: "#6b7280",
-          textTransform: "uppercase",
-          letterSpacing: .5
-        }
-      }, "Icon (optional)"),
-      /*#__PURE__*/React.createElement("span", {
-        style: { display: "flex", alignItems: "center", gap: 8 }
-      },
-        /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: editHabitModal?.icon ? 18 : 14,
-            color: editHabitModal?.icon ? "inherit" : "#9ca3af",
-            lineHeight: 1
-          }
-        }, editHabitModal?.icon || "\u2014"),
-        /*#__PURE__*/React.createElement("span", {
-          style: { fontSize: 12, color: "#6b7280", lineHeight: 1 }
-        }, showHabitIconPicker ? "\u25be" : "\u25b8")
-      )
-    ),
-    showHabitIconPicker && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 4,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => save({
-      ...data,
-      habits: (data.habits || []).map(h => h.id === editHabitModal?.id ? {
-        ...h,
-        icon: null
-      } : h)
-    }),
-    style: {
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      border: `1.5px solid ${!editHabitModal?.icon ? "#2d5a2d" : "var(--c-border)"}`,
-      background: !editHabitModal?.icon ? "var(--c-tint-green)" : "var(--c-surface-raised)",
-      fontSize: 12,
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      color: "#9ca3af"
-    }
-  }, "\u2014"), HABIT_ICONS.map(ic => /*#__PURE__*/React.createElement("button", {
-    key: ic,
-    onClick: () => {
-      save({
-        ...data,
-        habits: (data.habits || []).map(h => h.id === editHabitModal?.id ? {
-          ...h,
-          icon: ic
-        } : h)
-      });
-      setEditHabitModal(p => p ? {
-        ...p,
-        icon: ic
-      } : p);
-    },
-    style: {
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      border: `1.5px solid ${editHabitModal?.icon === ic ? "#2d5a2d" : "var(--c-border)"}`,
-      background: editHabitModal?.icon === ic ? "var(--c-tint-green)" : "var(--c-surface-raised)",
-      fontSize: 16,
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center"
-    }
-  }, ic)))), /*#__PURE__*/React.createElement("textarea", {
+  /*#__PURE__*/React.createElement("textarea", {
     value: eHNotes,
     onChange: e => sEHNotes(e.target.value),
     placeholder: "Details",
