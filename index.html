@@ -5054,12 +5054,22 @@ function App() {
       const r = localStorage.getItem(lsKey);
       if (r) {
         const d = JSON.parse(r);
+        // Backfill _updatedAt for legacy localStorage docs that
+        // predate the timestamp-echo logic. Without it the listener
+        // sees localTs=0, treats any cached cloud snapshot as
+        // "newer", and overwrites local state with stale data.
+        if (typeof d._updatedAt !== "number") d._updatedAt = Date.now();
         setData(d);
         latestData.current = d;
       } else {
-        // First time on this device for this user: start from a blank
-        // default so onboarding fires instead of the seed workspace.
+        // First time on this device for this user: start from the
+        // blank default. Stamp _updatedAt = Date.now() so the
+        // listener's echo-detection has a real baseline; otherwise
+        // it'll see localTs=0 and adopt any stale Firestore-cached
+        // snapshot that fires from IndexedDB before the .get()
+        // callback below runs.
         const blank = JSON.parse(JSON.stringify(DD));
+        blank._updatedAt = Date.now();
         setData(blank);
         latestData.current = blank;
       }
@@ -5129,19 +5139,23 @@ function App() {
     });
 
     // Realtime listener: pick up writes from other tabs/devices the
-    // moment they land. The local `_updatedAt` stamp (written by save
-    // below) lets us distinguish echoes of our own writes from genuine
-    // remote changes and skip them. On a genuine remote change we
-    // last-write-wins: adopt the remote state wholesale. Concurrent
-    // edits across tabs can still drop one side's changes, but the
-    // window is ~1s (one debounce interval) instead of "until the
-    // tab next reloads".
+    // moment they land. The local `_updatedAt` stamp lets us distinguish
+    // echoes of our own writes from genuine remote changes.
+    //
+    // Strict `<` (not `<=`): when two devices save at the same
+    // millisecond, the cloud's last-writer-wins keeps one of them, but
+    // both devices observe `remoteTs === localTs` on the snapshot. The
+    // old `<=` skipped that case as an echo and the loser silently
+    // never saw the winner's data. With `<`, an equal timestamp
+    // re-adopts the cloud doc — a no-op for our own echo (data is
+    // identical so setData is functionally idempotent) and a
+    // correct adopt for a same-ms cross-device write.
     const unsubRealtime = userDoc(uid).onSnapshot(snap => {
       if (!snap.exists) return;
       const remote = snap.data();
       const remoteTs = (remote && remote._updatedAt) || 0;
       const localTs = (latestData.current && latestData.current._updatedAt) || 0;
-      if (remoteTs <= localTs) return; // our own echo or older data
+      if (remoteTs < localTs) return; // strictly older — definite echo of an older write
       const d = hydrateCloudDoc(remote);
       setData(d);
       latestData.current = d;
@@ -5197,14 +5211,18 @@ function App() {
     if (!uid) { setSyncState("offline"); return; }
     // Write to Firestore immediately (no debounce). The previous
     // 800ms setTimeout was coalescing rapid edits but trading away
-    // reliability: when the user backgrounded the app or closed
-    // the tab within that window, mobile browsers throttle/kill
-    // the pending timer and the Firestore .set() never fires.
-    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    // reliability: mobile browsers throttle/kill timers when the
+    // tab is backgrounded.
+    //
+    // Use the locally-scoped `stamped` (NOT latestData.current) for
+    // the .set() payload — if a second save() fires before this
+    // .set() resolves, latestData.current will have been mutated to
+    // the newer doc, and our outgoing .set() would silently send
+    // mismatched data with mismatched _updatedAt.
     setSyncState("saving");
     const writeUid = uid;
     try { console.log("[verrocchio save] firing .set()", { uid: writeUid, ts: stamped._updatedAt }); } catch (e) {}
-    userDoc(writeUid).set(sanitizeForFirestore(latestData.current)).then(() => {
+    userDoc(writeUid).set(sanitizeForFirestore(stamped)).then(() => {
       setSyncState("synced");
       try { console.log("[verrocchio save] .set() succeeded"); } catch (e) {}
     }).catch(err => {
