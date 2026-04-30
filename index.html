@@ -5924,6 +5924,61 @@ function App() {
     ...data,
     habits: l
   });
+  /* Per-goal habit draft (mirrors goalTodoDraft). Empty string per
+     goal id; populated as the user types into the inline habit
+     quick-add row inside an expanded goal card. */
+  const [goalHabitDraft, setGoalHabitDraft] = useState({});
+  const addGoalHabit = (goalId) => {
+    const draft = (goalHabitDraft[goalId] || "").trim();
+    if (!draft) return;
+    const goal = (data.goals || []).find(g => g.id === goalId);
+    save({
+      ...data,
+      habits: [...(data.habits || []), {
+        id: Date.now(),
+        text: draft,
+        // Match the new-goal-flow defaults so habits created from a
+        // goal card share the same shape as the first-habit-on-create.
+        type: goal ? goal.type : null,
+        section: "morning",
+        importance: "Important",
+        notes: null,
+        frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+        location: "both",
+        startDate: dk(new Date()),
+        goalId: goalId,
+        completions: {},
+        completionTimes: {},
+        completionUnits: {},
+        target: null,
+        unitLabel: null,
+        increment: null
+      }]
+    });
+    setGoalHabitDraft(prev => ({ ...prev, [goalId]: "" }));
+  };
+  const renderGoalHabitQuickAdd = (goal) => /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }
+  },
+    /*#__PURE__*/React.createElement("input", {
+      value: goalHabitDraft[goal.id] || "",
+      onChange: e => setGoalHabitDraft(prev => ({ ...prev, [goal.id]: e.target.value })),
+      onKeyDown: e => { if (e.key === "Enter") e.preventDefault(); },
+      placeholder: "+ Add a habit for this goal…",
+      style: {
+        flex: 1, background: "#fff", border: "1px solid #e5e7eb",
+        borderRadius: 8, padding: "7px 10px", fontSize: 12, outline: "none"
+      }
+    }),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: () => addGoalHabit(goal.id),
+      style: {
+        background: "#2d5a2d", color: "#fff", border: "none",
+        borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, "Add")
+  );
   /* Quick-add row for attaching a new one-off to-do to a goal, rendered
      inside the goal's expanded details. Writes straight into `data.todos`
      with the goalId link and clears the per-goal draft on commit. */
@@ -12897,28 +12952,41 @@ function App() {
           position: "relative"
         }
       }), (() => {
-        // Donut now reflects today's linked-habit completion rather
-        // than how many SMART framework fields are filled. Empty ring
-        // when no habits are linked OR none are done; partial arc as
-        // the user checks habits off; solid fill when every linked
-        // habit for the selected date is done. The arc is built on a
-        // r=4 circle (circumference ≈ 25.1) and rotates -90° so 0%
-        // starts at 12 o'clock.
-        const ratio = linkedTotal > 0 ? Math.min(1, linkedDone / linkedTotal) : 0;
+        // Donut split into one arc per linked habit. Each segment is
+        // drawn at the same r=4 / circumference ~25.13 ring; a small
+        // gap (~0.5 viewBox units) between segments creates the tick-
+        // mark separators so the user can count habits at a glance.
+        // Segment color: brand-green-or-area-color when that habit is
+        // done for the selected date, faint border-color otherwise. A
+        // goal with no linked habits still renders the background
+        // ring (no segments) so its place in the layout is preserved.
         const ringColor = gt?.color || "#2d5a2d";
+        const C = 2 * Math.PI * 4; // ≈ 25.1327 viewBox units
+        const n = linkedHabits.length;
+        const gap = n > 1 ? 0.5 : 0; // no separator on a single-habit ring
+        const segLen = n > 0 ? Math.max(0.001, (C / n) - gap) : 0;
         return /*#__PURE__*/React.createElement("svg", {
           width: 28, height: 28, viewBox: "0 0 12 12", style: {flexShrink: 0}
-        }, /*#__PURE__*/React.createElement("circle", {
-          cx: 6, cy: 6, r: 4, fill: "none", stroke: "var(--c-border)", strokeWidth: 2
-        }), ratio > 0 && /*#__PURE__*/React.createElement("circle", {
-          cx: 6, cy: 6, r: 4,
-          fill: ratio === 1 ? ringColor : "none",
-          stroke: ringColor,
-          strokeWidth: 2,
-          strokeDasharray: `${ratio * 25.1} 25.1`,
-          strokeLinecap: "round",
-          transform: "rotate(-90 6 6)"
-        }));
+        },
+          /*#__PURE__*/React.createElement("circle", {
+            cx: 6, cy: 6, r: 4, fill: "none", stroke: "var(--c-border)", strokeWidth: 2
+          }),
+          ...linkedHabits.map((h, i) => {
+            const done = isDone(h, selDate);
+            const start = i * (C / n) + gap / 2;
+            return /*#__PURE__*/React.createElement("circle", {
+              key: "seg-" + h.id,
+              cx: 6, cy: 6, r: 4,
+              fill: "none",
+              stroke: done ? ringColor : "transparent",
+              strokeWidth: 2,
+              strokeLinecap: "butt",
+              strokeDasharray: segLen + " " + (C - segLen),
+              strokeDashoffset: -start,
+              transform: "rotate(-90 6 6)"
+            });
+          })
+        );
       })(), isE ? /*#__PURE__*/React.createElement("div", {
         style: {
           flex: 1
@@ -13369,8 +13437,10 @@ function App() {
             style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 14, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
           }, "\u00D7")
         ))),
-        // Quick-add row: always visible so the user can attach a new
-        // to-do to this specific goal without switching tabs.
+        // Quick-add rows: habit on top, then to-do — both always
+        // visible so the user can attach new items to this goal
+        // without switching tabs.
+        renderGoalHabitQuickAdd(goal),
         renderGoalTodoQuickAdd(goal)
         ) : /*#__PURE__*/React.createElement("div", {
           // Same anti-bubble guard as the populated branch — keeps a
@@ -13390,6 +13460,7 @@ function App() {
             marginBottom: 8
           }
         }, "No habits or to-dos linked to this goal yet."),
+          renderGoalHabitQuickAdd(goal),
           renderGoalTodoQuickAdd(goal)
         );
       })(),
