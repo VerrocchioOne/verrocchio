@@ -12986,12 +12986,12 @@ function App() {
           textOverflow: "ellipsis"
         }
       }, goal.text)),
-      // Days-until-deadline chip. Drawn inline on the goal card title
-      // row so the user can see at a glance how much runway is left
-      // for each goal. Color shifts red if the deadline has passed,
-      // amber if it's today/this week, otherwise neutral gray.
-      // Skipped when there is no Time-bound or the value can't be
-      // parsed as YYYY-MM-DD (legacy free-text values fall through).
+      // Days-to-deadline chip with the formatted target date stacked
+      // underneath. Top line is "<n> Days"; bottom line is italic
+      // "MMM. DD, YYYY". Color carries urgency: red if the date has
+      // passed, amber within 7 days, neutral gray otherwise. Skipped
+      // when there is no Time-bound or the value can't be parsed as
+      // YYYY-MM-DD (legacy free-text falls through silently).
       (() => {
         const raw = goal.smart && goal.smart.timebound || "";
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
@@ -13001,26 +13001,36 @@ function App() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const days = Math.round((target - today) / 86400000);
-        let label, color, bg;
-        if (days < 0) { label = `${-days}d overdue`; color = "#b91c1c"; bg = "#fee2e2"; }
-        else if (days === 0) { label = "Due today"; color = "#b45309"; bg = "#fef3c7"; }
-        else if (days <= 7) { label = `${days}d left`; color = "#b45309"; bg = "#fef3c7"; }
-        else { label = `${days}d left`; color = "#4b5563"; bg = "var(--c-surface-muted)"; }
+        const n = Math.abs(days);
+        let color, bg;
+        if (days < 0) { color = "#b91c1c"; bg = "#fee2e2"; }
+        else if (days <= 7) { color = "#b45309"; bg = "#fef3c7"; }
+        else { color = "#4b5563"; bg = "var(--c-surface-muted)"; }
+        const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        const dateLabel = MONTHS[+m[2] - 1] + ". " + (+m[3]) + ", " + m[1];
         return /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
-            fontSize: 10,
-            fontWeight: 700,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
             color: color,
             background: bg,
             border: "1px solid " + (bg === "var(--c-surface-muted)" ? "var(--c-border)" : "transparent"),
             borderRadius: 8,
             padding: "2px 6px",
             marginLeft: 6,
-            letterSpacing: 0.2,
+            lineHeight: 1.15,
             whiteSpace: "nowrap"
           }
-        }, label);
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 10, fontWeight: 700, letterSpacing: 0.2 }
+          }, n + " Days"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+          }, dateLabel)
+        );
       })(),
       momentum && /*#__PURE__*/React.createElement("span", {
         style: {fontSize:14,flexShrink:0,color:momentum==="up"?"#16a34a":momentum==="down"?"#dc2626":"#d97706",lineHeight:1,pointerEvents:"none"}
