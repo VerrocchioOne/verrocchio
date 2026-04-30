@@ -761,6 +761,17 @@ const SECTIONS = [{
   bg: "#f5f3ff",
   border: "#ddd6fe"
 }, {
+  // "Daily Completion" — habits that aren't tied to a specific time
+  // of day (water intake, posture checks, anything ambient). Sits
+  // after Evening (last time-of-day section) and before Avoid so it
+  // groups with the constructive sections in the UI.
+  value: "all-day",
+  label: "Daily Completion",
+  icon: "🔁",
+  color: "#0d9488",
+  bg: "#f0fdfa",
+  border: "#99f6e4"
+}, {
   value: "avoid",
   label: "Avoid",
   icon: "🚫",
@@ -4868,6 +4879,10 @@ function App() {
       morning:   cur !== "morning",
       afternoon: cur !== "afternoon",
       evening:   cur !== "evening",
+      // "All Day" habits aren't tied to a time-of-day cutoff — keep
+      // them expanded by default so they're always visible alongside
+      // the currently-active time-of-day section.
+      "all-day": false,
       avoid:     false
     };
   });
