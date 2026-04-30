@@ -16732,13 +16732,22 @@ function App() {
         : /*#__PURE__*/React.createElement(React.Fragment, null,
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 12 }
-            }, "Type ", /*#__PURE__*/React.createElement("strong", { style: { color: "#b91c1c" } }, "DELETE"), " in capital letters to confirm. This cannot be undone."),
+            }, "Type ", /*#__PURE__*/React.createElement("strong", { style: { color: "#b91c1c" } }, "delete"), " to confirm. This cannot be undone."),
             /*#__PURE__*/React.createElement("input", {
               type: "text",
               value: confirmWipeTyped,
               onChange: e => setConfirmWipeTyped(e.target.value),
               autoFocus: true,
-              placeholder: "Type DELETE",
+              // Mobile keyboards auto-capitalize the first letter only
+              // — so "DELETE" never lands without help. Force-uppercase
+              // the layout, switch off autocorrect/spellcheck so the
+              // word isn't replaced mid-typing, and accept any case
+              // (case-insensitive compare on the button below) so
+              // either "delete" or "DELETE" works.
+              autoCapitalize: "characters",
+              autoCorrect: "off",
+              spellCheck: false,
+              placeholder: "Type delete",
               style: { width: "100%", padding: "10px 12px", border: "1px solid var(--c-border)", borderRadius: 8, fontSize: 14, marginBottom: 18, outline: "none", background: "var(--c-surface-raised)" }
             })
           ),
@@ -16754,16 +16763,19 @@ function App() {
               onClick: () => { setConfirmWipeTyped(""); setConfirmWipe("2"); },
               style: { background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }
             }, "Continue")
-          : /*#__PURE__*/React.createElement("button", {
-              onClick: wipeAllData,
-              disabled: confirmWipeTyped !== "DELETE",
-              style: {
-                background: confirmWipeTyped === "DELETE" ? "#b91c1c" : "#9ca3af",
-                color: "#fff", border: "none", borderRadius: 8,
-                padding: "9px 16px", fontSize: 13, fontWeight: 700,
-                cursor: confirmWipeTyped === "DELETE" ? "pointer" : "not-allowed"
-              }
-            }, "Delete All Data")
+          : (() => {
+              const isReady = confirmWipeTyped.trim().toUpperCase() === "DELETE";
+              return /*#__PURE__*/React.createElement("button", {
+                onClick: wipeAllData,
+                disabled: !isReady,
+                style: {
+                  background: isReady ? "#b91c1c" : "#9ca3af",
+                  color: "#fff", border: "none", borderRadius: 8,
+                  padding: "9px 16px", fontSize: 13, fontWeight: 700,
+                  cursor: isReady ? "pointer" : "not-allowed"
+                }
+              }, "Delete All Data");
+            })()
       )
     )
   ),
