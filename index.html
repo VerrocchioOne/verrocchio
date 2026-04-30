@@ -12871,19 +12871,30 @@ function App() {
           paddingRight: gt ? "34px" : "14px",
           position: "relative"
         }
-      }), /*#__PURE__*/React.createElement("svg", {
-        width: 28, height: 28, viewBox: "0 0 12 12", style: {flexShrink: 0}
-      }, /*#__PURE__*/React.createElement("circle", {
-        cx: 6, cy: 6, r: 4, fill: "none", stroke: "var(--c-border)", strokeWidth: 2
-      }), smartCount > 0 && /*#__PURE__*/React.createElement("circle", {
-        cx: 6, cy: 6, r: 4,
-        fill: smartCount === 5 ? (gt?.color || "#6b7280") : "none",
-        stroke: gt?.color || "#6b7280",
-        strokeWidth: 2,
-        strokeDasharray: `${(smartCount / 5) * 25.1} 25.1`,
-        strokeLinecap: "round",
-        transform: "rotate(-90 6 6)"
-      })), isE ? /*#__PURE__*/React.createElement("div", {
+      }), (() => {
+        // Donut now reflects today's linked-habit completion rather
+        // than how many SMART framework fields are filled. Empty ring
+        // when no habits are linked OR none are done; partial arc as
+        // the user checks habits off; solid fill when every linked
+        // habit for the selected date is done. The arc is built on a
+        // r=4 circle (circumference ≈ 25.1) and rotates -90° so 0%
+        // starts at 12 o'clock.
+        const ratio = linkedTotal > 0 ? Math.min(1, linkedDone / linkedTotal) : 0;
+        const ringColor = gt?.color || "#2d5a2d";
+        return /*#__PURE__*/React.createElement("svg", {
+          width: 28, height: 28, viewBox: "0 0 12 12", style: {flexShrink: 0}
+        }, /*#__PURE__*/React.createElement("circle", {
+          cx: 6, cy: 6, r: 4, fill: "none", stroke: "var(--c-border)", strokeWidth: 2
+        }), ratio > 0 && /*#__PURE__*/React.createElement("circle", {
+          cx: 6, cy: 6, r: 4,
+          fill: ratio === 1 ? ringColor : "none",
+          stroke: ringColor,
+          strokeWidth: 2,
+          strokeDasharray: `${ratio * 25.1} 25.1`,
+          strokeLinecap: "round",
+          transform: "rotate(-90 6 6)"
+        }));
+      })(), isE ? /*#__PURE__*/React.createElement("div", {
         style: {
           flex: 1
         }
