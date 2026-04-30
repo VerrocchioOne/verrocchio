@@ -5887,6 +5887,13 @@ function App() {
     /*#__PURE__*/React.createElement("input", {
       value: goalTodoDraft[goal.id] || "",
       onChange: e => setGoalTodoDraft(prev => ({ ...prev, [goal.id]: e.target.value })),
+      // Auto-focus on mount so a single tap on the goal card lands
+      // the cursor straight in the to-do field — the user expanded
+      // the card precisely to add a to-do, no point making them tap
+      // a second time to focus the input. React honors autoFocus on
+      // initial mount only, which matches each expand/collapse cycle
+      // (the input unmounts when the goal card collapses).
+      autoFocus: true,
       // No Enter-to-save. Per user: saves happen on explicit tap of the
       // save/add button only — hitting Enter used to close the form and
       // silently commit a half-filled item, which felt like the card
