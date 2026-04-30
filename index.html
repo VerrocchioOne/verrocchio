@@ -5179,24 +5179,27 @@ function App() {
     // No uid yet (auth still resolving) — skip the cloud write; the next
     // save after sign-in will flush to the user's doc.
     if (!uid) { setSyncState("offline"); return; }
-    // Debounce Firestore writes — max 1 per 800ms
+    // Write to Firestore immediately (no debounce). The previous
+    // 800ms setTimeout was coalescing rapid edits but trading away
+    // reliability: when the user backgrounds the app or closes the
+    // tab within that window, mobile browsers throttle/kill the
+    // pending timer and the Firestore .set() never fires — that's
+    // the "next-day my changes are gone" symptom. Firestore's own
+    // SDK handles rapid back-to-back writes via its IndexedDB
+    // persistence layer, so we don't actually need to coalesce in
+    // user code. Each save() call goes straight to .set(), and the
+    // pagehide/visibilitychange flush is no longer load-bearing for
+    // correctness (kept as belt-and-braces for an edit literally in
+    // flight when the page suspends).
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     setSyncState("saving");
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    const writeUid = uid; // capture so a post-signout flush can't misroute
-    saveTimerRef.current = setTimeout(() => {
-      saveTimerRef.current = null;
-      userDoc(writeUid).set(sanitizeForFirestore(latestData.current)).then(() => {
-        setSyncState("synced");
-      }).catch(err => {
-        // Same rationale as the manual-save catch: surface the actual
-        // error so a deterministic reject (rules, auth, invalid data
-        // shape) doesn't silently masquerade as a transient offline
-        // blip. The realtime listener's catch sets offline too, so
-        // logging here is the only signal pointing at the write side.
-        try { console.warn("[verrocchio] debounced save rejected:", err && err.code, err && err.message, err); } catch (e) {}
-        setSyncState("offline");
-      });
-    }, 800);
+    const writeUid = uid;
+    userDoc(writeUid).set(sanitizeForFirestore(latestData.current)).then(() => {
+      setSyncState("synced");
+    }).catch(err => {
+      try { console.warn("[verrocchio] save rejected:", err && err.code, err && err.message, err); } catch (e) {}
+      setSyncState("offline");
+    });
   }, [demoMode, uid, lsKey]);
 
   // Flush pending Firestore writes when the page is hidden or unloaded.
