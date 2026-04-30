@@ -5963,6 +5963,13 @@ function App() {
     /*#__PURE__*/React.createElement("input", {
       value: goalHabitDraft[goal.id] || "",
       onChange: e => setGoalHabitDraft(prev => ({ ...prev, [goal.id]: e.target.value })),
+      // Auto-focus the topmost input on goal-card expand: the habit
+      // quick-add now sits above the to-do quick-add, so this is the
+      // input the user wants their cursor in when a single tap pops
+      // the goal card open. React honors autoFocus only on initial
+      // mount, which matches each expand/collapse cycle since this
+      // whole subtree unmounts when the card collapses.
+      autoFocus: true,
       onKeyDown: e => { if (e.key === "Enter") e.preventDefault(); },
       placeholder: "+ Add a habit for this goal…",
       style: {
@@ -6004,13 +6011,8 @@ function App() {
     /*#__PURE__*/React.createElement("input", {
       value: goalTodoDraft[goal.id] || "",
       onChange: e => setGoalTodoDraft(prev => ({ ...prev, [goal.id]: e.target.value })),
-      // Auto-focus on mount so a single tap on the goal card lands
-      // the cursor straight in the to-do field — the user expanded
-      // the card precisely to add a to-do, no point making them tap
-      // a second time to focus the input. React honors autoFocus on
-      // initial mount only, which matches each expand/collapse cycle
-      // (the input unmounts when the goal card collapses).
-      autoFocus: true,
+      // autoFocus moved to the habit quick-add row above this one —
+      // only the topmost input should grab focus on expand.
       // No Enter-to-save. Per user: saves happen on explicit tap of the
       // save/add button only — hitting Enter used to close the form and
       // silently commit a half-filled item, which felt like the card
