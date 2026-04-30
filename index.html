@@ -5197,23 +5197,18 @@ function App() {
     if (!uid) { setSyncState("offline"); return; }
     // Write to Firestore immediately (no debounce). The previous
     // 800ms setTimeout was coalescing rapid edits but trading away
-    // reliability: when the user backgrounds the app or closes the
-    // tab within that window, mobile browsers throttle/kill the
-    // pending timer and the Firestore .set() never fires — that's
-    // the "next-day my changes are gone" symptom. Firestore's own
-    // SDK handles rapid back-to-back writes via its IndexedDB
-    // persistence layer, so we don't actually need to coalesce in
-    // user code. Each save() call goes straight to .set(), and the
-    // pagehide/visibilitychange flush is no longer load-bearing for
-    // correctness (kept as belt-and-braces for an edit literally in
-    // flight when the page suspends).
+    // reliability: when the user backgrounded the app or closed
+    // the tab within that window, mobile browsers throttle/kill
+    // the pending timer and the Firestore .set() never fires.
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     setSyncState("saving");
     const writeUid = uid;
+    try { console.log("[verrocchio save] firing .set()", { uid: writeUid, ts: stamped._updatedAt }); } catch (e) {}
     userDoc(writeUid).set(sanitizeForFirestore(latestData.current)).then(() => {
       setSyncState("synced");
+      try { console.log("[verrocchio save] .set() succeeded"); } catch (e) {}
     }).catch(err => {
-      try { console.warn("[verrocchio] save rejected:", err && err.code, err && err.message, err); } catch (e) {}
+      try { console.warn("[verrocchio save] rejected:", err && err.code, err && err.message, err); } catch (e) {}
       setSyncState("offline");
     });
   }, [demoMode, uid, lsKey]);
@@ -5281,19 +5276,40 @@ function App() {
   // Wipe-all-data action. Resets every content array on the user's
   // doc back to its blank-default shape but keeps onboardingComplete
   // + tourDone true (the user has already done both — no point
-  // re-running them) and preserves the auth identity. Goes through
-  // the regular save() path so the empty doc lands in localStorage
-  // and Firestore atomically; the realtime listener on other devices
-  // will pick up the wipe within seconds. Tied to a two-stage
-  // confirmation in the profile UI; this function is the terminal
-  // action.
-  const wipeAllData = () => {
+  // re-running them) and preserves the auth identity.
+  //
+  // Writes directly to localStorage + Firestore in this function
+  // rather than going through save() so a broken save() path can't
+  // silently swallow the wipe. We also log every step so any failure
+  // shows up explicitly in DevTools console under [verrocchio wipe].
+  const wipeAllData = async () => {
+    try { console.log("[verrocchio wipe] start"); } catch (e) {}
     const blank = JSON.parse(JSON.stringify(DD));
     blank.onboardingComplete = true;
     blank.tourDone = true;
-    save(blank);
+    blank._updatedAt = Date.now();
+    // 1. In-memory React state.
+    try { setData(blank); } catch (e) { try { console.warn("[verrocchio wipe] setData failed", e); } catch (_) {} }
+    latestData.current = blank;
+    // 2. Per-user localStorage.
+    try {
+      localStorage.setItem(lsKey, JSON.stringify(blank));
+      try { console.log("[verrocchio wipe] localStorage cleared"); } catch (_) {}
+    } catch (e) {
+      try { console.warn("[verrocchio wipe] localStorage write failed", e); } catch (_) {}
+    }
+    // 3. Firestore (only when signed in and not in demo).
+    if (!demoMode && uid) {
+      try {
+        await userDoc(uid).set(sanitizeForFirestore(blank));
+        try { console.log("[verrocchio wipe] Firestore set succeeded"); } catch (_) {}
+      } catch (e) {
+        try { console.warn("[verrocchio wipe] Firestore set failed:", e && e.code, e && e.message, e); } catch (_) {}
+      }
+    }
     setConfirmWipe(null);
     setConfirmWipeTyped("");
+    setShowProfile(false);
   };
 
   /* ── Day-visit tracking ──
