@@ -5213,65 +5213,12 @@ function App() {
     });
   }, [demoMode, uid, lsKey]);
 
-  // Flush pending Firestore writes when the page is hidden or unloaded.
-  // The 800ms save() debounce coalesces rapid edits, but mobile
-  // browsers (iOS Safari especially) suspend JS aggressively when the
-  // user backgrounds the app or closes the tab — the timer never
-  // fires and the write never reaches Firestore. On the next session
-  // we'd then load older cloud data and the local edits would look
-  // lost. Reading "hidden"/"pagehide" and force-firing the queued
-  // .set() closes that gap so cross-device sync is reliable.
-  useEffect(() => {
-    if (demoMode) return;
-    if (!uid) return;
-    const flush = () => {
-      if (!saveTimerRef.current) return;
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-      if (!latestData.current) return;
-      try { userDoc(uid).set(sanitizeForFirestore(latestData.current)).catch(() => {}); } catch (e) {}
-    };
-    const onVis = () => { if (typeof document !== "undefined" && document.hidden) flush(); };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVis);
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("pagehide", flush);
-    }
-    return () => {
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVis);
-      }
-      if (typeof window !== "undefined") {
-        window.removeEventListener("pagehide", flush);
-      }
-    };
-  }, [uid, demoMode]);
-
-  // Auto-save heartbeat. Every 30s while the app is foregrounded and
-  // signed in, push the current `latestData.current` snapshot to
-  // Firestore. The regular save() path already writes on every edit;
-  // this is a safety net for the rare case where a save was missed
-  // (timer killed, transient network failure, browser suspension).
-  // Cheap: a redundant write of identical data with no real change
-  // resolves on the server quickly. Skips when `data._updatedAt`
-  // hasn't changed since the previous heartbeat to avoid pointless
-  // writes when the user is idle.
-  const lastHeartbeatTsRef = useRef(0);
-  useEffect(() => {
-    if (demoMode) return;
-    if (!uid) return;
-    const tick = () => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      const cur = latestData.current;
-      if (!cur || !cur._updatedAt) return;
-      if (cur._updatedAt === lastHeartbeatTsRef.current) return;
-      lastHeartbeatTsRef.current = cur._updatedAt;
-      try { userDoc(uid).set(sanitizeForFirestore(cur)).catch(() => {}); } catch (e) {}
-    };
-    const id = setInterval(tick, 30000);
-    return () => clearInterval(id);
-  }, [uid, demoMode]);
+  // The visibility/pagehide flush and 30s heartbeat were removed:
+  // both existed to compensate for the old 800ms save() debounce,
+  // but save() now writes to Firestore immediately on every call.
+  // The heartbeat could also race a more recent save from another
+  // device — re-writing this device's stale snapshot would clobber
+  // the cloud. Less code, fewer cross-device hiccups.
 
   // Wipe-all-data action. Resets every content array on the user's
   // doc back to its blank-default shape but keeps onboardingComplete
