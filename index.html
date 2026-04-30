@@ -270,21 +270,21 @@ textarea{resize:vertical}
    width the old layout used, so the V glyph sitting on top still
    lines up. Vertical gap is 4px between rows. */
 .splashv4 .pyramid{position:absolute;top:66px;left:50%;width:200px;height:120px;transform:translateX(-50%)}
-.splashv4 .block{position:absolute;width:44px;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);opacity:0;animation:splashv4BlockPop .5s cubic-bezier(.34,1.56,.64,1) forwards;will-change:transform,opacity;transform-origin:50% 100%}
+.splashv4 .block{position:absolute;width:44px;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);opacity:0;animation:splashv4BlockPop 1s cubic-bezier(.34,1.56,.64,1) forwards;will-change:transform,opacity;transform-origin:50% 100%}
 /* Row 1 (4 blocks, bottom). 4*44 + 3*8 = 200 */
-.splashv4 .b1{bottom:0;left:0;animation-delay:.05s}
-.splashv4 .b2{bottom:0;left:52px;animation-delay:.10s}
-.splashv4 .b3{bottom:0;left:104px;animation-delay:.15s}
-.splashv4 .b4{bottom:0;left:156px;animation-delay:.20s}
+.splashv4 .b1{bottom:0;left:0;animation-delay:.10s}
+.splashv4 .b2{bottom:0;left:52px;animation-delay:.20s}
+.splashv4 .b3{bottom:0;left:104px;animation-delay:.30s}
+.splashv4 .b4{bottom:0;left:156px;animation-delay:.40s}
 /* Row 2 (3 blocks). Offset 26px to center over row 1. */
-.splashv4 .b5{bottom:30px;left:26px;animation-delay:.27s}
-.splashv4 .b6{bottom:30px;left:78px;animation-delay:.32s}
-.splashv4 .b7{bottom:30px;left:130px;animation-delay:.37s}
+.splashv4 .b5{bottom:30px;left:26px;animation-delay:.54s}
+.splashv4 .b6{bottom:30px;left:78px;animation-delay:.64s}
+.splashv4 .b7{bottom:30px;left:130px;animation-delay:.74s}
 /* Row 3 (2 blocks). Offset 52px. */
-.splashv4 .b8{bottom:60px;left:52px;animation-delay:.44s}
-.splashv4 .b9{bottom:60px;left:104px;animation-delay:.49s}
+.splashv4 .b8{bottom:60px;left:52px;animation-delay:.88s}
+.splashv4 .b9{bottom:60px;left:104px;animation-delay:.98s}
 /* Row 4 (apex, 1 block). Offset 78px to center. */
-.splashv4 .b10{bottom:90px;left:78px;animation-delay:.56s}
+.splashv4 .b10{bottom:90px;left:78px;animation-delay:1.12s}
 /* Pop-in animation replacing the old "drop from above" stack: each
    block grows from 0 with a slight pre-rotation, overshoots its final
    size via a back-curve easing, and settles at 1×. Reads as blocks
@@ -299,17 +299,17 @@ textarea{resize:vertical}
    can fade up on its own staggered timing, paired 1:1 with the
    matching block. Block 1 + V, block 2 + e, ..., block 10 + o. */
 .splashv4 .brand-wordmark{position:absolute;top:22px;left:50%;font-family:'Lora',Georgia,'Times New Roman',serif;font-weight:700;font-size:34px;line-height:1;color:#2d5a2d;letter-spacing:-.01em;white-space:nowrap;transform:translateX(-50%)}
-.splashv4 .wm-letter{display:inline-block;opacity:0;transform:translateY(6px);animation:splashv4LetterIn .42s cubic-bezier(.22,1,.36,1) forwards;will-change:transform,opacity}
-.splashv4 .wm-1{animation-delay:.05s}
-.splashv4 .wm-2{animation-delay:.10s}
-.splashv4 .wm-3{animation-delay:.15s}
-.splashv4 .wm-4{animation-delay:.20s}
-.splashv4 .wm-5{animation-delay:.27s}
-.splashv4 .wm-6{animation-delay:.32s}
-.splashv4 .wm-7{animation-delay:.37s}
-.splashv4 .wm-8{animation-delay:.44s}
-.splashv4 .wm-9{animation-delay:.49s}
-.splashv4 .wm-10{animation-delay:.56s}
+.splashv4 .wm-letter{display:inline-block;opacity:0;transform:translateY(6px);animation:splashv4LetterIn .84s cubic-bezier(.22,1,.36,1) forwards;will-change:transform,opacity}
+.splashv4 .wm-1{animation-delay:.10s}
+.splashv4 .wm-2{animation-delay:.20s}
+.splashv4 .wm-3{animation-delay:.30s}
+.splashv4 .wm-4{animation-delay:.40s}
+.splashv4 .wm-5{animation-delay:.54s}
+.splashv4 .wm-6{animation-delay:.64s}
+.splashv4 .wm-7{animation-delay:.74s}
+.splashv4 .wm-8{animation-delay:.88s}
+.splashv4 .wm-9{animation-delay:.98s}
+.splashv4 .wm-10{animation-delay:1.12s}
 @keyframes splashv4LetterIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
 /* Tagline mirrors the LOGIN PAGE tagline: system-ui sans-serif, italic,
    #6b7280 gray, 13px — same treatment as the "Achieve Anything" line
@@ -6936,12 +6936,13 @@ function App() {
     const willShowWelcome = authUser !== undefined && (authUser !== null || demoMode);
     if (!willShowWelcome) return;
     if (splashPhase !== "loading") return;
-    // Splash runtime: ~3.4s of V-draw motion + wordmark/tagline landings,
-    // then hold the completed lockup for a beat before handing off to
-    // onboarding (no intermediate quote page — the splash lands the user
-    // straight into the 3-screen intro). Pyramid stacks (≤0.98s) → left
-    // stroke (1.15–2.45s) → right stroke (2.45–3.40s) → wordmark (3.30s)
-    // → tagline (3.90s).
+    // Splash runtime: pyramid blocks + their paired wordmark letters
+    // animate in pairs from t=0.10s to t=2.12s (each block's delay +
+    // its 1s pop-duration), then the tagline lands at 3.8s and the
+    // completed lockup holds until SPLASH_HOLD elapses. The pyramid
+    // sequence was slowed 2× from its original 1.06s end; the tagline
+    // and SPLASH_HOLD keep their original timing so the post-pyramid
+    // lockup pause stays the same length.
     const SPLASH_HOLD = 5800;
     const t = setTimeout(() => setHasSeenWelcome(true), SPLASH_HOLD);
     return () => clearTimeout(t);
