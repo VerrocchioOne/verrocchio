@@ -6482,26 +6482,43 @@ function App() {
       )
     );
   };
-  // Global habit reorder. Position numbers on the cards now reflect
-  // each habit's rank across the ENTIRE habits list (morning +
-  // afternoon + evening + daily completion + avoid combined). Type
-  // any number from 1 to data.habits.length on any card to move
-  // that habit to that global slot. Sections continue to group
-  // visually — the section field is unchanged — but the order
-  // within each section follows the global _order.
+  // Global habit reorder. Position numbers reflect each habit's
+  // rank across the ENTIRE habits list (morning + afternoon +
+  // evening + daily completion + avoid combined). Typing a number
+  // also reassigns the habit's `section` to match the new slot —
+  // moving a habit to position 2 when slots 1–4 are morning makes
+  // the moved habit a morning habit. The new section is inherited
+  // from the habit immediately ABOVE the new slot (or BELOW if the
+  // new slot is position 1). This way reordering doubles as a way
+  // to move habits between sections.
   const setHabitOrder = (habit, val) => {
     const all = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
     const n = parseInt(val);
     if (isNaN(n) || n < 1 || n > all.length) return;
     const others = all.filter(h => h.id !== habit.id);
     others.splice(n - 1, 0, habit);
+    // Determine the destination section: prefer the section of the
+    // habit immediately above the new slot. If the moved habit is
+    // now at position 1, fall back to the section below it. If
+    // there are no other habits at all (only this one), the
+    // section stays unchanged.
+    let destSection = habit.section;
+    if (others.length > 1) {
+      const newIdx = n - 1;
+      const above = others[newIdx - 1];
+      const below = others[newIdx + 1];
+      if (above) destSection = above.section || destSection;
+      else if (below) destSection = below.section || destSection;
+    }
     const allHabits = [...data.habits];
     others.forEach((h, i) => {
       const idx = allHabits.findIndex(x => x.id === h.id);
-      if (idx >= 0) allHabits[idx] = {
-        ...allHabits[idx],
-        _order: i
-      };
+      if (idx < 0) return;
+      const patch = { ...allHabits[idx], _order: i };
+      // Reassign section only on the moved habit; the others keep
+      // whatever section they already had.
+      if (h.id === habit.id) patch.section = destSection;
+      allHabits[idx] = patch;
     });
     // Flip the page's sortPref to "custom" so the user immediately
     // sees the new position. Without this the manually-set _order
