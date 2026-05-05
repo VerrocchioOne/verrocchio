@@ -920,6 +920,39 @@ const DURS = [{
 }, {
   value: "120",
   label: "2 hr"
+}, {
+  value: "150",
+  label: "2.5 hr"
+}, {
+  value: "180",
+  label: "3 hr"
+}, {
+  value: "240",
+  label: "4 hr"
+}, {
+  value: "300",
+  label: "5 hr"
+}, {
+  value: "360",
+  label: "6 hr"
+}, {
+  value: "420",
+  label: "7 hr"
+}, {
+  value: "480",
+  label: "8 hr"
+}, {
+  value: "540",
+  label: "9 hr"
+}, {
+  value: "600",
+  label: "10 hr"
+}, {
+  value: "660",
+  label: "11 hr"
+}, {
+  value: "720",
+  label: "12 hr"
 }];
 /* Habit frequency taxonomy. `rank` is used to order habits from "most
    often" to "least often" when a goal expands its linked habits (lower
@@ -4961,7 +4994,7 @@ function App() {
   // Duration filter is a two-thumb range [min, max] in minutes (0..120).
   // When min === 0 && max === 120 the filter is treated as "Any" (no
   // filtering). Thumbs are clamped so min <= max - 5 (slider step).
-  const DUR_MIN = 0, DUR_MAX = 120, DUR_STEP = 5;
+  const DUR_MIN = 0, DUR_MAX = 720, DUR_STEP = 5;
   const [durRange, setDurRange] = useState([DUR_MIN, DUR_MAX]);
   const [swipeFeedback, setSwipeFeedback] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
