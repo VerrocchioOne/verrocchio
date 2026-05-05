@@ -6482,10 +6482,18 @@ function App() {
       )
     );
   };
-  const setHabitOrder = (habit, groupHabits, val) => {
+  // Global habit reorder. Position numbers on the cards now reflect
+  // each habit's rank across the ENTIRE habits list (morning +
+  // afternoon + evening + daily completion + avoid combined). Type
+  // any number from 1 to data.habits.length on any card to move
+  // that habit to that global slot. Sections continue to group
+  // visually — the section field is unchanged — but the order
+  // within each section follows the global _order.
+  const setHabitOrder = (habit, val) => {
+    const all = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
     const n = parseInt(val);
-    if (isNaN(n) || n < 1 || n > groupHabits.length) return;
-    const others = groupHabits.filter(h => h.id !== habit.id);
+    if (isNaN(n) || n < 1 || n > all.length) return;
+    const others = all.filter(h => h.id !== habit.id);
     others.splice(n - 1, 0, habit);
     const allHabits = [...data.habits];
     others.forEach((h, i) => {
@@ -11715,34 +11723,52 @@ function App() {
           }
         },
         // Inline position input — sits as the leftmost element on
-        // the card. Type a number to move the habit to that slot
-        // within its section. Only renders when the section has 2+
-        // habits. stopPropagation on the events so typing/focusing
-        // doesn't trigger the row's tap-to-expand or long-press-to-
-        // edit handlers. setHabitOrder() also flips sortPrefs.habits
-        // to "custom" so the change is immediately visible.
-        group.habits.length > 1 && (() => {
-          const idx = group.habits.findIndex(x => x.id === habit.id);
+        // the card. Type a number, then press Enter or tap away to
+        // commit. Position is the habit's GLOBAL rank across every
+        // section (morning + afternoon + evening + daily completion
+        // + avoid). Sections still group visually, but the number
+        // shown is the slot in the full habits list. Reorder fires
+        // once on commit, not per-keystroke (otherwise typing "12"
+        // would reorder to slot 1, then to slot 12 mid-keystroke).
+        (data.habits || []).length > 1 && (() => {
+          const allSorted = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+          const idx = allSorted.findIndex(x => x.id === habit.id);
           const pos = idx >= 0 ? idx + 1 : 1;
+          const max = allSorted.length;
+          const commit = (raw) => {
+            const v = parseInt(raw, 10);
+            if (!isNaN(v) && v >= 1 && v <= max && v !== pos) {
+              setHabitOrder(habit, v);
+            }
+          };
           return /*#__PURE__*/React.createElement("input", {
             type: "number",
             min: 1,
-            max: group.habits.length,
+            max: max,
             defaultValue: pos,
+            // key changes when pos changes so the uncontrolled input
+            // resets its displayed value to the latest position after
+            // a save (otherwise stale typed text would persist).
             key: "ord-" + habit.id + "-" + pos,
             onClick: e => e.stopPropagation(),
             onPointerDown: e => e.stopPropagation(),
             onPointerUp: e => e.stopPropagation(),
-            onChange: e => {
-              const v = parseInt(e.target.value, 10);
-              if (!isNaN(v) && v >= 1 && v <= group.habits.length && v !== pos) {
-                setHabitOrder(habit, group.habits, v);
+            onBlur: e => commit(e.target.value),
+            onKeyDown: e => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit(e.target.value);
+                e.target.blur();
+              } else if (e.key === "Escape") {
+                e.target.value = String(pos);
+                e.target.blur();
               }
             },
-            "aria-label": "Position in " + group.label,
-            title: "Type a number to reorder within " + group.label,
+            "aria-label": "Global position",
+            title: "Type a number 1–" + max + " and press Enter to reorder",
             style: {
-              width: 32,
+              width: 36,
               padding: "2px 4px",
               fontSize: 12,
               fontWeight: 700,
