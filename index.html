@@ -996,6 +996,21 @@ const freqRank = h => {
   const row = FREQ.find(f => f.value === t);
   return row ? row.rank : 1;
 };
+// A habit can now belong to multiple goals (e.g. "sleep 8 hours" is
+// underlying for both "Pass CFA" and "Run a marathon"). Stored as
+// goalIds: number[]. Legacy habits store goalId: number — this
+// helper returns the canonical list regardless of which shape the
+// habit doc carries. Empty array if the habit isn't linked anywhere.
+const habitGoalIds = h => {
+  if (!h) return [];
+  if (Array.isArray(h.goalIds)) return h.goalIds.filter(x => x != null);
+  if (h.goalId != null) return [h.goalId];
+  return [];
+};
+// Whether this habit is linked to the given goal id, on either the
+// new goalIds array or the legacy goalId scalar.
+const habitLinkedToGoal = (h, goalId) =>
+  habitGoalIds(h).some(gid => String(gid) === String(goalId));
 // Whether a habit is "due" on a given date based on its frequency.
 // Handles every cadence the FREQ list supports:
 //   daily      → always due
@@ -2641,6 +2656,15 @@ function hydrateCloudDoc(p) {
       // maps dateKey → running count for that day. All optional;
       // habits without a target stay binary done/not-done.
       if (!h.completionUnits || typeof h.completionUnits !== "object") h = { ...h, completionUnits: {} };
+      // Backfill goalIds from the legacy goalId scalar. A habit can
+      // now belong to multiple goals; older docs only carried one
+      // link in goalId. Promote it into the array on read so every
+      // call site can rely on goalIds being authoritative. We keep
+      // goalId on the doc too (writes set both) so a downgrade to
+      // an older client wouldn't lose all goal links.
+      if (!Array.isArray(h.goalIds)) {
+        h = { ...h, goalIds: h.goalId != null ? [h.goalId] : [] };
+      }
       return h;
     });
   }
@@ -4019,7 +4043,16 @@ function App() {
   const [eHImp, sEHImp] = useState("Important");
   const [eHSec, sEHSec] = useState("morning");
   const [eHNotes, sEHNotes] = useState("");
-  const [eHGoal, sEHGoal] = useState("");
+  // Edit-habit goal links. Stored as array of id strings — a habit
+  // can belong to multiple goals (e.g. "sleep 8 hours" underlying
+  // both "Pass CFA" and "Run a marathon"). UI is checkbox-based.
+  const [eHGoalIds, sEHGoalIds] = useState([]);
+  // Legacy single-goal getter/setter so call sites that still expect
+  // a scalar (e.g. "create a new linked goal" inline flow) keep
+  // working. eHGoal == "" means no link, otherwise the FIRST id
+  // in the array.
+  const eHGoal = eHGoalIds.length > 0 ? String(eHGoalIds[0]) : "";
+  const sEHGoal = v => sEHGoalIds(v ? [v] : []);
   const [eHLoc, sEHLoc] = useState("both");
   const [eHFreq, sEHFreq] = useState({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
   const [eHStart, sEHStart] = useState(() => dk(new Date()));
@@ -5752,6 +5785,7 @@ function App() {
         frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
         location: "both",
         startDate: todayISO,
+        goalIds: [goalId],
         goalId: goalId,
         completions: {},
         completionTimes: {},
@@ -5850,12 +5884,15 @@ function App() {
       ...data,
       goals: data.goals.filter(x => x.id !== id),
       // Unlink any habits that pointed at this goal so they don't
-      // dangle with a goalId that no longer resolves. The habits
-      // themselves stay (the user may want them as standalones);
-      // only the link is severed.
-      habits: (data.habits || []).map(h =>
-        String(h.goalId) === String(id) ? { ...h, goalId: null } : h
-      ),
+      // dangle with a goalId that no longer resolves. Habits with
+      // multiple goalIds keep their other links — only the deleted
+      // goal is removed. Single-goal habits keep their `goalId`
+      // field set to null (legacy shape) for back-compat.
+      habits: (data.habits || []).map(h => {
+        const ids = habitGoalIds(h).filter(gid => String(gid) !== String(id));
+        if (ids.length === habitGoalIds(h).length) return h; // unchanged
+        return { ...h, goalIds: ids, goalId: ids[0] != null ? ids[0] : null };
+      }),
       // Same for any todos that had this goalId on them.
       todos: (data.todos || []).map(t =>
         String(t.goalId) === String(id) ? { ...t, goalId: null } : t
@@ -5924,6 +5961,8 @@ function App() {
         type: nHType || null,
         duration: nHDur || null,
         notes: nHNotes.trim() || null,
+        // Write both goalIds (canonical) and goalId (legacy back-compat).
+        goalIds: nHGoal ? [nHGoal] : [],
         goalId: nHGoal || null,
         location: "both",
         startDate: nHStart || dk(new Date()),
@@ -6045,7 +6084,7 @@ function App() {
     sEHImp(h.importance || "Important");
     sEHSec(h.section || "morning");
     sEHNotes(h.notes || "");
-    sEHGoal(h.goalId || "");
+    sEHGoalIds(habitGoalIds(h).map(String));
     sEHLoc(h.location || "both");
     sEHFreq(getFreq(h));
     sEHStart(h.startDate || dk(new Date()));
@@ -6106,7 +6145,11 @@ function App() {
         importance: nextImp,
         section: nextSec,
         notes: nextNotes,
-        goalId: eHGoal || null,
+        // Write both the new array form (goalIds) and the legacy
+        // scalar (goalId = first link) so a downgrade to an older
+        // client doesn't lose all goal links.
+        goalIds: eHGoalIds.slice(),
+        goalId: eHGoalIds[0] != null ? eHGoalIds[0] : null,
         location: eHLoc || "both",
         startDate: eHStart || h.startDate || dk(new Date()),
         frequency: nextFreq,
@@ -6149,6 +6192,7 @@ function App() {
         frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
         location: "both",
         startDate: dk(new Date()),
+        goalIds: [goalId],
         goalId: goalId,
         completions: {},
         completionTimes: {},
@@ -10257,7 +10301,7 @@ function App() {
           },
             goalsList.map(g => {
               const t = HT.find(x => x.value === g.type) || HT[0];
-              const linked = (data.habits || []).filter(h => h.goalId === g.id && h.section !== "avoid");
+              const linked = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id) && h.section !== "avoid");
               const doneToday = linked.filter(h => isDone(h, tk())).length;
               return /*#__PURE__*/React.createElement("div", {
                 key: "gl-" + g.id,
@@ -11478,11 +11522,14 @@ function App() {
             }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#1d4ed8"}}, cold));
             return null;
           })()),
-          habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
-            style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb"}
-          }, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}},"Goal: "),
-          /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
-            (data.goals||[]).find(g=>String(g.id)===String(habit.goalId))?.text||"")),
+          habitGoalIds(habit).length > 0 && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
+            style:{display:"flex",alignItems:"center",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb",flexWrap:"wrap"}
+          }, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase"}}, habitGoalIds(habit).length === 1 ? "Goal: " : "Goals: "),
+          /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d"}},
+            habitGoalIds(habit)
+              .map(gid => (data.goals||[]).find(g=>String(g.id)===String(gid))?.text)
+              .filter(Boolean)
+              .join(", "))),
           ht && /*#__PURE__*/React.createElement("div", {
             style: {position: "absolute", right: 0, top: 0, bottom: 0, width: "22px", background: ht.color, display: "flex", alignItems: "center", justifyContent: "center", borderTopRightRadius: 8, borderBottomRightRadius: 8}
           }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 7, fontWeight: 700, color: "#fff", textTransform: "uppercase", transform: "rotate(90deg)", whiteSpace: "nowrap", userSelect: "none"}}, ht.value))));
@@ -11949,7 +11996,10 @@ function App() {
         // Signature: every piece of App state that could affect how
         // this specific card renders. If it matches last render, the
         // shell's React.memo skips re-execution of the render body.
-        const goalText = h.goalId ? ((data.goals || []).find(g => String(g.id) === String(h.goalId))?.text || "") : "";
+        const goalText = habitGoalIds(h)
+          .map(gid => (data.goals || []).find(g => String(g.id) === String(gid))?.text)
+          .filter(Boolean)
+          .join(" ");
         const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + goalText;
         return /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard });
       })));
@@ -13255,7 +13305,7 @@ function App() {
         + (_hasVal(_sm.achievable) ? 1 : 0)
         + (_hasVal(_sm.relevant) ? 1 : 0)
         + (_hasVal(_sm.timebound) ? 1 : 0);
-      const linkedHabits = data.habits.filter(h => String(h.goalId) === String(goal.id));
+      const linkedHabits = data.habits.filter(h => habitLinkedToGoal(h, goal.id));
       const linkedDone = linkedHabits.filter(h => isDone(h, selDate)).length;
       const linkedTotal = linkedHabits.length;
       const momentum = (() => {
@@ -13642,7 +13692,7 @@ function App() {
         // at the bottom lets the user attach a new to-do directly from
         // here without leaving the goal view.
         const linked = habits
-          .filter(h => String(h.goalId) === String(goal.id))
+          .filter(h => habitLinkedToGoal(h, goal.id))
           .slice()
           .sort((a, b) => freqRank(a) - freqRank(b));
         const linkedTodos = (data.todos || []).filter(t => String(t.goalId) === String(goal.id));
@@ -17322,53 +17372,89 @@ function App() {
   /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
-  // Link to Goal sits as the third field (after habit name + target
-  // row) so the most-edited connections are all near the top. The
-  // inline "+ Create a new linked goal" branch renders directly under
-  // the select when newGoalFromHabit is true.
-  /*#__PURE__*/React.createElement("select", {
-    value: eHGoal,
-    onChange: e => {
-      if (e.target.value === "__new__") {
-        setNewGoalFromHabit(true);
-      } else {
-        const v = e.target.value;
-        sEHGoal(v);
-        setNewGoalFromHabit(false);
-        // Mirror the add-habit flow: sync Area of Life to the linked
-        // goal's area so they can't diverge.
-        if (v) {
-          const g = data.goals.find(x => String(x.id) === String(v));
-          if (g && g.type) sEHType(g.type);
-        }
+  // Link to Goals — multi-select. A habit can drive several goals
+  // at once (e.g. "Sleep 8 hours" supports both "Pass CFA" and
+  // "Run a marathon"). Stored as goalIds: number[] on the habit.
+  /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: 10 }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11, fontWeight: 600, color: "#6b7280",
+        textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6
       }
-    },
-    style: {
-      ...S,
-      width: "100%",
-      marginBottom: newGoalFromHabit ? 6 : 10,
-      color: eHGoal ? "#2d5a2d" : "#9ca3af"
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "🎯 Link to a Goal"), /*#__PURE__*/React.createElement("option", {
-    value: "__new__"
-  }, "＋ Create a new linked goal"), HT.map(ht => {
-    const tg = data.goals.filter(g => g.type === ht.value);
-    if (!tg.length) return null;
-    return /*#__PURE__*/React.createElement("optgroup", {
-      key: ht.value,
-      label: ht.value
-    }, tg.map(g => /*#__PURE__*/React.createElement("option", {
-      key: g.id,
-      value: g.id
-    }, g.text)));
-  }), data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("optgroup", {
-    label: "General"
-  }, data.goals.filter(g => !g.type).map(g => /*#__PURE__*/React.createElement("option", {
-    key: g.id,
-    value: g.id
-  }, g.text)))),
+    }, "🎯 Linked Goals" + (eHGoalIds.length > 0 ? " (" + eHGoalIds.length + ")" : "")),
+    (data.goals || []).length === 0
+      ? /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, color: "#9ca3af", marginBottom: 6 }
+        }, "No goals yet. Add the goal first, then link it here.")
+      : /*#__PURE__*/React.createElement("div", {
+          style: {
+            maxHeight: 160, overflowY: "auto",
+            border: "1px solid var(--c-border)",
+            borderRadius: 8,
+            padding: "4px 0",
+            background: "var(--c-surface-raised)"
+          }
+        },
+          (data.goals || []).slice().sort((a, b) => {
+            const at = a.type || "~"; const bt = b.type || "~";
+            if (at !== bt) return at.localeCompare(bt);
+            return (a.text || "").localeCompare(b.text || "");
+          }).map(g => {
+            const idStr = String(g.id);
+            const checked = eHGoalIds.indexOf(idStr) !== -1;
+            return /*#__PURE__*/React.createElement("label", {
+              key: g.id,
+              style: {
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "6px 10px",
+                cursor: "pointer",
+                fontSize: 12,
+                color: checked ? "#2d5a2d" : "var(--c-text)",
+                background: checked ? "var(--c-tint-green)" : "transparent"
+              }
+            },
+              /*#__PURE__*/React.createElement("input", {
+                type: "checkbox",
+                checked: checked,
+                onChange: e => {
+                  if (e.target.checked) {
+                    sEHGoalIds(prev => prev.indexOf(idStr) === -1 ? [...prev, idStr] : prev);
+                    // Sync Area of Life to the FIRST checked goal's area
+                    // so habit + primary goal don't diverge by default.
+                    if (eHGoalIds.length === 0 && g.type) sEHType(g.type);
+                  } else {
+                    sEHGoalIds(prev => prev.filter(x => x !== idStr));
+                  }
+                },
+                style: { flexShrink: 0 }
+              }),
+              /*#__PURE__*/React.createElement("span", {
+                style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+              }, g.text),
+              g.type && /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 9, color: "#9ca3af", flexShrink: 0 }
+              }, g.type)
+            );
+          })
+        ),
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => setNewGoalFromHabit(v => !v),
+      style: {
+        marginTop: 6,
+        background: "transparent",
+        border: "1px dashed var(--c-border)",
+        borderRadius: 8,
+        padding: "6px 10px",
+        fontSize: 11,
+        color: "#2d5a2d",
+        fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, newGoalFromHabit ? "Cancel new goal" : "＋ Create a new linked goal")
+  ),
   newGoalFromHabit && /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
     style: {
@@ -17413,7 +17499,9 @@ function App() {
         goals: [...data.goals, ng]
       };
       save(newData);
-      sEHGoal(String(ng.id));
+      // Add the just-created goal to the linked-goals selection
+      // (don't replace existing selections — we're multi-link now).
+      sEHGoalIds(prev => prev.indexOf(String(ng.id)) === -1 ? [...prev, String(ng.id)] : prev);
       setNewGoalText("");
       setNewGoalFromHabit(false);
     },
