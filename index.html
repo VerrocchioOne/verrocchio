@@ -4941,19 +4941,17 @@ function App() {
   // someone opening the app at 3pm lands on their afternoon habits.
   // Avoid defaults to expanded on first load but is toggleable like the
   // other three sections — its collapse state is honored at render time.
-  const [collapsedSections, setCollapsedSections] = useState(() => {
-    const cur = getCurrentSection(null); // no data yet in closure
-    return {
-      morning:   cur !== "morning",
-      afternoon: cur !== "afternoon",
-      evening:   cur !== "evening",
-      // "All Day" habits aren't tied to a time-of-day cutoff — keep
-      // them expanded by default so they're always visible alongside
-      // the currently-active time-of-day section.
-      "all-day": false,
-      avoid:     false
-    };
-  });
+  // Every section starts expanded by default so the user sees their
+  // full habit list immediately when opening the Habits tab. Tapping
+  // a section header still toggles its collapsed state — only the
+  // initial render is all-open.
+  const [collapsedSections, setCollapsedSections] = useState(() => ({
+    morning:    false,
+    afternoon:  false,
+    evening:    false,
+    "all-day":  false,
+    avoid:      false
+  }));
   // Re-evaluate the "which section is current" default once per session,
   // after data (and therefore the user's custom timeRanges, if any) has
   // loaded. Guarded by a ref so we don't clobber manual toggles afterward.
@@ -5586,23 +5584,13 @@ function App() {
     };
   }, [data]);
 
-  // Run once per session after data loads: seed `collapsedSections` so
-  // the section matching the user's current time-of-day (per their own
-  // timeRanges if set, or defaults otherwise) is the only one expanded.
-  // Ref-guarded so subsequent data updates don't collapse sections the
-  // user has since manually expanded.
-  useEffect(() => {
-    if (didInitCollapseRef.current || !data) return;
-    didInitCollapseRef.current = true;
-    const cur = getCurrentSection(data);
-    setCollapsedSections(prev => ({
-      ...prev,
-      morning:   cur !== "morning",
-      afternoon: cur !== "afternoon",
-      evening:   cur !== "evening",
-      avoid:     false
-    }));
-  }, [data]);
+  // Removed: a one-shot effect that collapsed every section except
+  // the current time-of-day one once data loaded. The user prefers
+  // all sections expanded on first render, and the initial
+  // `collapsedSections` state already starts every section open —
+  // re-collapsing them after data arrives would override that.
+  // didInitCollapseRef is kept declared in case any other effect
+  // wants to gate on first-data-loaded later.
 
   /* ── Cache first-unlock timestamps ──
      Whenever stats cross a threshold for the first time, record the
