@@ -11713,7 +11713,51 @@ function App() {
             userSelect: "none",
             WebkitTapHighlightColor: "transparent"
           }
-        }, (() => {
+        },
+        // Inline position input — sits as the leftmost element on
+        // the card. Type a number to move the habit to that slot
+        // within its section. Only renders when the section has 2+
+        // habits. stopPropagation on the events so typing/focusing
+        // doesn't trigger the row's tap-to-expand or long-press-to-
+        // edit handlers. setHabitOrder() also flips sortPrefs.habits
+        // to "custom" so the change is immediately visible.
+        group.habits.length > 1 && (() => {
+          const idx = group.habits.findIndex(x => x.id === habit.id);
+          const pos = idx >= 0 ? idx + 1 : 1;
+          return /*#__PURE__*/React.createElement("input", {
+            type: "number",
+            min: 1,
+            max: group.habits.length,
+            defaultValue: pos,
+            key: "ord-" + habit.id + "-" + pos,
+            onClick: e => e.stopPropagation(),
+            onPointerDown: e => e.stopPropagation(),
+            onPointerUp: e => e.stopPropagation(),
+            onChange: e => {
+              const v = parseInt(e.target.value, 10);
+              if (!isNaN(v) && v >= 1 && v <= group.habits.length && v !== pos) {
+                setHabitOrder(habit, group.habits, v);
+              }
+            },
+            "aria-label": "Position in " + group.label,
+            title: "Type a number to reorder within " + group.label,
+            style: {
+              width: 32,
+              padding: "2px 4px",
+              fontSize: 12,
+              fontWeight: 700,
+              textAlign: "center",
+              border: "1px solid var(--c-border)",
+              borderRadius: 6,
+              background: "var(--c-surface-raised)",
+              color: "var(--c-text-soft)",
+              outline: "none",
+              flexShrink: 0,
+              alignSelf: "center"
+            }
+          });
+        })(),
+        (() => {
           // Sub-unit habits (target > 0, e.g. "8 cups of water"): the
           // button becomes an increment tap — each tap adds `increment`
           // units to today's count. When count >= target, the habit
@@ -11805,60 +11849,9 @@ function App() {
             textDecoration: d || missed ? "line-through" : "none",
             whiteSpace: "nowrap",
             overflow: "hidden",
-            textOverflow: "ellipsis",
-            display: "flex",
-            alignItems: "center",
-            gap: 6
+            textOverflow: "ellipsis"
           }
-        },
-          // Inline order input. Type a number to move the habit to
-          // that position within its section. Only renders when the
-          // section has 2+ habits (single-item sections don't need
-          // ordering). stopPropagation on the events so typing /
-          // focusing doesn't trigger the row's tap-to-expand or
-          // long-press-to-edit handlers. Setting via setHabitOrder
-          // also flips sortPrefs.habits to "custom" so the change
-          // is immediately visible.
-          group.habits.length > 1 && (() => {
-            const idx = group.habits.findIndex(x => x.id === habit.id);
-            const pos = idx >= 0 ? idx + 1 : 1;
-            return /*#__PURE__*/React.createElement("input", {
-              type: "number",
-              min: 1,
-              max: group.habits.length,
-              defaultValue: pos,
-              key: "ord-" + habit.id + "-" + pos,
-              onClick: e => e.stopPropagation(),
-              onPointerDown: e => e.stopPropagation(),
-              onPointerUp: e => e.stopPropagation(),
-              onChange: e => {
-                const v = parseInt(e.target.value, 10);
-                if (!isNaN(v) && v >= 1 && v <= group.habits.length && v !== pos) {
-                  setHabitOrder(habit, group.habits, v);
-                }
-              },
-              "aria-label": "Position in " + group.label,
-              title: "Type a number to reorder",
-              style: {
-                width: 36,
-                padding: "2px 4px",
-                fontSize: 12,
-                fontWeight: 700,
-                textAlign: "center",
-                border: "1px solid var(--c-border)",
-                borderRadius: 6,
-                background: "var(--c-surface-raised)",
-                color: "var(--c-text-soft)",
-                outline: "none",
-                flexShrink: 0,
-                textDecoration: "none"
-              }
-            });
-          })(),
-          /*#__PURE__*/React.createElement("span", {
-            style: { overflow: "hidden", textOverflow: "ellipsis" }
-          }, habit.text)
-        ),
+        }, habit.text),
         // Sub-unit progress line: "4/8 cups". Shown only when a target
         // is configured AND the habit isn't already fully done (done
         // case is conveyed by the line-through on the name). Intentionally
