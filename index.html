@@ -12010,6 +12010,30 @@ function App() {
           color: "#9ca3af"
         }
       }, doneCount, "/", group.habits.length),
+      // Reorder button — explicit affordance so the user doesn't have
+      // to discover the long-press gesture. stopPropagation on the
+      // pointer events keeps the surrounding header's collapse-toggle
+      // / long-press handlers from firing when this is tapped.
+      group.habits.length > 1 && /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onPointerDown: e => e.stopPropagation(),
+        onPointerUp: e => e.stopPropagation(),
+        onClick: e => { e.stopPropagation(); openSectionReorder(group.value); },
+        title: "Reorder habits in " + group.label,
+        "aria-label": "Reorder " + group.label + " habits",
+        style: {
+          background: "transparent",
+          border: "none",
+          padding: "2px 6px",
+          marginLeft: 2,
+          fontSize: 14,
+          lineHeight: 1,
+          color: group.color,
+          opacity: .7,
+          cursor: "pointer",
+          WebkitTapHighlightColor: "transparent"
+        }
+      }, "⇅"),
       // Chevron indicator — rotates 180° when the section is collapsed
       // (down arrow = "tap to expand", up arrow = "tap to collapse").
       /*#__PURE__*/React.createElement("span", {
