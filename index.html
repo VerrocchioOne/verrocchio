@@ -6470,48 +6470,60 @@ function App() {
       )
     );
   };
-  // Global habit reorder. Position numbers reflect each habit's
-  // rank across the ENTIRE habits list (morning + afternoon +
-  // evening + daily completion + avoid combined). Typing a number
-  // also reassigns the habit's `section` to match the new slot —
-  // moving a habit to position 2 when slots 1–4 are morning makes
-  // the moved habit a morning habit. The new section is inherited
-  // from the habit immediately ABOVE the new slot (or BELOW if the
-  // new slot is position 1). This way reordering doubles as a way
-  // to move habits between sections.
+  // Habit reorder — within the habit's current section ONLY. The
+  // displayed ordinal on each card is the habit's GLOBAL rank
+  // across every time-of-day section, but the move operation stays
+  // within the habit's section: typing a global slot N moves the
+  // habit to the section position closest to N. Section field
+  // never changes — users explicitly opted out of auto-shifting
+  // habits between time-of-day buckets.
+  //
+  // Algorithm:
+  //  1. List the section's habits in current global order; record
+  //     their current global positions.
+  //  2. The user-typed global slot N is converted into a relative
+  //     within-section position by counting how many of the section's
+  //     habits currently sit at or before slot N. Clamped to
+  //     [1 .. section.length].
+  //  3. Splice the moved habit into that relative slot.
+  //  4. Replay the new section sequence into the global _order: walk
+  //     the original global list, and for every slot that belonged
+  //     to this section, write the next habit from the reordered
+  //     section sequence.
+  //  5. Rewrite _order on every habit. Other sections' orderings
+  //     stay intact; only the moved habit's section is touched.
   const setHabitOrder = (habit, val) => {
+    const sectionVal = habit.section;
     const all = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    const sectionHabits = all.filter(h => h.section === sectionVal);
+    if (sectionHabits.length < 2) return;
     const n = parseInt(val);
-    if (isNaN(n) || n < 1 || n > all.length) return;
-    const others = all.filter(h => h.id !== habit.id);
-    others.splice(n - 1, 0, habit);
-    // Determine the destination section: prefer the section of the
-    // habit immediately above the new slot. If the moved habit is
-    // now at position 1, fall back to the section below it. If
-    // there are no other habits at all (only this one), the
-    // section stays unchanged.
-    let destSection = habit.section;
-    if (others.length > 1) {
-      const newIdx = n - 1;
-      const above = others[newIdx - 1];
-      const below = others[newIdx + 1];
-      if (above) destSection = above.section || destSection;
-      else if (below) destSection = below.section || destSection;
+    if (isNaN(n)) return;
+    // Map the typed GLOBAL slot to a RELATIVE within-section slot.
+    // Count of section habits at or before global slot N — capped
+    // to the section's length so an out-of-range value lands on
+    // the section's last slot.
+    let relTarget = 0;
+    for (let i = 0; i < all.length && i < n; i++) {
+      if (all[i].section === sectionVal) relTarget++;
     }
-    const allHabits = [...data.habits];
-    others.forEach((h, i) => {
-      const idx = allHabits.findIndex(x => x.id === h.id);
-      if (idx < 0) return;
-      const patch = { ...allHabits[idx], _order: i };
-      // Reassign section only on the moved habit; the others keep
-      // whatever section they already had.
-      if (h.id === habit.id) patch.section = destSection;
-      allHabits[idx] = patch;
+    relTarget = Math.max(1, Math.min(relTarget, sectionHabits.length));
+    const reordered = sectionHabits.filter(h => h.id !== habit.id);
+    reordered.splice(relTarget - 1, 0, habit);
+    // Replay the section's new sequence into the global list.
+    let sIdx = 0;
+    const newGlobal = all.map(h => {
+      if (h.section === sectionVal) {
+        const replacement = reordered[sIdx++];
+        return replacement || h;
+      }
+      return h;
     });
-    // Flip the page's sortPref to "custom" so the user immediately
-    // sees the new position. Without this the manually-set _order
-    // would still be on the doc but invisible behind whatever sort
-    // mode (default / alpha / streak / …) is currently active.
+    const allHabits = [...data.habits];
+    newGlobal.forEach((h, i) => {
+      const idx = allHabits.findIndex(x => x.id === h.id);
+      if (idx >= 0) allHabits[idx] = { ...allHabits[idx], _order: i };
+    });
     save({
       ...data,
       habits: allHabits,
