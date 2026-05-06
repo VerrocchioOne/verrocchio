@@ -4103,11 +4103,6 @@ function App() {
   // No "offline" terminal — localStorage always succeeds, so the
   // flash is always green. Firestore failures get logged to console.
   const [manualSyncFlash, setManualSyncFlash] = useState(null);
-  // Tracks whether the most recent manual sync action was a Push
-  // (force-save to cloud) or a Pull (force-load from cloud) so the
-  // "Saving…" / "Loading…" label on the flash reflects the right
-  // verb. Reset to null when the flash clears.
-  const [manualSyncOp, setManualSyncOp] = useState(null);
   // Tracks the timestamp of the most recent tap on the header date
   // pill. Used to detect double-tap manually (browsers don't always
   // fire dblclick reliably on touch). Window: 350ms.
@@ -4639,10 +4634,7 @@ function App() {
   }, [syncState, manualSyncFlash]);
   useEffect(() => {
     if (manualSyncFlash !== "synced") return;
-    const t = setTimeout(() => {
-      setManualSyncFlash(null);
-      setManualSyncOp(null);
-    }, 2000);
+    const t = setTimeout(() => setManualSyncFlash(null), 2000);
     return () => clearTimeout(t);
   }, [manualSyncFlash]);
   useEffect(() => {
@@ -5572,131 +5564,6 @@ function App() {
   // Writes directly to localStorage + Firestore rather than going
   // through save() so a broken save path can't silently swallow the
   // wipe. Each step logs to [verrocchio wipe] for debug.
-  // Push-to-cloud: explicit, server-verified upload of the current
-  // local state. With Firestore offline persistence on, plain .set()
-  // resolves the moment the LOCAL CACHE is updated — not when the
-  // server has acknowledged the write. That's why pushes from one
-  // origin (e.g. localhost) can fail to propagate without anyone
-  // noticing: the local cache is happy, but the server never got it.
-  //
-  // This implementation:
-  //   1. Stamps + writes locally so the UI is consistent immediately.
-  //   2. Calls .set() and awaits its (cache-level) resolution.
-  //   3. Calls db.waitForPendingWrites() so we block until the SDK
-  //      has actually flushed queued writes to the server (or
-  //      surfaced a server rejection).
-  //   4. Reads the doc back via .get({ source: "server" }) and
-  //      checks the timestamp matches what we just pushed.
-  //   5. If anything goes wrong at any step, the actual Firestore
-  //      error code/message is surfaced via alert() — the user (and
-  //      I) need to SEE the real reason. Silent green flashes were
-  //      what caused this whole stale-cloud problem.
-  const pushToCloud = async () => {
-    setManualSyncOp("push");
-    if (demoMode) {
-      setManualSyncFlash("synced");
-      return;
-    }
-    if (!uid) {
-      setManualSyncFlash("synced");
-      alert("Push couldn't run: you're not signed in on this device.");
-      return;
-    }
-    setManualSyncFlash("saving");
-    const stamped = { ...data, _updatedAt: Date.now() };
-    setData(stamped);
-    latestData.current = stamped;
-    try { localStorage.setItem(lsKey, JSON.stringify(stamped)); } catch (e) {}
-    const cu = auth.currentUser;
-    try { console.log("[verrocchio push] writing ts=" + stamped._updatedAt + " uid(state)=" + uid + " uid(auth)=" + (cu ? cu.uid : "null") + " email=" + (cu ? cu.email : "null")); } catch (e) {}
-    if (!cu) {
-      setManualSyncFlash("synced");
-      alert("Push couldn't run: Firebase says you're not signed in on this origin (auth.currentUser is null). Sign out and back in to refresh the token.");
-      return;
-    }
-    if (cu.uid !== uid) {
-      setManualSyncFlash("synced");
-      alert("Push couldn't run: account mismatch.\nReact state uid: " + uid + "\nFirebase auth uid: " + cu.uid + " (" + cu.email + ")\nSign out and back in to fix.");
-      return;
-    }
-    try {
-      await userDoc(uid).set(sanitizeForFirestore(stamped));
-      if (typeof db.waitForPendingWrites === "function") {
-        await db.waitForPendingWrites();
-      }
-      const verify = await userDoc(uid).get({ source: "server" });
-      const serverTs = verify.exists ? (verify.data()._updatedAt || null) : null;
-      try { console.log("[verrocchio push] server confirmed ts=" + serverTs + " (expected " + stamped._updatedAt + ", fromCache=" + verify.metadata.fromCache + ")"); } catch (e) {}
-      if (!verify.exists) {
-        throw new Error("server reports no doc after write");
-      }
-      if (serverTs !== stamped._updatedAt) {
-        throw new Error("server timestamp mismatch (got " + serverTs + ", expected " + stamped._updatedAt + ")");
-      }
-      setSyncState("synced");
-      setManualSyncFlash("synced");
-    } catch (err) {
-      try { console.warn("[verrocchio push] FAILED:", err && err.code, err && err.message, err); } catch (e) {}
-      setManualSyncFlash("synced");
-      const code = (err && err.code) || "unknown";
-      const msg  = (err && err.message) || String(err || "see console");
-      alert("Push to cloud failed.\n\nCode: " + code + "\n" + msg + "\n\nThis is the real Firestore error — share it so the underlying issue can be fixed. Your local data is unchanged.");
-    }
-  };
-  // Pull-from-cloud: force-fetch the latest user doc from Firestore
-  // and overwrite local state + localStorage. On any failure (no doc,
-  // no uid, network error) we just show the green "Saved" flash —
-  // local data is untouched and remains the source of truth, and we
-  // don't surface "Offline" since the user explicitly didn't want
-  // that label anywhere in the UI.
-  const pullFromCloud = async () => {
-    setManualSyncOp("pull");
-    if (demoMode || !uid) {
-      setManualSyncFlash("synced");
-      return;
-    }
-    setManualSyncFlash("saving");
-    try { console.log("[verrocchio pull] fetching cloud doc from server"); } catch (e) {}
-    try {
-      // { source: "server" } bypasses Firestore's local IndexedDB
-      // cache and forces an actual round-trip to the server. Without
-      // this, .get() defaults to "cache then server", so on a device
-      // whose realtime listener was still catching up (e.g. just
-      // returned from background), Pull would serve the stale cache
-      // and look like it did nothing. If the server is unreachable
-      // we fall back to a default .get() so the user still sees
-      // their cached state rather than a hard failure.
-      let snap;
-      try {
-        snap = await userDoc(uid).get({ source: "server" });
-      } catch (netErr) {
-        try { console.warn("[verrocchio pull] server fetch failed, falling back to cache:", netErr && netErr.code, netErr && netErr.message); } catch (e) {}
-        snap = await userDoc(uid).get();
-      }
-      if (!snap.exists) {
-        try { console.warn("[verrocchio pull] cloud doc does not exist for uid", uid); } catch (e) {}
-        setManualSyncFlash("synced");
-        return;
-      }
-      const remote = hydrateCloudDoc(snap.data());
-      // Stamp _updatedAt forward so the realtime listener's echo
-      // gate (`remoteTs <= localTs`) doesn't immediately re-skip
-      // this exact snapshot when it bounces back through onSnapshot
-      // — and so any subsequent incoming snapshots from another
-      // device with the original (older) timestamp don't overwrite
-      // the freshly-pulled state.
-      remote._updatedAt = Date.now();
-      setData(remote);
-      latestData.current = remote;
-      try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
-      try { console.log("[verrocchio pull] adopted cloud doc, fromCache=" + snap.metadata.fromCache); } catch (e) {}
-      setSyncState("synced");
-      setManualSyncFlash("synced");
-    } catch (err) {
-      try { console.warn("[verrocchio pull] failed:", err && err.code, err && err.message); } catch (e) {}
-      setManualSyncFlash("synced");
-    }
-  };
   const wipeAllData = async () => {
     try { console.log("[verrocchio wipe] start"); } catch (e) {}
     const blank = {
@@ -9456,12 +9323,10 @@ function App() {
     const label = isTodaySel
       ? "Today"
       : sd.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-    // Flash label: in-flight ("Saving…" / "Loading…") or terminal
-    // ("✓ Saved"). The terminal state is always green — the old
-    // "Offline" red was misleading (localStorage always succeeded)
-    // and surfaced transient Firestore listener errors as a UI alarm.
-    const flashLabel = manualSyncFlash === "saving"
-                       ? (manualSyncOp === "pull" ? "Loading…" : "Saving…")
+    // Flash label: in-flight ("Saving…") or terminal ("✓ Saved").
+    // Triggered by double-tapping the Today pill — a quiet "your
+    // edits are committed" confirmation.
+    const flashLabel = manualSyncFlash === "saving"  ? "Saving…"
                      : manualSyncFlash === "synced"  ? "✓ Saved"
                      : null;
     const flashColor = manualSyncFlash === "synced" ? "#2d5a2d" : "#6b7280";
@@ -9531,60 +9396,6 @@ function App() {
       justifyContent: "flex-end"
     }
   },
-    // Push to Cloud — explicit one-tap force-save. Goes through the
-    // dedicated pushToCloud helper (NOT save()) so the flash reflects
-    // this write's actual outcome instead of being raced by an
-    // unrelated syncState transition from the realtime listener.
-    !demoMode && /*#__PURE__*/React.createElement("button", {
-      onClick: pushToCloud,
-      title: "Push current data to the cloud",
-      "aria-label": "Push to cloud",
-      style: {
-        background: "var(--c-tint-green)",
-        border: "1px solid #c6dfc6",
-        color: "#2d5a2d",
-        borderRadius: 14,
-        padding: "4px 8px",
-        fontSize: 11,
-        fontWeight: 700,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        display: "flex",
-        alignItems: "center",
-        gap: 3,
-        WebkitTapHighlightColor: "transparent"
-      }
-    },
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "↑"),
-      /*#__PURE__*/React.createElement("span", null, "Push")
-    ),
-    // Pull from Cloud — force-fetch the latest doc from Firestore
-    // and overwrite local state. Useful when another device made
-    // a change you want to pull onto this one without waiting for
-    // the realtime listener.
-    !demoMode && /*#__PURE__*/React.createElement("button", {
-      onClick: pullFromCloud,
-      title: "Pull latest data from the cloud",
-      "aria-label": "Pull from cloud",
-      style: {
-        background: "#fff",
-        border: "1px solid #c6dfc6",
-        color: "#2d5a2d",
-        borderRadius: 14,
-        padding: "4px 8px",
-        fontSize: 11,
-        fontWeight: 700,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        display: "flex",
-        alignItems: "center",
-        gap: 3,
-        WebkitTapHighlightColor: "transparent"
-      }
-    },
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "↓"),
-      /*#__PURE__*/React.createElement("span", null, "Pull")
-    ),
     (() => {
     // App-wide streak: consecutive days (back from today) where at least one habit was logged (done or missed). Today may be blank.
     const hs = data.habits || [];
