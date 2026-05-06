@@ -9270,7 +9270,36 @@ function App() {
       alignItems: "center",
       justifyContent: "flex-end"
     }
-  }, (() => {
+  },
+    // Push to Cloud — explicit one-tap force-save. Calls the same
+    // save(data) path the double-tap-Today gesture uses; the
+    // manualSyncFlash effect mirrors syncState into a "Saving… /
+    // ✓ Synced / Offline" pill next to the date so the user can
+    // visually confirm the write landed.
+    !demoMode && /*#__PURE__*/React.createElement("button", {
+      onClick: () => { setManualSyncFlash("saving"); save(data); },
+      title: "Push current data to the cloud",
+      "aria-label": "Push to cloud",
+      style: {
+        background: "var(--c-tint-green)",
+        border: "1px solid #c6dfc6",
+        color: "#2d5a2d",
+        borderRadius: 14,
+        padding: "4px 10px",
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        WebkitTapHighlightColor: "transparent"
+      }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "☁"),
+      /*#__PURE__*/React.createElement("span", null, "Push")
+    ),
+    (() => {
     // App-wide streak: consecutive days (back from today) where at least one habit was logged (done or missed). Today may be blank.
     const hs = data.habits || [];
     let appStreak = 0;
