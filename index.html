@@ -3917,6 +3917,11 @@ function App() {
   //   "synced"  → shown for ~2s after Firestore confirms
   //   "offline" → shown for ~3s if the write fails
   const [manualSyncFlash, setManualSyncFlash] = useState(null);
+  // Tracks whether the most recent manual sync action was a Push
+  // (force-save to cloud) or a Pull (force-load from cloud) so the
+  // "Saving…" / "Loading…" label on the flash reflects the right
+  // verb. Reset to null when the flash clears.
+  const [manualSyncOp, setManualSyncOp] = useState(null);
   // Tracks the timestamp of the most recent tap on the header date
   // pill. Used to detect double-tap manually (browsers don't always
   // fire dblclick reliably on touch). Window: 350ms.
@@ -4449,7 +4454,10 @@ function App() {
   }, [syncState, manualSyncFlash]);
   useEffect(() => {
     if (manualSyncFlash !== "synced" && manualSyncFlash !== "offline") return;
-    const t = setTimeout(() => setManualSyncFlash(null), manualSyncFlash === "synced" ? 2000 : 3000);
+    const t = setTimeout(() => {
+      setManualSyncFlash(null);
+      setManualSyncOp(null);
+    }, manualSyncFlash === "synced" ? 2000 : 3000);
     return () => clearTimeout(t);
   }, [manualSyncFlash]);
   useEffect(() => {
@@ -5439,6 +5447,41 @@ function App() {
   // Writes directly to localStorage + Firestore rather than going
   // through save() so a broken save path can't silently swallow the
   // wipe. Each step logs to [verrocchio wipe] for debug.
+  // Pull-from-cloud: force-fetch the latest user doc from Firestore
+  // and overwrite local state + localStorage. Mirror to the Today
+  // pill flash via manualSyncFlash + manualSyncOp = "pull" so the
+  // label reads "Loading…" → "✓ Pulled" or "Offline".
+  const pullFromCloud = async () => {
+    if (demoMode || !uid) {
+      setManualSyncOp("pull");
+      setManualSyncFlash("offline");
+      return;
+    }
+    setManualSyncOp("pull");
+    setManualSyncFlash("saving");
+    setSyncState("loading");
+    try { console.log("[verrocchio pull] fetching cloud doc"); } catch (e) {}
+    try {
+      const snap = await userDoc(uid).get();
+      if (!snap.exists) {
+        try { console.warn("[verrocchio pull] cloud doc does not exist for uid", uid); } catch (e) {}
+        setSyncState("offline");
+        setManualSyncFlash("offline");
+        return;
+      }
+      const remote = hydrateCloudDoc(snap.data());
+      setData(remote);
+      latestData.current = remote;
+      try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
+      try { console.log("[verrocchio pull] adopted cloud doc, ts=" + (remote._updatedAt || "(none)")); } catch (e) {}
+      setSyncState("synced");
+      setManualSyncFlash("synced");
+    } catch (err) {
+      try { console.warn("[verrocchio pull] failed:", err && err.code, err && err.message, err); } catch (e) {}
+      setSyncState("offline");
+      setManualSyncFlash("offline");
+    }
+  };
   const wipeAllData = async () => {
     try { console.log("[verrocchio wipe] start"); } catch (e) {}
     const blank = {
@@ -9198,7 +9241,12 @@ function App() {
     const label = isTodaySel
       ? "Today"
       : sd.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-    const flashLabel = manualSyncFlash === "saving" ? "Saving…"
+    // Flash label varies by op: a Push shows "Saving…", a Pull
+    // shows "Loading…". Terminal states ("✓ Synced" / "Offline")
+    // use the same wording either way since they communicate the
+    // outcome, not the verb.
+    const flashLabel = manualSyncFlash === "saving"
+                       ? (manualSyncOp === "pull" ? "Loading…" : "Saving…")
                      : manualSyncFlash === "synced"  ? "✓ Synced"
                      : manualSyncFlash === "offline" ? "Offline"
                      : null;
@@ -9273,11 +9321,11 @@ function App() {
   },
     // Push to Cloud — explicit one-tap force-save. Calls the same
     // save(data) path the double-tap-Today gesture uses; the
-    // manualSyncFlash effect mirrors syncState into a "Saving… /
-    // ✓ Synced / Offline" pill next to the date so the user can
-    // visually confirm the write landed.
+    // manualSyncFlash + manualSyncOp wiring mirrors syncState into
+    // the "Saving… / ✓ Synced / Offline" pill next to the date so
+    // the user can visually confirm the write landed.
     !demoMode && /*#__PURE__*/React.createElement("button", {
-      onClick: () => { setManualSyncFlash("saving"); save(data); },
+      onClick: () => { setManualSyncOp("push"); setManualSyncFlash("saving"); save(data); },
       title: "Push current data to the cloud",
       "aria-label": "Push to cloud",
       style: {
@@ -9285,19 +9333,46 @@ function App() {
         border: "1px solid #c6dfc6",
         color: "#2d5a2d",
         borderRadius: 14,
-        padding: "4px 10px",
+        padding: "4px 8px",
         fontSize: 11,
         fontWeight: 700,
         cursor: "pointer",
         whiteSpace: "nowrap",
         display: "flex",
         alignItems: "center",
-        gap: 4,
+        gap: 3,
         WebkitTapHighlightColor: "transparent"
       }
     },
-      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "☁"),
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "↑"),
       /*#__PURE__*/React.createElement("span", null, "Push")
+    ),
+    // Pull from Cloud — force-fetch the latest doc from Firestore
+    // and overwrite local state. Useful when another device made
+    // a change you want to pull onto this one without waiting for
+    // the realtime listener.
+    !demoMode && /*#__PURE__*/React.createElement("button", {
+      onClick: pullFromCloud,
+      title: "Pull latest data from the cloud",
+      "aria-label": "Pull from cloud",
+      style: {
+        background: "#fff",
+        border: "1px solid #c6dfc6",
+        color: "#2d5a2d",
+        borderRadius: 14,
+        padding: "4px 8px",
+        fontSize: 11,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        display: "flex",
+        alignItems: "center",
+        gap: 3,
+        WebkitTapHighlightColor: "transparent"
+      }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "↓"),
+      /*#__PURE__*/React.createElement("span", null, "Pull")
     ),
     (() => {
     // App-wide streak: consecutive days (back from today) where at least one habit was logged (done or missed). Today may be blank.
