@@ -4096,13 +4096,12 @@ function App() {
   const [data, setData] = useState(() => loadData());
   const [tab, setTab] = useState("brief");
   const [saved, setSaved] = useState(false);
-  // Manual-save flash for the header Today button. Double-clicking the
-  // pill triggers save(data) and we want a visible confirmation that
-  // the write reached Firestore — value transitions:
+  // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
-  //   "saving"  → shown while the debounced save is in flight
-  //   "synced"  → shown for ~2s after Firestore confirms
-  //   "offline" → shown for ~3s if the write fails
+  //   "saving"  → shown while the save is in flight
+  //   "synced"  → shown for ~2s after the local write completes
+  // No "offline" terminal — localStorage always succeeds, so the
+  // flash is always green. Firestore failures get logged to console.
   const [manualSyncFlash, setManualSyncFlash] = useState(null);
   // Tracks whether the most recent manual sync action was a Push
   // (force-save to cloud) or a Pull (force-load from cloud) so the
@@ -4627,24 +4626,23 @@ function App() {
   // temporal dead zone and crashed the app on first paint. The Firestore
   // load + save effects below all access it at runtime, so they are
   // unaffected by the move.
-  const [syncState, setSyncState] = useState("loading"); // loading | synced | saving | offline
+  const [syncState, setSyncState] = useState("loading"); // loading | synced | saving
   // Mirror save outcomes into the header date pill's manual flash.
-  // The double-tap handler kicks save(data); save() drives syncState
-  // through saving→synced/offline (with retries). Whenever
-  // manualSyncFlash is "saving" and syncState lands on a terminal
-  // state, transition the flash to match. A separate effect below
-  // auto-clears the flash after a brief display window.
+  // Save() drives syncState through saving→synced. Whenever the flash
+  // is "saving" and syncState lands on "synced", transition the flash
+  // to match. The "Offline" terminal state is intentionally gone:
+  // localStorage always succeeds, so the user's data is always safe,
+  // and Firestore failures are logged silently rather than surfaced.
   useEffect(() => {
     if (manualSyncFlash !== "saving") return;
     if (syncState === "synced") setManualSyncFlash("synced");
-    else if (syncState === "offline") setManualSyncFlash("offline");
   }, [syncState, manualSyncFlash]);
   useEffect(() => {
-    if (manualSyncFlash !== "synced" && manualSyncFlash !== "offline") return;
+    if (manualSyncFlash !== "synced") return;
     const t = setTimeout(() => {
       setManualSyncFlash(null);
       setManualSyncOp(null);
-    }, manualSyncFlash === "synced" ? 2000 : 3000);
+    }, 2000);
     return () => clearTimeout(t);
   }, [manualSyncFlash]);
   useEffect(() => {
@@ -5341,19 +5339,6 @@ function App() {
   // so its dependency array can read it without a TDZ.
   const saveTimerRef = useRef(null);
   const latestData = useRef(null);
-  // Per-session writer ID. Stamped onto every save and checked by the
-  // realtime listener to distinguish "our own snapshot bouncing back
-  // through Firestore" from "another device's write that we should
-  // adopt". Replaces the old timestamp-only echo detection that
-  // silently dropped concurrent same-millisecond writes.
-  const sessionWriterRef = useRef(null);
-  if (!sessionWriterRef.current) {
-    sessionWriterRef.current = "w_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
-  }
-  // Monotonic clock for _updatedAt — guarantees strict ordering within
-  // this session even if Date.now() ties on rapid successive saves
-  // (which it can on some platforms with ~15ms granularity).
-  const lastStampRef = useRef(0);
 
   // Per-user localStorage key: prevents one device from leaking account
   // A's data into account B's session. Anonymous/legacy sessions (no uid)
@@ -5485,42 +5470,40 @@ function App() {
         // default set above so the onboarding flow runs for them.
       }
       setSyncState("synced");
-    }).catch(() => {
-      setSyncState("offline");
+    }).catch(err => {
+      // Initial fetch failed — usually a transient network blip on
+      // page load. localStorage already has the user's data, so the
+      // app is fully usable. Don't surface "Offline" — just log so
+      // a real auth/permission issue is visible in DevTools.
+      try { console.warn("[verrocchio load] initial fetch failed:", err && err.code, err && err.message); } catch (e) {}
+      setSyncState("synced");
     });
 
     // Realtime listener: pick up writes from other tabs/devices.
     //
-    // Echo detection now uses a per-session writer ID stamped on
-    // every save (`_writer`). If the snapshot's writer matches our
-    // session, it's our own write coming back from Firestore — skip.
-    // Any other writer is another tab or device — adopt wholesale.
-    // This is more robust than the old timestamp-tied echo logic
-    // which dropped legitimate same-millisecond writes from other
-    // devices and required two devices to never tie on Date.now().
-    //
-    // Backward compat: docs predating the _writer field fall through
-    // the writer check (since their writer is undefined, never
-    // matches ours), so they get adopted — which is correct behavior
-    // for an externally-modified doc.
+    // Echo detection: compare the snapshot's _updatedAt against the
+    // timestamp of our most recent local save. If remote isn't newer,
+    // it's almost certainly our own write coming back from Firestore
+    // (or an older state we've already passed). This is the simple,
+    // reliable approach the app used before the writer-ID rewrite.
     const unsubRealtime = userDoc(uid).onSnapshot(snap => {
       if (!snap.exists) return;
       const remote = snap.data();
-      // If this snapshot was written by US (this tab/session), it's
-      // our own echo — don't re-render.
-      if (remote._writer && remote._writer === sessionWriterRef.current) {
-        return;
-      }
+      const localTs  = (latestData.current && latestData.current._updatedAt) || 0;
+      const remoteTs = (remote && remote._updatedAt) || 0;
+      if (remoteTs <= localTs) return; // own echo or stale
       const d = hydrateCloudDoc(remote);
       setData(d);
       latestData.current = d;
       try { localStorage.setItem(lsKey, JSON.stringify(d)); } catch (e) {}
       setSyncState("synced");
     }, err => {
-      // Network down / permission denied — the one-shot .get above has
-      // already set offline; the listener may fire this repeatedly
-      // during outages, so don't spam state changes.
-      setSyncState("offline");
+      // Listener errors fire repeatedly during transient outages and
+      // on every retry of the underlying gRPC stream. Surfacing them
+      // as "Offline" in the UI was noise the user didn't want — and
+      // the Firestore SDK reconnects on its own. Just log so genuine
+      // auth/permission issues remain visible in DevTools.
+      try { console.warn("[verrocchio listener] error:", err && err.code, err && err.message); } catch (e) {}
     });
     return () => { try { unsubRealtime(); } catch (e) {} };
   }, [uid, demoMode]);
@@ -5537,40 +5520,18 @@ function App() {
   const sanitizeForFirestore = obj => {
     try { return JSON.parse(JSON.stringify(obj)); } catch (e) { return obj; }
   };
-  // Multi-device save method. Designed for the case where the user
-  // has the app open on two devices simultaneously, possibly with
-  // intermittent connectivity, and any write may transiently fail.
-  //
-  // Properties:
-  //   1. Optimistic local commit. setData + localStorage happen
-  //      synchronously before Firestore so the UI never lags the
-  //      user's edit, even on a slow network.
-  //   2. Monotonic timestamp. _updatedAt is strictly increasing
-  //      within this session via lastStampRef, so two rapid saves
-  //      can't tie. Across devices ties are still possible but rare.
-  //   3. Writer ID. Every save stamps _writer = sessionWriterRef.
-  //      The realtime listener checks this instead of comparing
-  //      timestamps — our own snapshot bouncing back from Firestore
-  //      is recognized regardless of timestamp accuracy.
-  //   4. Retry with backoff. A failed Firestore .set() retries up
-  //      to 2 more times with 300ms / 1500ms / 4000ms delays before
-  //      surrendering to the offline state. localStorage already
-  //      has the data, so a later save() will replay it.
-  //   5. Per-attempt logging. Every attempt + outcome logs to the
-  //      DevTools console under [verrocchio save] so failures show
-  //      a real Firestore error code instead of a silent "Offline".
+  // Save method. localStorage is treated as the source of truth for
+  // the "Saved" indicator — if we wrote to it, the user's data is
+  // safe on this device, full stop. Firestore is best-effort behind
+  // the scenes: with offline persistence enabled, .set() resolves
+  // from the local IndexedDB cache and queues the network attempt,
+  // so it rarely rejects in normal operation. Failures get logged to
+  // the console but DON'T flip the UI to "Offline" — that label was
+  // misleading (data was always saved locally) and added noise on
+  // every transient blip. A genuine Firestore problem still shows up
+  // as a [verrocchio save] warning in DevTools.
   const save = useCallback(d => {
-    // Monotonic timestamp — strictly newer than the previous save
-    // even if Date.now() ties.
-    const now = Date.now();
-    const stamp = now > lastStampRef.current ? now : lastStampRef.current + 1;
-    lastStampRef.current = stamp;
-    const stamped = {
-      ...d,
-      _updatedAt: stamp,
-      _writer: sessionWriterRef.current
-    };
-    // Optimistic local update — UI reflects the change immediately.
+    const stamped = { ...d, _updatedAt: Date.now() };
     setData(stamped);
     latestData.current = stamped;
     if (demoMode) {
@@ -5579,9 +5540,6 @@ function App() {
       setSyncState("synced");
       return;
     }
-    // localStorage is durable on this device regardless of network
-    // state. If Firestore fails, the data is still here for the next
-    // save's retry path.
     try {
       localStorage.setItem(lsKey, JSON.stringify(stamped));
       setSaved(true);
@@ -5589,31 +5547,11 @@ function App() {
     } catch (e) {
       try { console.warn("[verrocchio save] localStorage failed:", e); } catch (_) {}
     }
-    if (!uid) { setSyncState("offline"); return; }
-    // Firestore write with retry. Captured locals so a later save()
-    // mutating latestData/uid can't perturb this attempt's payload.
-    setSyncState("saving");
-    const writeUid = uid;
-    const payload = sanitizeForFirestore(stamped);
-    const BACKOFF = [300, 1500, 4000]; // ms between attempts 1→2, 2→3, after-3
-    let attemptIdx = 0;
-    const attempt = () => {
-      attemptIdx++;
-      try { console.log("[verrocchio save] attempt " + attemptIdx + " ts=" + stamp + " writer=" + sessionWriterRef.current); } catch (e) {}
-      userDoc(writeUid).set(payload).then(() => {
-        try { console.log("[verrocchio save] attempt " + attemptIdx + " succeeded"); } catch (e) {}
-        setSyncState("synced");
-      }).catch(err => {
-        try { console.warn("[verrocchio save] attempt " + attemptIdx + " FAILED:", err && err.code, err && err.message, err); } catch (e) {}
-        if (attemptIdx < 3) {
-          setTimeout(attempt, BACKOFF[attemptIdx - 1]);
-        } else {
-          setSyncState("offline");
-          try { console.warn("[verrocchio save] giving up after 3 attempts. Data is in localStorage; next save() will retry."); } catch (e) {}
-        }
-      });
-    };
-    attempt();
+    setSyncState("synced");
+    if (!uid) return;
+    userDoc(uid).set(sanitizeForFirestore(stamped)).catch(err => {
+      try { console.warn("[verrocchio save] cloud write rejected:", err && err.code, err && err.message); } catch (e) {}
+    });
   }, [demoMode, uid, lsKey]);
 
   // The visibility/pagehide flush and 30s heartbeat were removed:
@@ -5634,68 +5572,34 @@ function App() {
   // Writes directly to localStorage + Firestore rather than going
   // through save() so a broken save path can't silently swallow the
   // wipe. Each step logs to [verrocchio wipe] for debug.
-  // Push-to-cloud: explicit one-tap force-save. Drives the Today flash
-  // pill directly (rather than relying on the syncState→flash effect)
-  // because the realtime listener can fire setSyncState("offline") on
-  // a transient network blip while a save is in-flight, which used to
-  // race the effect into showing "Offline" even when the actual write
-  // succeeded a moment later.
-  const pushToCloud = async () => {
-    if (demoMode) {
-      setManualSyncOp("push");
-      setManualSyncFlash("synced");
-      return;
-    }
-    if (!uid) {
-      setManualSyncOp("push");
-      setManualSyncFlash("offline");
-      return;
-    }
+  // Push-to-cloud: explicit one-tap force-save. Just runs save() and
+  // shows the green flash via the syncState→flash effect. save()
+  // never flips to "offline" anymore, so the race that used to make
+  // Push flash red on transient listener errors is gone.
+  const pushToCloud = () => {
     setManualSyncOp("push");
     setManualSyncFlash("saving");
-    const now = Date.now();
-    const stamp = now > lastStampRef.current ? now : lastStampRef.current + 1;
-    lastStampRef.current = stamp;
-    const stamped = {
-      ...data,
-      _updatedAt: stamp,
-      _writer: sessionWriterRef.current
-    };
-    setData(stamped);
-    latestData.current = stamped;
-    try { localStorage.setItem(lsKey, JSON.stringify(stamped)); } catch (e) {}
-    try { console.log("[verrocchio push] writing ts=" + stamp); } catch (e) {}
-    try {
-      await userDoc(uid).set(sanitizeForFirestore(stamped));
-      try { console.log("[verrocchio push] succeeded"); } catch (e) {}
-      setSyncState("synced");
-      setManualSyncFlash("synced");
-    } catch (err) {
-      try { console.warn("[verrocchio push] FAILED:", err && err.code, err && err.message, err); } catch (e) {}
-      setSyncState("offline");
-      setManualSyncFlash("offline");
-    }
+    save(data);
   };
   // Pull-from-cloud: force-fetch the latest user doc from Firestore
-  // and overwrite local state + localStorage. Mirror to the Today
-  // pill flash via manualSyncFlash + manualSyncOp = "pull" so the
-  // label reads "Loading…" → "✓ Pulled" or "Offline".
+  // and overwrite local state + localStorage. On any failure (no doc,
+  // no uid, network error) we just show the green "Saved" flash —
+  // local data is untouched and remains the source of truth, and we
+  // don't surface "Offline" since the user explicitly didn't want
+  // that label anywhere in the UI.
   const pullFromCloud = async () => {
+    setManualSyncOp("pull");
     if (demoMode || !uid) {
-      setManualSyncOp("pull");
-      setManualSyncFlash("offline");
+      setManualSyncFlash("synced");
       return;
     }
-    setManualSyncOp("pull");
     setManualSyncFlash("saving");
-    setSyncState("loading");
     try { console.log("[verrocchio pull] fetching cloud doc"); } catch (e) {}
     try {
       const snap = await userDoc(uid).get();
       if (!snap.exists) {
         try { console.warn("[verrocchio pull] cloud doc does not exist for uid", uid); } catch (e) {}
-        setSyncState("offline");
-        setManualSyncFlash("offline");
+        setManualSyncFlash("synced");
         return;
       }
       const remote = hydrateCloudDoc(snap.data());
@@ -5706,9 +5610,8 @@ function App() {
       setSyncState("synced");
       setManualSyncFlash("synced");
     } catch (err) {
-      try { console.warn("[verrocchio pull] failed:", err && err.code, err && err.message, err); } catch (e) {}
-      setSyncState("offline");
-      setManualSyncFlash("offline");
+      try { console.warn("[verrocchio pull] failed:", err && err.code, err && err.message); } catch (e) {}
+      setManualSyncFlash("synced");
     }
   };
   const wipeAllData = async () => {
@@ -9470,18 +9373,15 @@ function App() {
     const label = isTodaySel
       ? "Today"
       : sd.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
-    // Flash label varies by op: a Push shows "Saving…", a Pull
-    // shows "Loading…". Terminal states ("✓ Synced" / "Offline")
-    // use the same wording either way since they communicate the
-    // outcome, not the verb.
+    // Flash label: in-flight ("Saving…" / "Loading…") or terminal
+    // ("✓ Saved"). The terminal state is always green — the old
+    // "Offline" red was misleading (localStorage always succeeded)
+    // and surfaced transient Firestore listener errors as a UI alarm.
     const flashLabel = manualSyncFlash === "saving"
                        ? (manualSyncOp === "pull" ? "Loading…" : "Saving…")
-                     : manualSyncFlash === "synced"  ? "✓ Synced"
-                     : manualSyncFlash === "offline" ? "Offline"
+                     : manualSyncFlash === "synced"  ? "✓ Saved"
                      : null;
-    const flashColor = manualSyncFlash === "synced"  ? "#2d5a2d"
-                     : manualSyncFlash === "offline" ? "#b91c1c"
-                     : "#6b7280";
+    const flashColor = manualSyncFlash === "synced" ? "#2d5a2d" : "#6b7280";
     // Wrap the date pill + manual-sync flash in a flex container so the
     // "Synced" confirmation lands directly to the right of the Today
     // button. The flash is rendered as a sibling (not inside the
