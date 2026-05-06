@@ -11747,15 +11747,45 @@ function App() {
                 }))));
           })(), /*#__PURE__*/React.createElement("div", {
             style: {flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4}
-          }, /*#__PURE__*/React.createElement("div", {
-            style: {fontSize: 13, fontWeight: 500, color: d ? "#15803d" : missed ? "#991b1b" : "var(--c-text-soft)", textDecoration: d || missed ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
           },
-            habit.text,
-            // Same ≥/≤ inline parenthetical as the non-avoid card so
-            // sub-unit avoid habits read the same in both lists.
-            ((habit.target || 0) > 0 && !d) && /*#__PURE__*/React.createElement("span", {
-              style: { color: "#9ca3af", fontWeight: 400, marginLeft: 6 }
-            }, "(", (habit.targetOp === ">=" ? "≥" : "≤"), " ", Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : "", ")")
+          // Name row mirrors the non-avoid card layout: title flexes
+          // to fill, target chip pinned right. See comment there.
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: {flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: d ? "#15803d" : missed ? "#991b1b" : "var(--c-text-soft)", textDecoration: d || missed ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
+            }, habit.text),
+            ((habit.target || 0) > 0) && (() => {
+              // Avoid habits default to ≤ (stay-under), so the op
+              // resolution mirrors that side: explicit ">=" overrides
+              // back to ≥, otherwise ≤.
+              const op = habit.targetOp === ">=" ? "≥" : "≤";
+              const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
+              const shown = Math.min(habit.target, units);
+              return /*#__PURE__*/React.createElement("span", {
+                style: {
+                  flexShrink: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  color: d ? "#15803d" : "#4b5563",
+                  background: d ? "#dcfce7" : "var(--c-surface-muted)",
+                  border: "1px solid " + (d ? "transparent" : "var(--c-border)"),
+                  borderRadius: 8,
+                  padding: "2px 6px",
+                  lineHeight: 1.15,
+                  whiteSpace: "nowrap"
+                }
+              },
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2 }
+                }, op + " " + shown + "/" + habit.target),
+                habit.unitLabel && /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+                }, habit.unitLabel)
+              );
+            })()
           ),
           habit.notes && /*#__PURE__*/React.createElement("div", {
             style: {fontSize: 11, color: "#6b7280", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
@@ -12064,29 +12094,55 @@ function App() {
             flexDirection: "column",
             gap: 4
           }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13,
-            fontWeight: 500,
-            color: d || missed ? "#6b7280" : "var(--c-text)",
-            textDecoration: d || missed ? "line-through" : "none",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }
         },
-          habit.text,
-          // Sub-unit progress, e.g. "(≥ 4/8 cups)" or "(≤ 4/8 cups)".
-          // Inlined as a gray parenthetical at the end of the habit
-          // name (rather than a separate line below) so cards with a
-          // target match the height of cards without one — the column
-          // was making sub-unit habits visibly taller than their
-          // neighbours. The comparison op (≥ for "do at least N",
-          // ≤ for "stay under N") sits left of the count so the user
-          // can see at a glance which direction the goal is.
-          ((habit.target || 0) > 0 && !d) && /*#__PURE__*/React.createElement("span", {
-            style: { color: "#9ca3af", fontWeight: 400, marginLeft: 6 }
-          }, "(", (habit.targetOp === "<=" ? "≤" : "≥"), " ", Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : "", ")")
+        // Name row: name on the left (truncates), sub-unit target
+        // chip on the right. The chip mirrors the goal-card date
+        // pill — a compact two-line stack so a habit like "Drink
+        // water (8 cups)" doesn't blow out the row height or eat
+        // horizontal room from the title.
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: {
+              flex: 1,
+              minWidth: 0,
+              fontSize: 13,
+              fontWeight: 500,
+              color: d || missed ? "#6b7280" : "var(--c-text)",
+              textDecoration: d || missed ? "line-through" : "none",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis"
+            }
+          }, habit.text),
+          ((habit.target || 0) > 0) && (() => {
+            const op = habit.targetOp === "<=" ? "≤" : "≥";
+            const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
+            const shown = Math.min(habit.target, units);
+            return /*#__PURE__*/React.createElement("span", {
+              style: {
+                flexShrink: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                color: d ? "#15803d" : "#4b5563",
+                background: d ? "#dcfce7" : "var(--c-surface-muted)",
+                border: "1px solid " + (d ? "transparent" : "var(--c-border)"),
+                borderRadius: 8,
+                padding: "2px 6px",
+                lineHeight: 1.15,
+                whiteSpace: "nowrap"
+              }
+            },
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2 }
+              }, op + " " + shown + "/" + habit.target),
+              habit.unitLabel && /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+              }, habit.unitLabel)
+            );
+          })()
         ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
