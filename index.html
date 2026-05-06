@@ -4092,6 +4092,12 @@ function App() {
   // Sub-unit target fields. Blank strings so "no target" is the default
   // and an empty field is indistinguishable from "leave as-is".
   const [eHTarget, sEHTarget] = useState("");
+  // Comparison op for the target — ">=" means "do at least N units"
+  // (the historical default), "<=" means "stay under N units" (avoid-
+  // style ceilings like ≤ 30 min on social media). Stored as
+  // targetOp on the habit; legacy habits without the field default
+  // to ">=" so existing behavior is preserved.
+  const [eHTargetOp, sEHTargetOp] = useState(">=");
   const [eHUnitLabel, sEHUnitLabel] = useState("");
   const [eHIncrement, sEHIncrement] = useState("");
 
@@ -5832,6 +5838,32 @@ function App() {
     setGoalAreaErr(false);
     setGoalFormStep(0);
     setExpGForm(false);
+    // Drop the user straight into the edit-habit modal for the
+    // freshly-created habit so they can fill out section, frequency,
+    // target, comparison op, notes, etc. on the actual edit-habit
+    // card. Guarded behind a microtask so React commits the new
+    // habit into `data` first; sEHabit reads from `data.habits`
+    // (via setEditHabitModal(h)) and would miss the just-added one.
+    const newHabitObj = {
+      id: habitId,
+      text: nGFirstHabit.trim(),
+      type: nGType,
+      section: "morning",
+      importance: "Important",
+      notes: null,
+      frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+      location: "both",
+      startDate: todayISO,
+      goalIds: [goalId],
+      goalId: goalId,
+      completions: {},
+      completionTimes: {},
+      completionUnits: {},
+      target: null,
+      unitLabel: null,
+      increment: null
+    };
+    setTimeout(() => sEHabit(newHabitObj), 0);
   };
   const sEGoal = g => {
     sEGId(g.id);
@@ -6110,6 +6142,7 @@ function App() {
     sEHFreq(getFreq(h));
     sEHStart(h.startDate || dk(new Date()));
     sEHTarget(typeof h.target === "number" && h.target > 0 ? String(h.target) : "");
+    sEHTargetOp(h.targetOp === "<=" ? "<=" : ">=");
     sEHUnitLabel(h.unitLabel || "");
     sEHIncrement(typeof h.increment === "number" && h.increment > 0 ? String(h.increment) : "");
     setEditHabitModal(h);
@@ -6178,6 +6211,7 @@ function App() {
         // positive target + optional unit label + optional increment
         // (default 1) switches the card into progress-tap mode.
         target: (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n > 0 ? n : null; })(),
+        targetOp: eHTargetOp === "<=" ? "<=" : ">=",
         unitLabel: eHUnitLabel.trim() || null,
         increment: (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })(),
         history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
@@ -13144,13 +13178,13 @@ function App() {
         style: { fontSize: 11, color: "#dc2626", marginBottom: 6 }
       }, "Pick an area of life to continue.")
     ),
-    // STEP 2 — SMART framework + final Add Goal
+    // STEP 2 — SMART framework
     /*#__PURE__*/React.createElement("div", {
       style: { display: goalFormStep === 2 ? "block" : "none" }
     },
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 6 }
-      }, "Step 3 of 3 — SMART details (optional)"),
+      }, "Step 3 of 4 — SMART details (optional)"),
       /*#__PURE__*/React.createElement("div", {
         "data-tour-id": "goal-smart",
         style: { fontSize: 10, fontWeight: 600, color: "#6b7280", marginBottom: 8 }
@@ -13211,24 +13245,30 @@ function App() {
       })),
       placeholder: f.ph
     }));
-  })),
-      // First habit (required). A goal without a driving habit is
-      // inert, so the new-goal flow blocks the save until the user
-      // names at least one habit. The rest of the habit's properties
-      // (section, frequency, target) get sensible defaults at save
-      // time and can be refined from the habits tab afterward.
+  }))
+    ),
+    // STEP 3 — First habit (required). Its own step so the user has
+    // a clean focus. Collects the name only; on "Add Goal" the goal
+    // + a default-shaped habit are created together and the edit-
+    // habit modal pops open immediately so the user can refine every
+    // field (section, frequency, target, notes, ≥/≤, etc.) on the
+    // actual edit-habit card.
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: goalFormStep === 3 ? "block" : "none" }
+    },
       /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginTop: 14, marginBottom: 4 }
-      }, "First habit (required)"),
+        style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 6 }
+      }, "Step 4 of 4 — First habit (required)"),
       /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 10, color: "#6b7280", marginBottom: 6 }
-      }, "Every goal needs at least one habit driving it. Name the first one — you can refine details later."),
+        style: { fontSize: 10, color: "#6b7280", marginBottom: 8, lineHeight: 1.5 }
+      }, "Every goal needs at least one habit driving it. Name the first one. After tapping Add Goal you'll go straight into the edit-habit card to dial in section, frequency, target, and notes."),
       /*#__PURE__*/React.createElement("input", {
         type: "text",
         className: "sf",
         value: nGFirstHabit,
         onChange: e => sNGFirstHabit(e.target.value),
         placeholder: "e.g. Run 30 min, Meditate, Read 20 pages",
+        autoFocus: goalFormStep === 3,
         style: { width: "100%" }
       })
     ),
@@ -13251,7 +13291,7 @@ function App() {
           onClick: () => setGoalFormStep(s => Math.max(0, s - 1)),
           style: { ...AB, background: "var(--c-surface-muted)", color: "var(--c-text-soft)", padding: "8px 14px", fontSize: 12 }
         }, "Back"),
-        goalFormStep < 2 && /*#__PURE__*/React.createElement("button", {
+        goalFormStep < 3 && /*#__PURE__*/React.createElement("button", {
           // data-tour-id so the guided tour can paint a secondary
           // spotlight here once the user has filled the current step's
           // required field — see `extraSelector` on TOUR_STEPS entries
@@ -13259,19 +13299,19 @@ function App() {
           "data-tour-id": "goal-next",
           // Each Next is gated on the current step's required input.
           // Step 0: need non-empty name. Step 1: need Area of Life
-          // picked (we surface the red-ring error instead of silently
-          // blocking). Step 2's primary button is Add Goal, not Next.
+          // picked. Step 2 (SMART) has no required field — Next
+          // always advances. Step 3's primary button is Add Goal.
           onClick: () => {
             if (goalFormStep === 0) {
               if (!nGoal.trim()) return;
               setGoalFormStep(1);
-              // Keep the guided tour in lockstep with the form so
-              // the coach-marks don't lag behind the user.
               if (tourStep === 3) setTourStep(4);
             } else if (goalFormStep === 1) {
               if (!nGType) { setGoalAreaErr(true); return; }
               setGoalFormStep(2);
               if (tourStep === 4) setTourStep(5);
+            } else if (goalFormStep === 2) {
+              setGoalFormStep(3);
             }
           },
           disabled: goalFormStep === 0 ? !nGoal.trim() : false,
@@ -13283,13 +13323,9 @@ function App() {
             cursor: (goalFormStep === 0 && !nGoal.trim()) ? "default" : "pointer"
           }
         }, "Next"),
-        goalFormStep === 2 && /*#__PURE__*/React.createElement("button", {
+        goalFormStep === 3 && /*#__PURE__*/React.createElement("button", {
           "data-tour-id": "goal-save",
           onClick: addGoal,
-          // Block the save until the first-habit field has a value —
-          // matches the same gating pattern as Step 0's empty-name
-          // check and gives the user a visible cue that the habit is
-          // required, not just a silent no-op when they tap it.
           disabled: !nGFirstHabit.trim(),
           style: {
             ...AB,
@@ -17398,6 +17434,19 @@ function App() {
   /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", gap: 6, marginBottom: 6 }
   },
+    // Comparison op — required choice before the target count.
+    // ">=" : "do at least N units" (the historical default).
+    // "<=" : "stay under N units" (e.g. ≤ 30 min on social media,
+    //        ≤ 2 hr of TV — useful for avoid-style ceilings).
+    /*#__PURE__*/React.createElement("select", {
+      value: eHTargetOp,
+      onChange: e => sEHTargetOp(e.target.value),
+      "aria-label": "Target comparison",
+      style: { ...IS, width: 56, minWidth: 0, textAlign: "center" }
+    },
+      /*#__PURE__*/React.createElement("option", { value: ">=" }, "≥"),
+      /*#__PURE__*/React.createElement("option", { value: "<=" }, "≤")
+    ),
     /*#__PURE__*/React.createElement("input", {
       type: "number",
       min: 1,
