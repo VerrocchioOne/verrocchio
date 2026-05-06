@@ -324,6 +324,13 @@ textarea{resize:vertical}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
 .hrow:hover .del-btn,.hrow:hover .edit-btn,.ecard:hover .e-del,.ecard:hover .e-edit{opacity:1!important}
+/* Drag-reorder mode: a card the user is press-and-holding wiggles
+   to signal "you can now drag me to reorder". Slight elevation +
+   shadow + cursor change so the gesture feels like the iOS Home
+   Screen rearrange the user already knows. touch-action:none stops
+   the browser from interpreting the drag as a vertical scroll. */
+@keyframes habitWiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-1.4deg)}75%{transform:rotate(1.4deg)}}
+.hrow.wiggling{animation:habitWiggle .35s ease-in-out infinite;z-index:50;box-shadow:0 6px 18px rgba(0,0,0,.18)!important;cursor:grabbing;touch-action:none;position:relative}
 .sf{width:100%;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.35;color:#374151;outline:none;resize:none;min-height:34px}
 .sf:focus{border-color:#2d5a2d}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
@@ -4669,6 +4676,56 @@ function App() {
     return () => clearTimeout(t);
   }, [tourDone, inPreApp, tourStep, hasAnyData, syncState]);
 
+  // Document-level pointer handlers for habit-card drag reorder.
+  // Active only while reorderModeId is set (the user is mid-drag);
+  // unmounted otherwise so we're not paying for global listeners
+  // during normal browsing. The handlers find the card under the
+  // pointer via document.elementFromPoint + the [data-habit-id]
+  // attribute set on each card's outer div, then call
+  // reorderHabitSection to slot the dragged habit into the new spot.
+  // Cross-section drops are rejected so a habit's `section` field is
+  // never silently changed by the gesture.
+  useEffect(() => {
+    reorderActiveRef.current = reorderModeId;
+    if (!reorderModeId) return;
+    const onMove = e => {
+      const draggingId = reorderActiveRef.current;
+      if (!draggingId) return;
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      if (!target) return;
+      const card = target.closest("[data-habit-id]");
+      if (!card) return;
+      const overId = Number(card.getAttribute("data-habit-id"));
+      if (!overId || overId === draggingId) return;
+      const cur = latestData.current || data;
+      const habits = (cur && cur.habits) || [];
+      const fromHabit = habits.find(h => h.id === draggingId);
+      const overHabit = habits.find(h => h.id === overId);
+      if (!fromHabit || !overHabit) return;
+      if (fromHabit.section !== overHabit.section) return;
+      const sectionList = habits.filter(h => h.section === fromHabit.section);
+      const seq = sectionList.slice();
+      const fromIdx = seq.findIndex(h => h.id === draggingId);
+      const overIdx = seq.findIndex(h => h.id === overId);
+      if (fromIdx < 0 || overIdx < 0) return;
+      const [moved] = seq.splice(fromIdx, 1);
+      seq.splice(overIdx, 0, moved);
+      reorderHabitSection(fromHabit.section, seq);
+    };
+    const onUp = () => setReorderModeId(null);
+    const onKey = e => { if (e.key === "Escape") setReorderModeId(null); };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [reorderModeId]);
+
   // Keyboard support for the guided tour: left/right arrows drive
   // Back/Next via the refs that renderTour keeps up to date. Lets
   // keyboard-only users walk through the tour (the rest of the app
@@ -5144,6 +5201,17 @@ function App() {
   // the session only so the next sign-in opens with everything
   // visible — same as how the habits tab defaults all-open.
   const [collapsedGoalAreas, setCollapsedGoalAreas] = useState({});
+  // Drag-to-reorder mode for habit cards. When non-null, that habit's
+  // card is wiggling and the document-level pointer handlers below
+  // run live reorder via document.elementFromPoint hit-testing on
+  // the [data-habit-id] attribute set on each card. Entered by
+  // pressing-and-holding on a card; exited by pointerup, pointer
+  // cancel, or pressing Escape.
+  const [reorderModeId, setReorderModeId] = useState(null);
+  // Mirror of reorderModeId for the document handlers below — the
+  // handlers close over this ref instead of the state value so they
+  // stay stable across renders without having to reattach.
+  const reorderActiveRef = useRef(null);
   // Re-evaluate the "which section is current" default once per session,
   // after data (and therefore the user's custom timeRanges, if any) has
   // loaded. Guarded by a ref so we don't clobber manual toggles afterward.
@@ -6628,13 +6696,6 @@ function App() {
       )
     );
   };
-  // Drag-and-drop reorder state for habit cards. Scoped per render
-  // via useRef so cross-component pointer events don't trip each
-  // other. Each card sets fromId on dragstart and overId on
-  // dragenter; onDrop consults both and only commits if both
-  // habits are in the same section (cross-section drops are
-  // ignored — section assignment is intentional).
-  const habitDragRef = useRef({ fromId: null, overId: null });
   // Reorder a section's habits given a new sequence (an array of
   // habit objects in the new order). Rewrites _order on every
   // habit in data.habits so the global _order reflects the new
@@ -11519,55 +11580,70 @@ function App() {
         if (isAvoid) {
           return /*#__PURE__*/React.createElement("div", {
             key: habit.id,
-            className: "hrow",
-            // Same expansion pattern as the non-avoid card: tap toggles
-            // the metadata row; press-and-hold opens the edit dialog.
-            // habitHoldRef's fired flag suppresses the synthetic click
-            // that fires on mobile right after a long-press.
+            className: "hrow" + (reorderModeId === habit.id ? " wiggling" : ""),
+            "data-habit-id": habit.id,
+            // Tap = toggle expand. Double-tap = open edit modal.
+            // Press+hold = enter wiggle/reorder mode (same as the
+            // non-avoid card path — see the longer comment there).
             onClick: e => {
               const s = habitHoldRef.current[habit.id];
               if (s && s.fired) { delete habitHoldRef.current[habit.id]; return; }
+              if (reorderModeId === habit.id) return;
               setExpHabitGoals(p => ({ ...p, [habit.id]: !p[habit.id] }));
             },
-            onMouseDown: e => {
-              if (e.button !== 0) return;
+            onDoubleClick: e => { e.stopPropagation(); sEHabit(habit); },
+            onPointerDown: e => {
+              if (e.pointerType === "mouse" && e.button !== 0) return;
+              const startX = e.clientX, startY = e.clientY;
               habitHoldRef.current[habit.id] = {
                 fired: false,
+                startX, startY,
                 timer: setTimeout(() => {
                   const cur = habitHoldRef.current[habit.id];
-                  if (cur) cur.fired = true;
-                  sEHabit(habit);
-                }, 520)
+                  if (!cur || cur.cancelled) return;
+                  cur.fired = true;
+                  if (navigator.vibrate) try { navigator.vibrate(40); } catch (_) {}
+                  setReorderModeId(habit.id);
+                  if (swipeRef.current[habit.id]) delete swipeRef.current[habit.id];
+                }, 500)
               };
             },
-            onMouseUp: () => { const s = habitHoldRef.current[habit.id]; if (s && !s.fired) clearTimeout(s.timer); },
-            onMouseLeave: () => { const s = habitHoldRef.current[habit.id]; if (s) { clearTimeout(s.timer); delete habitHoldRef.current[habit.id]; } },
+            onPointerMove: e => {
+              const s = habitHoldRef.current[habit.id];
+              if (!s || s.fired) return;
+              const dx = e.clientX - s.startX;
+              const dy = e.clientY - s.startY;
+              if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+                clearTimeout(s.timer);
+                s.cancelled = true;
+              }
+            },
+            onPointerUp: () => {
+              const s = habitHoldRef.current[habit.id];
+              if (s && !s.fired) clearTimeout(s.timer);
+            },
+            onPointerLeave: () => {
+              const s = habitHoldRef.current[habit.id];
+              if (s && !s.fired) { clearTimeout(s.timer); s.cancelled = true; }
+            },
+            onPointerCancel: () => {
+              const s = habitHoldRef.current[habit.id];
+              if (s && !s.fired) { clearTimeout(s.timer); s.cancelled = true; }
+            },
             onTouchStart: e => {
               const t = e.touches[0];
-              swipeRef.current[habit.id] = {
-                x: t.clientX,
-                y: t.clientY,
-                t: Date.now(),
-                holdTimer: setTimeout(() => {
-                  habitHoldRef.current[habit.id] = { fired: true };
-                  sEHabit(habit);
-                }, 600)
-              };
+              swipeRef.current[habit.id] = { x: t.clientX, y: t.clientY, t: Date.now() };
             },
-            onTouchMove: e => {
-              const s = swipeRef.current[habit.id];
-              if (!s) return;
-              const dx = e.touches[0].clientX - s.x;
-              if (Math.abs(dx) > 8) clearTimeout(s.holdTimer);
-            },
+            onTouchMove: e => { return; },
             onTouchEnd: e => {
               const s = swipeRef.current[habit.id];
               if (!s) return;
-              clearTimeout(s.holdTimer);
               const dx = e.changedTouches[0].clientX - s.x;
               const dy = e.changedTouches[0].clientY - s.y;
               const dt = Date.now() - (s.t || Date.now());
               delete swipeRef.current[habit.id];
+              const heldFor = habitHoldRef.current[habit.id];
+              if ((heldFor && heldFor.fired) || reorderActiveRef.current === habit.id) return;
               if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
               if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
                 if (dx > 0) {
@@ -11688,109 +11764,103 @@ function App() {
         }
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
-          className: "hrow",
-          // Tap = toggle expanded metadata row; press-and-hold = edit.
-          // The click path checks habitHoldRef so a hold-fired synthetic
-          // click (common on mobile after a long press) doesn't also
-          // toggle the card. Mouse hold lives in mouseDown/Up/Leave;
-          // touch hold is still kicked off inside onTouchStart so it
-          // coexists with the swipe handlers.
+          className: "hrow" + (reorderModeId === habit.id ? " wiggling" : ""),
+          "data-habit-id": habit.id,
+          // Tap          = toggle expanded metadata row.
+          // Double-tap   = open the edit-habit modal.
+          // Press+hold   = enter wiggle/reorder mode; while held, drag
+          //                to slot the card to a new position within
+          //                this section. Release to commit.
+          //
+          // Hold detection lives in onPointerDown/Move/Up/Cancel so
+          // mouse and touch share one code path. Reorder mode itself
+          // is driven by the document-level pointermove/up handlers
+          // declared in a useEffect above. The synthetic click that
+          // fires after a hold is suppressed via habitHoldRef.fired.
           onClick: e => {
             const s = habitHoldRef.current[habit.id];
             if (s && s.fired) { delete habitHoldRef.current[habit.id]; return; }
+            if (reorderModeId === habit.id) return;
             setExpHabitGoals(p => ({ ...p, [habit.id]: !p[habit.id] }));
           },
-          // Double-click opens the edit modal (replaces the desktop
-          // long-press path with something more discoverable). The
-          // single-click expansion above still fires twice on a
-          // double-click — toggling expanded state to where it
-          // started — so the only net effect users see is the modal
-          // popping open.
           onDoubleClick: e => {
             e.stopPropagation();
             sEHabit(habit);
           },
-          // Native HTML5 drag-and-drop reorder (desktop). Limited to
-          // within the habit's section: cross-section drops are
-          // intentionally rejected so a habit's `section` field is
-          // never changed by reordering. Mobile users can use the
-          // long-press → edit modal or the ⇅ section header button.
-          draggable: true,
-          onDragStart: e => {
-            habitDragRef.current.fromId = habit.id;
-            try { e.dataTransfer.effectAllowed = "move"; } catch (_) {}
-          },
-          onDragEnter: () => { habitDragRef.current.overId = habit.id; },
-          onDragOver: e => { e.preventDefault(); },
-          onDrop: e => {
-            e.preventDefault();
-            const fromId = habitDragRef.current.fromId;
-            const overId = habitDragRef.current.overId;
-            habitDragRef.current.fromId = null;
-            habitDragRef.current.overId = null;
-            if (fromId == null || overId == null || fromId === overId) return;
-            const fromHabit = (data.habits || []).find(h => h.id === fromId);
-            const overHabit = (data.habits || []).find(h => h.id === overId);
-            if (!fromHabit || !overHabit || fromHabit.section !== overHabit.section) return;
-            const seq = group.habits.slice();
-            const fromIdx = seq.findIndex(h => h.id === fromId);
-            const overIdx = seq.findIndex(h => h.id === overId);
-            if (fromIdx < 0 || overIdx < 0) return;
-            const [moved] = seq.splice(fromIdx, 1);
-            seq.splice(overIdx, 0, moved);
-            reorderHabitSection(group.value, seq);
-          },
-          onDragEnd: () => {
-            habitDragRef.current.fromId = null;
-            habitDragRef.current.overId = null;
-          },
-          onMouseDown: e => {
-            if (e.button !== 0) return;
+          onPointerDown: e => {
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            const startX = e.clientX, startY = e.clientY;
             habitHoldRef.current[habit.id] = {
               fired: false,
+              startX, startY,
               timer: setTimeout(() => {
                 const cur = habitHoldRef.current[habit.id];
-                if (cur) cur.fired = true;
-                sEHabit(habit);
-              }, 520)
+                if (!cur || cur.cancelled) return;
+                cur.fired = true;
+                if (navigator.vibrate) try { navigator.vibrate(40); } catch (_) {}
+                setReorderModeId(habit.id);
+                // Cancel any swipe gesture that was building up so
+                // touchend doesn't fire a left/right swipe action on
+                // top of the reorder we just kicked off.
+                if (swipeRef.current[habit.id]) {
+                  delete swipeRef.current[habit.id];
+                }
+              }, 500)
             };
           },
-          onMouseUp: () => {
+          onPointerMove: e => {
+            const s = habitHoldRef.current[habit.id];
+            if (!s || s.fired) return;
+            const dx = e.clientX - s.startX;
+            const dy = e.clientY - s.startY;
+            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+              clearTimeout(s.timer);
+              s.cancelled = true;
+            }
+          },
+          onPointerUp: () => {
             const s = habitHoldRef.current[habit.id];
             if (s && !s.fired) clearTimeout(s.timer);
           },
-          onMouseLeave: () => {
+          onPointerLeave: () => {
             const s = habitHoldRef.current[habit.id];
-            if (s) { clearTimeout(s.timer); delete habitHoldRef.current[habit.id]; }
+            if (s && !s.fired) { clearTimeout(s.timer); s.cancelled = true; }
+          },
+          onPointerCancel: () => {
+            const s = habitHoldRef.current[habit.id];
+            if (s && !s.fired) { clearTimeout(s.timer); s.cancelled = true; }
           },
           onTouchStart: e => {
+            // Swipe-tracking only — the press-and-hold for reorder is
+            // owned by onPointerDown. We DON'T set a holdTimer here
+            // anymore (it used to open the edit modal; that's now
+            // double-tap).
             const t = e.touches[0];
             swipeRef.current[habit.id] = {
               x: t.clientX,
               y: t.clientY,
-              t: Date.now(),
-              holdTimer: setTimeout(() => {
-                // Flag the hold so the synthetic click that follows
-                // touchend doesn't also toggle the card expansion.
-                habitHoldRef.current[habit.id] = { fired: true };
-                sEHabit(habit);
-              }, 600)
+              t: Date.now()
             };
           },
           onTouchMove: e => {
-            const s = swipeRef.current[habit.id];
-            if (!s) return;
-            const dx = e.touches[0].clientX - s.x;
-            if (Math.abs(dx) > 8) clearTimeout(s.holdTimer);
+            // No more holdTimer to clear; swipe direction is read off
+            // the changedTouches in onTouchEnd. This handler stays in
+            // place because removing it would break passive-listener
+            // assumptions on some mobile browsers.
+            return;
           },
           onTouchEnd: e => {
             const s = swipeRef.current[habit.id];
             if (!s) return;
-            clearTimeout(s.holdTimer);
             const dx = e.changedTouches[0].clientX - s.x;
             const dy = e.changedTouches[0].clientY - s.y;
             const dt = Date.now() - (s.t || Date.now());
             delete swipeRef.current[habit.id];
+            // If the press-and-hold gesture for reorder fired during
+            // this touch, suppress swipe processing — the user wasn't
+            // swiping, they were dragging.
+            const heldFor = habitHoldRef.current[habit.id];
+            if ((heldFor && heldFor.fired) || reorderActiveRef.current === habit.id) return;
             if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
             if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
               if (dx > 0) {
