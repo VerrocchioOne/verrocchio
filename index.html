@@ -5594,19 +5594,40 @@ function App() {
       return;
     }
     setManualSyncFlash("saving");
-    try { console.log("[verrocchio pull] fetching cloud doc"); } catch (e) {}
+    try { console.log("[verrocchio pull] fetching cloud doc from server"); } catch (e) {}
     try {
-      const snap = await userDoc(uid).get();
+      // { source: "server" } bypasses Firestore's local IndexedDB
+      // cache and forces an actual round-trip to the server. Without
+      // this, .get() defaults to "cache then server", so on a device
+      // whose realtime listener was still catching up (e.g. just
+      // returned from background), Pull would serve the stale cache
+      // and look like it did nothing. If the server is unreachable
+      // we fall back to a default .get() so the user still sees
+      // their cached state rather than a hard failure.
+      let snap;
+      try {
+        snap = await userDoc(uid).get({ source: "server" });
+      } catch (netErr) {
+        try { console.warn("[verrocchio pull] server fetch failed, falling back to cache:", netErr && netErr.code, netErr && netErr.message); } catch (e) {}
+        snap = await userDoc(uid).get();
+      }
       if (!snap.exists) {
         try { console.warn("[verrocchio pull] cloud doc does not exist for uid", uid); } catch (e) {}
         setManualSyncFlash("synced");
         return;
       }
       const remote = hydrateCloudDoc(snap.data());
+      // Stamp _updatedAt forward so the realtime listener's echo
+      // gate (`remoteTs <= localTs`) doesn't immediately re-skip
+      // this exact snapshot when it bounces back through onSnapshot
+      // — and so any subsequent incoming snapshots from another
+      // device with the original (older) timestamp don't overwrite
+      // the freshly-pulled state.
+      remote._updatedAt = Date.now();
       setData(remote);
       latestData.current = remote;
       try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
-      try { console.log("[verrocchio pull] adopted cloud doc, ts=" + (remote._updatedAt || "(none)")); } catch (e) {}
+      try { console.log("[verrocchio pull] adopted cloud doc, fromCache=" + snap.metadata.fromCache); } catch (e) {}
       setSyncState("synced");
       setManualSyncFlash("synced");
     } catch (err) {
