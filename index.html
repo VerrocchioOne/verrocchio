@@ -5910,6 +5910,19 @@ function App() {
     const goalId = Date.now();
     const habitId = goalId + 1;
     const todayISO = dk(new Date());
+    // Pull the habit's metadata from the new-habit form state that
+    // Step 4 populated. Defaults match the standalone Add Habit form
+    // so a user who tabbed past every dropdown still gets a valid
+    // shape. The Area of Life is forced to nGType regardless of
+    // nHType so it can't drift from the goal's area.
+    const habitFreq = {
+      ...(nHFreq || {}),
+      type: (nHFreq && nHFreq.type) || "daily",
+      days: Array.isArray(nHFreq && nHFreq.days) ? nHFreq.days.slice() : [],
+      day: typeof (nHFreq && nHFreq.day) === "number" ? nHFreq.day : null,
+      monthDay: typeof (nHFreq && nHFreq.monthDay) === "number" ? nHFreq.monthDay : 1,
+      month: typeof (nHFreq && nHFreq.month) === "number" ? nHFreq.month : 0
+    };
     save({
       ...data,
       goals: [...data.goals, {
@@ -5925,12 +5938,13 @@ function App() {
         text: nGFirstHabit.trim(),
         // Inherit area from the goal so habit + goal share a category.
         type: nGType,
-        section: "morning",
-        importance: "Important",
-        notes: null,
-        frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+        section: nHSec || "morning",
+        duration: nHDur || "",
+        importance: nHImp || "Important",
+        notes: (nHNotes && nHNotes.trim()) || null,
+        frequency: habitFreq,
         location: "both",
-        startDate: todayISO,
+        startDate: nHStart || todayISO,
         goalIds: [goalId],
         goalId: goalId,
         completions: {},
@@ -5954,35 +5968,19 @@ function App() {
       timebound: ""
     });
     sNGFirstHabit("");
+    // Reset the shared new-habit form state so a later standalone
+    // Add Habit attempt starts fresh.
+    sNHabit("");
+    sNHType("");
+    sNHSec("morning");
+    sNHDur("");
+    sNHImp("Important");
+    sNHFreq({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
+    sNHStart(dk(new Date()));
+    sNHNotes("");
     setGoalAreaErr(false);
     setGoalFormStep(0);
     setExpGForm(false);
-    // Drop the user straight into the edit-habit modal for the
-    // freshly-created habit so they can fill out section, frequency,
-    // target, comparison op, notes, etc. on the actual edit-habit
-    // card. Guarded behind a microtask so React commits the new
-    // habit into `data` first; sEHabit reads from `data.habits`
-    // (via setEditHabitModal(h)) and would miss the just-added one.
-    const newHabitObj = {
-      id: habitId,
-      text: nGFirstHabit.trim(),
-      type: nGType,
-      section: "morning",
-      importance: "Important",
-      notes: null,
-      frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
-      location: "both",
-      startDate: todayISO,
-      goalIds: [goalId],
-      goalId: goalId,
-      completions: {},
-      completionTimes: {},
-      completionUnits: {},
-      target: null,
-      unitLabel: null,
-      increment: null
-    };
-    setTimeout(() => sEHabit(newHabitObj), 0);
   };
   const sEGoal = g => {
     sEGId(g.id);
@@ -13367,12 +13365,18 @@ function App() {
     }));
   }))
     ),
-    // STEP 3 — First habit (required). Its own step so the user has
-    // a clean focus. Collects the name only; on "Add Goal" the goal
-    // + a default-shaped habit are created together and the edit-
-    // habit modal pops open immediately so the user can refine every
-    // field (section, frequency, target, notes, ≥/≤, etc.) on the
-    // actual edit-habit card.
+    // STEP 3 — First habit (required). The full edit-habit field set
+    // is inlined here so the user dials in section, duration,
+    // importance, frequency, start date, and notes BEFORE creating
+    // the goal — no second-pass modal pop. Target / unit / +per-tap /
+    // ≥-≤ aren't in this form (they aren't in the standalone Add
+    // Habit form either) but can be refined later by tapping the
+    // habit; the helper text below reminds the user.
+    //
+    // Reuses the same nH* state variables as the standalone Add
+    // Habit form for code reuse. Those variables get reset to
+    // sensible defaults on every Step 2 → Step 3 transition so the
+    // two flows can't leak into each other.
     /*#__PURE__*/React.createElement("div", {
       style: { display: goalFormStep === 3 ? "block" : "none" }
     },
@@ -13381,7 +13385,7 @@ function App() {
       }, "Step 4 of 4 — First habit (required)"),
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 10, color: "#6b7280", marginBottom: 8, lineHeight: 1.5 }
-      }, "Every goal needs at least one habit driving it. Name the first one. After tapping Add Goal you'll go straight into the edit-habit card to dial in section, frequency, target, and notes."),
+      }, "Every goal needs at least one habit driving it. Set its details below. Target, units, and +/tap can be added later by tapping the habit card."),
       /*#__PURE__*/React.createElement("input", {
         type: "text",
         className: "sf",
@@ -13389,7 +13393,50 @@ function App() {
         onChange: e => sNGFirstHabit(e.target.value),
         placeholder: "e.g. Run 30 min, Meditate, Read 20 pages",
         autoFocus: goalFormStep === 3,
-        style: { width: "100%" }
+        style: { ...IS, width: "100%", marginBottom: 8 }
+      }),
+      // Section + Duration row.
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6, marginBottom: 8 }
+      },
+        /*#__PURE__*/React.createElement("select", {
+          value: nHSec,
+          onChange: e => sNHSec(e.target.value),
+          style: { ...S, flex: 1, color: SECTIONS.find(s => s.value === nHSec)?.color || "var(--c-text-soft)" }
+        }, /*#__PURE__*/React.createElement("option", { value: "morning" }, "🌅 Time of Day"),
+          SECTIONS.map(s => /*#__PURE__*/React.createElement("option", { key: s.value, value: s.value }, s.icon, " ", s.label))
+        ),
+        /*#__PURE__*/React.createElement("select", {
+          value: nHDur,
+          onChange: e => sNHDur(e.target.value),
+          style: { ...S, flex: 1 }
+        }, /*#__PURE__*/React.createElement("option", { value: "" }, "⏱ Duration"),
+          DURS.map(d => /*#__PURE__*/React.createElement("option", { key: d.value, value: d.value }, d.label))
+        )
+      ),
+      // Importance only — Area of Life is locked to the goal's area
+      // (set via sNHType when entering this step), so we skip the
+      // type dropdown here. The habit's `type` is set from nGType
+      // in addGoal.
+      /*#__PURE__*/React.createElement("select", {
+        value: nHImp,
+        onChange: e => sNHImp(e.target.value),
+        style: { ...S, width: "100%", marginBottom: 8, color: IMP.find(i => i.value === nHImp)?.color || "var(--c-text-soft)" }
+      }, /*#__PURE__*/React.createElement("option", { value: "Important" }, "★ Importance"),
+        IMP.map(i => /*#__PURE__*/React.createElement("option", { key: i.value, value: i.value }, i.value))
+      ),
+      // Schedule block — start date + frequency cadence + cadence-
+      // specific sub-picker. Same component the standalone Add Habit
+      // form uses, kept identical so the user only learns one UI.
+      /*#__PURE__*/React.createElement("div", null,
+        renderFreqPicker(nHFreq, sNHFreq, nHStart, sNHStart)
+      ),
+      /*#__PURE__*/React.createElement("textarea", {
+        value: nHNotes,
+        onChange: e => sNHNotes(e.target.value),
+        placeholder: "Sub-components / notes — e.g. Sit-ups \xB7 Planks \xB7 Leg raises",
+        rows: 2,
+        style: { ...IS, width: "100%", marginBottom: 4, resize: "none", lineHeight: 1.5 }
       })
     ),
     // Dynamic nav row. Cancel is always on the far left. Back appears
@@ -13431,6 +13478,18 @@ function App() {
               setGoalFormStep(2);
               if (tourStep === 4) setTourStep(5);
             } else if (goalFormStep === 2) {
+              // Reset the new-habit form state to defaults each time
+              // we enter step 4, and inherit the goal's Area of Life.
+              // Without the reset, residual values from the last
+              // standalone Add Habit attempt (or a previous goal-flow
+              // attempt that was cancelled) would bleed in here.
+              sNHType(nGType);
+              sNHSec("morning");
+              sNHDur("");
+              sNHImp("Important");
+              sNHFreq({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
+              sNHStart(dk(new Date()));
+              sNHNotes("");
               setGoalFormStep(3);
             }
           },
