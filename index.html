@@ -6254,19 +6254,30 @@ function App() {
     const prev = targetH.completions?.[key];
     const prevState = (prev === "done" || prev === true) ? "done" : (prev === "missed" ? "missed" : "none");
 
-    // "increment" mode drives the sub-unit feature (e.g. 4/8 cups). We
-    // bump completionUnits[key] by habit.increment; when it meets or
-    // exceeds habit.target, we also mark the habit done for the day
-    // and stamp a completion time as a normal finish would. Negative
-    // increments decrement (for undoing an accidental tap). Habits
-    // without a target fall through to the binary done/missed logic.
+    // "increment" mode drives the sub-unit feature (e.g. 4/8 cups, or
+    // ≤ 0 drinks for an avoid habit). We bump completionUnits[key]
+    // by habit.increment, then resolve the new state from the
+    // habit's comparison op:
+    //   ≥ N: done once units >= N (the historical "do at least N")
+    //   ≤ N: done while units <= N, missed once units > N (the
+    //        "stay under N" pattern, including the ≤ 0 ceiling for
+    //        avoid habits like "0 drinks today")
+    // typeof check (instead of truthy) lets target = 0 count as a
+    // real target — required for ≤ 0 to work. Negative increments
+    // decrement (for undoing an accidental tap); the "reset" sentinel
+    // wipes the day to 0.
     let newState;
     let nextUnits = null;
-    if (mode === "increment" && targetH.target) {
+    if (mode === "increment" && typeof targetH.target === "number") {
       const step = atTime === "reset" ? -Infinity : (Number(targetH.increment) || 1);
       const curUnits = Number(targetH.completionUnits && targetH.completionUnits[key]) || 0;
       nextUnits = Math.max(0, curUnits + step);
-      newState = nextUnits >= targetH.target ? "done" : (prev === "done" ? "done" : "none");
+      const op = targetH.targetOp === "<=" ? "<=" : ">=";
+      if (op === "<=") {
+        newState = nextUnits <= targetH.target ? "done" : "missed";
+      } else {
+        newState = nextUnits >= targetH.target ? "done" : (prev === "done" ? "done" : "none");
+      }
     } else {
       newState = mode === "done" ? "done" : (mode === "missed" ? "missed" : "none");
     }
@@ -11777,7 +11788,12 @@ function App() {
           // (rolls back to 0 and un-marks). Non-subunit habits fall
           // back to the original behavior: tap only toggles off an
           // already-done/missed habit.
-          const hasTarget = typeof habit.target === "number" && habit.target > 0;
+          // hasTarget: the habit owns a numeric target — including
+          // 0 (e.g. "≤ 0 drinks"). The old `> 0` gate was excluding
+          // ≤ 0 avoid habits and forcing them through the binary
+          // done/missed path with no way to log unit counts.
+          const hasTarget = typeof habit.target === "number";
+          const isUnderOp = habit.targetOp === "<=";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const bg = d ? "#22c55e" : missed ? "#ef4444" : (hasTarget && units > 0 ? "#3d7a3d" : "var(--c-border)");
           return /*#__PURE__*/React.createElement("div", {
@@ -11785,9 +11801,15 @@ function App() {
           onClick: e => {
             e.stopPropagation();
             if (hasTarget) {
-              if (d || missed) {
-                // Rolled-back tap: clear today's count and mark back
-                // to "none" so the user can start over.
+              // For ≤ habits, every tap adds a unit — even after the
+              // habit has flipped to missed (because count > limit),
+              // the user is still logging real-world drinks/minutes/
+              // calories and wants the running tally to stay accurate.
+              // For ≥ habits, tapping when already done/missed clears
+              // back to 0 so the user can start over.
+              if (isUnderOp) {
+                togHabit(habit.id, selDate, "increment");
+              } else if (d || missed) {
                 togHabit(habit.id, selDate, "increment", "reset");
               } else {
                 togHabit(habit.id, selDate, "increment");
@@ -11835,8 +11857,15 @@ function App() {
           stroke: "white",
           strokeWidth: "2",
           strokeLinecap: "round"
-        })) : ((habit.target || 0) > 0 && !d && !missed)
-          ? /*#__PURE__*/React.createElement("span", null, Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0))
+        })) : (typeof habit.target === "number" && !d && !missed)
+          ? /*#__PURE__*/React.createElement("span", null,
+              // Show the live count for ≤ habits (even if it's 0 of
+              // 0); show min(count, target) for ≥ habits so the
+              // button doesn't read past the goal mid-day.
+              habit.targetOp === "<="
+                ? ((habit.completionUnits && Number(habit.completionUnits[selDate])) || 0)
+                : Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0)
+            )
           : /*#__PURE__*/React.createElement("svg", {
               width: "14",
               height: "14",
@@ -11875,19 +11904,26 @@ function App() {
               textOverflow: "ellipsis"
             }
           }, habit.text),
-          ((habit.target || 0) > 0) && (() => {
+          (typeof habit.target === "number") && (() => {
             const op = habit.targetOp === "<=" ? "≤" : "≥";
             const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
-            const shown = Math.min(habit.target, units);
+            // For ≥ habits, cap the displayed count at target so the
+            // chip never reads "9/8". For ≤ habits, show the real
+            // running tally past the limit so the user can see how
+            // many drinks/minutes/etc. they've logged today.
+            const shown = op === "≤" ? units : Math.min(habit.target, units);
+            // Tint red when the user has slipped past a ≤ limit so
+            // the chip's color matches the missed state.
+            const overLimit = op === "≤" && units > habit.target;
             return /*#__PURE__*/React.createElement("span", {
               style: {
                 flexShrink: 0,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                color: d ? "#15803d" : "#4b5563",
-                background: d ? "#dcfce7" : "var(--c-surface-muted)",
-                border: "1px solid " + (d ? "transparent" : "var(--c-border)"),
+                color: d ? "#15803d" : overLimit ? "#991b1b" : "#4b5563",
+                background: d ? "#dcfce7" : overLimit ? "#fee2e2" : "var(--c-surface-muted)",
+                border: "1px solid " + (d || overLimit ? "transparent" : "var(--c-border)"),
                 borderRadius: 8,
                 padding: "2px 6px",
                 lineHeight: 1.15,
