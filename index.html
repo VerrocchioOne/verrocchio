@@ -5572,14 +5572,76 @@ function App() {
   // Writes directly to localStorage + Firestore rather than going
   // through save() so a broken save path can't silently swallow the
   // wipe. Each step logs to [verrocchio wipe] for debug.
-  // Push-to-cloud: explicit one-tap force-save. Just runs save() and
-  // shows the green flash via the syncState→flash effect. save()
-  // never flips to "offline" anymore, so the race that used to make
-  // Push flash red on transient listener errors is gone.
-  const pushToCloud = () => {
+  // Push-to-cloud: explicit, server-verified upload of the current
+  // local state. With Firestore offline persistence on, plain .set()
+  // resolves the moment the LOCAL CACHE is updated — not when the
+  // server has acknowledged the write. That's why pushes from one
+  // origin (e.g. localhost) can fail to propagate without anyone
+  // noticing: the local cache is happy, but the server never got it.
+  //
+  // This implementation:
+  //   1. Stamps + writes locally so the UI is consistent immediately.
+  //   2. Calls .set() and awaits its (cache-level) resolution.
+  //   3. Calls db.waitForPendingWrites() so we block until the SDK
+  //      has actually flushed queued writes to the server (or
+  //      surfaced a server rejection).
+  //   4. Reads the doc back via .get({ source: "server" }) and
+  //      checks the timestamp matches what we just pushed.
+  //   5. If anything goes wrong at any step, the actual Firestore
+  //      error code/message is surfaced via alert() — the user (and
+  //      I) need to SEE the real reason. Silent green flashes were
+  //      what caused this whole stale-cloud problem.
+  const pushToCloud = async () => {
     setManualSyncOp("push");
+    if (demoMode) {
+      setManualSyncFlash("synced");
+      return;
+    }
+    if (!uid) {
+      setManualSyncFlash("synced");
+      alert("Push couldn't run: you're not signed in on this device.");
+      return;
+    }
     setManualSyncFlash("saving");
-    save(data);
+    const stamped = { ...data, _updatedAt: Date.now() };
+    setData(stamped);
+    latestData.current = stamped;
+    try { localStorage.setItem(lsKey, JSON.stringify(stamped)); } catch (e) {}
+    const cu = auth.currentUser;
+    try { console.log("[verrocchio push] writing ts=" + stamped._updatedAt + " uid(state)=" + uid + " uid(auth)=" + (cu ? cu.uid : "null") + " email=" + (cu ? cu.email : "null")); } catch (e) {}
+    if (!cu) {
+      setManualSyncFlash("synced");
+      alert("Push couldn't run: Firebase says you're not signed in on this origin (auth.currentUser is null). Sign out and back in to refresh the token.");
+      return;
+    }
+    if (cu.uid !== uid) {
+      setManualSyncFlash("synced");
+      alert("Push couldn't run: account mismatch.\nReact state uid: " + uid + "\nFirebase auth uid: " + cu.uid + " (" + cu.email + ")\nSign out and back in to fix.");
+      return;
+    }
+    try {
+      await userDoc(uid).set(sanitizeForFirestore(stamped));
+      if (typeof db.waitForPendingWrites === "function") {
+        await db.waitForPendingWrites();
+      }
+      const verify = await userDoc(uid).get({ source: "server" });
+      const serverTs = verify.exists ? (verify.data()._updatedAt || null) : null;
+      try { console.log("[verrocchio push] server confirmed ts=" + serverTs + " (expected " + stamped._updatedAt + ", fromCache=" + verify.metadata.fromCache + ")"); } catch (e) {}
+      if (!verify.exists) {
+        throw new Error("server reports no doc after write");
+      }
+      if (serverTs !== stamped._updatedAt) {
+        throw new Error("server timestamp mismatch (got " + serverTs + ", expected " + stamped._updatedAt + ")");
+      }
+      setSyncState("synced");
+      setManualSyncFlash("synced");
+    } catch (err) {
+      try { console.warn("[verrocchio push] FAILED:", err && err.code, err && err.message, err); } catch (e) {}
+      setManualSyncFlash("synced");
+      const code = (err && err.code) || "unknown";
+      const msg  = (err && err.message) || String(err || "see console");
+      alert("Push to cloud failed.\n\nCode: " + code + "\n" + msg + "\n\nThis is the real Firestore error — share it so the underlying issue can be fixed. Your local data is unchanged.");
+    }
   };
   // Pull-from-cloud: force-fetch the latest user doc from Firestore
   // and overwrite local state + localStorage. On any failure (no doc,
