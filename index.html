@@ -11961,14 +11961,17 @@ function App() {
           }
         },
           habit.text,
-          // Sub-unit progress, e.g. "(4/8 cups)". Inlined as a gray
-          // parenthetical at the end of the habit name (rather than a
-          // separate line below) so cards with a target match the
-          // height of cards without one — the column was making
-          // sub-unit habits visibly taller than their neighbours.
+          // Sub-unit progress, e.g. "(≥ 4/8 cups)" or "(≤ 4/8 cups)".
+          // Inlined as a gray parenthetical at the end of the habit
+          // name (rather than a separate line below) so cards with a
+          // target match the height of cards without one — the column
+          // was making sub-unit habits visibly taller than their
+          // neighbours. The comparison op (≥ for "do at least N",
+          // ≤ for "stay under N") sits left of the count so the user
+          // can see at a glance which direction the goal is.
           ((habit.target || 0) > 0 && !d) && /*#__PURE__*/React.createElement("span", {
             style: { color: "#9ca3af", fontWeight: 400, marginLeft: 6 }
-          }, "(", Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : "", ")")
+          }, "(", (habit.targetOp === "<=" ? "≤" : "≥"), " ", Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : "", ")")
         ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
@@ -13518,15 +13521,38 @@ function App() {
       fontSize: 13,
       padding: "40px 0"
     }
-  }, "No goals yet \u2014 tap + to add one"), HT.map(ht => {
-    const typeGoals = sortItems(data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value))), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal");
-    if (!typeGoals.length || (goalTypeFilter.length > 0 && !goalTypeFilter.includes(ht.value))) return null;
+  }, "No goals yet \u2014 tap + to add one"), (() => {
+    // When the user picks "Earliest" or "Latest" (date-based sort),
+    // the per-Area section dividers fragment the chronological order
+    // across multiple lists \u2014 a goal due next week could end up below
+    // a goal due in two years just because they're in different
+    // areas. Merge into a single flat list in that case so target
+    // dates read top-to-bottom in real order. Other sort modes keep
+    // the by-Area grouping since "Newest first / A\u2192Z / etc." inside
+    // each area is what users expect.
+    const goalSortMode = (data.sortPrefs && data.sortPrefs.goals) || "default";
+    const isDateSort = goalSortMode === "date-asc" || goalSortMode === "date-desc";
+    const groups = isDateSort
+      ? [{ value: "__all__", color: "#9ca3af", border: "var(--c-border)", merged: true }]
+      : HT;
+    return groups;
+  })().map(ht => {
+    const goalSortMode = (data.sortPrefs && data.sortPrefs.goals) || "default";
+    const isDateSort = goalSortMode === "date-asc" || goalSortMode === "date-desc";
+    // Merged path: ignore ht.value, just respect the user's area
+    // chip filter. Per-area path keeps the original gating.
+    const filtered = ht.merged
+      ? data.goals.filter(g => goalTypeFilter.length === 0 || goalTypeFilter.includes(g.type))
+      : data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value)));
+    const typeGoals = sortItems(filtered, goalSortMode, "goal");
+    if (!typeGoals.length) return null;
+    if (!ht.merged && goalTypeFilter.length > 0 && !goalTypeFilter.includes(ht.value)) return null;
     return /*#__PURE__*/React.createElement("div", {
       key: ht.value,
       style: {
         marginBottom: 16
       }
-    }, /*#__PURE__*/React.createElement("div", {
+    }, !ht.merged && /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
