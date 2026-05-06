@@ -13974,7 +13974,14 @@ function App() {
           transition: "width 0.4s ease",
           minWidth: linkedDone > 0 ? 4 : 0
         }
-      })), expGoalHabits[goal.id] && !isE && hasSm && (() => {
+      })), expGoalHabits[goal.id] && !isE && (() => {
+        // SMART header always renders when the goal panel is open,
+        // even on goals with zero SMART fields filled in. Earlier
+        // we gated this on hasSm — that hid the sub-section
+        // entirely on goals with no SMART data, so the user lost a
+        // visible affordance to learn there's a SMART panel at all.
+        // Now the header is permanent and the body's "0/5 filled"
+        // count is a clearer signal that the section is intentional.
         const smOpen = isGoalSubOpen(goal.id, "smart");
         return /*#__PURE__*/React.createElement("div", {
           style: {
