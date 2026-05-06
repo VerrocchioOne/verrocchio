@@ -11959,22 +11959,17 @@ function App() {
             overflow: "hidden",
             textOverflow: "ellipsis"
           }
-        }, habit.text),
-        // Sub-unit progress line: "4/8 cups". Shown only when a target
-        // is configured AND the habit isn't already fully done (done
-        // case is conveyed by the line-through on the name). Intentionally
-        // rendered BEFORE the "notes" line so the progress is more
-        // prominent than the italic sub-caption.
-        ((habit.target || 0) > 0 && !d) && /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#2d5a2d",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          }
-        }, Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : ""),
+        },
+          habit.text,
+          // Sub-unit progress, e.g. "(4/8 cups)". Inlined as a gray
+          // parenthetical at the end of the habit name (rather than a
+          // separate line below) so cards with a target match the
+          // height of cards without one — the column was making
+          // sub-unit habits visibly taller than their neighbours.
+          ((habit.target || 0) > 0 && !d) && /*#__PURE__*/React.createElement("span", {
+            style: { color: "#9ca3af", fontWeight: 400, marginLeft: 6 }
+          }, "(", Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : "", ")")
+        ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
