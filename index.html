@@ -12246,14 +12246,25 @@ function App() {
       }, "\u25BE")),
       // Body: hidden when the section is collapsed.
       !collapsed && /*#__PURE__*/React.createElement("div", null, group.habits.map(h => {
-        // Signature: every piece of App state that could affect how
-        // this specific card renders. If it matches last render, the
-        // shell's React.memo skips re-execution of the render body.
+        // Signature: every piece of state that affects how this
+        // specific card renders but isn't carried on the habit
+        // object itself. If sig matches last render AND the habit
+        // reference is unchanged, the shell's React.memo skips
+        // re-execution of the render body.
+        //
+        // Target / unit / op and the running unit count for selDate
+        // are stamped into the sig too so a tap-to-log or an edit
+        // that bumps these values forces an immediate re-render
+        // even if some upstream path failed to swap the habit
+        // reference (defensive — saves should always swap, but if
+        // they don't, the chip would otherwise look stale).
         const goalText = habitGoalIds(h)
           .map(gid => (data.goals || []).find(g => String(g.id) === String(gid))?.text)
           .filter(Boolean)
           .join(" ");
-        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + goalText;
+        const todayUnits = (h.completionUnits && h.completionUnits[selDate]) || 0;
+        const targetSig = (h.target == null ? "" : h.target) + "/" + (h.targetOp || "") + "/" + (h.unitLabel || "") + "/" + todayUnits;
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + (reorderModeId === h.id ? 1 : 0) + "|" + targetSig + "|" + goalText;
         return /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard });
       })));
     }), filtH.length === 0 && /*#__PURE__*/React.createElement("div", {
