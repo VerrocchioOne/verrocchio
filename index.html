@@ -6349,7 +6349,10 @@ function App() {
     sEHLoc(h.location || "both");
     sEHFreq(getFreq(h));
     sEHStart(h.startDate || dk(new Date()));
-    sEHTarget(typeof h.target === "number" && h.target > 0 ? String(h.target) : "");
+    // Show 0 in the form too — e.g. an "Avoid alcohol — ≤ 0 Drinks"
+    // habit needs to render its zero target, not silently fall back
+    // to an empty input that reads as "no target set".
+    sEHTarget(typeof h.target === "number" ? String(h.target) : "");
     sEHTargetOp(h.targetOp === "<=" ? "<=" : ">=");
     sEHUnitLabel(h.unitLabel || "");
     sEHIncrement(typeof h.increment === "number" && h.increment > 0 ? String(h.increment) : "");
@@ -6415,10 +6418,11 @@ function App() {
         location: eHLoc || "both",
         startDate: eHStart || h.startDate || dk(new Date()),
         frequency: nextFreq,
-        // Sub-unit fields. Empty / zero target clears the feature;
-        // positive target + optional unit label + optional increment
-        // (default 1) switches the card into progress-tap mode.
-        target: (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n > 0 ? n : null; })(),
+        // Sub-unit fields. An empty target clears the feature;
+        // explicit 0 is preserved (it's a valid "≤ 0 cap" — e.g.
+        // avoid alcohol). Optional unit label + optional increment
+        // (default 1) switch the card into progress-tap mode.
+        target: (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })(),
         targetOp: eHTargetOp === "<=" ? "<=" : ">=",
         unitLabel: eHUnitLabel.trim() || null,
         increment: (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })(),
@@ -6426,7 +6430,7 @@ function App() {
       } : h)
     });
     const targetN = parseInt(eHTarget, 10);
-    if (isFinite(targetN) && targetN > 0) touchFeature("habit.subunits");
+    if (isFinite(targetN) && targetN >= 0) touchFeature("habit.subunits");
     sEHId(null);
   };
   const reordHabits = l => save({
@@ -11883,62 +11887,23 @@ function App() {
             gap: 4
           }
         },
-        // Name row: name on the left (truncates), sub-unit target
-        // chip on the right. The chip mirrors the goal-card date
-        // pill — a compact two-line stack so a habit like "Drink
-        // water (8 cups)" doesn't blow out the row height or eat
-        // horizontal room from the title.
+        // Habit name row. The target chip used to sit here too as a
+        // flex sibling, but on narrow cards it could push past the
+        // row's right padding. Chip now lives as a direct child of
+        // the row container (see below), so the column owns full
+        // freedom to shrink and the chip's natural width is bounded
+        // by the row's flex layout instead of overflowing it.
         /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }
-        },
-          /*#__PURE__*/React.createElement("div", {
-            style: {
-              flex: 1,
-              minWidth: 0,
-              fontSize: 13,
-              fontWeight: 500,
-              color: d || missed ? "#6b7280" : "var(--c-text)",
-              textDecoration: d || missed ? "line-through" : "none",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis"
-            }
-          }, habit.text),
-          (typeof habit.target === "number") && (() => {
-            const op = habit.targetOp === "<=" ? "≤" : "≥";
-            const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
-            // For ≥ habits, cap the displayed count at target so the
-            // chip never reads "9/8". For ≤ habits, show the real
-            // running tally past the limit so the user can see how
-            // many drinks/minutes/etc. they've logged today.
-            const shown = op === "≤" ? units : Math.min(habit.target, units);
-            // Tint red when the user has slipped past a ≤ limit so
-            // the chip's color matches the missed state.
-            const overLimit = op === "≤" && units > habit.target;
-            return /*#__PURE__*/React.createElement("span", {
-              style: {
-                flexShrink: 0,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                color: d ? "#15803d" : overLimit ? "#991b1b" : "#4b5563",
-                background: d ? "#dcfce7" : overLimit ? "#fee2e2" : "var(--c-surface-muted)",
-                border: "1px solid " + (d || overLimit ? "transparent" : "var(--c-border)"),
-                borderRadius: 8,
-                padding: "2px 6px",
-                lineHeight: 1.15,
-                whiteSpace: "nowrap"
-              }
-            },
-              /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2 }
-              }, op + " " + shown + "/" + habit.target),
-              habit.unitLabel && /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
-              }, habit.unitLabel)
-            );
-          })()
-        ),
+          style: {
+            fontSize: 13,
+            fontWeight: 500,
+            color: d || missed ? "#6b7280" : "var(--c-text)",
+            textDecoration: d || missed ? "line-through" : "none",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }
+        }, habit.text),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
@@ -12039,7 +12004,46 @@ function App() {
             whiteSpace: "nowrap",
             userSelect: "none"
           }
-        }, ht.value))));
+        }, ht.value))),
+        // Sub-unit target chip — lives at the row-container level so
+        // it sits between the column (which shrinks the name) and the
+        // ht area-stripe (absolute, right edge). Mirrors the goal-card
+        // date pill: stacked op+count on top, italic unit on bottom.
+        // Tints green when done and red when the user has slipped past
+        // a ≤ limit. flexShrink:0 keeps it from getting squeezed; the
+        // column's flex:1 + minWidth:0 ensures the name truncates
+        // first, so the chip can no longer fall off the right edge.
+        (typeof habit.target === "number") && (() => {
+          const op = habit.targetOp === "<=" ? "≤" : "≥";
+          const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
+          const shown = op === "≤" ? units : Math.min(habit.target, units);
+          const overLimit = op === "≤" && units > habit.target;
+          return /*#__PURE__*/React.createElement("span", {
+            style: {
+              flexShrink: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              alignSelf: "center",
+              color: d ? "#15803d" : overLimit ? "#991b1b" : "#4b5563",
+              background: d ? "#dcfce7" : overLimit ? "#fee2e2" : "var(--c-surface-muted)",
+              border: "1px solid " + (d || overLimit ? "transparent" : "var(--c-border)"),
+              borderRadius: 8,
+              padding: "2px 6px",
+              lineHeight: 1.15,
+              whiteSpace: "nowrap",
+              marginRight: ht ? 4 : 0
+            }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2 }
+            }, op + " " + shown + "/" + habit.target),
+            habit.unitLabel && /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+            }, habit.unitLabel)
+          );
+        })()
+        );
       };
       // All four sections (morning/afternoon/evening/avoid) collapse
       // when their map value is true. Tapping the header toggles
