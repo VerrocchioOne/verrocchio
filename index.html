@@ -4676,6 +4676,22 @@ function App() {
     return () => clearTimeout(t);
   }, [tourDone, inPreApp, tourStep, hasAnyData, syncState]);
 
+  // Drag-to-reorder mode for habit cards. When non-null, that habit's
+  // card is wiggling and the document-level pointer handlers below
+  // run live reorder via document.elementFromPoint hit-testing on
+  // the [data-habit-id] attribute set on each card. Entered by
+  // pressing-and-holding on a card; exited by pointerup, pointer
+  // cancel, or pressing Escape. Declared HERE (not next to the
+  // other UI-state hooks lower in the function) because the
+  // useEffect just below reads it in its dependency array — and
+  // useState/useEffect are evaluated top-to-bottom during render,
+  // so a later declaration would TDZ.
+  const [reorderModeId, setReorderModeId] = useState(null);
+  // Mirror of reorderModeId for the document handlers — closes over
+  // this ref instead of the state value so the handlers stay stable
+  // across renders without having to reattach.
+  const reorderActiveRef = useRef(null);
+
   // Document-level pointer handlers for habit-card drag reorder.
   // Active only while reorderModeId is set (the user is mid-drag);
   // unmounted otherwise so we're not paying for global listeners
@@ -5201,17 +5217,6 @@ function App() {
   // the session only so the next sign-in opens with everything
   // visible — same as how the habits tab defaults all-open.
   const [collapsedGoalAreas, setCollapsedGoalAreas] = useState({});
-  // Drag-to-reorder mode for habit cards. When non-null, that habit's
-  // card is wiggling and the document-level pointer handlers below
-  // run live reorder via document.elementFromPoint hit-testing on
-  // the [data-habit-id] attribute set on each card. Entered by
-  // pressing-and-holding on a card; exited by pointerup, pointer
-  // cancel, or pressing Escape.
-  const [reorderModeId, setReorderModeId] = useState(null);
-  // Mirror of reorderModeId for the document handlers below — the
-  // handlers close over this ref instead of the state value so they
-  // stay stable across renders without having to reattach.
-  const reorderActiveRef = useRef(null);
   // Re-evaluate the "which section is current" default once per session,
   // after data (and therefore the user's custom timeRanges, if any) has
   // loaded. Guarded by a ref so we don't clobber manual toggles afterward.
