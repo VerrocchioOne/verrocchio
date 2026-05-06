@@ -10127,7 +10127,7 @@ function App() {
       left: "50%",
       transform: "translate(-50%,-50%)",
       zIndex: 250,
-      background: swipeFeedback.type === "done" ? "#2d5a2d" : "#ef4444",
+      background: swipeFeedback.type === "done" ? "#2d5a2d" : swipeFeedback.type === "reset" ? "#6b7280" : "#ef4444",
       borderRadius: 16,
       padding: "14px 24px",
       boxShadow: "0 8px 32px rgba(0,0,0,.25)",
@@ -10139,7 +10139,7 @@ function App() {
       fontSize: 24,
       marginBottom: 4
     }
-  }, swipeFeedback.type === "done" ? "🎉" : "💪"), /*#__PURE__*/React.createElement("div", {
+  }, swipeFeedback.type === "done" ? "🎉" : swipeFeedback.type === "reset" ? "↺" : "💪"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 14,
       fontWeight: 600,
@@ -11805,23 +11805,26 @@ function App() {
                   });
                 }, 320);
               } else {
+                // Right-to-left swipe = "reset today" rather than the
+                // old "mark missed" behavior. For sub-unit habits this
+                // wipes the day's count back to 0; for plain habits
+                // it clears any done/missed mark. Goes through the
+                // existing increment/"reset" sentinel in togHabit so
+                // ≤ habits land back on done (you've avoided so far),
+                // ≥ habits land back on none, and plain habits clear.
+                // Light single-pulse vibrate + neutral toast — this
+                // is now an undo gesture, not a self-judgement.
                 setSwipeAnim(p => ({
                   ...p,
-                  [habit.id]: "missed"
+                  [habit.id]: "reset"
                 }));
-                if (navigator.vibrate) navigator.vibrate([30, 30, 30]);
-                const msgs2 = ["You'll get it tomorrow!", "Every day is a fresh start.", "Progress takes time. Keep going!", "Miss it today, crush it tomorrow!"];
-                setSwipeFeedback({
-                  msg: msgs2[Math.floor(Math.random() * msgs2.length)],
-                  type: "missed"
-                });
-                setTimeout(() => setSwipeFeedback(null), 2500);
+                if (navigator.vibrate) navigator.vibrate(20);
+                setSwipeFeedback({ msg: "Cleared for today", type: "reset" });
+                setTimeout(() => setSwipeFeedback(null), 1800);
                 setTimeout(() => {
-                  togHabit(habit.id, selDate, "missed");
+                  togHabit(habit.id, selDate, "increment", "reset");
                   setSwipeAnim(p => {
-                    const n = {
-                      ...p
-                    };
+                    const n = { ...p };
                     delete n[habit.id];
                     return n;
                   });
@@ -11833,15 +11836,15 @@ function App() {
             display: "flex",
             alignItems: "center",
             gap: 10,
-            background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
-            border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : "var(--c-border)"}`,
+            background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : animState === "reset" ? "var(--c-surface-muted)" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
+            border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : animState === "reset" ? "var(--c-border)" : "var(--c-border)"}`,
             borderRadius: 12,
             // Compact height by default (matches goal-card density);
             // when the user taps to expand, vertical padding grows so
             // the metadata row has breathing room.
             padding: expHabitGoals[habit.id] ? "10px 12px" : "7px 12px",
             paddingRight: ht ? "30px" : "12px",
-            transform: animState === "done" ? "translateX(110%)" : animState === "missed" ? "translateX(-110%)" : "translateX(0)",
+            transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
             transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s",
             boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : missed || animState === "missed" ? "0 1px 3px rgba(220,38,38,.08)" : "0 1px 2px rgba(0,0,0,.04)",
             position: "relative",
