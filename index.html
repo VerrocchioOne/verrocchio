@@ -11696,29 +11696,67 @@ function App() {
               userSelect: "none",
               WebkitTapHighlightColor: "transparent"
             }
-          }, /*#__PURE__*/React.createElement("div", {
-            onClick: e => { e.stopPropagation(); if (d || missed) togHabit(habit.id, selDate, undefined); },
-            style: {
-              width: 28, height: 28, borderRadius: "50%",
-              background: d ? "#22c55e" : "#ef4444",
-              cursor: d || missed ? "pointer" : "default", flexShrink: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all .2s",
-              boxShadow: d ? "0 2px 8px rgba(34,197,94,.4)" : "0 2px 8px rgba(239,68,68,.3)"
-            }
-          }, d ? /*#__PURE__*/React.createElement("svg", {
-            width: "14", height: "14", viewBox: "0 0 18 18", fill: "none"
-          }, /*#__PURE__*/React.createElement("path", {
-            d: "M3.5 9L7.5 13L14.5 5", stroke: "white", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round"
-          })) : /*#__PURE__*/React.createElement("svg", {
-            width: "13", height: "13", viewBox: "0 0 16 16", fill: "none"
-          }, /*#__PURE__*/React.createElement("path", {
-            d: "M4.5 4.5L11.5 11.5M11.5 4.5L4.5 11.5", stroke: "white", strokeWidth: "2", strokeLinecap: "round"
-          }))), /*#__PURE__*/React.createElement("div", {
+          },
+          // Avoid-card action button. Mirrors the non-avoid card so a
+          // user tapping it always feels the same: empty circle by
+          // default, increment counter for sub-unit avoid habits
+          // (e.g. "≤ 30 min social media — log minutes used"), green
+          // check once the day is logged as a successful avoid. The
+          // old big-red-X-by-default was visually shouting at the
+          // user every render and didn't support sub-unit logging.
+          (() => {
+            const hasTarget = typeof habit.target === "number" && habit.target > 0;
+            const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
+            const bg = d ? "#22c55e" : missed ? "#ef4444" : (hasTarget && units > 0 ? "#3d7a3d" : "var(--c-border)");
+            return /*#__PURE__*/React.createElement("div", {
+              "aria-label": hasTarget ? "Log " + (habit.increment || 1) + " " + (habit.unitLabel || "unit") : undefined,
+              onClick: e => {
+                e.stopPropagation();
+                if (hasTarget) {
+                  if (d || missed) togHabit(habit.id, selDate, "increment", "reset");
+                  else togHabit(habit.id, selDate, "increment");
+                } else if (d || missed) {
+                  togHabit(habit.id, selDate, undefined);
+                } else {
+                  togHabit(habit.id, selDate, "done");
+                }
+              },
+              style: {
+                width: 28, height: 28, borderRadius: "50%",
+                background: bg,
+                cursor: "pointer", flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all .2s",
+                boxShadow: d ? "0 2px 8px rgba(34,197,94,.4)" : missed ? "0 2px 8px rgba(239,68,68,.3)" : "none",
+                color: "#fff", fontSize: 10, fontWeight: 700
+              }
+            }, d ? /*#__PURE__*/React.createElement("svg", {
+              width: "14", height: "14", viewBox: "0 0 18 18", fill: "none"
+            }, /*#__PURE__*/React.createElement("path", {
+              d: "M3.5 9L7.5 13L14.5 5", stroke: "white", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round"
+            })) : missed ? /*#__PURE__*/React.createElement("svg", {
+              width: "13", height: "13", viewBox: "0 0 16 16", fill: "none"
+            }, /*#__PURE__*/React.createElement("path", {
+              d: "M4 4L12 12M12 4L4 12", stroke: "white", strokeWidth: "2", strokeLinecap: "round"
+            })) : (hasTarget
+              ? /*#__PURE__*/React.createElement("span", null, Math.min(habit.target, units))
+              : /*#__PURE__*/React.createElement("svg", {
+                  width: "14", height: "14", viewBox: "0 0 16 16", fill: "none"
+                }, /*#__PURE__*/React.createElement("circle", {
+                  cx: "8", cy: "8", r: "7", stroke: "#d1d5db", strokeWidth: "1.5"
+                }))));
+          })(), /*#__PURE__*/React.createElement("div", {
             style: {flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4}
           }, /*#__PURE__*/React.createElement("div", {
             style: {fontSize: 13, fontWeight: 500, color: d ? "#15803d" : missed ? "#991b1b" : "var(--c-text-soft)", textDecoration: d || missed ? "line-through" : "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
-          }, habit.text),
+          },
+            habit.text,
+            // Same ≥/≤ inline parenthetical as the non-avoid card so
+            // sub-unit avoid habits read the same in both lists.
+            ((habit.target || 0) > 0 && !d) && /*#__PURE__*/React.createElement("span", {
+              style: { color: "#9ca3af", fontWeight: 400, marginLeft: 6 }
+            }, "(", (habit.targetOp === ">=" ? "≥" : "≤"), " ", Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0), "/", habit.target, habit.unitLabel ? " " + habit.unitLabel : "", ")")
+          ),
           habit.notes && /*#__PURE__*/React.createElement("div", {
             style: {fontSize: 11, color: "#6b7280", fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"}
           }, habit.notes),
@@ -13924,12 +13962,13 @@ function App() {
           textOverflow: "ellipsis"
         }
       }, goal.text)),
-      // Days-to-deadline chip with the formatted target date stacked
-      // underneath. Top line is "<n> Days"; bottom line is italic
-      // "MMM. DD, YYYY". Color carries urgency: red if the date has
-      // passed, amber within 7 days, neutral gray otherwise. Skipped
-      // when there is no Time-bound or the value can't be parsed as
-      // YYYY-MM-DD (legacy free-text falls through silently).
+      // Days-to-deadline chip. Top line is "<n>d" in a small font;
+      // bottom line is the target date formatted as M/D/YY (compact
+      // numeric — gives the goal name more room than the old
+      // "<n> Days" + "MMM. DD, YYYY" stacked layout did).
+      // Color carries urgency: red if the date has passed, amber
+      // within 7 days, neutral gray otherwise. Skipped when there is
+      // no Time-bound or the value can't be parsed as YYYY-MM-DD.
       (() => {
         const raw = goal.smart && goal.smart.timebound || "";
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
@@ -13944,8 +13983,8 @@ function App() {
         if (days < 0) { color = "#b91c1c"; bg = "#fee2e2"; }
         else if (days <= 7) { color = "#b45309"; bg = "#fef3c7"; }
         else { color = "#4b5563"; bg = "var(--c-surface-muted)"; }
-        const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-        const dateLabel = MONTHS[+m[2] - 1] + ". " + (+m[3]) + ", " + m[1];
+        const yy = m[1].slice(2);
+        const dateLabel = (+m[2]) + "/" + (+m[3]) + "/" + yy;
         return /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
@@ -13963,10 +14002,10 @@ function App() {
           }
         },
           /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 13, fontWeight: 500, letterSpacing: 0.2 }
-          }, n + " Days"),
+            style: { fontSize: 9, fontWeight: 600, letterSpacing: 0.2 }
+          }, (days < 0 ? "-" : "") + n + "d"),
           /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+            style: { fontSize: 10, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
           }, dateLabel)
         );
       })(),
