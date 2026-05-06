@@ -5447,6 +5447,48 @@ function App() {
   // Writes directly to localStorage + Firestore rather than going
   // through save() so a broken save path can't silently swallow the
   // wipe. Each step logs to [verrocchio wipe] for debug.
+  // Push-to-cloud: explicit one-tap force-save. Drives the Today flash
+  // pill directly (rather than relying on the syncState→flash effect)
+  // because the realtime listener can fire setSyncState("offline") on
+  // a transient network blip while a save is in-flight, which used to
+  // race the effect into showing "Offline" even when the actual write
+  // succeeded a moment later.
+  const pushToCloud = async () => {
+    if (demoMode) {
+      setManualSyncOp("push");
+      setManualSyncFlash("synced");
+      return;
+    }
+    if (!uid) {
+      setManualSyncOp("push");
+      setManualSyncFlash("offline");
+      return;
+    }
+    setManualSyncOp("push");
+    setManualSyncFlash("saving");
+    const now = Date.now();
+    const stamp = now > lastStampRef.current ? now : lastStampRef.current + 1;
+    lastStampRef.current = stamp;
+    const stamped = {
+      ...data,
+      _updatedAt: stamp,
+      _writer: sessionWriterRef.current
+    };
+    setData(stamped);
+    latestData.current = stamped;
+    try { localStorage.setItem(lsKey, JSON.stringify(stamped)); } catch (e) {}
+    try { console.log("[verrocchio push] writing ts=" + stamp); } catch (e) {}
+    try {
+      await userDoc(uid).set(sanitizeForFirestore(stamped));
+      try { console.log("[verrocchio push] succeeded"); } catch (e) {}
+      setSyncState("synced");
+      setManualSyncFlash("synced");
+    } catch (err) {
+      try { console.warn("[verrocchio push] FAILED:", err && err.code, err && err.message, err); } catch (e) {}
+      setSyncState("offline");
+      setManualSyncFlash("offline");
+    }
+  };
   // Pull-from-cloud: force-fetch the latest user doc from Firestore
   // and overwrite local state + localStorage. Mirror to the Today
   // pill flash via manualSyncFlash + manualSyncOp = "pull" so the
@@ -9319,13 +9361,12 @@ function App() {
       justifyContent: "flex-end"
     }
   },
-    // Push to Cloud — explicit one-tap force-save. Calls the same
-    // save(data) path the double-tap-Today gesture uses; the
-    // manualSyncFlash + manualSyncOp wiring mirrors syncState into
-    // the "Saving… / ✓ Synced / Offline" pill next to the date so
-    // the user can visually confirm the write landed.
+    // Push to Cloud — explicit one-tap force-save. Goes through the
+    // dedicated pushToCloud helper (NOT save()) so the flash reflects
+    // this write's actual outcome instead of being raced by an
+    // unrelated syncState transition from the realtime listener.
     !demoMode && /*#__PURE__*/React.createElement("button", {
-      onClick: () => { setManualSyncOp("push"); setManualSyncFlash("saving"); save(data); },
+      onClick: pushToCloud,
       title: "Push current data to the cloud",
       "aria-label": "Push to cloud",
       style: {
