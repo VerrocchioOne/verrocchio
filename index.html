@@ -3699,6 +3699,193 @@ function App() {
     a.remove();
     URL.revokeObjectURL(url);
   };
+  // iCalendar (.ics) export. Every active habit becomes a recurring
+  // VEVENT keyed off its frequency cadence so it shows up forever in
+  // Apple Calendar / Mail, Google Calendar, Outlook, etc.
+  //
+  // Time-of-day mapping (since habits don't carry a clock-time field):
+  //   morning   → starts 6:00, then each subsequent morning habit
+  //               starts where the previous one ended (sequential
+  //               stacking by duration).
+  //   afternoon → starts 12:00, same stacking rule.
+  //   evening   → starts 18:00, same stacking rule.
+  //   all-day   → all-day VEVENT (VALUE=DATE), no clock time.
+  //   avoid     → skipped — calendar reminders to NOT do something
+  //               are noise the user didn't ask for.
+  //
+  // Recurrence (RRULE) derives directly from habit.frequency:
+  //   daily      → FREQ=DAILY
+  //   weekdays   → FREQ=WEEKLY;BYDAY=MO,WE,FR…
+  //   weekly     → FREQ=WEEKLY;BYDAY=<one day>
+  //   monthly    → FREQ=MONTHLY;BYMONTHDAY=<n>
+  //   quarterly  → FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=<n>
+  //   annual     → FREQ=YEARLY;BYMONTH=<m>;BYMONTHDAY=<n>
+  //
+  // DTSTART is aligned to the first date that matches the RRULE so
+  // calendar apps (Apple in particular) anchor the recurrence
+  // correctly. Each event also carries a 5-minute reminder VALARM for
+  // timed events, or a 0-minute morning-of alarm for all-day events.
+  const exportHabitsICS = () => {
+    const habits = (data.habits || []).filter(h => h && h.section !== "avoid");
+    if (!habits.length) {
+      alert("No habits to export. Add a habit first.");
+      return;
+    }
+    const tzid = (() => {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }
+      catch (e) { return "UTC"; }
+    })();
+    // Section anchors in minutes from midnight.
+    const SECTION_START = { morning: 6 * 60, afternoon: 12 * 60, evening: 18 * 60 };
+    const DOW_ICS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+    const pad = n => String(n).padStart(2, "0");
+    const escapeICS = s => String(s == null ? "" : s)
+      .replace(/\\/g, "\\\\")
+      .replace(/;/g, "\\;")
+      .replace(/,/g, "\\,")
+      .replace(/\r?\n/g, "\\n");
+    const localStamp = d =>
+      d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
+      + "T" + pad(d.getHours()) + pad(d.getMinutes()) + "00";
+    const dateStamp = d =>
+      d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
+    const utcStamp = d => {
+      const z = new Date(d.getTime());
+      return z.getUTCFullYear() + pad(z.getUTCMonth() + 1) + pad(z.getUTCDate())
+        + "T" + pad(z.getUTCHours()) + pad(z.getUTCMinutes()) + pad(z.getUTCSeconds()) + "Z";
+    };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    // First date matching the RRULE — calendar apps key off this.
+    const firstOccurrence = freq => {
+      if (!freq || freq.type === "daily") return new Date(today);
+      if (freq.type === "weekdays" || freq.type === "weekly") {
+        const targets = freq.type === "weekdays"
+          ? (Array.isArray(freq.days) ? freq.days : [])
+          : (typeof freq.day === "number" ? [freq.day] : []);
+        if (!targets.length) return new Date(today);
+        for (let i = 0; i < 14; i++) {
+          const c = new Date(today);
+          c.setDate(today.getDate() + i);
+          if (targets.includes(c.getDay())) return c;
+        }
+        return new Date(today);
+      }
+      if (freq.type === "monthly") {
+        const md = freq.monthDay || 1;
+        const c = new Date(today.getFullYear(), today.getMonth(), md);
+        if (c < today) c.setMonth(c.getMonth() + 1);
+        return c;
+      }
+      if (freq.type === "quarterly") {
+        const md = freq.monthDay || 1;
+        const m  = typeof freq.month === "number" ? freq.month : today.getMonth();
+        let c = new Date(today.getFullYear(), m, md);
+        while (c < today) c.setMonth(c.getMonth() + 3);
+        return c;
+      }
+      if (freq.type === "annual") {
+        const md = freq.monthDay || 1;
+        const m  = typeof freq.month === "number" ? freq.month : 0;
+        let c = new Date(today.getFullYear(), m, md);
+        if (c < today) c = new Date(today.getFullYear() + 1, m, md);
+        return c;
+      }
+      return new Date(today);
+    };
+    const buildRRULE = freq => {
+      if (!freq || freq.type === "daily") return "FREQ=DAILY";
+      if (freq.type === "weekdays") {
+        const days = (freq.days || []).map(d => DOW_ICS[d]).filter(Boolean).join(",");
+        return days ? "FREQ=WEEKLY;BYDAY=" + days : "FREQ=DAILY";
+      }
+      if (freq.type === "weekly") {
+        return typeof freq.day === "number"
+          ? "FREQ=WEEKLY;BYDAY=" + DOW_ICS[freq.day]
+          : "FREQ=WEEKLY";
+      }
+      if (freq.type === "monthly")   return "FREQ=MONTHLY;BYMONTHDAY=" + (freq.monthDay || 1);
+      if (freq.type === "quarterly") return "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=" + (freq.monthDay || 1);
+      if (freq.type === "annual")    return "FREQ=YEARLY;BYMONTH=" + ((freq.month || 0) + 1) + ";BYMONTHDAY=" + (freq.monthDay || 1);
+      return "FREQ=DAILY";
+    };
+    // Compute each habit's start time within its section by stacking
+    // sequentially — habits in the same section don't all collapse on
+    // top of each other in the calendar view.
+    const sectionCursor = { morning: 0, afternoon: 0, evening: 0 };
+    const habitTimes = habits.map(h => {
+      const dur = Math.max(5, parseInt(h.duration, 10) || 30);
+      const sec = h.section;
+      if (sec === "all-day") return { habit: h, allDay: true, durationMin: dur };
+      const anchor = SECTION_START[sec] != null ? SECTION_START[sec] : 12 * 60;
+      const offset = sectionCursor[sec] || 0;
+      sectionCursor[sec] = offset + dur;
+      return { habit: h, allDay: false, durationMin: dur, startMin: anchor + offset };
+    });
+    const dtstamp = utcStamp(new Date());
+    const lines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Verrocchio//Habits//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+      "X-WR-CALNAME:Verrocchio Habits",
+      "X-WR-TIMEZONE:" + tzid
+    ];
+    for (const ht of habitTimes) {
+      const h = ht.habit;
+      const freq = getFreq(h);
+      const first = firstOccurrence(freq);
+      const uid = (h.id || ("h-" + Math.random().toString(36).slice(2, 10))) + "@verrocchio.app";
+      const summary = escapeICS(h.text || "Habit");
+      const descParts = [];
+      if (h.importance) descParts.push(h.importance);
+      if (h.type)       descParts.push(h.type);
+      if (h.duration)   descParts.push(h.duration + " min");
+      const description = escapeICS(descParts.join(" · "));
+      lines.push("BEGIN:VEVENT");
+      lines.push("UID:" + uid);
+      lines.push("DTSTAMP:" + dtstamp);
+      lines.push("SUMMARY:" + summary);
+      if (description) lines.push("DESCRIPTION:" + description);
+      lines.push("RRULE:" + buildRRULE(freq));
+      if (ht.allDay) {
+        const end = new Date(first);
+        end.setDate(end.getDate() + 1);
+        lines.push("DTSTART;VALUE=DATE:" + dateStamp(first));
+        lines.push("DTEND;VALUE=DATE:"   + dateStamp(end));
+        lines.push("BEGIN:VALARM");
+        lines.push("ACTION:DISPLAY");
+        lines.push("DESCRIPTION:" + summary);
+        lines.push("TRIGGER:PT0M");
+        lines.push("END:VALARM");
+      } else {
+        const start = new Date(first);
+        start.setHours(0, 0, 0, 0);
+        start.setMinutes(ht.startMin);
+        const end = new Date(start.getTime() + ht.durationMin * 60000);
+        lines.push("DTSTART;TZID=" + tzid + ":" + localStamp(start));
+        lines.push("DTEND;TZID="   + tzid + ":" + localStamp(end));
+        lines.push("BEGIN:VALARM");
+        lines.push("ACTION:DISPLAY");
+        lines.push("DESCRIPTION:" + summary);
+        lines.push("TRIGGER:-PT5M");
+        lines.push("END:VALARM");
+      }
+      lines.push("END:VEVENT");
+    }
+    lines.push("END:VCALENDAR");
+    // ICS spec mandates CRLF line endings.
+    const blob = new Blob([lines.join("\r\n") + "\r\n"], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "verrocchio-habits-" + tk() + ".ics";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
   const startDemo = () => {
     setAuthErr("");
     setAuthEmail(""); setAuthPass("");
@@ -15702,6 +15889,21 @@ function App() {
           onClick: exportSummary,
           style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }
         }, "Download summary (.txt)")
+      ),
+      // ── iCalendar export ──
+      // Downloads an .ics file with one recurring event per habit so
+      // they show up in Apple Calendar / Mail, Google Calendar, Outlook,
+      // etc. Times are inferred from section (morning/afternoon/evening
+      // anchors); cadence comes from each habit's frequency. Avoid-list
+      // habits are excluded.
+      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Export to calendar"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8, lineHeight: 1.5 } }, "Download an iCalendar (.ics) file you can open in Apple Calendar, Mail, Google Calendar, or Outlook. Each habit becomes a recurring event — morning at 6 AM, afternoon at 12 PM, evening at 6 PM, stacked by duration. Daily Completion habits become all-day events. Avoid habits are skipped."),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: exportHabitsICS,
+          style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }
+        }, "Download habits (.ics)")
       ),
       // ── Leave a review ──
       // Always available in settings so the user can rate whenever —
