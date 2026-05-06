@@ -5259,6 +5259,14 @@ function App() {
   // filtering). Thumbs are clamped so min <= max - 5 (slider step).
   const DUR_MIN = 0, DUR_MAX = 720, DUR_STEP = 5;
   const [durRange, setDurRange] = useState([DUR_MIN, DUR_MAX]);
+  // Master "Filter" toggle on the habits page. Collapses the
+  // Priority / Goal / Freq / Duration pill buttons behind a single
+  // entry point so the default filter row fits the [+], Today
+  // toggle, Filter, and Sort buttons all on one line. The sub-pills
+  // re-appear when this is open OR when at least one sub-filter is
+  // currently active (so the user can always see what's filtering
+  // their list, even after collapsing).
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [swipeFeedback, setSwipeFeedback] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
   // Two-stage "wipe all data" gate. null = idle. "1" = first warning
@@ -10986,10 +10994,65 @@ function App() {
           }
         }, labelMap[dueFilter]);
       })(),
+      // Master "Filter" pill — collapses Priority / Goal / Freq /
+      // Duration behind one entry point. Filter icon (SVG funnel)
+      // + "Filter" label, with a count badge summing the active
+      // sub-filters. Tapping toggles the sub-pills' visibility.
+      // When any sub-filter is active the sub-pills also stay
+      // visible regardless of this toggle so the user can see
+      // what's filtering them.
+      (() => {
+        const [dMin, dMax] = durRange;
+        const durActive = !(dMin === DUR_MIN && dMax === DUR_MAX);
+        const totalCount = impFilter.length + habGoalFilter.length + habFreqFilter.length + (durActive ? 1 : 0);
+        const active = totalCount > 0;
+        const expanded = filterMenuOpen || active;
+        return /*#__PURE__*/React.createElement("button", {
+          onClick: () => setFilterMenuOpen(p => !p),
+          title: "Filter habits",
+          style: {
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "4px 9px",
+            borderRadius: 20,
+            border: `1px solid ${active ? "#c6dfc6" : expanded ? "#d1d5db" : "var(--c-border)"}`,
+            background: active ? "var(--c-tint-green)" : expanded ? "var(--c-surface-muted)" : "#fff",
+            color: active ? "var(--accent, #2d5a2d)" : "#6b7280",
+            fontSize: 11, fontWeight: active ? 700 : 500,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+            WebkitTapHighlightColor: "transparent", userSelect: "none"
+          }
+        },
+          // Funnel icon — sits left of "Filter" so the master
+          // pill is visually distinct from the sub-pills.
+          /*#__PURE__*/React.createElement("svg", {
+            "aria-hidden": true, width: 11, height: 11, viewBox: "0 0 16 16", fill: "none",
+            style: { marginRight: 1 }
+          }, /*#__PURE__*/React.createElement("path", {
+            d: "M2 3h12l-4.5 6v4l-3 1.5V9L2 3z",
+            stroke: "currentColor", strokeWidth: "1.4", strokeLinejoin: "round", fill: "none"
+          })),
+          "Filter",
+          totalCount > 0 && /*#__PURE__*/React.createElement("span", {
+            style: { background: "var(--accent, #2d5a2d)", color: "#fff", borderRadius: 9, padding: "0 5px", fontSize: 9, fontWeight: 700, minWidth: 12, textAlign: "center" }
+          }, totalCount),
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { display: "inline-block", fontSize: 9, lineHeight: 1, marginLeft: 2, opacity: .7, transform: expanded ? "rotate(180deg)" : "none", transition: "transform .15s" }
+          }, "▾")
+        );
+      })(),
+      // Sort button — moved up here (was at the end of the row)
+      // so the default closed-Filter layout reads [+] [Today]
+      // [Filter] [Sort] all on one line. The sub-filter pills
+      // below render after the Sort button and wrap to a new row
+      // when expanded, which is fine because that's a deliberate
+      // user action.
+      renderSortButton("habits"),
       (() => {
         const active = impFilter.length > 0;
         const expanded = impPillsOpen || active;
         const count = impFilter.length;
+        if (!filterMenuOpen && !active) return null;
         return /*#__PURE__*/React.createElement("button", {
           onClick: () => setImpPillsOpen(p => !p),
           title: "Filter by priority",
@@ -11023,6 +11086,7 @@ function App() {
         const active = habGoalFilter.length > 0;
         const expanded = habGoalPillsOpen || active;
         const count = habGoalFilter.length;
+        if (!filterMenuOpen && !active) return null;
         return /*#__PURE__*/React.createElement("button", {
           onClick: () => setHabGoalPillsOpen(p => !p),
           title: "Filter by goal / area of life",
@@ -11056,6 +11120,7 @@ function App() {
         const active = habFreqFilter.length > 0;
         const expanded = habFreqPillsOpen || active;
         const count = habFreqFilter.length;
+        if (!filterMenuOpen && !active) return null;
         return /*#__PURE__*/React.createElement("button", {
           onClick: () => setHabFreqPillsOpen(p => !p),
           title: "Filter by frequency",
@@ -11094,6 +11159,7 @@ function App() {
         const any = dMin === DUR_MIN && dMax === DUR_MAX;
         const active = !any;
         const expanded = durPillsOpen || active;
+        if (!filterMenuOpen && !active) return null;
         return /*#__PURE__*/React.createElement("button", {
           key: "dur-label",
           type: "button",
@@ -11139,9 +11205,11 @@ function App() {
       // stays focused on filters. The view itself was also simplified
       // to a week-vs-month consistency comparison — see routineView
       // modal at the bottom of this file.)
-      // Sort button — opens the bottom-sheet sort menu for the Habits
-      // page. Sits at the end of the filter pill row.
-      renderSortButton("habits")
+      // Sort button moved up next to the master Filter pill so the
+      // default closed-Filter row reads [+] [Today] [Filter] [Sort]
+      // on a single line. The sub-filter pills above render after
+      // Sort and wrap below it when expanded.
+      null
     ),
     // (Time of Day expanded pill row removed — see comment above about
     // the Time compact toggle being removed in favor of collapsible
@@ -12012,7 +12080,9 @@ function App() {
         // Tints green when done and red when the user has slipped past
         // a ≤ limit. flexShrink:0 keeps it from getting squeezed; the
         // column's flex:1 + minWidth:0 ensures the name truncates
-        // first, so the chip can no longer fall off the right edge.
+        // first. maxWidth + overflow:hidden on the unit line ensures
+        // even a long unit label ("Calories of soda") truncates with
+        // ellipsis instead of pushing the chip past the card edge.
         (typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
@@ -12032,14 +12102,15 @@ function App() {
               padding: "2px 6px",
               lineHeight: 1.15,
               whiteSpace: "nowrap",
+              maxWidth: 88,
               marginRight: ht ? 4 : 0
             }
           },
             /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2 }
+              style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }
             }, op + " " + shown + "/" + habit.target),
             habit.unitLabel && /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+              style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }
             }, habit.unitLabel)
           );
         })()
@@ -13627,31 +13698,22 @@ function App() {
           cursor: isE ? "default" : "pointer",
           userSelect: "none"
         },
-        onPointerDown: e => {
+        // Tap        = toggle the goal's expanded panel (linked
+        //               habits + SMART summary). Same gesture the
+        //               cards have always had.
+        // Double-tap = open the actions menu (Add Journal Entry,
+        //               Edit Goal, Mark Complete, Delete Goal). Was
+        //               press-and-hold; switched to double-tap to
+        //               match the habit-card gesture set so users
+        //               only learn one pattern.
+        onClick: () => {
           if (isE) return;
-          goalHoldRef.current[goal.id] = {fired:false, startX:e.clientX, startY:e.clientY,
-            timer: setTimeout(() => {
-              if (goalHoldRef.current[goal.id]) goalHoldRef.current[goal.id].fired = true;
-              setGoalMoreMenu(goal.id);
-            }, 520)};
+          setExpGoalHabits(p => ({ ...p, [goal.id]: !p[goal.id] }));
         },
-        onPointerMove: e => {
-          const s = goalHoldRef.current[goal.id];
-          if (s && (Math.abs(e.clientX-s.startX)>10 || Math.abs(e.clientY-s.startY)>10)) {
-            clearTimeout(s.timer); delete goalHoldRef.current[goal.id];
-          }
-        },
-        onPointerUp: e => {
-          const s = goalHoldRef.current[goal.id];
-          if (!s) return;
-          clearTimeout(s.timer);
-          const fired = s.fired;
-          delete goalHoldRef.current[goal.id];
-          if (!fired && !isE) setExpGoalHabits(p => ({...p, [goal.id]: !p[goal.id]}));
-        },
-        onPointerCancel: e => {
-          const s = goalHoldRef.current[goal.id];
-          if (s) { clearTimeout(s.timer); delete goalHoldRef.current[goal.id]; }
+        onDoubleClick: e => {
+          if (isE) return;
+          e.stopPropagation();
+          setGoalMoreMenu(goal.id);
         }
       }, /*#__PURE__*/React.createElement("div", _extends({
         className: "hrow"
@@ -13817,13 +13879,13 @@ function App() {
           textOverflow: "ellipsis"
         }
       }, goal.text)),
-      // Days-to-deadline chip. Top line is "<n>d" in a small font;
-      // bottom line is the target date formatted as M/D/YY (compact
-      // numeric — gives the goal name more room than the old
-      // "<n> Days" + "MMM. DD, YYYY" stacked layout did).
-      // Color carries urgency: red if the date has passed, amber
-      // within 7 days, neutral gray otherwise. Skipped when there is
-      // no Time-bound or the value can't be parsed as YYYY-MM-DD.
+      // Days-to-deadline chip. Top line is the prominent "# Days"
+      // count (the most useful at-a-glance number); bottom line is
+      // the target date formatted as M/D/YY in a smaller, italic,
+      // muted font. Color carries urgency: red if the date has
+      // passed, amber within 7 days, neutral gray otherwise.
+      // Skipped when there's no Time-bound or the value can't be
+      // parsed as YYYY-MM-DD.
       (() => {
         const raw = goal.smart && goal.smart.timebound || "";
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
@@ -13840,6 +13902,7 @@ function App() {
         else { color = "#4b5563"; bg = "var(--c-surface-muted)"; }
         const yy = m[1].slice(2);
         const dateLabel = (+m[2]) + "/" + (+m[3]) + "/" + yy;
+        const dayLabel = (days < 0 ? "-" : "") + n + " Day" + (n === 1 ? "" : "s");
         return /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
@@ -13850,17 +13913,17 @@ function App() {
             background: bg,
             border: "1px solid " + (bg === "var(--c-surface-muted)" ? "var(--c-border)" : "transparent"),
             borderRadius: 8,
-            padding: "2px 6px",
+            padding: "3px 7px",
             marginLeft: 6,
             lineHeight: 1.15,
             whiteSpace: "nowrap"
           }
         },
           /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 9, fontWeight: 600, letterSpacing: 0.2 }
-          }, (days < 0 ? "-" : "") + n + "d"),
+            style: { fontSize: 12, fontWeight: 700, letterSpacing: 0.2 }
+          }, dayLabel),
           /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 10, fontWeight: 500, fontStyle: "italic", opacity: 0.85 }
+            style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.8 }
           }, dateLabel)
         );
       })(),
