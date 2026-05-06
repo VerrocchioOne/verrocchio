@@ -311,13 +311,7 @@ textarea{resize:vertical}
 .splashv4 .wm-9{animation-delay:.98s}
 .splashv4 .wm-10{animation-delay:1.12s}
 @keyframes splashv4LetterIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
-/* Tagline mirrors the LOGIN PAGE tagline: system-ui sans-serif, italic,
-   #6b7280 gray, 13px — same treatment as the "Achieve Anything" line
-   under the Verrocchio wordmark on the login/signup screen so the two
-   read as the same piece of typography across the launch flow. */
-.splashv4 .tagline{position:absolute;top:184px;left:50%;transform:translateX(-50%);font-family:system-ui,-apple-system,sans-serif;font-size:13px;font-weight:400;font-style:italic;color:#6b7280;letter-spacing:normal;white-space:nowrap;opacity:0;animation:splashv4TagIn .6s ease-out 3.8s forwards;will-change:opacity,transform}
-@keyframes splashv4TagIn{0%{opacity:0;transform:translate(-50%,6px)}100%{opacity:1;transform:translate(-50%,0)}}
-@media (prefers-reduced-motion: reduce){.splashv4 .block,.splashv4 .wm-letter,.splashv4 .tagline{animation-duration:.01s!important}}
+@media (prefers-reduced-motion: reduce){.splashv4 .block,.splashv4 .wm-letter{animation-duration:.01s!important}}
 
 /* Compact pyramid + V brand mark — static lockup used on the quote card. */
 .brand-mark{position:relative;width:140px;height:78px;margin:0 auto 22px}
@@ -7918,11 +7912,11 @@ function App() {
             React.createElement("div", { className: "block b9" }),
             React.createElement("div", { className: "block b10" })
           ),
-          // Cream Playfair V was previously layered on top of the
-          // pyramid via an SVG mask + bubble fill animation. Removed
-          // per design — the splash is now just the wordmark, the
-          // pyramid build, and the tagline.
-          React.createElement("div", { className: "tagline", "aria-label": "Achieve Anything" }, "Achieve Anything")
+          // Splash is now just the wordmark + the pyramid build.
+          // The italic "Achieve Anything" tagline that used to sit
+          // under the pyramid was removed — it competed visually
+          // with the wordmark animation and added nothing the user
+          // hadn't already absorbed from the marketing material.
         )
       );
     }
