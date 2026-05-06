@@ -6263,23 +6263,32 @@ function App() {
     const prevState = (prev === "done" || prev === true) ? "done" : (prev === "missed" ? "missed" : "none");
 
     // "increment" mode drives the sub-unit feature (e.g. 4/8 cups, or
-    // ≤ 0 drinks for an avoid habit). We bump completionUnits[key]
-    // by habit.increment, then resolve the new state from the
-    // habit's comparison op:
-    //   ≥ N: done once units >= N (the historical "do at least N")
-    //   ≤ N: done while units <= N, missed once units > N (the
-    //        "stay under N" pattern, including the ≤ 0 ceiling for
-    //        avoid habits like "0 drinks today")
-    // typeof check (instead of truthy) lets target = 0 count as a
-    // real target — required for ≤ 0 to work. Negative increments
-    // decrement (for undoing an accidental tap); the "reset" sentinel
-    // wipes the day to 0.
+    // ≤ 0 drinks for an avoid habit). The atTime parameter doubles
+    // as a sentinel here:
+    //   atTime = "reset" → wipe the day's count to 0 (used by the
+    //                       swipe-left clear gesture)
+    //   atTime = "fill"  → jump straight to target — Math.max so we
+    //                       don't decrement a count that's already
+    //                       past target (used by swipe-right on
+    //                       sub-unit habits: "I did the whole 60
+    //                       minutes; mark me done in one gesture")
+    //   otherwise        → +habit.increment per call (default 1)
+    //
+    // Newstate then follows the habit's comparison op:
+    //   ≥ N: done once units >= N
+    //   ≤ N: done while units <= N, missed once units > N
+    // typeof check lets target = 0 count as a real target.
     let newState;
     let nextUnits = null;
     if (mode === "increment" && typeof targetH.target === "number") {
-      const step = atTime === "reset" ? -Infinity : (Number(targetH.increment) || 1);
       const curUnits = Number(targetH.completionUnits && targetH.completionUnits[key]) || 0;
-      nextUnits = Math.max(0, curUnits + step);
+      if (atTime === "reset") {
+        nextUnits = 0;
+      } else if (atTime === "fill") {
+        nextUnits = Math.max(curUnits, targetH.target);
+      } else {
+        nextUnits = Math.max(0, curUnits + (Number(targetH.increment) || 1));
+      }
       const op = targetH.targetOp === "<=" ? "<=" : ">=";
       if (op === "<=") {
         newState = nextUnits <= targetH.target ? "done" : "missed";
@@ -11774,15 +11783,17 @@ function App() {
             if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
             if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
               if (dx > 0) {
-                // Slow right-swipe (user dwells before releasing) opens
-                // the time-entry modal so the habit can be logged at a
-                // back-dated time — "I did my run at 7am even though
-                // I'm checking it off at 10am". Fast flick keeps the
-                // original one-gesture log with current time.
-                if (dt >= 400) {
-                  openTimeEntry(habit.id, selDate, "done");
-                  return;
-                }
+                // Swipe right = mark done in one gesture.
+                //   • Sub-unit habits: jump count to target via the
+                //     "fill" sentinel — e.g. "Recruit prep · 60 min"
+                //     instantly reads "60/60". Subsequent taps on
+                //     the action circle keep adding habit.increment
+                //     past the target.
+                //   • Plain habits: flip the binary state to done.
+                //
+                // The slow-swipe time-entry modal that used to fire
+                // on a ≥400ms dwell was removed — the user wanted
+                // a single uniform "swipe right = complete" gesture.
                 setSwipeAnim(p => ({
                   ...p,
                   [habit.id]: "done"
@@ -11795,7 +11806,11 @@ function App() {
                 });
                 setTimeout(() => setSwipeFeedback(null), 2500);
                 setTimeout(() => {
-                  togHabit(habit.id, selDate, "done");
+                  if (typeof habit.target === "number") {
+                    togHabit(habit.id, selDate, "increment", "fill");
+                  } else {
+                    togHabit(habit.id, selDate, "done");
+                  }
                   setSwipeAnim(p => {
                     const n = {
                       ...p
@@ -11876,19 +11891,13 @@ function App() {
           onClick: e => {
             e.stopPropagation();
             if (hasTarget) {
-              // For ≤ habits, every tap adds a unit — even after the
-              // habit has flipped to missed (because count > limit),
-              // the user is still logging real-world drinks/minutes/
-              // calories and wants the running tally to stay accurate.
-              // For ≥ habits, tapping when already done/missed clears
-              // back to 0 so the user can start over.
-              if (isUnderOp) {
-                togHabit(habit.id, selDate, "increment");
-              } else if (d || missed) {
-                togHabit(habit.id, selDate, "increment", "reset");
-              } else {
-                togHabit(habit.id, selDate, "increment");
-              }
+              // Every tap on a sub-unit habit adds habit.increment,
+              // regardless of done/missed state. After a swipe-right
+              // fill lands the count at target, subsequent taps push
+              // past it (60 → 75 → 90 …). Resetting to 0 is now
+              // exclusively the swipe-left gesture, so the action
+              // circle has one job: log the next unit.
+              togHabit(habit.id, selDate, "increment");
             } else if (d || missed) {
               togHabit(habit.id, selDate, undefined);
             }
