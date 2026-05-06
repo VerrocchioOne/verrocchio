@@ -6470,55 +6470,23 @@ function App() {
       )
     );
   };
-  // Habit reorder — within the habit's current section ONLY. The
-  // displayed ordinal on each card is the habit's GLOBAL rank
-  // across every time-of-day section, but the move operation stays
-  // within the habit's section: typing a global slot N moves the
-  // habit to the section position closest to N. Section field
-  // never changes — users explicitly opted out of auto-shifting
-  // habits between time-of-day buckets.
-  //
-  // Algorithm:
-  //  1. List the section's habits in current global order; record
-  //     their current global positions.
-  //  2. The user-typed global slot N is converted into a relative
-  //     within-section position by counting how many of the section's
-  //     habits currently sit at or before slot N. Clamped to
-  //     [1 .. section.length].
-  //  3. Splice the moved habit into that relative slot.
-  //  4. Replay the new section sequence into the global _order: walk
-  //     the original global list, and for every slot that belonged
-  //     to this section, write the next habit from the reordered
-  //     section sequence.
-  //  5. Rewrite _order on every habit. Other sections' orderings
-  //     stay intact; only the moved habit's section is touched.
-  const setHabitOrder = (habit, val) => {
-    const sectionVal = habit.section;
+  // Drag-and-drop reorder state for habit cards. Scoped per render
+  // via useRef so cross-component pointer events don't trip each
+  // other. Each card sets fromId on dragstart and overId on
+  // dragenter; onDrop consults both and only commits if both
+  // habits are in the same section (cross-section drops are
+  // ignored — section assignment is intentional).
+  const habitDragRef = useRef({ fromId: null, overId: null });
+  // Reorder a section's habits given a new sequence (an array of
+  // habit objects in the new order). Rewrites _order on every
+  // habit in data.habits so the global _order reflects the new
+  // section sequence; other sections' relative orderings are
+  // preserved. Flips sortPrefs.habits to "custom" so the change
+  // is immediately visible.
+  const reorderHabitSection = (sectionVal, newSequence) => {
     const all = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-    const sectionHabits = all.filter(h => h.section === sectionVal);
-    if (sectionHabits.length < 2) return;
-    const n = parseInt(val);
-    if (isNaN(n)) return;
-    // Map the typed GLOBAL slot to a RELATIVE within-section slot.
-    // Count of section habits at or before global slot N — capped
-    // to the section's length so an out-of-range value lands on
-    // the section's last slot.
-    let relTarget = 0;
-    for (let i = 0; i < all.length && i < n; i++) {
-      if (all[i].section === sectionVal) relTarget++;
-    }
-    relTarget = Math.max(1, Math.min(relTarget, sectionHabits.length));
-    const reordered = sectionHabits.filter(h => h.id !== habit.id);
-    reordered.splice(relTarget - 1, 0, habit);
-    // Replay the section's new sequence into the global list.
     let sIdx = 0;
-    const newGlobal = all.map(h => {
-      if (h.section === sectionVal) {
-        const replacement = reordered[sIdx++];
-        return replacement || h;
-      }
-      return h;
-    });
+    const newGlobal = all.map(h => h.section === sectionVal ? (newSequence[sIdx++] || h) : h);
     const allHabits = [...data.habits];
     newGlobal.forEach((h, i) => {
       const idx = allHabits.findIndex(x => x.id === h.id);
@@ -11611,6 +11579,50 @@ function App() {
             if (s && s.fired) { delete habitHoldRef.current[habit.id]; return; }
             setExpHabitGoals(p => ({ ...p, [habit.id]: !p[habit.id] }));
           },
+          // Double-click opens the edit modal (replaces the desktop
+          // long-press path with something more discoverable). The
+          // single-click expansion above still fires twice on a
+          // double-click — toggling expanded state to where it
+          // started — so the only net effect users see is the modal
+          // popping open.
+          onDoubleClick: e => {
+            e.stopPropagation();
+            sEHabit(habit);
+          },
+          // Native HTML5 drag-and-drop reorder (desktop). Limited to
+          // within the habit's section: cross-section drops are
+          // intentionally rejected so a habit's `section` field is
+          // never changed by reordering. Mobile users can use the
+          // long-press → edit modal or the ⇅ section header button.
+          draggable: true,
+          onDragStart: e => {
+            habitDragRef.current.fromId = habit.id;
+            try { e.dataTransfer.effectAllowed = "move"; } catch (_) {}
+          },
+          onDragEnter: () => { habitDragRef.current.overId = habit.id; },
+          onDragOver: e => { e.preventDefault(); },
+          onDrop: e => {
+            e.preventDefault();
+            const fromId = habitDragRef.current.fromId;
+            const overId = habitDragRef.current.overId;
+            habitDragRef.current.fromId = null;
+            habitDragRef.current.overId = null;
+            if (fromId == null || overId == null || fromId === overId) return;
+            const fromHabit = (data.habits || []).find(h => h.id === fromId);
+            const overHabit = (data.habits || []).find(h => h.id === overId);
+            if (!fromHabit || !overHabit || fromHabit.section !== overHabit.section) return;
+            const seq = group.habits.slice();
+            const fromIdx = seq.findIndex(h => h.id === fromId);
+            const overIdx = seq.findIndex(h => h.id === overId);
+            if (fromIdx < 0 || overIdx < 0) return;
+            const [moved] = seq.splice(fromIdx, 1);
+            seq.splice(overIdx, 0, moved);
+            reorderHabitSection(group.value, seq);
+          },
+          onDragEnd: () => {
+            habitDragRef.current.fromId = null;
+            habitDragRef.current.overId = null;
+          },
           onMouseDown: e => {
             if (e.button !== 0) return;
             habitHoldRef.current[habit.id] = {
@@ -11739,67 +11751,6 @@ function App() {
             WebkitTapHighlightColor: "transparent"
           }
         },
-        // Inline position input — sits as the leftmost element on
-        // the card. Type a number, then press Enter or tap away to
-        // commit. Position is the habit's GLOBAL rank across every
-        // section (morning + afternoon + evening + daily completion
-        // + avoid). Sections still group visually, but the number
-        // shown is the slot in the full habits list. Reorder fires
-        // once on commit, not per-keystroke (otherwise typing "12"
-        // would reorder to slot 1, then to slot 12 mid-keystroke).
-        (data.habits || []).length > 1 && (() => {
-          const allSorted = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-          const idx = allSorted.findIndex(x => x.id === habit.id);
-          const pos = idx >= 0 ? idx + 1 : 1;
-          const max = allSorted.length;
-          const commit = (raw) => {
-            const v = parseInt(raw, 10);
-            if (!isNaN(v) && v >= 1 && v <= max && v !== pos) {
-              setHabitOrder(habit, v);
-            }
-          };
-          return /*#__PURE__*/React.createElement("input", {
-            type: "number",
-            min: 1,
-            max: max,
-            defaultValue: pos,
-            // key changes when pos changes so the uncontrolled input
-            // resets its displayed value to the latest position after
-            // a save (otherwise stale typed text would persist).
-            key: "ord-" + habit.id + "-" + pos,
-            onClick: e => e.stopPropagation(),
-            onPointerDown: e => e.stopPropagation(),
-            onPointerUp: e => e.stopPropagation(),
-            onBlur: e => commit(e.target.value),
-            onKeyDown: e => {
-              e.stopPropagation();
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit(e.target.value);
-                e.target.blur();
-              } else if (e.key === "Escape") {
-                e.target.value = String(pos);
-                e.target.blur();
-              }
-            },
-            "aria-label": "Global position",
-            title: "Type a number 1–" + max + " and press Enter to reorder",
-            style: {
-              width: 36,
-              padding: "2px 4px",
-              fontSize: 12,
-              fontWeight: 700,
-              textAlign: "center",
-              border: "1px solid var(--c-border)",
-              borderRadius: 6,
-              background: "var(--c-surface-raised)",
-              color: "var(--c-text-soft)",
-              outline: "none",
-              flexShrink: 0,
-              alignSelf: "center"
-            }
-          });
-        })(),
         (() => {
           // Sub-unit habits (target > 0, e.g. "8 cups of water"): the
           // button becomes an increment tap — each tap adds `increment`
