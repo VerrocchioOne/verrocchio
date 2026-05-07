@@ -14835,38 +14835,34 @@ function App() {
       const ampm = h < 12 ? "am" : "pm";
       return h12 + (m === 0 ? "" : ":" + String(m).padStart(2, "0")) + ampm;
     };
-    // Importance is now expressed by PATTERN, not color. Color is
-    // entirely area-of-life. The pattern hierarchy:
-    //   Non-Negotiable → solid fill (area's bg tint)
-    //   Important      → striped fill (45° area-color stripes
-    //                    over the bg tint)
-    //   Additive       → outlined only (transparent fill, area
-    //                    border in solid 2px)
-    // Same hierarchy reads at a glance: filled = strongest, then
-    // striped, then outline. Pairs cleanly with the area color so
-    // the user always sees "this is a Physical Important habit"
-    // not two competing color cues.
-    const impStyle = (imp, area) => {
+    // Color = area-of-life on every card body (calm tinted fill).
+    // Importance lives only on the left-edge stripe, expressed as
+    // a fill PATTERN inside that 6px slot:
+    //   Non-Negotiable → solid stripe (full area color)
+    //   Important      → striped stripe (diagonal area-color
+    //                    bars over a lighter same-color base)
+    //   Additive       → outlined stripe (transparent fill, thin
+    //                    area-color rule top + bottom + sides via
+    //                    a 1.5px solid border)
+    // Hierarchy reads at a glance: filled = strongest, striped =
+    // medium, outlined = lightest. Same area color throughout so
+    // the user gets one color cue per card.
+    const impStripe = (imp, area) => {
       if (imp === "Important") {
-        // Softened stripes — alpha dropped from 0x33 (~20%) to
-        // 0x1A (~10%) and the cycle widened from 6/6 to 8/4 so
-        // the tint dominates and the stripe colour reads as a
-        // gentle shimmer rather than a strong barber pole.
         return {
           background: "repeating-linear-gradient(45deg, "
-                      + area.bg + " 0 8px, "
-                      + area.color + "1A 8px 12px)",
-          border: "1px solid " + area.border
+                      + area.color + " 0 3px, "
+                      + area.color + "55 3px 6px)"
         };
       }
       if (imp === "Additive") {
         return {
-          background: "var(--c-surface, #fff)",
-          border: "2px solid " + area.color
+          background: "transparent",
+          border: "1.5px solid " + area.color,
+          boxSizing: "border-box"
         };
       }
-      // Non-Negotiable (default) → solid fill.
-      return { background: area.bg, border: "1px solid " + area.border };
+      return { background: area.color };
     };
     const fmtDate = (d, opts) => d.toLocaleDateString(undefined, opts || { weekday: "short", month: "short", day: "numeric" });
     const moveFocus = days => {
@@ -15196,17 +15192,18 @@ function App() {
                   // need to be tap-tall.
                   const height = Math.max(3, slot.durationMin * pxPerMin - 1);
                   const a = areaOf(h);
-                  const impS = impStyle(h.importance, a);
                   return /*#__PURE__*/React.createElement("div", {
                     key: h.id,
                     title: fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin) + " · " + h.text + " · " + (h.importance || "Important"),
-                    style: Object.assign({
+                    style: {
                       position: "absolute",
                       top: top + "px",
                       left: 38, right: 4,
                       height: height + "px",
+                      background: a.bg,
+                      border: "1px solid " + a.border,
                       borderRadius: 4
-                    }, impS)
+                    }
                   });
                 })
               ),
@@ -15232,7 +15229,6 @@ function App() {
                 : dueOnFocus.flatMap((slot, i) => {
                     const h = slot.habit;
                     const a = areaOf(h);
-                    const impS = impStyle(h.importance, a);
                     const prev = i > 0 ? dueOnFocus[i - 1].habit : null;
                     // Render a section header before EVERY section
                     // change — including the very first habit.
@@ -15240,24 +15236,38 @@ function App() {
                     const card = /*#__PURE__*/React.createElement("div", {
                       key: h.id,
                       title: (h.importance || "Important") + " · " + (h.type || "Uncategorized"),
-                      style: Object.assign({
-                        padding: "8px 10px",
+                      style: {
+                        display: "flex", alignItems: "stretch", gap: 0,
+                        background: a.bg,
+                        border: "1px solid " + a.border,
                         borderRadius: 8,
-                        display: "flex", flexDirection: "column", gap: 3,
-                        minWidth: 0
-                      }, impS)
+                        overflow: "hidden",
+                        padding: 0
+                      }
                     },
+                      // Importance "stoplight" stripe — solid /
+                      // striped / outlined per impStripe(). The
+                      // area-of-life color carries through both
+                      // the body fill and the stripe so the card
+                      // wears one hue.
                       /*#__PURE__*/React.createElement("div", {
-                        style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                      }, h.text),
+                        style: Object.assign({ width: 6, flexShrink: 0 }, impStripe(h.importance, a))
+                      }),
                       /*#__PURE__*/React.createElement("div", {
-                        style: { fontSize: 10, color: a.color, display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap", fontWeight: 600 }
+                        style: { flex: 1, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }
                       },
-                        /*#__PURE__*/React.createElement("span", null, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
-                        /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
-                        /*#__PURE__*/React.createElement("span", null, slot.durationMin + " min"),
-                        /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
-                        /*#__PURE__*/React.createElement("span", { style: { textTransform: "uppercase", fontWeight: 700 } }, freqLabel(h).replace(/^(\w+).*/, "$1"))
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                        }, h.text),
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 10, color: a.color, display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap", fontWeight: 600 }
+                        },
+                          /*#__PURE__*/React.createElement("span", null, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
+                          /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
+                          /*#__PURE__*/React.createElement("span", null, slot.durationMin + " min"),
+                          /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
+                          /*#__PURE__*/React.createElement("span", { style: { textTransform: "uppercase", fontWeight: 700 } }, freqLabel(h).replace(/^(\w+).*/, "$1"))
+                        )
                       )
                     );
                     if (showBreak) {
