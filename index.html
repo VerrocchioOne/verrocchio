@@ -14077,16 +14077,19 @@ function App() {
             }
           },
             /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase" }
+              // Red title when SMART isn't fully filled, grey when
+              // complete. Mirrors the same rule on Linked Habits /
+              // Linked To-Dos below.
+              style: { fontSize: 10, fontWeight: 700, color: smartCount < 5 ? "#b91c1c" : "#6b7280", textTransform: "uppercase" }
             }, "S.M.A.R.T. Framework"),
             /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", alignItems: "center", gap: 8 }
             },
               /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 10, color: "#6b7280", fontWeight: 500 }
-              }, smartCount + "/5 filled"),
+                style: { fontSize: 10, color: smartCount < 5 ? "#b91c1c" : "#9ca3af", fontWeight: 500 }
+              }, smartCount + "/5"),
               /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 10, color: "#9ca3af", transform: smOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" }
+                style: { fontSize: 10, color: smartCount < 5 ? "#b91c1c" : "#9ca3af", transform: smOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" }
               }, "\u25B8")
             )
           ),
@@ -14181,15 +14184,26 @@ function App() {
               marginBottom: habitsOpen ? 6 : 8
             }
           },
-            /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 10, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase" }
-            }, "Linked Habits"),
-            /*#__PURE__*/React.createElement("span", {
-              style: { display: "flex", alignItems: "center", gap: 8 }
-            },
-              /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 500 } }, linked.length + (linked.length === 1 ? " habit" : " habits")),
-              /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", transform: habitsOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
-            )
+            (() => {
+              // Linked Habits header coloring: red title + count
+              // when there are uncompleted linked habits today;
+              // grey when all done (or when there are 0 linked, in
+              // which case the count reads 0/0 and there's no
+              // outstanding work to flag).
+              const habitsDone = linked.filter(h => isDone(h, selDate)).length;
+              const habitsIncomplete = linked.length > 0 && habitsDone < linked.length;
+              return /*#__PURE__*/React.createElement(React.Fragment, null,
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, fontWeight: 700, color: habitsIncomplete ? "#b91c1c" : "#6b7280", textTransform: "uppercase" }
+                }, "Linked Habits"),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { display: "flex", alignItems: "center", gap: 8 }
+                },
+                  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: habitsIncomplete ? "#b91c1c" : "#9ca3af", fontWeight: 500 } }, habitsDone + "/" + linked.length),
+                  /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: habitsIncomplete ? "#b91c1c" : "#9ca3af", transform: habitsOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
+                )
+              );
+            })()
           ),
           // Body: linked habits list (when any) + Add Habit quick-add.
           // Renders only when the section is expanded.
@@ -14294,15 +14308,27 @@ function App() {
             marginBottom: todosOpen ? 6 : 0
           }
         },
-          /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 10, fontWeight: 700, color: "#0891b2", textTransform: "uppercase" }
-          }, "Linked To-Dos"),
-          /*#__PURE__*/React.createElement("span", {
-            style: { display: "flex", alignItems: "center", gap: 8 }
-          },
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#6b7280", fontWeight: 500 } }, linkedTodos.length + (linkedTodos.length === 1 ? " to-do" : " to-dos")),
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", transform: todosOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
-          )
+          (() => {
+            // Linked To-Dos header coloring: red when any linked
+            // to-do is still pending. Completed to-dos are moved
+            // out of data.todos into data.archive on check, so
+            // linkedTodos.length effectively counts the pending
+            // work; once everything is checked the count reads
+            // 0/0 and the section drops back to grey.
+            const todosPending = linkedTodos.length;
+            const todosIncomplete = todosPending > 0;
+            return /*#__PURE__*/React.createElement(React.Fragment, null,
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 10, fontWeight: 700, color: todosIncomplete ? "#b91c1c" : "#6b7280", textTransform: "uppercase" }
+              }, "Linked To-Dos"),
+              /*#__PURE__*/React.createElement("span", {
+                style: { display: "flex", alignItems: "center", gap: 8 }
+              },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: todosIncomplete ? "#b91c1c" : "#9ca3af", fontWeight: 500 } }, "0/" + todosPending),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: todosIncomplete ? "#b91c1c" : "#9ca3af", transform: todosOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
+              )
+            );
+          })()
         ),
         // Body: existing linked to-dos + Add To-Do quick-add. Renders
         // only when the section is expanded.
