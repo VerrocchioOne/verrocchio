@@ -15084,7 +15084,11 @@ function App() {
             const morningStart   = (ranges.morning   && ranges.morning.start   != null) ? ranges.morning.start   : 6;
             const afternoonStart = (ranges.afternoon && ranges.afternoon.start != null) ? ranges.afternoon.start : 12;
             const eveningStart   = (ranges.evening   && ranges.evening.start   != null) ? ranges.evening.start   : 18;
-            const dayStartHour = Math.min(morningStart, afternoonStart, eveningStart, 6);
+            // Pad an hour before the earliest section start so the
+            // first morning habit isn't pinned to the top edge —
+            // gives visual breathing room and a "make space for
+            // morning" effect at the top of the timeline.
+            const dayStartHour = Math.max(0, Math.min(morningStart, afternoonStart, eveningStart, 6) - 1);
             const dayEndHour = 24; // exclusive — render through 23:59
             const totalMin = (dayEndHour - dayStartHour) * 60;
             const pxPerMin = 1; // 60 px per hour, dense but readable on mobile
@@ -15095,25 +15099,17 @@ function App() {
               const h12 = ((h + 11) % 12) + 1;
               return h12 + (h < 12 ? "am" : "pm");
             };
-            // Bumped tints — the previous palette had three colours
-            // that all read as "very pale wash" on phones. These
-            // sit deeper into amber / orange / violet so a glance
-            // at the day immediately separates morning, afternoon,
-            // and evening blocks. Borders match the section's
-            // accent hue so the rectangles read as section-colored
-            // even at 5px tall.
-            const sectionTint = sec => sec === "morning"   ? "#fef3c7"
-                                       : sec === "afternoon" ? "#ffedd5"
-                                       : sec === "evening"   ? "#ede9fe"
-                                                             : "#f3f4f6";
-            const sectionBorder = sec => sec === "morning"   ? "#fbbf24"
-                                       : sec === "afternoon" ? "#fb923c"
-                                       : sec === "evening"   ? "#a78bfa"
-                                                             : "var(--c-border)";
-            const sectionAccent = sec => sec === "morning"   ? "#d97706"
-                                       : sec === "afternoon" ? "#ea580c"
-                                       : sec === "evening"   ? "#7c3aed"
-                                                             : "#6b7280";
+            // Color coding now tracks the habit's area-of-life
+            // (Physical = green, Mental = cyan, Career = blue,
+            // Spiritual = violet, Social = pink, Wealth = amber,
+            // Creative = teal, …). Section (time of day) is still
+            // signaled by the icon up front (🌅 / ☀️ / 🌙) so the
+            // user gets two cues at once: which goal area the
+            // habit belongs to (color) and when in the day it
+            // lands (icon). Habits with no area fall back to a
+            // neutral grey palette.
+            const NEUTRAL = { color: "#6b7280", bg: "#f3f4f6", border: "var(--c-border)" };
+            const areaOf = h => HT.find(t => t.value === (h && h.type)) || NEUTRAL;
             const sectionIcon = sec => sec === "morning"   ? "🌅"
                                        : sec === "afternoon" ? "☀️"
                                        : sec === "evening"   ? "🌙"
@@ -15169,6 +15165,7 @@ function App() {
                   // right carries the text, so the block doesn't
                   // need to be tap-tall.
                   const height = Math.max(3, slot.durationMin * pxPerMin - 1);
+                  const a = areaOf(h);
                   return /*#__PURE__*/React.createElement("div", {
                     key: h.id,
                     title: fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin) + " · " + h.text,
@@ -15177,8 +15174,8 @@ function App() {
                       top: top + "px",
                       left: 38, right: 4,
                       height: height + "px",
-                      background: sectionTint(h.section),
-                      border: "1px solid " + sectionBorder(h.section),
+                      background: a.bg,
+                      border: "1px solid " + a.border,
                       borderLeft: "5px solid " + impColor(h.importance),
                       borderRadius: 4
                     }
@@ -15206,22 +15203,22 @@ function App() {
                   }, "Nothing scheduled.")
                 : dueOnFocus.flatMap((slot, i) => {
                     const h = slot.habit;
+                    const a = areaOf(h);
                     const prev = i > 0 ? dueOnFocus[i - 1].habit : null;
                     const showBreak = prev && prev.section !== h.section;
                     const card = /*#__PURE__*/React.createElement("div", {
                       key: h.id,
                       style: {
                         display: "flex", alignItems: "stretch", gap: 0,
-                        background: sectionTint(h.section),
-                        border: "1px solid " + sectionBorder(h.section),
+                        background: a.bg,
+                        border: "1px solid " + a.border,
                         borderRadius: 8,
                         overflow: "hidden",
                         padding: 0
                       }
                     },
-                      // Wider 6px importance stripe — at-a-glance
-                      // colour for Non-Negotiable / Important /
-                      // Additive without needing to read text.
+                      // 6px importance stripe — at-a-glance colour
+                      // for Non-Negotiable / Important / Additive.
                       /*#__PURE__*/React.createElement("div", {
                         style: { width: 6, background: impColor(h.importance), flexShrink: 0 }
                       }),
@@ -15229,20 +15226,10 @@ function App() {
                         style: { flex: 1, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }
                       },
                         /*#__PURE__*/React.createElement("div", {
-                          style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }
-                        },
-                          // Section icon up front — sun / sunset /
-                          // moon depending on time of day. Reinforces
-                          // the colour cue.
-                          /*#__PURE__*/React.createElement("span", {
-                            style: { fontSize: 13, lineHeight: 1, flexShrink: 0 }
-                          }, sectionIcon(h.section)),
-                          /*#__PURE__*/React.createElement("div", {
-                            style: { flex: 1, fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                          }, h.text)
-                        ),
+                          style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                        }, h.text),
                         /*#__PURE__*/React.createElement("div", {
-                          style: { fontSize: 10, color: sectionAccent(h.section), display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap", fontWeight: 600 }
+                          style: { fontSize: 10, color: a.color, display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap", fontWeight: 600 }
                         },
                           /*#__PURE__*/React.createElement("span", null, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
                           /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
@@ -15258,14 +15245,14 @@ function App() {
                         style: {
                           display: "flex", alignItems: "center", gap: 6,
                           fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
-                          color: sectionAccent(h.section),
+                          color: "#9ca3af",
                           textTransform: "uppercase",
                           margin: "4px 0"
                         }
                       },
-                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed " + sectionBorder(h.section) } }),
+                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed #e5e7eb" } }),
                         /*#__PURE__*/React.createElement("span", null, sectionIcon(h.section) + " " + (h.section === "morning" ? "Morning" : h.section === "afternoon" ? "Afternoon" : "Evening")),
-                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed " + sectionBorder(h.section) } })
+                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed #e5e7eb" } })
                       );
                       return [brk, card];
                     }
