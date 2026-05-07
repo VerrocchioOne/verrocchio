@@ -14908,7 +14908,17 @@ function App() {
           const cell = new Date(focusDate.getFullYear(), focusDate.getMonth(), dayNum);
           const k = dk(cell);
           const due = habitsDueOn(k);
-          cells.push({ key: k, dayNum, k, dueCount: due.length, isToday: k === tk() });
+          // Per-section counts so each cell can render three small
+          // section indicators below the day number — one per
+          // morning / afternoon / evening that has habits scheduled.
+          // Visual breaks make the day feel split into time-of-day
+          // chunks instead of one undifferentiated count.
+          const sectionCounts = { morning: 0, afternoon: 0, evening: 0 };
+          for (const slot of due) {
+            const sec = slot.habit.section;
+            if (sectionCounts[sec] != null) sectionCounts[sec]++;
+          }
+          cells.push({ key: k, dayNum, k, dueCount: due.length, sectionCounts, isToday: k === tk() });
         }
       }
       const todayKey = tk();
@@ -14941,9 +14951,39 @@ function App() {
               }
             },
               /*#__PURE__*/React.createElement("span", null, c.dayNum),
+              // Three section bars beneath the day number — morning
+              // / afternoon / evening, dimmed when no habit lands in
+              // that section, full color otherwise. Reads as a tiny
+              // density bar that visualizes which parts of the day
+              // are loaded without dropping a single text count.
               c.dueCount > 0 && /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 9, color: c.k === calendarFocus ? "#fff" : "#9ca3af", lineHeight: 1 }
-              }, c.dueCount + (c.dueCount === 1 ? " habit" : " habits"))
+                style: { display: "flex", gap: 2, marginTop: 1 }
+              },
+                /*#__PURE__*/React.createElement("span", {
+                  style: {
+                    width: 8, height: 3, borderRadius: 1,
+                    background: c.sectionCounts.morning > 0
+                      ? (c.k === calendarFocus ? "#fbbf24" : "#fbbf24")
+                      : (c.k === calendarFocus ? "rgba(255,255,255,.25)" : "#f3f4f6")
+                  }
+                }),
+                /*#__PURE__*/React.createElement("span", {
+                  style: {
+                    width: 8, height: 3, borderRadius: 1,
+                    background: c.sectionCounts.afternoon > 0
+                      ? "#fb923c"
+                      : (c.k === calendarFocus ? "rgba(255,255,255,.25)" : "#f3f4f6")
+                  }
+                }),
+                /*#__PURE__*/React.createElement("span", {
+                  style: {
+                    width: 8, height: 3, borderRadius: 1,
+                    background: c.sectionCounts.evening > 0
+                      ? "#a78bfa"
+                      : (c.k === calendarFocus ? "rgba(255,255,255,.25)" : "#f3f4f6")
+                  }
+                })
+              )
             )
         ))
       );
@@ -14979,13 +15019,17 @@ function App() {
           /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af" } }, due.length + (due.length === 1 ? " habit" : " habits"))
         ),
         // Inline list of timed habits — one mini-row per habit with
-        // the start–end block, importance dot, and name. Mirrors
-        // the day panel's row layout, smaller font.
+        // the start–end block, importance dot, and name. A faint
+        // dashed break line sits between each section group
+        // (morning → afternoon → evening) so the day doesn't read
+        // as one contiguous block.
         due.length > 0 && /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", flexDirection: "column", gap: 3 }
-        }, due.map(slot => {
+        }, due.flatMap((slot, i) => {
           const h = slot.habit;
-          return /*#__PURE__*/React.createElement("div", {
+          const prev = i > 0 ? due[i - 1].habit : null;
+          const showBreak = prev && prev.section !== h.section;
+          const row = /*#__PURE__*/React.createElement("div", {
             key: h.id,
             style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--c-text-soft)" }
           },
@@ -14999,6 +15043,14 @@ function App() {
               style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
             }, h.text)
           );
+          if (showBreak) {
+            const brk = /*#__PURE__*/React.createElement("div", {
+              key: "brk-" + h.id,
+              style: { height: 0, borderTop: "1px dashed #e5e7eb", margin: "2px 0" }
+            });
+            return [brk, row];
+          }
+          return [row];
         }))
       )));
     };
@@ -15152,9 +15204,11 @@ function App() {
                 ? /*#__PURE__*/React.createElement("div", {
                     style: { fontSize: 12, color: "#9ca3af", padding: "8px 0", textAlign: "center" }
                   }, "Nothing scheduled.")
-                : dueOnFocus.map(slot => {
+                : dueOnFocus.flatMap((slot, i) => {
                     const h = slot.habit;
-                    return /*#__PURE__*/React.createElement("div", {
+                    const prev = i > 0 ? dueOnFocus[i - 1].habit : null;
+                    const showBreak = prev && prev.section !== h.section;
+                    const card = /*#__PURE__*/React.createElement("div", {
                       key: h.id,
                       style: {
                         display: "flex", alignItems: "stretch", gap: 0,
@@ -15198,6 +15252,24 @@ function App() {
                         )
                       )
                     );
+                    if (showBreak) {
+                      const brk = /*#__PURE__*/React.createElement("div", {
+                        key: "brk-" + h.id,
+                        style: {
+                          display: "flex", alignItems: "center", gap: 6,
+                          fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+                          color: sectionAccent(h.section),
+                          textTransform: "uppercase",
+                          margin: "4px 0"
+                        }
+                      },
+                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed " + sectionBorder(h.section) } }),
+                        /*#__PURE__*/React.createElement("span", null, sectionIcon(h.section) + " " + (h.section === "morning" ? "Morning" : h.section === "afternoon" ? "Afternoon" : "Evening")),
+                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed " + sectionBorder(h.section) } })
+                      );
+                      return [brk, card];
+                    }
+                    return [card];
                   })
               )
             );
