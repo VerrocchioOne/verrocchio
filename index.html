@@ -14835,9 +14835,14 @@ function App() {
       const ampm = h < 12 ? "am" : "pm";
       return h12 + (m === 0 ? "" : ":" + String(m).padStart(2, "0")) + ampm;
     };
-    const impColor = imp => imp === "Non-Negotiable" ? "#b91c1c"
-                          : imp === "Important"     ? "#b45309"
-                                                    : "#0891b2";
+    // Traffic-light importance palette — red = must, yellow =
+    // should, green = nice. Reads more universally than the
+    // previous red/amber/cyan scheme; the green-for-Additive
+    // pairs naturally with Physical-area-green only when both
+    // align, so the visual collision is rare.
+    const impColor = imp => imp === "Non-Negotiable" ? "#dc2626"
+                          : imp === "Important"     ? "#eab308"
+                                                    : "#16a34a";
     const fmtDate = (d, opts) => d.toLocaleDateString(undefined, opts || { weekday: "short", month: "short", day: "numeric" });
     const moveFocus = days => {
       const d = new Date(focusDate);
@@ -18214,9 +18219,9 @@ function App() {
             : /*#__PURE__*/React.createElement("div", {
                 style: { display: "flex", flexDirection: "column", gap: 6 }
               }, rows.map(r => {
-                const impColor = r.importance === "Non-Negotiable" ? "#b91c1c"
-                                : r.importance === "Important"     ? "#b45309"
-                                                                   : "#0891b2";
+                const impColor = r.importance === "Non-Negotiable" ? "#dc2626"
+                                : r.importance === "Important"     ? "#eab308"
+                                                                   : "#16a34a";
                 return /*#__PURE__*/React.createElement("div", {
                   key: r.id,
                   style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8 }
