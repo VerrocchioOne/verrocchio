@@ -12156,11 +12156,17 @@ function App() {
         // even a long unit label ("Calories of soda") truncates with
         // ellipsis instead of pushing the chip past the card edge.
         // Plain (Yes/No) habit chip — shown only once the habit is
-        // marked done so the right-side slot reads "Yes" instead
-        // of being empty. Same fixed 64×36 box as the sub-unit
-        // chip below so the row layout is identical regardless of
-        // habit flavor. Hidden until done; on a fresh plain habit
-        // the slot stays clear.
+        // marked done so the right-side slot reads its completion
+        // status instead of being empty. Same fixed 64×36 box as
+        // the sub-unit chip below so the row layout is identical
+        // regardless of habit flavor.
+        //
+        // Avoid-section habits flip the language: completion means
+        // you DIDN'T do the negative thing, so the chip reads "No"
+        // (i.e., "I had no drinks today") instead of "Yes". For
+        // every other section, completion is a positive "Yes I did
+        // it." Both states are still visually identical green
+        // pills — only the word changes.
         (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
@@ -12184,7 +12190,7 @@ function App() {
             fontWeight: 700,
             letterSpacing: 0.3
           }
-        }, "Yes"),
+        }, habit.section === "avoid" ? "No" : "Yes"),
         (typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
