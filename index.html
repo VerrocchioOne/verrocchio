@@ -14848,10 +14848,14 @@ function App() {
     // not two competing color cues.
     const impStyle = (imp, area) => {
       if (imp === "Important") {
+        // Softened stripes — alpha dropped from 0x33 (~20%) to
+        // 0x1A (~10%) and the cycle widened from 6/6 to 8/4 so
+        // the tint dominates and the stripe colour reads as a
+        // gentle shimmer rather than a strong barber pole.
         return {
           background: "repeating-linear-gradient(45deg, "
-                      + area.bg + " 0 6px, "
-                      + area.color + "33 6px 12px)",
+                      + area.bg + " 0 8px, "
+                      + area.color + "1A 8px 12px)",
           border: "1px solid " + area.border
         };
       }
