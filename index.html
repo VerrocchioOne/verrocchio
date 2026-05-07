@@ -13720,14 +13720,15 @@ function App() {
           cursor: isE ? "default" : "pointer",
           userSelect: "none"
         },
-        // Tap        = toggle the goal's expanded panel (linked
-        //               habits + SMART summary). Same gesture the
-        //               cards have always had.
-        // Double-tap = open the actions menu (Add Journal Entry,
-        //               Edit Goal, Mark Complete, Delete Goal). Was
-        //               press-and-hold; switched to double-tap to
-        //               match the habit-card gesture set so users
-        //               only learn one pattern.
+        // Tap        = toggle the expanded panel (3 collapsible
+        //               sub-headers: SMART, Linked Habits, Linked
+        //               To-Dos).
+        // Double-tap = open the inline edit form (mirrors the
+        //               habit-card double-tap to edit). The inline
+        //               form's footer has Journal / Archive /
+        //               Delete buttons alongside the standard
+        //               Save / Cancel — see SC component usage
+        //               below.
         onClick: () => {
           if (isE) return;
           setExpGoalHabits(p => ({ ...p, [goal.id]: !p[goal.id] }));
@@ -13735,7 +13736,7 @@ function App() {
         onDoubleClick: e => {
           if (isE) return;
           e.stopPropagation();
-          setGoalMoreMenu(goal.id);
+          sEGoal(goal);
         }
       }, /*#__PURE__*/React.createElement("div", _extends({
         className: "hrow"
@@ -13889,7 +13890,33 @@ function App() {
       })), /*#__PURE__*/React.createElement(SC, {
         onSave: () => svEGoal(goal.id),
         onCancel: () => sEGId(null)
-      })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      }),
+      // Goal actions row — sits beneath the standard Save / Cancel
+      // and mirrors the habit-edit modal's footer. Journal logs an
+      // entry; Archive marks complete (with the option to chain a
+      // related follow-up goal); Delete removes the goal entirely.
+      // Each button closes the inline edit (sEGId(null)) before
+      // opening its target modal so the goal panel doesn't stay in
+      // dual edit + dialog state.
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => { setGoalJournal({ id: goal.id, text: goal.text }); setGoalJournalTxt(""); sEGId(null); },
+          style: { flex: 1, minWidth: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid #bae6fd", background: "#eff6ff", color: "#0891b2", fontSize: 11, fontWeight: 700, cursor: "pointer" }
+        }, "📝 Journal"),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => { setCompleteGoalModal(goal); sEGId(null); },
+          style: { flex: 1, minWidth: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid #86efac", background: "#f0fdf4", color: "#15803d", fontSize: 11, fontWeight: 700, cursor: "pointer" }
+        }, "📦 Archive"),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => { delGoal(goal.id); sEGId(null); },
+          style: { flex: 1, minWidth: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", fontSize: 11, fontWeight: 700, cursor: "pointer" }
+        }, "🗑 Delete")
+      )) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
         style: {flex: 1, minWidth: 0}
       }, /*#__PURE__*/React.createElement("div", {
         style: {
@@ -14075,11 +14102,14 @@ function App() {
         }, shown));
       })));
       })(), expGoalHabits[goal.id] && !isE && (() => {
-        // Habits linked to this goal, ordered by how often they fire
-        // (daily > select-days > weekly > monthly > quarterly > annual).
-        // Below the habits we list linked one-off to-dos. A quick-add row
-        // at the bottom lets the user attach a new to-do directly from
-        // here without leaving the goal view.
+        // Linked Habits + Linked To-Dos sub-sections. Both headers
+        // ALWAYS render whenever the goal panel is open — even on a
+        // goal with zero linked items — so the user can see the
+        // sections exist and use the inline quick-add to attach the
+        // first habit or to-do. The Add Habit / Add To-Do inputs
+        // now live INSIDE each expanded section (not in their own
+        // always-visible row at the bottom), keeping the closed
+        // panel compact.
         const linked = habits
           .filter(h => habitLinkedToGoal(h, goal.id))
           .slice()
@@ -14087,7 +14117,7 @@ function App() {
         const linkedTodos = (data.todos || []).filter(t => String(t.goalId) === String(goal.id));
         const habitsOpen = isGoalSubOpen(goal.id, "habits");
         const todosOpen  = isGoalSubOpen(goal.id, "todos");
-        return (linked.length > 0 || linkedTodos.length > 0) ? /*#__PURE__*/React.createElement("div", {
+        return /*#__PURE__*/React.createElement("div", {
           // Stop pointer events from bubbling up to the goal card's
           // onPointerDown/Up handlers — those toggle the card's
           // expansion, so without this guard a tap on the to-do input
@@ -14104,13 +14134,13 @@ function App() {
             background: "var(--c-surface-raised)"
           }
         },
-          // Linked Habits collapsible header
-          linked.length > 0 && /*#__PURE__*/React.createElement("div", {
+          // Linked Habits collapsible header — always visible
+          /*#__PURE__*/React.createElement("div", {
             onClick: (e) => { e.stopPropagation(); toggleGoalSub(goal.id, "habits"); },
             style: {
               display: "flex", alignItems: "center", justifyContent: "space-between",
               cursor: "pointer", userSelect: "none",
-              marginBottom: habitsOpen ? 6 : (linkedTodos.length > 0 ? 8 : 0)
+              marginBottom: habitsOpen ? 6 : 8
             }
           },
             /*#__PURE__*/React.createElement("span", {
@@ -14123,14 +14153,19 @@ function App() {
               /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", transform: habitsOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
             )
           ),
-          linked.length > 0 && habitsOpen && /*#__PURE__*/React.createElement("div", {
-          style: {
-            display: "flex",
-            flexDirection: "column",
-            gap: 5,
-            marginBottom: linkedTodos.length > 0 ? 10 : 0
-          }
-        }, linked.map(h => {
+          // Body: linked habits list (when any) + Add Habit quick-add.
+          // Renders only when the section is expanded.
+          habitsOpen && /*#__PURE__*/React.createElement("div", {
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              gap: 5,
+              marginBottom: 10
+            }
+          },
+            linked.length > 0 && /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 5 }
+            }, linked.map(h => {
           const d = isDone(h, selDate);
           const m = isMissed(h, selDate);
           return /*#__PURE__*/React.createElement("div", {
@@ -14192,9 +14227,13 @@ function App() {
           /*#__PURE__*/React.createElement("span", {
             style: { fontSize: 9, color: "#9ca3af", marginLeft: 4 }
           }, freqLabel(h)));
-        })),
-        // Linked to-dos list (one-off, not recurring) — collapsible.
-        linkedTodos.length > 0 && /*#__PURE__*/React.createElement("div", {
+            })),
+            // Add Habit quick-add lives INSIDE the Linked Habits
+            // expanded body — visible only when this header is open.
+            renderGoalHabitQuickAdd(goal)
+          ),
+        // Linked To-Dos collapsible header — always visible.
+        /*#__PURE__*/React.createElement("div", {
           onClick: (e) => { e.stopPropagation(); toggleGoalSub(goal.id, "todos"); },
           style: {
             display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -14212,62 +14251,44 @@ function App() {
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", transform: todosOpen ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s ease", display: "inline-block" } }, "\u25B8")
           )
         ),
-        linkedTodos.length > 0 && todosOpen && /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }
-        }, linkedTodos.map(t => /*#__PURE__*/React.createElement("div", {
-          key: t.id,
-          style: {
-            display: "flex", alignItems: "center", gap: 8,
-            background: "#fff", borderRadius: 8, padding: "7px 10px",
-            border: "1px solid #e5e7eb"
-          }
+        // Body: existing linked to-dos + Add To-Do quick-add. Renders
+        // only when the section is expanded.
+        todosOpen && /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 0 }
         },
-          /*#__PURE__*/React.createElement("div", {
-            onClick: () => chkTodo(t.id),
-            title: "Mark done",
+          linkedTodos.length > 0 && /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", gap: 5 }
+          }, linkedTodos.map(t => /*#__PURE__*/React.createElement("div", {
+            key: t.id,
             style: {
-              width: 16, height: 16, borderRadius: 4,
-              border: "1.5px solid #d1d5db", background: "#fff",
-              cursor: "pointer", flexShrink: 0
+              display: "flex", alignItems: "center", gap: 8,
+              background: "#fff", borderRadius: 8, padding: "7px 10px",
+              border: "1px solid #e5e7eb"
             }
-          }),
-          /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 12, color: "var(--c-text-soft)", fontWeight: 500, flex: 1 }
-          }, t.text),
-          t.dueDate && /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 10, color: "#6b7280" }
-          }, t.dueDate),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => delTodo(t.id),
-            title: "Remove",
-            style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 14, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
-          }, "\u00D7")
-        ))),
-        // Quick-add rows: habit on top, then to-do — both always
-        // visible so the user can attach new items to this goal
-        // without switching tabs.
-        renderGoalHabitQuickAdd(goal),
-        renderGoalTodoQuickAdd(goal)
-        ) : /*#__PURE__*/React.createElement("div", {
-          // Same anti-bubble guard as the populated branch — keeps a
-          // tap on the empty-state quick-add row from collapsing the
-          // goal card.
-          onPointerDown: e => e.stopPropagation(),
-          onPointerUp: e => e.stopPropagation(),
-          style: {
-            borderTop: "1px solid #f3f4f6",
-            padding: "10px 14px",
-            background: "var(--c-surface-raised)"
-          }
-        }, /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 12,
-            color: "#9ca3af",
-            marginBottom: 8
-          }
-        }, "No habits or to-dos linked to this goal yet."),
-          renderGoalHabitQuickAdd(goal),
+          },
+            /*#__PURE__*/React.createElement("div", {
+              onClick: () => chkTodo(t.id),
+              title: "Mark done",
+              style: {
+                width: 16, height: 16, borderRadius: 4,
+                border: "1.5px solid #d1d5db", background: "#fff",
+                cursor: "pointer", flexShrink: 0
+              }
+            }),
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 12, color: "var(--c-text-soft)", fontWeight: 500, flex: 1 }
+            }, t.text),
+            t.dueDate && /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 10, color: "#6b7280" }
+            }, t.dueDate),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => delTodo(t.id),
+              title: "Remove",
+              style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 14, cursor: "pointer", padding: "0 4px", lineHeight: 1 }
+            }, "\u00D7")
+          ))),
           renderGoalTodoQuickAdd(goal)
+        )
         );
       })()
       );
