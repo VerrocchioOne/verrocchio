@@ -14082,7 +14082,11 @@ function App() {
         else { color = "#4b5563"; bg = "var(--c-surface-muted)"; }
         const yy = m[1].slice(2);
         const dateLabel = (+m[2]) + "/" + (+m[3]) + "/" + yy;
-        const dayLabel = (days < 0 ? "-" : "") + n + " Day" + (n === 1 ? "" : "s");
+        // T-minus countdown style instead of "<n> Days" — same
+        // information, half the horizontal space. Overdue goals
+        // flip the sign to "T+N" so the chip still reads
+        // naturally for dates that have passed.
+        const dayLabel = days < 0 ? "T+" + n : "T-" + n;
         return /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
