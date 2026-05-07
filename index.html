@@ -6291,6 +6291,85 @@ function App() {
     });
     setEditHabitModal(null);
   };
+  // Open the bottom-sheet edit-habit modal in CREATE mode. Resets
+  // every eH* field to its default and stamps the modal target as
+  // a sentinel object whose id is "__new__"; the save handler in
+  // the modal footer branches on this to call addHabit's logic
+  // instead of svEHabit. Keeps a single, full-featured form for
+  // both new and existing habits — including target/op/unit/+per-
+  // tap which the old inline Add Habit form didn't expose.
+  const openNewHabitModal = () => {
+    sEHId(null);
+    sEHTxt("");
+    sEHDur("");
+    sEHType("");
+    sEHImp("Important");
+    sEHSec("morning");
+    sEHNotes("");
+    sEHGoalIds([]);
+    sEHLoc("both");
+    sEHFreq({ type: "daily", days: [], day: 1, monthDay: 1, month: new Date().getMonth() });
+    sEHStart(dk(new Date()));
+    sEHTarget("");
+    sEHTargetOp(">=");
+    sEHUnitLabel("");
+    sEHIncrement("");
+    sEHOrder("");
+    setEditHabitModal({ id: "__new__", section: "morning" });
+  };
+  // Save handler for the edit-habit modal that picks the right
+  // path. New habits go through addHabitFromEdit; existing ones
+  // through svEHabit. The modal footer's primary button calls
+  // this so callers don't have to know which mode they're in.
+  const saveEditHabitModal = () => {
+    if (editHabitModal && editHabitModal.id === "__new__") {
+      addHabitFromEdit();
+    } else if (editHabitModal) {
+      svEHabit(editHabitModal.id);
+    }
+    setEditHabitModal(null);
+  };
+  // Build a brand-new habit from the eH* state and save it. Mirrors
+  // the field shape of the legacy addHabit() so both paths produce
+  // identical-looking records.
+  const addHabitFromEdit = () => {
+    if (!eHTxt.trim()) return;
+    const newId = Date.now();
+    const todayISO = dk(new Date());
+    save({
+      ...data,
+      habits: [...(data.habits || []), {
+        id: newId,
+        text: eHTxt.trim(),
+        section: eHSec || "morning",
+        importance: eHImp || "Important",
+        type: eHType || null,
+        duration: eHDur || null,
+        notes: (eHNotes && eHNotes.trim()) || null,
+        goalIds: (eHGoalIds || []).slice(),
+        goalId: (eHGoalIds && eHGoalIds[0] != null) ? eHGoalIds[0] : null,
+        location: eHLoc || "both",
+        startDate: eHStart || todayISO,
+        frequency: {
+          type: (eHFreq && eHFreq.type) || "daily",
+          days: Array.isArray(eHFreq && eHFreq.days) ? eHFreq.days.slice() : [],
+          day:      typeof (eHFreq && eHFreq.day)      === "number" ? eHFreq.day      : null,
+          monthDay: typeof (eHFreq && eHFreq.monthDay) === "number" ? eHFreq.monthDay : 1,
+          month:    typeof (eHFreq && eHFreq.month)    === "number" ? eHFreq.month    : 0
+        },
+        target:   (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })(),
+        targetOp: eHTargetOp === "<=" ? "<=" : ">=",
+        unitLabel: (eHUnitLabel || "").trim() || null,
+        increment: (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })(),
+        completions: {},
+        completionTimes: {},
+        completionUnits: {}
+      }]
+    });
+    touchFeature("habit.create");
+    const targetN = parseInt(eHTarget, 10);
+    if (isFinite(targetN) && targetN >= 0) touchFeature("habit.subunits");
+  };
   const sEHabit = h => {
     sEHId(h.id);
     sEHTxt(h.text);
@@ -10937,7 +11016,12 @@ function App() {
         marginBottom: 10
       }
     }, /*#__PURE__*/React.createElement("button", {
-      onClick: () => setShowAddHabit(p => !p),
+      // Opens the same bottom-sheet form Edit Habit uses, in
+      // create mode. The legacy inline add-habit form (gated on
+      // showAddHabit) is no longer reachable from here; the
+      // modal exposes target/unit/op/+per-tap which the inline
+      // form never did.
+      onClick: () => openNewHabitModal(),
       "aria-label": "New habit",
       style: {
         width: 28,
@@ -11906,8 +11990,21 @@ function App() {
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis"
-          }
-        }, habit.text),
+          },
+          title: habit.text
+        },
+          // Hard 30-character cap on the displayed title with an
+          // explicit ellipsis. The CSS overflow:hidden + textOverflow
+          // already truncates by container width, but on wider
+          // screens a 60-char habit name would still render fully —
+          // which clashes visually with neighbouring shorter
+          // habits. Slicing here gives a deterministic display
+          // length regardless of viewport. Hover-title preserves
+          // the full text for the curious user.
+          (habit.text || "").length > 30
+            ? (habit.text || "").slice(0, 29) + "…"
+            : (habit.text || "")
+        ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
@@ -17688,13 +17785,12 @@ function App() {
         fontWeight: 700,
         color: "var(--c-text-strong)"
       }
-    }, "Edit Habit"),
-    // Order x / y — the user can directly edit x to slot this habit
-    // at a new position within its section. y is the total habit
-    // count for that section (read-only). Replaces the drag-to-
-    // reorder gesture; less error-prone on mobile and
-    // self-explanatory.
-    (() => {
+    }, editHabitModal && editHabitModal.id === "__new__" ? "New Habit" : "Edit Habit"),
+    // Order x / y — only meaningful when editing an existing
+    // habit. New habits don't have a position yet (they'll be
+    // appended to the end of their section on save), so the
+    // input is suppressed in create mode.
+    editHabitModal && editHabitModal.id !== "__new__" && (() => {
       const sec = (editHabitModal && editHabitModal.section) || eHSec || "morning";
       const total = (data.habits || []).filter(h => (h.section || "morning") === sec).length;
       return /*#__PURE__*/React.createElement("div", {
@@ -18073,30 +18169,31 @@ function App() {
       gap: 10,
       marginTop: 4
     }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => delHabit(editHabitModal.id),
-    style: {
-      background: "#fef2f2",
-      border: "1px solid #fecaca",
-      borderRadius: 8,
-      padding: "10px 16px",
-      color: "#dc2626",
-      fontSize: 13,
-      fontWeight: 600,
-      cursor: "pointer"
-    }
-  }, "Delete"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => {
-      svEHabit(editHabitModal.id);
-      setEditHabitModal(null);
-    },
+  },
+    // Delete only makes sense when editing an existing habit.
+    editHabitModal && editHabitModal.id !== "__new__" && /*#__PURE__*/React.createElement("button", {
+      onClick: () => delHabit(editHabitModal.id),
+      style: {
+        background: "#fef2f2",
+        border: "1px solid #fecaca",
+        borderRadius: 8,
+        padding: "10px 16px",
+        color: "#dc2626",
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: "pointer"
+      }
+    }, "Delete"),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: saveEditHabitModal,
     style: {
       ...AB,
       flex: 1,
       background: "#2d5a2d",
       padding: "10px"
     }
-  }, "Save Changes")))), /*#__PURE__*/React.createElement("div", {
+  }, editHabitModal && editHabitModal.id === "__new__" ? "Add Habit" : "Save Changes"))
+  )), /*#__PURE__*/React.createElement("div", {
     // Liquid-glass bottom nav — matches the header treatment. The top
     // highlight is inverted (inset top border) so the bar reads as
     // floating above the content rather than pressed into it.
