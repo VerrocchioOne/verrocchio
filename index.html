@@ -14089,15 +14089,22 @@ function App() {
         const dayLabel = days < 0 ? "T+" + n : "T-" + n;
         return /*#__PURE__*/React.createElement("span", {
           style: {
+            // Fixed width so every goal card's chip lines up in
+            // the same column, regardless of whether the count is
+            // T-7 or T-238. boxSizing:border-box keeps the
+            // padding inside the 64px footprint.
             flexShrink: 0,
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
+            justifyContent: "center",
             color: color,
             background: bg,
             border: "1px solid " + (bg === "var(--c-surface-muted)" ? "var(--c-border)" : "transparent"),
             borderRadius: 8,
-            padding: "3px 7px",
+            padding: "3px 6px",
+            boxSizing: "border-box",
+            width: 64,
             marginLeft: 6,
             lineHeight: 1.15,
             whiteSpace: "nowrap"
@@ -14111,9 +14118,23 @@ function App() {
           }, dateLabel)
         );
       })(),
-      momentum && /*#__PURE__*/React.createElement("span", {
-        style: {fontSize:14,flexShrink:0,color:momentum==="up"?"#16a34a":momentum==="down"?"#dc2626":"#d97706",lineHeight:1,pointerEvents:"none"}
-      }, momentum==="up"?"↑":momentum==="down"?"↓":"→"), gt && /*#__PURE__*/React.createElement("div", {
+      // Trending arrow — fixed-width slot so it always lands in
+      // the same column to the right of the date chip, even when
+      // a goal has no momentum to show (renders an empty
+      // placeholder of the same width). Skipped entirely when the
+      // goal has no linked habits (momentum is null upstream).
+      /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 14,
+          flexShrink: 0,
+          width: 16,
+          textAlign: "center",
+          color: momentum === "up" ? "#16a34a" : momentum === "down" ? "#dc2626" : momentum === "flat" ? "#d97706" : "transparent",
+          lineHeight: 1,
+          pointerEvents: "none",
+          marginLeft: 4
+        }
+      }, momentum === "up" ? "↑" : momentum === "down" ? "↓" : momentum === "flat" ? "→" : ""), gt && /*#__PURE__*/React.createElement("div", {
         style: {
           position: "absolute",
           right: 0,
