@@ -4539,7 +4539,7 @@ function App() {
   // list pivots around. The view toggle (day/week/month) lives at
   // the top of the tab; calendarFocus is the date the user is
   // currently inspecting.
-  const [calendarView, setCalendarView] = useState("month");
+  const [calendarView, setCalendarView] = useState("day");
   const [calendarFocus, setCalendarFocus] = useState(() => dk(new Date()));
   const [showXpChart, setShowXpChart] = useState(false);
   const [xpChartGrain, setXpChartGrain] = useState("day"); // "day" | "week" | "month"
@@ -15205,7 +15205,11 @@ function App() {
                     const h = slot.habit;
                     const a = areaOf(h);
                     const prev = i > 0 ? dueOnFocus[i - 1].habit : null;
-                    const showBreak = prev && prev.section !== h.section;
+                    // Render a section header before EVERY section
+                    // change — including the very first habit. Used
+                    // to gate on `prev && ...`, which suppressed
+                    // the morning header at the top of the day.
+                    const showBreak = !prev || prev.section !== h.section;
                     const card = /*#__PURE__*/React.createElement("div", {
                       key: h.id,
                       style: {
