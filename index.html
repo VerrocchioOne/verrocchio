@@ -3720,17 +3720,32 @@ function App() {
   // correctly. Each event also carries a 5-minute reminder VALARM for
   // timed events, or a 0-minute morning-of alarm for all-day events.
   const exportHabitsICS = () => {
-    const habits = (data.habits || []).filter(h => h && h.section !== "avoid");
+    // Skip avoid habits AND all-day "Daily Completion" habits — neither
+    // sits on a clock-time slot, and their inclusion in a time-of-day
+    // calendar export muddied the daily schedule. The Calendar tab
+    // applies the same filter so what the user sees in the app
+    // matches what gets exported.
+    const habits = (data.habits || []).filter(h =>
+      h && h.section !== "avoid" && h.section !== "all-day"
+    );
     if (!habits.length) {
-      alert("No habits to export. Add a habit first.");
+      alert("No timed habits to export. Add a Morning/Afternoon/Evening habit first.");
       return;
     }
     const tzid = (() => {
       try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }
       catch (e) { return "UTC"; }
     })();
-    // Section anchors in minutes from midnight.
-    const SECTION_START = { morning: 6 * 60, afternoon: 12 * 60, evening: 18 * 60 };
+    // Section anchors come from the user's configured timeRanges
+    // (or DEFAULT_TIME_RANGES). morning.start = 6, afternoon.start
+    // = 12, evening.start = 18 by default; if the user customized
+    // them on the Profile page, the export honors that.
+    const ranges = getTimeRanges(data);
+    const SECTION_START = {
+      morning:   (ranges.morning   && ranges.morning.start   != null ? ranges.morning.start   : 6)  * 60,
+      afternoon: (ranges.afternoon && ranges.afternoon.start != null ? ranges.afternoon.start : 12) * 60,
+      evening:   (ranges.evening   && ranges.evening.start   != null ? ranges.evening.start   : 18) * 60
+    };
     const DOW_ICS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
     const pad = n => String(n).padStart(2, "0");
     const escapeICS = s => String(s == null ? "" : s)
@@ -3804,13 +3819,18 @@ function App() {
       return "FREQ=DAILY";
     };
     // Compute each habit's start time within its section by stacking
-    // sequentially — habits in the same section don't all collapse on
-    // top of each other in the calendar view.
+    // sequentially in the user's manual order. Sort by _order then
+    // id within each section so the exported events line up with
+    // the in-app calendar tab and the Habits-page row order.
+    const sortedHabits = habits.slice().sort((a, b) => {
+      const ao = a._order ?? 999, bo = b._order ?? 999;
+      if (ao !== bo) return ao - bo;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
     const sectionCursor = { morning: 0, afternoon: 0, evening: 0 };
-    const habitTimes = habits.map(h => {
+    const habitTimes = sortedHabits.map(h => {
       const dur = Math.max(5, parseInt(h.duration, 10) || 30);
       const sec = h.section;
-      if (sec === "all-day") return { habit: h, allDay: true, durationMin: dur };
       const anchor = SECTION_START[sec] != null ? SECTION_START[sec] : 12 * 60;
       const offset = sectionCursor[sec] || 0;
       sectionCursor[sec] = offset + dur;
@@ -3856,17 +3876,10 @@ function App() {
       lines.push("PRIORITY:" + priorityFor(h.importance));
       if (categories.length) lines.push("CATEGORIES:" + categories.map(escapeICS).join(","));
       lines.push("RRULE:" + buildRRULE(freq));
-      if (ht.allDay) {
-        const end = new Date(first);
-        end.setDate(end.getDate() + 1);
-        lines.push("DTSTART;VALUE=DATE:" + dateStamp(first));
-        lines.push("DTEND;VALUE=DATE:"   + dateStamp(end));
-        lines.push("BEGIN:VALARM");
-        lines.push("ACTION:DISPLAY");
-        lines.push("DESCRIPTION:" + summary);
-        lines.push("TRIGGER:PT0M");
-        lines.push("END:VALARM");
-      } else {
+      {
+        // All habits exported now have a clock-time slot — the all-day
+        // (Daily Completion) and avoid sections were filtered out
+        // upstream. So every event takes the same DTSTART/DTEND form.
         const start = new Date(first);
         start.setHours(0, 0, 0, 0);
         start.setMinutes(ht.startMin);
@@ -14732,14 +14745,68 @@ function App() {
     // Calendar tab — day / week / month views over the user's habits.
     // Each cell shows a small badge of how many habits are due that
     // day; tapping a cell selects it and the bottom panel lists the
-    // due habits with their importance dot.
+    // due habits with their importance dot, scheduled time, and end
+    // time. all-day (Daily Completion) and avoid sections are filtered
+    // out — they don't have a clock-time slot and shouldn't appear in
+    // a time-of-day calendar; the export logic mirrors the same
+    // filter so the exported .ics matches what the tab displays.
     const focusDate = (() => {
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calendarFocus);
       if (!m) return new Date();
       return new Date(+m[1], +m[2] - 1, +m[3]);
     })();
     const allHabits = (data.habits || []);
-    const habitsDueOn = key => allHabits.filter(h => isHabitDueOn(h, key));
+    // Filter out the two sections that can't sit on a clock:
+    //   • all-day  (Daily Completion) — no time of day
+    //   • avoid                       — not a scheduled action
+    const scheduledOnly = allHabits.filter(h => h.section !== "all-day" && h.section !== "avoid");
+    // Time ranges drive section anchors. Evening wraps midnight in
+    // the default (18→6), so the schedule helper clamps to a 24-h
+    // local-day window for display.
+    const ranges = getTimeRanges(data);
+    // Schedule helper — returns the due habits for a date with an
+    // assigned [startMin, endMin] in minutes from midnight, ordered
+    // by their _order within each section, stacked by duration so
+    // a 60-min run at 6:00 followed by a 30-min stretch lands at
+    // 7:00. Habits without a duration get a default 30-min slot.
+    const scheduleHabitsForDay = key => {
+      const due = scheduledOnly.filter(h => isHabitDueOn(h, key));
+      // Group by section, sort within each by _order then id.
+      const bySection = { morning: [], afternoon: [], evening: [] };
+      for (const h of due) {
+        const sec = h.section || "morning";
+        if (bySection[sec]) bySection[sec].push(h);
+      }
+      const sortFn = (a, b) => {
+        const ao = a._order ?? 999, bo = b._order ?? 999;
+        if (ao !== bo) return ao - bo;
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      };
+      const out = [];
+      for (const sec of ["morning", "afternoon", "evening"]) {
+        bySection[sec].sort(sortFn);
+        const r = ranges[sec] || DEFAULT_TIME_RANGES[sec];
+        // Anchor in minutes from midnight. Evening wraps to 18:00
+        // start; we cap end at 23:59 for display so an over-long
+        // evening stack doesn't paint into next-day hours.
+        let cursor = (r.start || 0) * 60;
+        for (const h of bySection[sec]) {
+          const dur = Math.max(5, parseInt(h.duration, 10) || 30);
+          out.push({ habit: h, startMin: cursor, endMin: cursor + dur, durationMin: dur });
+          cursor += dur;
+        }
+      }
+      out.sort((a, b) => a.startMin - b.startMin);
+      return out;
+    };
+    const habitsDueOn = key => scheduleHabitsForDay(key);
+    const fmtMins = mins => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      const h12 = ((h + 11) % 12) + 1;
+      const ampm = h < 12 ? "am" : "pm";
+      return h12 + (m === 0 ? "" : ":" + String(m).padStart(2, "0")) + ampm;
+    };
     const impColor = imp => imp === "Non-Negotiable" ? "#b91c1c"
                           : imp === "Important"     ? "#b45309"
                                                     : "#0891b2";
@@ -14920,29 +14987,34 @@ function App() {
             }, "Nothing scheduled.")
           : /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", flexDirection: "column", gap: 6 }
-            }, dueOnFocus.map(h => /*#__PURE__*/React.createElement("div", {
-              key: h.id,
-              style: {
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "8px 10px",
-                background: "var(--c-surface-raised)",
-                border: "1px solid var(--c-border)",
-                borderRadius: 8
-              }
-            },
-              /*#__PURE__*/React.createElement("span", {
-                style: { width: 8, height: 8, borderRadius: "50%", background: impColor(h.importance), flexShrink: 0 }
-              }),
-              /*#__PURE__*/React.createElement("span", {
-                style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-              }, h.text),
-              h.duration && /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 10, color: "#9ca3af" }
-              }, "⏱ " + h.duration + "m"),
-              /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 9, color: "#9ca3af", textTransform: "uppercase", fontWeight: 700 }
-              }, freqLabel(h).replace(/^(\w+).*/, "$1"))
-            )))
+            }, dueOnFocus.map(slot => {
+              const h = slot.habit;
+              return /*#__PURE__*/React.createElement("div", {
+                key: h.id,
+                style: {
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 10px",
+                  background: "var(--c-surface-raised)",
+                  border: "1px solid var(--c-border)",
+                  borderRadius: 8
+                }
+              },
+                // Start–end time block, fixed width so habit names
+                // line up vertically across rows of varying length.
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, color: "#6b7280", fontWeight: 700, width: 88, flexShrink: 0, fontVariantNumeric: "tabular-nums" }
+                }, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { width: 8, height: 8, borderRadius: "50%", background: impColor(h.importance), flexShrink: 0 }
+                }),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                }, h.text),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 9, color: "#9ca3af", textTransform: "uppercase", fontWeight: 700 }
+                }, freqLabel(h).replace(/^(\w+).*/, "$1"))
+              );
+            }))
       ),
       // Export — hooks the existing exportHabitsICS, which now stamps
       // PRIORITY (Non-Negotiable=1, Important=5, Additive=7) and
