@@ -18165,6 +18165,33 @@ function App() {
         color: "var(--c-text-strong)"
       }
     }, editHabitModal && editHabitModal.id === "__new__" ? "New Habit" : "Edit Habit"),
+    // Center cluster: compact "Starts <date>" pill that opens the
+    // native date picker. Moved out of its own row at the bottom
+    // of the form so the modal is a noticeably shorter card.
+    // Hidden in container query — flex-shrinks first if the
+    // header gets cramped, but typically renders inline.
+    /*#__PURE__*/React.createElement("label", {
+      title: "Starts on " + (eHStart || dk(new Date())),
+      style: {
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "3px 8px",
+        borderRadius: 14,
+        border: "1px solid var(--c-border)",
+        background: "var(--c-surface-muted)",
+        fontSize: 10, fontWeight: 600, color: "var(--c-text-soft)",
+        cursor: "pointer", whiteSpace: "nowrap",
+        flexShrink: 1, overflow: "hidden"
+      }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { opacity: 0.7 } }, "Starts"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "date",
+        value: eHStart || dk(new Date()),
+        onChange: e => sEHStart(e.target.value || dk(new Date())),
+        "aria-label": "Start date",
+        style: { border: "none", background: "transparent", padding: 0, fontSize: 10, fontWeight: 600, color: "var(--c-text)", outline: "none", cursor: "pointer", width: 90 }
+      })
+    ),
     // Right cluster: Order x/y (existing habits only) + close X.
     /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", alignItems: "center", gap: 10 }
@@ -18556,38 +18583,8 @@ function App() {
       fontSize: 12
     }
   }),
-  // Starts row (last field before save). Pulled out of renderFreqPicker
-  // for the edit-habit modal because the user wants the start date to
-  // be the final thing they touch before committing changes.
-  /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11, fontWeight: 600, color: "#6b7280",
-      marginBottom: 4, letterSpacing: .2
-    }
-  }, "Starts"),
-  /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }
-  },
-    /*#__PURE__*/React.createElement("input", {
-      type: "date",
-      value: eHStart || dk(new Date()),
-      onChange: e => sEHStart(e.target.value || dk(new Date())),
-      style: { ...S, flex: 1, color: "var(--c-text-soft)" }
-    }),
-    /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => sEHStart(dk(new Date())),
-      title: "Start today",
-      style: {
-        padding: "6px 11px", borderRadius: 10,
-        border: eHStart === dk(new Date()) ? "1px solid var(--accent, #2d5a2d)" : "1px solid #d1d5db",
-        background: eHStart === dk(new Date()) ? "var(--accent, #2d5a2d)" : "#fff",
-        color: eHStart === dk(new Date()) ? "#fff" : "var(--c-text-soft)",
-        fontSize: 11, fontWeight: 700, cursor: "pointer",
-        WebkitTapHighlightColor: "transparent", whiteSpace: "nowrap"
-      }
-    }, "Today")
-  ),
+  // (Starts row was here; moved into the modal header as a
+  // compact pill so the form is one viewport shorter.)
   /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
