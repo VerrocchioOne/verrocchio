@@ -11890,16 +11890,15 @@ function App() {
           "aria-label": hasTarget ? "Log " + (habit.increment || 1) + " " + (habit.unitLabel || "unit") : undefined,
           onClick: e => {
             e.stopPropagation();
+            // The action circle is exclusively a unit-logger now.
+            // Sub-unit habits: each tap adds habit.increment past
+            // target if needed (60 → 75 → 90 …). Plain habits get
+            // NO tap behavior — done/missed/reset all go through
+            // swipes (right = done, left = reset). Removing the
+            // tap-when-done un-mark path keeps the gesture set
+            // unambiguous: one place to reset, one place to log.
             if (hasTarget) {
-              // Every tap on a sub-unit habit adds habit.increment,
-              // regardless of done/missed state. After a swipe-right
-              // fill lands the count at target, subsequent taps push
-              // past it (60 → 75 → 90 …). Resetting to 0 is now
-              // exclusively the swipe-left gesture, so the action
-              // circle has one job: log the next unit.
               togHabit(habit.id, selDate, "increment");
-            } else if (d || missed) {
-              togHabit(habit.id, selDate, undefined);
             }
           },
           style: {
@@ -11908,7 +11907,7 @@ function App() {
             borderRadius: "50%",
             border: "none",
             background: bg,
-            cursor: (hasTarget || d || missed) ? "pointer" : "default",
+            cursor: hasTarget ? "pointer" : "default",
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
