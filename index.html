@@ -15076,6 +15076,10 @@ function App() {
                   const height = Math.max(22, slot.durationMin * pxPerMin - 2);
                   return /*#__PURE__*/React.createElement("div", {
                     key: h.id,
+                    // Hover/long-press tooltip carries the time range
+                    // for users who want it on demand — keeps the
+                    // block itself uncluttered.
+                    title: fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin) + " · " + h.text,
                     style: {
                       position: "absolute",
                       top: top + "px",
@@ -15087,14 +15091,14 @@ function App() {
                       borderRadius: 6,
                       padding: "4px 8px",
                       overflow: "hidden",
-                      display: "flex", flexDirection: "column",
-                      gap: 2,
-                      fontSize: 11
+                      display: "flex", alignItems: "center"
                     }
                   },
-                    /*#__PURE__*/React.createElement("div", {
-                      style: { fontSize: 10, color: "#6b7280", fontVariantNumeric: "tabular-nums" }
-                    }, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
+                    // Just the habit name. The hour rail on the left
+                    // already encodes the start time (block top-edge
+                    // aligns with the hour line) and the block height
+                    // encodes duration, so a redundant "6:00am–6:30am"
+                    // line inside was visual noise.
                     /*#__PURE__*/React.createElement("div", {
                       style: { fontSize: 12, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
                     }, h.text)
