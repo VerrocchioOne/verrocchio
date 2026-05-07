@@ -3826,6 +3826,12 @@ function App() {
       "X-WR-CALNAME:Verrocchio Habits",
       "X-WR-TIMEZONE:" + tzid
     ];
+    // Importance → iCalendar PRIORITY mapping. RFC 5545 priority is
+    // 0–9 where 1 is highest, 5 is normal, 9 is lowest. Most
+    // calendar apps surface this as a flag/icon on the event.
+    const priorityFor = imp => imp === "Non-Negotiable" ? 1
+                              : imp === "Additive"      ? 7
+                                                        : 5;
     for (const ht of habitTimes) {
       const h = ht.habit;
       const freq = getFreq(h);
@@ -3837,11 +3843,18 @@ function App() {
       if (h.type)       descParts.push(h.type);
       if (h.duration)   descParts.push(h.duration + " min");
       const description = escapeICS(descParts.join(" · "));
+      // CATEGORIES tags the event so calendar apps can filter or
+      // colour-code by area-of-life and importance tier.
+      const categories = [];
+      if (h.type)       categories.push(h.type);
+      if (h.importance) categories.push(h.importance);
       lines.push("BEGIN:VEVENT");
       lines.push("UID:" + uid);
       lines.push("DTSTAMP:" + dtstamp);
       lines.push("SUMMARY:" + summary);
       if (description) lines.push("DESCRIPTION:" + description);
+      lines.push("PRIORITY:" + priorityFor(h.importance));
+      if (categories.length) lines.push("CATEGORIES:" + categories.map(escapeICS).join(","));
       lines.push("RRULE:" + buildRRULE(freq));
       if (ht.allDay) {
         const end = new Date(first);
@@ -4509,6 +4522,12 @@ function App() {
      remembers the chosen granularity across opens within the session
      so a user who prefers week-columns gets week-columns next time
      without re-tapping the toggle. */
+  // Calendar tab state — view mode and the focal date the grid /
+  // list pivots around. The view toggle (day/week/month) lives at
+  // the top of the tab; calendarFocus is the date the user is
+  // currently inspecting.
+  const [calendarView, setCalendarView] = useState("month");
+  const [calendarFocus, setCalendarFocus] = useState(() => dk(new Date()));
   const [showXpChart, setShowXpChart] = useState(false);
   const [xpChartGrain, setXpChartGrain] = useState("day"); // "day" | "week" | "month"
   // When the user taps a column on the XP chart, store the bar
@@ -14709,7 +14728,244 @@ function App() {
         opacity: 0
       }
     }, "\xD7")));
-  })))), false && tab === "social" && /*#__PURE__*/React.createElement("div", {
+  })))), tab === "calendar" && (() => {
+    // Calendar tab — day / week / month views over the user's habits.
+    // Each cell shows a small badge of how many habits are due that
+    // day; tapping a cell selects it and the bottom panel lists the
+    // due habits with their importance dot.
+    const focusDate = (() => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(calendarFocus);
+      if (!m) return new Date();
+      return new Date(+m[1], +m[2] - 1, +m[3]);
+    })();
+    const allHabits = (data.habits || []);
+    const habitsDueOn = key => allHabits.filter(h => isHabitDueOn(h, key));
+    const impColor = imp => imp === "Non-Negotiable" ? "#b91c1c"
+                          : imp === "Important"     ? "#b45309"
+                                                    : "#0891b2";
+    const fmtDate = (d, opts) => d.toLocaleDateString(undefined, opts || { weekday: "short", month: "short", day: "numeric" });
+    const moveFocus = days => {
+      const d = new Date(focusDate);
+      d.setDate(d.getDate() + days);
+      setCalendarFocus(dk(d));
+    };
+    const moveMonth = months => {
+      const d = new Date(focusDate);
+      d.setMonth(d.getMonth() + months);
+      setCalendarFocus(dk(d));
+    };
+    // ── header: view toggle + nav arrows + Export button ──
+    const viewBtn = (id, label) => /*#__PURE__*/React.createElement("button", {
+      key: id,
+      type: "button",
+      onClick: () => setCalendarView(id),
+      style: {
+        flex: 1, padding: "8px 10px", fontSize: 12, fontWeight: 700,
+        border: "1px solid " + (calendarView === id ? "#2d5a2d" : "var(--c-border)"),
+        background: calendarView === id ? "var(--c-tint-green)" : "#fff",
+        color: calendarView === id ? "#2d5a2d" : "#6b7280",
+        borderRadius: 8, cursor: "pointer"
+      }
+    }, label);
+    const navBtn = (label, onClick, dim) => /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick,
+      "aria-label": label,
+      style: {
+        background: "var(--c-surface-raised)", border: "1px solid var(--c-border)",
+        borderRadius: 8, padding: "6px 10px", fontSize: 14, cursor: "pointer",
+        color: dim ? "#9ca3af" : "var(--c-text)"
+      }
+    }, label);
+    // ── header range label changes per view ──
+    const rangeLabel = (() => {
+      if (calendarView === "day") return fmtDate(focusDate, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+      if (calendarView === "week") {
+        const start = new Date(focusDate);
+        start.setDate(focusDate.getDate() - focusDate.getDay()); // Sunday-anchored
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        return fmtDate(start, { month: "short", day: "numeric" }) + " — " + fmtDate(end, { month: "short", day: "numeric", year: "numeric" });
+      }
+      return focusDate.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+    })();
+    const stepBack = () => {
+      if (calendarView === "day") moveFocus(-1);
+      else if (calendarView === "week") moveFocus(-7);
+      else moveMonth(-1);
+    };
+    const stepFwd = () => {
+      if (calendarView === "day") moveFocus(1);
+      else if (calendarView === "week") moveFocus(7);
+      else moveMonth(1);
+    };
+    // ── month grid: 6 rows × 7 cols, anchored to first of focus month ──
+    const renderMonth = () => {
+      const first = new Date(focusDate.getFullYear(), focusDate.getMonth(), 1);
+      const startDow = first.getDay();
+      const daysInMonth = new Date(focusDate.getFullYear(), focusDate.getMonth() + 1, 0).getDate();
+      const cells = [];
+      for (let i = 0; i < 42; i++) {
+        const dayNum = i - startDow + 1;
+        if (dayNum < 1 || dayNum > daysInMonth) {
+          cells.push({ key: "blank-" + i, blank: true });
+        } else {
+          const cell = new Date(focusDate.getFullYear(), focusDate.getMonth(), dayNum);
+          const k = dk(cell);
+          const due = habitsDueOn(k);
+          cells.push({ key: k, dayNum, k, dueCount: due.length, isToday: k === tk() });
+        }
+      }
+      const todayKey = tk();
+      return /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 4 }
+        }, ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d =>
+          /*#__PURE__*/React.createElement("div", {
+            key: d,
+            style: { textAlign: "center", fontSize: 9, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", padding: "4px 0" }
+          }, d)
+        )),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }
+        }, cells.map(c => c.blank
+          ? /*#__PURE__*/React.createElement("div", { key: c.key, style: { aspectRatio: "1 / 1" } })
+          : /*#__PURE__*/React.createElement("button", {
+              key: c.key,
+              type: "button",
+              onClick: () => setCalendarFocus(c.k),
+              style: {
+                aspectRatio: "1 / 1",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                gap: 2,
+                background: c.k === calendarFocus ? "#2d5a2d" : c.isToday ? "var(--c-tint-green)" : "#fff",
+                color: c.k === calendarFocus ? "#fff" : "var(--c-text)",
+                border: "1px solid " + (c.isToday ? "#86efac" : "var(--c-border)"),
+                borderRadius: 8, cursor: "pointer", padding: "4px 0",
+                fontSize: 12, fontWeight: c.isToday ? 700 : 500
+              }
+            },
+              /*#__PURE__*/React.createElement("span", null, c.dayNum),
+              c.dueCount > 0 && /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 9, color: c.k === calendarFocus ? "#fff" : "#9ca3af", lineHeight: 1 }
+              }, c.dueCount + (c.dueCount === 1 ? " habit" : " habits"))
+            )
+        ))
+      );
+    };
+    const renderWeek = () => {
+      const start = new Date(focusDate);
+      start.setDate(focusDate.getDate() - focusDate.getDay());
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const k = dk(d);
+        days.push({ d, k, due: habitsDueOn(k), isToday: k === tk() });
+      }
+      return /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexDirection: "column", gap: 6 }
+      }, days.map(({ d, k, due, isToday }) => /*#__PURE__*/React.createElement("button", {
+        key: k,
+        type: "button",
+        onClick: () => setCalendarFocus(k),
+        style: {
+          textAlign: "left",
+          background: k === calendarFocus ? "var(--c-tint-green)" : "#fff",
+          border: "1px solid " + (isToday ? "#86efac" : "var(--c-border)"),
+          borderRadius: 10, padding: "10px 12px", cursor: "pointer",
+          display: "flex", justifyContent: "space-between", alignItems: "center"
+        }
+      },
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "var(--c-text)" } }, fmtDate(d, { weekday: "long", month: "short", day: "numeric" })),
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280" } }, due.length + (due.length === 1 ? " habit" : " habits"))
+      )));
+    };
+    const dueOnFocus = habitsDueOn(calendarFocus);
+    return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
+      // View toggle
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6, marginBottom: 10 }
+      }, viewBtn("day", "Day"), viewBtn("week", "Week"), viewBtn("month", "Month")),
+      // Range header + nav
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8 }
+      },
+        navBtn("←", stepBack),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", textAlign: "center", flex: 1 }
+        }, rangeLabel),
+        navBtn("→", stepFwd)
+      ),
+      // Body — month / week / day
+      calendarView === "month" ? renderMonth()
+        : calendarView === "week" ? renderWeek()
+        : /*#__PURE__*/React.createElement("div", {
+            style: { padding: "0", marginBottom: 8 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#6b7280", marginBottom: 8 }
+            }, dueOnFocus.length + (dueOnFocus.length === 1 ? " habit" : " habits") + " due")
+          ),
+      // Selected day's habits panel — visible in all views.
+      /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--c-border)" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }
+        }, fmtDate(focusDate, { weekday: "long", month: "short", day: "numeric" }) + " · " + dueOnFocus.length + (dueOnFocus.length === 1 ? " habit" : " habits")),
+        dueOnFocus.length === 0
+          ? /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#9ca3af", padding: "8px 0", textAlign: "center" }
+            }, "Nothing scheduled.")
+          : /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 6 }
+            }, dueOnFocus.map(h => /*#__PURE__*/React.createElement("div", {
+              key: h.id,
+              style: {
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "8px 10px",
+                background: "var(--c-surface-raised)",
+                border: "1px solid var(--c-border)",
+                borderRadius: 8
+              }
+            },
+              /*#__PURE__*/React.createElement("span", {
+                style: { width: 8, height: 8, borderRadius: "50%", background: impColor(h.importance), flexShrink: 0 }
+              }),
+              /*#__PURE__*/React.createElement("span", {
+                style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+              }, h.text),
+              h.duration && /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 10, color: "#9ca3af" }
+              }, "⏱ " + h.duration + "m"),
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 9, color: "#9ca3af", textTransform: "uppercase", fontWeight: 700 }
+              }, freqLabel(h).replace(/^(\w+).*/, "$1"))
+            )))
+      ),
+      // Export — hooks the existing exportHabitsICS, which now stamps
+      // PRIORITY (Non-Negotiable=1, Important=5, Additive=7) and
+      // CATEGORIES so any calendar app (Apple, Google, Yahoo, Outlook)
+      // can colour-code or filter by importance and area.
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: exportHabitsICS,
+        style: {
+          marginTop: 16, width: "100%",
+          padding: "11px 14px",
+          borderRadius: 10,
+          border: "1px solid var(--c-border)",
+          background: "var(--c-surface-raised)",
+          color: "var(--c-text)",
+          fontSize: 13, fontWeight: 600, cursor: "pointer"
+        }
+      }, "📅 Export to iCalendar (.ics)"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: "#9ca3af", textAlign: "center", marginTop: 6, lineHeight: 1.5 }
+      }, "Imports into Apple Calendar, Google Calendar, Yahoo, Outlook. Importance is stamped as iCalendar PRIORITY (Non-Negotiable = highest, Additive = lowest).")
+    );
+  })(), false && tab === "social" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -18242,9 +18498,62 @@ function App() {
     style: {
       ...IS,
       width: "100%",
-      marginBottom: 10
+      marginBottom: 6
     }
   }),
+  // Created / last-modified line — read-only metadata, surfaced
+  // because the streak counter is bound by h.startDate (no streak
+  // can extend before the habit existed). Showing the dates here
+  // makes that contract explicit. Hidden in create mode (no
+  // habit yet, nothing to date-stamp).
+  editHabitModal && editHabitModal.id !== "__new__" && (() => {
+    const h = (data.habits || []).find(x => x.id === editHabitModal.id);
+    if (!h) return null;
+    const fmt = key => {
+      if (!key) return "—";
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(key);
+      if (!m) return key;
+      return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    };
+    // h.id is Date.now() at creation, so derive a created date from it
+    // if there's no explicit field. h.startDate is the user-set start
+    // (defaults to creation date), which is what the streak math
+    // actually keys off.
+    const createdDateKey = (() => {
+      const id = Number(h.id);
+      if (!isFinite(id) || id <= 0) return h.startDate || null;
+      const d = new Date(id);
+      if (isNaN(d.getTime())) return h.startDate || null;
+      return dk(d);
+    })();
+    // Last modified: take the freshest history snapshot's ts, else
+    // fall back to the start date. History entries write `ts` in
+    // svEHabit when the user actually changes a tracked field.
+    const lastEdit = (() => {
+      const hist = Array.isArray(h.history) ? h.history : [];
+      if (hist.length === 0) return null;
+      const latest = hist[hist.length - 1];
+      if (!latest || !latest.ts) return null;
+      return dk(new Date(latest.ts));
+    })();
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex", justifyContent: "space-between", gap: 12,
+        fontSize: 10, color: "#9ca3af",
+        marginBottom: 10, paddingBottom: 6,
+        borderBottom: "1px dashed var(--c-border)"
+      }
+    },
+      /*#__PURE__*/React.createElement("span", null,
+        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700 } }, "Added "),
+        fmt(createdDateKey)
+      ),
+      lastEdit && /*#__PURE__*/React.createElement("span", null,
+        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700 } }, "Edited "),
+        fmt(lastEdit)
+      )
+    );
+  })(),
   // Habit flavor toggle: Yes/No vs Target & Unit. Switches whether
   // the rows below render. When switching to Yes/No, the target /
   // unit / +per-tap state stays in memory so flipping back doesn't
@@ -18736,6 +19045,21 @@ function App() {
       // Two check marks, one per list row.
       /*#__PURE__*/React.createElement("path", { d: "M8.5 12l1.5 1.5L13 10.5" }),
       /*#__PURE__*/React.createElement("path", { d: "M8.5 17l1.5 1.5L13 15.5" })
+    )
+  }, {
+    // CALENDAR — day/week/month views over scheduled habits, plus
+    // an iCalendar (.ics) export hook for Apple/Google/Yahoo/Outlook.
+    key: "calendar",
+    label: "Calendar",
+    icon: a => /*#__PURE__*/React.createElement("svg", {
+      width: "22", height: "22", viewBox: "0 0 24 24", fill: "none",
+      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
+      strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
+    },
+      /*#__PURE__*/React.createElement("rect", { x: "3", y: "4", width: "18", height: "18", rx: "2", ry: "2" }),
+      /*#__PURE__*/React.createElement("line", { x1: "16", y1: "2", x2: "16", y2: "6" }),
+      /*#__PURE__*/React.createElement("line", { x1: "8",  y1: "2", x2: "8",  y2: "6" }),
+      /*#__PURE__*/React.createElement("line", { x1: "3",  y1: "10", x2: "21", y2: "10" })
     )
   }, {
     key: "reflection",
