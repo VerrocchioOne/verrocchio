@@ -11908,18 +11908,21 @@ function App() {
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const bg = d ? "#22c55e" : missed ? "#ef4444" : (hasTarget && units > 0 ? "#3d7a3d" : "var(--c-border)");
           return /*#__PURE__*/React.createElement("div", {
-          "aria-label": hasTarget ? "Log " + (habit.increment || 1) + " " + (habit.unitLabel || "unit") : undefined,
+          "aria-label": hasTarget
+            ? "Log " + (habit.increment || 1) + " " + (habit.unitLabel || "unit")
+            : (d ? "Mark not done" : "Mark done"),
           onClick: e => {
             e.stopPropagation();
-            // The action circle is exclusively a unit-logger now.
             // Sub-unit habits: each tap adds habit.increment past
-            // target if needed (60 → 75 → 90 …). Plain habits get
-            // NO tap behavior — done/missed/reset all go through
-            // swipes (right = done, left = reset). Removing the
-            // tap-when-done un-mark path keeps the gesture set
-            // unambiguous: one place to reset, one place to log.
+            // target if needed (60 → 75 → 90 …).
+            // Plain habits (no target / no unit): tap toggles
+            // Yes ⇄ No. Resetting a done plain habit BACK to None
+            // is still done via swipe-left ("Cleared for today");
+            // tap on the action circle just flips the binary.
             if (hasTarget) {
               togHabit(habit.id, selDate, "increment");
+            } else if (!d) {
+              togHabit(habit.id, selDate, "done");
             }
           },
           style: {
@@ -11928,7 +11931,7 @@ function App() {
             borderRadius: "50%",
             border: "none",
             background: bg,
-            cursor: hasTarget ? "pointer" : "default",
+            cursor: "pointer",
             flexShrink: 0,
             display: "flex",
             alignItems: "center",
@@ -11961,7 +11964,7 @@ function App() {
           stroke: "white",
           strokeWidth: "2",
           strokeLinecap: "round"
-        })) : (typeof habit.target === "number" && !d && !missed)
+        })) : hasTarget
           ? /*#__PURE__*/React.createElement("span", null,
               // Show the live count for ≤ habits (even if it's 0 of
               // 0); show min(count, target) for ≥ habits so the
@@ -11970,14 +11973,12 @@ function App() {
                 ? ((habit.completionUnits && Number(habit.completionUnits[selDate])) || 0)
                 : Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0)
             )
-          : /*#__PURE__*/React.createElement("svg", {
-              width: "14",
-              height: "14",
-              viewBox: "0 0 16 16",
-              fill: "none"
-            }, /*#__PURE__*/React.createElement("circle", {
-              cx: "8", cy: "8", r: "7", stroke: "#d1d5db", strokeWidth: "1.5"
-            })));
+          // Plain habit, fresh: small "Y/N" label inside the circle
+          // so the affordance reads as a Yes/No toggle. Tap marks
+          // Yes; swipe right also marks Yes; swipe left clears.
+          : /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 8, fontWeight: 700, color: "#6b7280", letterSpacing: 0.2 }
+            }, "Y/N"));
         })(), /*#__PURE__*/React.createElement("div", {
           style: {
             flex: 1,
