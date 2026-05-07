@@ -6791,18 +6791,30 @@ function App() {
   // preserved. Flips sortPrefs.habits to "custom" so the change
   // is immediately visible.
   const reorderHabitSection = (sectionVal, newSequence) => {
-    const all = (data.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    // Read from latestData.current (always the freshest state)
+    // rather than the closure-captured `data` — when this is
+    // called as a follow-up to svEHabit's save (e.g. the user
+    // both renamed AND repositioned a habit), the closure here
+    // would still hold the pre-save habits array and the order
+    // rewrite would clobber the rename.
+    const cur = latestData.current || data;
+    const all = (cur.habits || []).slice().sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
     let sIdx = 0;
     const newGlobal = all.map(h => h.section === sectionVal ? (newSequence[sIdx++] || h) : h);
-    const allHabits = [...data.habits];
+    const allHabits = [...(cur.habits || [])];
     newGlobal.forEach((h, i) => {
       const idx = allHabits.findIndex(x => x.id === h.id);
       if (idx >= 0) allHabits[idx] = { ...allHabits[idx], _order: i };
     });
+    // Snap habits sort to "default" so the user immediately sees
+    // the new manual order. Custom was removed from the sort
+    // sheet when drag-and-drop landed (and now re-removed when
+    // it was replaced by the Order x/y input), so we no longer
+    // route through that pref.
     save({
-      ...data,
+      ...cur,
       habits: allHabits,
-      sortPrefs: { ...(data.sortPrefs || {}), habits: "custom" }
+      sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" }
     });
   };
   // Open the reorder modal for a Habits-page section. Seeds the draft
