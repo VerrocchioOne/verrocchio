@@ -15024,26 +15024,26 @@ function App() {
                                        : sec === "evening"   ? "#ddd6fe"
                                                              : "var(--c-border)";
             return /*#__PURE__*/React.createElement("div", {
-              style: {
-                border: "1px solid var(--c-border)",
-                borderRadius: 10,
-                background: "var(--c-surface, #fff)",
-                overflow: "hidden",
-                marginBottom: 8
-              }
+              style: { display: "flex", gap: 8, alignItems: "stretch", marginBottom: 8 }
             },
+              // ── LEFT: timeline with proportional colored blocks
+              // ─────────────────────────────────────────────────
+              // Narrow column showing hour gridlines + small
+              // section/importance-colored rectangles whose height
+              // is proportional to habit duration. No text inside
+              // the blocks (short ones can't fit it anyway); the
+              // detail lives in the callouts column to the right.
               /*#__PURE__*/React.createElement("div", {
                 style: {
+                  flex: "0 0 88px",
                   position: "relative",
                   height: colHeight + "px",
-                  // Outer scroll: phones won't fit 18 hours of
-                  // 60px lines onscreen, so the timeline scrolls
-                  // inside its bordered card.
-                  overflowY: "auto"
+                  overflowY: "auto",
+                  border: "1px solid var(--c-border)",
+                  borderRadius: 10,
+                  background: "var(--c-surface, #fff)"
                 }
               },
-                // Hour gridlines + labels — left rail with hour
-                // labels, faint horizontal line under each hour.
                 hours.map(h => /*#__PURE__*/React.createElement("div", {
                   key: "hr-" + h,
                   style: {
@@ -15066,44 +15066,83 @@ function App() {
                     }
                   }, fmtHour(h))
                 )),
-                // Habit blocks. Each block: absolute-positioned
-                // rectangle with importance dot, time range, and
-                // habit name. Min height of 22px so a 5-min habit
-                // is still tap-able.
                 dueOnFocus.map(slot => {
                   const h = slot.habit;
                   const top = Math.max(0, (slot.startMin - dayStartHour * 60) * pxPerMin);
-                  const height = Math.max(22, slot.durationMin * pxPerMin - 2);
+                  // Strict proportional height — even a 5-min
+                  // habit gets exactly 5px. The callout to the
+                  // right carries the text, so the block doesn't
+                  // need to be tap-tall.
+                  const height = Math.max(3, slot.durationMin * pxPerMin - 1);
                   return /*#__PURE__*/React.createElement("div", {
                     key: h.id,
-                    // Hover/long-press tooltip carries the time range
-                    // for users who want it on demand — keeps the
-                    // block itself uncluttered.
                     title: fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin) + " · " + h.text,
                     style: {
                       position: "absolute",
                       top: top + "px",
-                      left: 56, right: 6,
+                      left: 38, right: 4,
                       height: height + "px",
                       background: sectionTint(h.section),
                       border: "1px solid " + sectionBorder(h.section),
                       borderLeft: "3px solid " + impColor(h.importance),
-                      borderRadius: 6,
-                      padding: "4px 8px",
-                      overflow: "hidden",
-                      display: "flex", alignItems: "center"
+                      borderRadius: 4
                     }
-                  },
-                    // Just the habit name. The hour rail on the left
-                    // already encodes the start time (block top-edge
-                    // aligns with the hour line) and the block height
-                    // encodes duration, so a redundant "6:00am–6:30am"
-                    // line inside was visual noise.
-                    /*#__PURE__*/React.createElement("div", {
-                      style: { fontSize: 12, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                    }, h.text)
-                  );
+                  });
                 })
+              ),
+              // ── RIGHT: callout cards
+              // ─────────────────────────────────────────────────
+              // One card per habit, in chronological order. Each
+              // carries its own color stripe matching the block on
+              // the left so the visual link is obvious. Cards
+              // flow naturally — no absolute positioning, so two
+              // adjacent short habits can each have full text
+              // without crowding the timeline.
+              /*#__PURE__*/React.createElement("div", {
+                style: {
+                  flex: 1,
+                  display: "flex", flexDirection: "column", gap: 6,
+                  maxHeight: colHeight + "px",
+                  overflowY: "auto"
+                }
+              }, dueOnFocus.length === 0
+                ? /*#__PURE__*/React.createElement("div", {
+                    style: { fontSize: 12, color: "#9ca3af", padding: "8px 0", textAlign: "center" }
+                  }, "Nothing scheduled.")
+                : dueOnFocus.map(slot => {
+                    const h = slot.habit;
+                    return /*#__PURE__*/React.createElement("div", {
+                      key: h.id,
+                      style: {
+                        display: "flex", alignItems: "stretch", gap: 8,
+                        background: sectionTint(h.section),
+                        border: "1px solid " + sectionBorder(h.section),
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        padding: 0
+                      }
+                    },
+                      /*#__PURE__*/React.createElement("div", {
+                        style: { width: 4, background: impColor(h.importance), flexShrink: 0 }
+                      }),
+                      /*#__PURE__*/React.createElement("div", {
+                        style: { flex: 1, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }
+                      },
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                        }, h.text),
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 10, color: "#6b7280", display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }
+                        },
+                          /*#__PURE__*/React.createElement("span", null, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
+                          /*#__PURE__*/React.createElement("span", { style: { color: "#cbd5e1" } }, "·"),
+                          /*#__PURE__*/React.createElement("span", null, slot.durationMin + " min"),
+                          /*#__PURE__*/React.createElement("span", { style: { color: "#cbd5e1" } }, "·"),
+                          /*#__PURE__*/React.createElement("span", { style: { textTransform: "uppercase", fontWeight: 700, color: "#6b7280" } }, freqLabel(h).replace(/^(\w+).*/, "$1"))
+                        )
+                      )
+                    );
+                  })
               )
             );
           })(),
