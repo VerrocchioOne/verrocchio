@@ -15015,14 +15015,29 @@ function App() {
               const h12 = ((h + 11) % 12) + 1;
               return h12 + (h < 12 ? "am" : "pm");
             };
-            const sectionTint = sec => sec === "morning"   ? "#fffbeb"
-                                       : sec === "afternoon" ? "#fff7ed"
-                                       : sec === "evening"   ? "#f5f3ff"
+            // Bumped tints — the previous palette had three colours
+            // that all read as "very pale wash" on phones. These
+            // sit deeper into amber / orange / violet so a glance
+            // at the day immediately separates morning, afternoon,
+            // and evening blocks. Borders match the section's
+            // accent hue so the rectangles read as section-colored
+            // even at 5px tall.
+            const sectionTint = sec => sec === "morning"   ? "#fef3c7"
+                                       : sec === "afternoon" ? "#ffedd5"
+                                       : sec === "evening"   ? "#ede9fe"
                                                              : "#f3f4f6";
-            const sectionBorder = sec => sec === "morning"   ? "#fde68a"
-                                       : sec === "afternoon" ? "#fed7aa"
-                                       : sec === "evening"   ? "#ddd6fe"
+            const sectionBorder = sec => sec === "morning"   ? "#fbbf24"
+                                       : sec === "afternoon" ? "#fb923c"
+                                       : sec === "evening"   ? "#a78bfa"
                                                              : "var(--c-border)";
+            const sectionAccent = sec => sec === "morning"   ? "#d97706"
+                                       : sec === "afternoon" ? "#ea580c"
+                                       : sec === "evening"   ? "#7c3aed"
+                                                             : "#6b7280";
+            const sectionIcon = sec => sec === "morning"   ? "🌅"
+                                       : sec === "afternoon" ? "☀️"
+                                       : sec === "evening"   ? "🌙"
+                                                             : "•";
             return /*#__PURE__*/React.createElement("div", {
               style: { display: "flex", gap: 8, alignItems: "stretch", marginBottom: 8 }
             },
@@ -15084,7 +15099,7 @@ function App() {
                       height: height + "px",
                       background: sectionTint(h.section),
                       border: "1px solid " + sectionBorder(h.section),
-                      borderLeft: "3px solid " + impColor(h.importance),
+                      borderLeft: "5px solid " + impColor(h.importance),
                       borderRadius: 4
                     }
                   });
@@ -15114,7 +15129,7 @@ function App() {
                     return /*#__PURE__*/React.createElement("div", {
                       key: h.id,
                       style: {
-                        display: "flex", alignItems: "stretch", gap: 8,
+                        display: "flex", alignItems: "stretch", gap: 0,
                         background: sectionTint(h.section),
                         border: "1px solid " + sectionBorder(h.section),
                         borderRadius: 8,
@@ -15122,23 +15137,36 @@ function App() {
                         padding: 0
                       }
                     },
+                      // Wider 6px importance stripe — at-a-glance
+                      // colour for Non-Negotiable / Important /
+                      // Additive without needing to read text.
                       /*#__PURE__*/React.createElement("div", {
-                        style: { width: 4, background: impColor(h.importance), flexShrink: 0 }
+                        style: { width: 6, background: impColor(h.importance), flexShrink: 0 }
                       }),
                       /*#__PURE__*/React.createElement("div", {
                         style: { flex: 1, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }
                       },
                         /*#__PURE__*/React.createElement("div", {
-                          style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                        }, h.text),
+                          style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 }
+                        },
+                          // Section icon up front — sun / sunset /
+                          // moon depending on time of day. Reinforces
+                          // the colour cue.
+                          /*#__PURE__*/React.createElement("span", {
+                            style: { fontSize: 13, lineHeight: 1, flexShrink: 0 }
+                          }, sectionIcon(h.section)),
+                          /*#__PURE__*/React.createElement("div", {
+                            style: { flex: 1, fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                          }, h.text)
+                        ),
                         /*#__PURE__*/React.createElement("div", {
-                          style: { fontSize: 10, color: "#6b7280", display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap" }
+                          style: { fontSize: 10, color: sectionAccent(h.section), display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap", fontWeight: 600 }
                         },
                           /*#__PURE__*/React.createElement("span", null, fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin)),
-                          /*#__PURE__*/React.createElement("span", { style: { color: "#cbd5e1" } }, "·"),
+                          /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
                           /*#__PURE__*/React.createElement("span", null, slot.durationMin + " min"),
-                          /*#__PURE__*/React.createElement("span", { style: { color: "#cbd5e1" } }, "·"),
-                          /*#__PURE__*/React.createElement("span", { style: { textTransform: "uppercase", fontWeight: 700, color: "#6b7280" } }, freqLabel(h).replace(/^(\w+).*/, "$1"))
+                          /*#__PURE__*/React.createElement("span", { style: { opacity: 0.4 } }, "·"),
+                          /*#__PURE__*/React.createElement("span", { style: { textTransform: "uppercase", fontWeight: 700 } }, freqLabel(h).replace(/^(\w+).*/, "$1"))
                         )
                       )
                     );
