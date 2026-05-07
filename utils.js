@@ -36,12 +36,50 @@ function pastDays(n) {
   });
 }
 
+// Streak is the count of consecutive DUE days that the user has
+// completed, walking back from today. Days where the habit isn't
+// scheduled (a Mon/Wed habit on Tuesday; a weekly-Sunday habit
+// any day except Sunday) are skipped — they're not opportunities,
+// so missing them shouldn't break the streak. Today is also given
+// a grace pass: if today is a due day and not yet completed, we
+// don't break (the user might still do it). Earlier due days
+// without a completion still break.
+//
+// Walks past h.startDate (loop terminates when we cross before
+// the habit existed) so brand-new habits don't get a long fake
+// streak from a frequency that happened to land on green dates.
 function getStreak(h) {
+  if (!h) return 0;
+  const fq = (h && h.frequency) || { type: "daily" };
+  const type = fq.type === "weekly-day" ? "weekly" : (fq.type || "daily");
+  const todayKey = tk();
+  const startKey = h.startDate || null;
   let s = 0;
   for (let i = 0; i < 365; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    if (h.completions?.[dk(d)]) s++;
+    const k = dk(d);
+    if (startKey && k < startKey) break;
+    let due = true;
+    if (type === "weekdays") {
+      due = Array.isArray(fq.days) && fq.days.includes(d.getDay());
+    } else if (type === "weekly") {
+      due = (typeof fq.day === "number" ? fq.day : 1) === d.getDay();
+    } else if (type === "monthly") {
+      due = (fq.monthDay || 1) === d.getDate();
+    } else if (type === "quarterly") {
+      const m = typeof fq.month === "number" ? fq.month : 0;
+      const md = fq.monthDay || 1;
+      due = ((d.getMonth() - m) % 3 + 3) % 3 === 0 && d.getDate() === md;
+    } else if (type === "annual") {
+      const m = typeof fq.month === "number" ? fq.month : 0;
+      const md = fq.monthDay || 1;
+      due = d.getMonth() === m && d.getDate() === md;
+    }
+    // type === "daily" (or unknown) leaves due = true.
+    if (!due) continue;
+    if (h.completions?.[k]) s++;
+    else if (k === todayKey) continue;
     else break;
   }
   return s;
