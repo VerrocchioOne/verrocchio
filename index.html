@@ -18317,25 +18317,27 @@ function App() {
   // Link to Goals — multi-select. A habit can drive several goals
   // at once (e.g. "Sleep 8 hours" supports both "Pass CFA" and
   // "Run a marathon"). Stored as goalIds: number[] on the habit.
+  // Compact layout: tighter row padding + smaller max-height so
+  // the modal stays inside one viewport.
   /*#__PURE__*/React.createElement("div", {
-    style: { marginBottom: 10 }
+    style: { marginBottom: 8 }
   },
     /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11, fontWeight: 600, color: "#6b7280",
-        textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6
+        textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4
       }
     }, "🎯 Linked Goals" + (eHGoalIds.length > 0 ? " (" + eHGoalIds.length + ")" : "")),
     (data.goals || []).length === 0
       ? /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, color: "#9ca3af", marginBottom: 6 }
+          style: { fontSize: 11, color: "#9ca3af", marginBottom: 4 }
         }, "No goals yet. Add the goal first, then link it here.")
       : /*#__PURE__*/React.createElement("div", {
           style: {
-            maxHeight: 160, overflowY: "auto",
+            maxHeight: 96, overflowY: "auto",
             border: "1px solid var(--c-border)",
             borderRadius: 8,
-            padding: "4px 0",
+            padding: "2px 0",
             background: "var(--c-surface-raised)"
           }
         },
@@ -18349,10 +18351,10 @@ function App() {
             return /*#__PURE__*/React.createElement("label", {
               key: g.id,
               style: {
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "6px 10px",
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "3px 8px",
                 cursor: "pointer",
-                fontSize: 12,
+                fontSize: 11,
                 color: checked ? "#2d5a2d" : "var(--c-text)",
                 background: checked ? "var(--c-tint-green)" : "transparent"
               }
@@ -18370,7 +18372,7 @@ function App() {
                     sEHGoalIds(prev => prev.filter(x => x !== idStr));
                   }
                 },
-                style: { flexShrink: 0 }
+                style: { flexShrink: 0, width: 13, height: 13 }
               }),
               /*#__PURE__*/React.createElement("span", {
                 style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
@@ -18385,11 +18387,11 @@ function App() {
       type: "button",
       onClick: () => setNewGoalFromHabit(v => !v),
       style: {
-        marginTop: 6,
+        marginTop: 4,
         background: "transparent",
         border: "1px dashed var(--c-border)",
         borderRadius: 8,
-        padding: "6px 10px",
+        padding: "4px 10px",
         fontSize: 11,
         color: "#2d5a2d",
         fontWeight: 600,
