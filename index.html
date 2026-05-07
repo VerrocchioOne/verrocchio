@@ -4511,6 +4511,10 @@ function App() {
      without re-tapping the toggle. */
   const [showXpChart, setShowXpChart] = useState(false);
   const [xpChartGrain, setXpChartGrain] = useState("day"); // "day" | "week" | "month"
+  // When the user taps a column on the XP chart, store the bar
+  // object so we can render a per-habit breakdown below the chart
+  // for that specific window. null = no bar selected.
+  const [selectedXpBar, setSelectedXpBar] = useState(null);
   const levelHoldTimerRef = useRef(null);
   const levelPressStartRef = useRef(false);
   // Set true for one tick after the long-press handler fires so the
@@ -17385,7 +17389,7 @@ function App() {
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, totalInRange.toLocaleString() + " XP in range · avg " + avg.toLocaleString() + "/" + xpChartGrain)
         ),
         /*#__PURE__*/React.createElement("button", {
-          type: "button", onClick: () => setShowXpChart(false), "aria-label": "Close",
+          type: "button", onClick: () => { setShowXpChart(false); setSelectedXpBar(null); }, "aria-label": "Close",
           style: { background: "transparent", border: "none", fontSize: 22, color: "#6b7280", cursor: "pointer", padding: 4, lineHeight: 1 }
         }, "\u00d7")
       ),
@@ -17450,8 +17454,20 @@ function App() {
             style: { display: "flex", alignItems: "flex-end", gap: 4, height: CHART_H, minWidth: "100%" }
           }, bars.map(b => /*#__PURE__*/React.createElement("div", {
             key: b.key,
-            title: b.value + " XP",
-            style: { flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "flex-end", position: "relative" }
+            title: b.value + " XP — tap for breakdown",
+            // Tap a column to drill into the per-habit breakdown
+            // for that bar's window (1 day / 7 days / 1 month).
+            // Tapping the same bar again clears the selection.
+            onClick: () => setSelectedXpBar(prev => prev && prev.key === b.key ? null : b),
+            style: {
+              flex: 1, minWidth: xpChartGrain === "day" ? 10 : 22,
+              display: "flex", flexDirection: "column", alignItems: "stretch",
+              justifyContent: "flex-end", position: "relative",
+              cursor: "pointer", userSelect: "none",
+              outline: selectedXpBar && selectedXpBar.key === b.key ? "2px solid " + chartAccent : "none",
+              outlineOffset: 2,
+              borderRadius: "4px 4px 0 0"
+            }
           },
             // Value label on top of every non-zero column, at all
             // granularities. Column width gets narrow on Day view, so
@@ -17496,10 +17512,108 @@ function App() {
           )
         )
       ),
+      // Per-habit breakdown for the tapped column. Computes which
+      // habits contributed XP across the bar's window by walking
+      // each habit's completions and matching against the date
+      // range that bar represents (1 day / 7 days / 1 month).
+      // Sums the contribution per habit; lists the breakdown
+      // sorted desc, with the importance-tier color on each
+      // entry's amount so the user sees Non-Negotiable wins
+      // visually distinct from Additive ones.
+      selectedXpBar && (() => {
+        // Resolve the date range covered by this bar.
+        const dates = [];
+        if (xpChartGrain === "day") {
+          dates.push(selectedXpBar.key);
+        } else if (xpChartGrain === "week") {
+          const endK = selectedXpBar.key.replace(/^w-/, "");
+          const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(endK);
+          if (m) {
+            const end = new Date(+m[1], +m[2] - 1, +m[3]);
+            for (let i = 0; i < 7; i++) {
+              const dt = new Date(end); dt.setDate(end.getDate() - i);
+              dates.push(dk(dt));
+            }
+          }
+        } else { // month
+          const m = /^m-(\d{4})-(\d+)$/.exec(selectedXpBar.key);
+          if (m) {
+            const yr = +m[1], mo = +m[2];
+            const last = new Date(yr, mo + 1, 0).getDate();
+            for (let d = 1; d <= last; d++) dates.push(dk(new Date(yr, mo, d)));
+          }
+        }
+        const dateSet = new Set(dates);
+        // Per-habit XP sum (only "done" entries; missed/none don't
+        // contribute, matching xpByDay above).
+        const rows = [];
+        (data.habits || []).forEach(h => {
+          const unit = h.importance === "Non-Negotiable" ? 30 : h.importance === "Important" ? 20 : 10;
+          const comps = h.completions || {};
+          let count = 0;
+          for (const d in comps) {
+            if (!dateSet.has(d)) continue;
+            if (comps[d] === "done") count++;
+          }
+          if (count > 0) {
+            rows.push({ id: h.id, text: h.text, importance: h.importance || "Additive", unit, count, xp: count * unit });
+          }
+        });
+        rows.sort((a, b) => b.xp - a.xp);
+        const sectionLabel = xpChartGrain === "day"
+          ? selectedXpBar.key
+          : xpChartGrain === "week"
+            ? "Week ending " + (selectedXpBar.label || "")
+            : selectedXpBar.label;
+        return /*#__PURE__*/React.createElement("div", {
+          style: { padding: "0 18px 16px" }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingTop: 12, borderTop: "1px solid #f3f4f6" }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, fontWeight: 700, color: "var(--c-text-strong)" }
+            }, "Breakdown · " + sectionLabel),
+            /*#__PURE__*/React.createElement("button", {
+              type: "button",
+              onClick: () => setSelectedXpBar(null),
+              style: { background: "transparent", border: "none", color: "#9ca3af", fontSize: 11, cursor: "pointer", padding: 0 }
+            }, "Close ×")
+          ),
+          rows.length === 0
+            ? /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 12, color: "#9ca3af", padding: "8px 0", textAlign: "center" }
+              }, "No habits logged in this window.")
+            : /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", flexDirection: "column", gap: 6 }
+              }, rows.map(r => {
+                const impColor = r.importance === "Non-Negotiable" ? "#b91c1c"
+                                : r.importance === "Important"     ? "#b45309"
+                                                                   : "#0891b2";
+                return /*#__PURE__*/React.createElement("div", {
+                  key: r.id,
+                  style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8 }
+                },
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { width: 8, height: 8, borderRadius: "50%", background: impColor, flexShrink: 0 }
+                  }),
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                  }, r.text),
+                  r.count > 1 && /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 10, color: "#9ca3af" }
+                  }, r.count + "× " + r.unit + " XP"),
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 13, fontWeight: 700, color: chartAccent, whiteSpace: "nowrap" }
+                  }, "+" + r.xp + " XP")
+                );
+              }))
+        );
+      })(),
       // Footer hint so people know tap-and-hold does a different thing.
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 11, color: "#9ca3af", textAlign: "center", padding: "10px 18px 16px" }
-      }, "Tap and hold the XP bar to open your achievements shelf.")
+      }, "Tap a bar to see which habits earned that XP. Hold the XP bar in the header to open achievements.")
     ));
   })(), showAchievements && /*#__PURE__*/React.createElement("div", {
     style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 320, display: "flex", alignItems: "flex-end", justifyContent: "center" },
