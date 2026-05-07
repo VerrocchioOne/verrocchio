@@ -6283,17 +6283,28 @@ function App() {
     if (mode === "increment" && typeof targetH.target === "number") {
       const curUnits = Number(targetH.completionUnits && targetH.completionUnits[key]) || 0;
       if (atTime === "reset") {
+        // Hard clear: drop count to 0 AND force state back to
+        // "none". Bypassing the op-based resolution below is
+        // intentional — a ≤ habit at 0 would otherwise auto-flag
+        // as done (you've avoided so far), which the user
+        // doesn't want when the gesture means "wipe today's
+        // record." The XP delta = val(none) − val(prevState)
+        // calculation downstream will refund any XP awarded
+        // earlier in the day.
         nextUnits = 0;
-      } else if (atTime === "fill") {
-        nextUnits = Math.max(curUnits, targetH.target);
+        newState = "none";
       } else {
-        nextUnits = Math.max(0, curUnits + (Number(targetH.increment) || 1));
-      }
-      const op = targetH.targetOp === "<=" ? "<=" : ">=";
-      if (op === "<=") {
-        newState = nextUnits <= targetH.target ? "done" : "missed";
-      } else {
-        newState = nextUnits >= targetH.target ? "done" : (prev === "done" ? "done" : "none");
+        if (atTime === "fill") {
+          nextUnits = Math.max(curUnits, targetH.target);
+        } else {
+          nextUnits = Math.max(0, curUnits + (Number(targetH.increment) || 1));
+        }
+        const op = targetH.targetOp === "<=" ? "<=" : ">=";
+        if (op === "<=") {
+          newState = nextUnits <= targetH.target ? "done" : "missed";
+        } else {
+          newState = nextUnits >= targetH.target ? "done" : (prev === "done" ? "done" : "none");
+        }
       }
     } else {
       newState = mode === "done" ? "done" : (mode === "missed" ? "missed" : "none");
@@ -14023,9 +14034,13 @@ function App() {
         const smOpen = isGoalSubOpen(goal.id, "smart");
         return /*#__PURE__*/React.createElement("div", {
           style: {
+            // Match the Linked Habits / Linked To-Dos subsections so
+            // the three sub-headers (SMART, Linked Habits, Linked
+            // To-Dos) share an even visual rhythm — same border-top
+            // divider, same padding, same surface tint.
             borderTop: "1px solid #f3f4f6",
             padding: "10px 14px",
-            background: "#fafafa"
+            background: "var(--c-surface-raised)"
           }
         },
           // Collapsible header — title on the left, filled-count + caret
@@ -14117,15 +14132,15 @@ function App() {
         const linkedTodos = (data.todos || []).filter(t => String(t.goalId) === String(goal.id));
         const habitsOpen = isGoalSubOpen(goal.id, "habits");
         const todosOpen  = isGoalSubOpen(goal.id, "todos");
-        return /*#__PURE__*/React.createElement("div", {
-          // Stop pointer events from bubbling up to the goal card's
-          // onPointerDown/Up handlers — those toggle the card's
-          // expansion, so without this guard a tap on the to-do input
-          // (or any control inside this expanded section) would
-          // collapse the card mid-interaction. Children that need
-          // their own pointer handling (linked-habit checkboxes,
-          // section-toggle headers) still receive their direct events;
-          // only the bubble path to the goal card is severed.
+        // Two visually-distinct subsections — Linked Habits on top,
+        // Linked To-Dos below — each with its own border-top divider
+        // and the same anti-bubble pointer handlers (children's
+        // events keep working; the bubble path to the goal card,
+        // which would collapse the panel mid-interaction, is cut).
+        // A Fragment groups them so they render as siblings of the
+        // SMART block above without an extra DOM wrapper.
+        return /*#__PURE__*/React.createElement(React.Fragment, null,
+        /*#__PURE__*/React.createElement("div", {
           onPointerDown: e => e.stopPropagation(),
           onPointerUp: e => e.stopPropagation(),
           style: {
@@ -14231,7 +14246,22 @@ function App() {
             // Add Habit quick-add lives INSIDE the Linked Habits
             // expanded body — visible only when this header is open.
             renderGoalHabitQuickAdd(goal)
-          ),
+          )
+        ),
+        // ── Linked To-Dos subsection ──
+        // Separate wrapper from Linked Habits so the two read as
+        // visually distinct sections (mirror of the SMART block
+        // above). Same border-top + padding for an even rhythm
+        // across all three sub-sections.
+        /*#__PURE__*/React.createElement("div", {
+          onPointerDown: e => e.stopPropagation(),
+          onPointerUp: e => e.stopPropagation(),
+          style: {
+            borderTop: "1px solid #f3f4f6",
+            padding: "10px 14px",
+            background: "var(--c-surface-raised)"
+          }
+        },
         // Linked To-Dos collapsible header — always visible.
         /*#__PURE__*/React.createElement("div", {
           onClick: (e) => { e.stopPropagation(); toggleGoalSub(goal.id, "todos"); },
@@ -14288,6 +14318,7 @@ function App() {
             }, "\u00D7")
           ))),
           renderGoalTodoQuickAdd(goal)
+        )
         )
         );
       })()
