@@ -11961,6 +11961,11 @@ function App() {
           "aria-label": hasTarget
             ? "Log " + (habit.increment || 1) + " " + (habit.unitLabel || "unit")
             : (d ? "Mark not done" : "Mark done"),
+          // Stop dblclick from bubbling so a rapid double-tap on
+          // the action circle stays as "increment twice" / "log
+          // twice" instead of also firing the row's
+          // onDoubleClick handler (which opens the edit modal).
+          onDoubleClick: e => e.stopPropagation(),
           onClick: e => {
             e.stopPropagation();
             // Sub-unit habits: each tap adds habit.increment past
