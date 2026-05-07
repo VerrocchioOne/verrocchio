@@ -12026,19 +12026,31 @@ function App() {
           const overLimit = op === "≤" && units > habit.target;
           return /*#__PURE__*/React.createElement("span", {
             style: {
+              // Fixed width + height + flexShrink:0 so the chip's
+              // footprint never depends on content. The slot it
+              // occupies in the row layout is locked, which means
+              // the habit name to its left always reserves the
+              // same horizontal space — no jitter when the count
+              // grows from 1 to 12 or the unit changes from "min"
+              // to "Calories". boxSizing:border-box keeps the
+              // padding inside the 64px box.
               flexShrink: 0,
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
+              justifyContent: "center",
               alignSelf: "center",
               color: d ? "#15803d" : overLimit ? "#991b1b" : "#4b5563",
               background: d ? "#dcfce7" : overLimit ? "#fee2e2" : "var(--c-surface-muted)",
               border: "1px solid " + (d || overLimit ? "transparent" : "var(--c-border)"),
               borderRadius: 8,
-              padding: "2px 6px",
+              padding: "2px 4px",
+              boxSizing: "border-box",
+              width: 64,
+              height: 36,
               lineHeight: 1.15,
               whiteSpace: "nowrap",
-              maxWidth: 88,
+              overflow: "hidden",
               marginRight: ht ? 4 : 0
             }
           },
@@ -17759,8 +17771,14 @@ function App() {
     }),
     /*#__PURE__*/React.createElement("input", {
       type: "text",
+      // Cap unit labels at 8 characters so the chip on the habit
+      // card stays inside its fixed 64px slot. Anything longer
+      // ("Calories of soda") would overflow the chip's truncation
+      // bound and look ugly. 8 covers "minutes", "Calories",
+      // "pages", "cups", etc.
       value: eHUnitLabel,
-      onChange: e => sEHUnitLabel(e.target.value),
+      maxLength: 8,
+      onChange: e => sEHUnitLabel(e.target.value.slice(0, 8)),
       placeholder: "Unit (cups, min…)",
       style: { ...IS, flex: 2, minWidth: 0 }
     })
