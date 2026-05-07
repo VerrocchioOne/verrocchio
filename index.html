@@ -17898,9 +17898,8 @@ function App() {
       alignItems: "center",
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }
   },
+    // Title on the left, alone — no longer adjacent to Order.
     /*#__PURE__*/React.createElement("div", {
       style: {
         fontFamily: "'Lora',serif",
@@ -17909,46 +17908,50 @@ function App() {
         color: "var(--c-text-strong)"
       }
     }, editHabitModal && editHabitModal.id === "__new__" ? "New Habit" : "Edit Habit"),
-    // Order x / y — only meaningful when editing an existing
-    // habit. New habits don't have a position yet (they'll be
-    // appended to the end of their section on save), so the
-    // input is suppressed in create mode.
-    editHabitModal && editHabitModal.id !== "__new__" && (() => {
-      const sec = (editHabitModal && editHabitModal.section) || eHSec || "morning";
-      const total = (data.habits || []).filter(h => (h.section || "morning") === sec).length;
-      return /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--c-text-soft)", fontWeight: 600 }
-      },
-        /*#__PURE__*/React.createElement("span", null, "Order"),
-        /*#__PURE__*/React.createElement("input", {
-          type: "number",
-          inputMode: "numeric",
-          min: 1,
-          max: total || 1,
-          value: eHOrder,
-          onChange: e => sEHOrder(e.target.value.replace(/[^0-9]/g, "")),
-          "aria-label": "Position within " + sec,
-          style: { ...IS, width: 40, padding: "4px 6px", textAlign: "center", fontSize: 12 }
-        }),
-        /*#__PURE__*/React.createElement("span", { style: { color: "#9ca3af" } }, "/ " + (total || 1))
-      );
-    })()
-  ), /*#__PURE__*/React.createElement("button", {
-    onClick: () => setEditHabitModal(null),
-    style: {
-      background: "var(--c-surface-muted)",
-      border: "none",
-      borderRadius: "50%",
-      width: 30,
-      height: 30,
-      cursor: "pointer",
-      fontSize: 16,
-      color: "#6b7280",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center"
-    }
-  }, "\xD7")), /*#__PURE__*/React.createElement("input", {
+    // Right cluster: Order x/y (existing habits only) + close X.
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", gap: 10 }
+    },
+      // Order x / y — only meaningful when editing an existing
+      // habit. New habits don't have a position yet (they'll be
+      // appended to the end of their section on save), so the
+      // input is suppressed in create mode.
+      editHabitModal && editHabitModal.id !== "__new__" && (() => {
+        const sec = (editHabitModal && editHabitModal.section) || eHSec || "morning";
+        const total = (data.habits || []).filter(h => (h.section || "morning") === sec).length;
+        return /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--c-text-soft)", fontWeight: 600 }
+        },
+          /*#__PURE__*/React.createElement("span", null, "Order"),
+          /*#__PURE__*/React.createElement("input", {
+            type: "number",
+            inputMode: "numeric",
+            min: 1,
+            max: total || 1,
+            value: eHOrder,
+            onChange: e => sEHOrder(e.target.value.replace(/[^0-9]/g, "")),
+            "aria-label": "Position within " + sec,
+            style: { ...IS, width: 40, padding: "4px 6px", textAlign: "center", fontSize: 12 }
+          }),
+          /*#__PURE__*/React.createElement("span", { style: { color: "#9ca3af" } }, "/ " + (total || 1))
+        );
+      })(),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setEditHabitModal(null),
+        style: {
+          background: "var(--c-surface-muted)",
+          border: "none",
+          borderRadius: "50%",
+          width: 30,
+          height: 30,
+          cursor: "pointer",
+          fontSize: 16,
+          color: "#6b7280",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }
+  }, "\xD7"))), /*#__PURE__*/React.createElement("input", {
     value: eHTxt,
     onChange: e => sEHTxt(e.target.value),
     placeholder: "Habit name",
@@ -18278,13 +18281,20 @@ function App() {
     value: eHNotes,
     onChange: e => sEHNotes(e.target.value),
     placeholder: "Details",
-    rows: 2,
+    // Single-row default — kept compact so the entire edit-habit
+    // modal fits on a phone viewport without scrolling. Users with
+    // long notes can drag the textarea handle (or just keep typing
+    // and let it overflow internally — the textarea itself
+    // scrolls).
+    rows: 1,
     style: {
       ...IS,
       width: "100%",
       marginBottom: 10,
       resize: "none",
-      lineHeight: 1.5
+      lineHeight: 1.4,
+      padding: "6px 12px",
+      fontSize: 12
     }
   }),
   // Starts row (last field before save). Pulled out of renderFreqPicker
