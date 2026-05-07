@@ -4279,6 +4279,15 @@ function App() {
   // the habit's _order to slot it at this 1-indexed position inside
   // its section (drag-and-drop was removed in favor of this).
   const [eHOrder, sEHOrder] = useState("");
+  // Habit flavor toggle in the edit-habit modal:
+  //   true  → target + unit + +per-tap fields visible; the chip on
+  //           the card reads e.g. "≥ 4/8 cups"
+  //   false → Yes/No habit; those fields are hidden and the chip
+  //           reads "Yes" once the day is logged.
+  // Default is false so brand-new habits start as the simpler
+  // Yes/No flavor; existing habits with target≥0 set hydrate as
+  // true. Toggle is a two-pill row above the target inputs.
+  const [eHHasTarget, sEHHasTarget] = useState(false);
 
   /* JOURNAL */
   const [jTxt, sJTxt] = useState("");
@@ -6315,6 +6324,10 @@ function App() {
     sEHUnitLabel("");
     sEHIncrement("");
     sEHOrder("");
+    // New habits start in Yes/No mode (no target). The user flips
+    // the toggle in the modal header to switch to Target & Unit
+    // when they want sub-unit logging.
+    sEHHasTarget(false);
     setEditHabitModal({ id: "__new__", section: "morning" });
   };
   // Save handler for the edit-habit modal that picks the right
@@ -6357,10 +6370,10 @@ function App() {
           monthDay: typeof (eHFreq && eHFreq.monthDay) === "number" ? eHFreq.monthDay : 1,
           month:    typeof (eHFreq && eHFreq.month)    === "number" ? eHFreq.month    : 0
         },
-        target:   (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })(),
-        targetOp: eHTargetOp === "<=" ? "<=" : ">=",
-        unitLabel: (eHUnitLabel || "").trim() || null,
-        increment: (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })(),
+        target:    eHHasTarget ? (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
+        targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
+        unitLabel: eHHasTarget ? ((eHUnitLabel || "").trim() || null) : null,
+        increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
         completions: {},
         completionTimes: {},
         completionUnits: {}
@@ -6386,6 +6399,10 @@ function App() {
     // habit needs to render its zero target, not silently fall back
     // to an empty input that reads as "no target set".
     sEHTarget(typeof h.target === "number" ? String(h.target) : "");
+    // Hydrate the flavor toggle: any habit that already has a
+    // numeric target opens in "Target & Unit" mode; everything
+    // else opens as Yes/No.
+    sEHHasTarget(typeof h.target === "number");
     sEHTargetOp(h.targetOp === "<=" ? "<=" : ">=");
     sEHUnitLabel(h.unitLabel || "");
     sEHIncrement(typeof h.increment === "number" && h.increment > 0 ? String(h.increment) : "");
@@ -6461,14 +6478,16 @@ function App() {
         location: eHLoc || "both",
         startDate: eHStart || h.startDate || dk(new Date()),
         frequency: nextFreq,
-        // Sub-unit fields. An empty target clears the feature;
-        // explicit 0 is preserved (it's a valid "≤ 0 cap" — e.g.
-        // avoid alcohol). Optional unit label + optional increment
-        // (default 1) switch the card into progress-tap mode.
-        target: (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })(),
-        targetOp: eHTargetOp === "<=" ? "<=" : ">=",
-        unitLabel: eHUnitLabel.trim() || null,
-        increment: (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })(),
+        // Sub-unit fields. Yes/No mode (eHHasTarget=false) writes
+        // null/null/null regardless of what's in the inputs — the
+        // target / unit / increment fields are hidden, so any
+        // residual values from a previous Target & Unit attempt
+        // shouldn't leak into the saved record. Target & Unit
+        // mode parses normally; explicit 0 is preserved (≤ 0 cap).
+        target:    eHHasTarget ? (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
+        targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
+        unitLabel: eHHasTarget ? (eHUnitLabel.trim() || null) : null,
+        increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
         history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
       } : h)
     });
@@ -11973,12 +11992,19 @@ function App() {
                 ? ((habit.completionUnits && Number(habit.completionUnits[selDate])) || 0)
                 : Math.min(habit.target, (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0)
             )
-          // Plain habit, fresh: small "Y/N" label inside the circle
-          // so the affordance reads as a Yes/No toggle. Tap marks
-          // Yes; swipe right also marks Yes; swipe left clears.
-          : /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 8, fontWeight: 700, color: "#6b7280", letterSpacing: 0.2 }
-            }, "Y/N"));
+          // Plain habit, fresh: a plain empty donut. Tap marks
+          // Yes (done) — that flips the donut to a green check.
+          // The "Yes" status is also surfaced on the right-side
+          // chip when done (see chip render below) so the row's
+          // completion state matches how sub-unit habits read.
+          : /*#__PURE__*/React.createElement("svg", {
+              width: "14",
+              height: "14",
+              viewBox: "0 0 16 16",
+              fill: "none"
+            }, /*#__PURE__*/React.createElement("circle", {
+              cx: "8", cy: "8", r: "7", stroke: "#d1d5db", strokeWidth: "1.5"
+            })));
         })(), /*#__PURE__*/React.createElement("div", {
           style: {
             flex: 1,
@@ -12129,6 +12155,36 @@ function App() {
         // first. maxWidth + overflow:hidden on the unit line ensures
         // even a long unit label ("Calories of soda") truncates with
         // ellipsis instead of pushing the chip past the card edge.
+        // Plain (Yes/No) habit chip — shown only once the habit is
+        // marked done so the right-side slot reads "Yes" instead
+        // of being empty. Same fixed 64×36 box as the sub-unit
+        // chip below so the row layout is identical regardless of
+        // habit flavor. Hidden until done; on a fresh plain habit
+        // the slot stays clear.
+        (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
+          style: {
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            alignSelf: "center",
+            color: "#15803d",
+            background: "#dcfce7",
+            border: "1px solid transparent",
+            borderRadius: 8,
+            padding: "2px 4px",
+            boxSizing: "border-box",
+            width: 64,
+            height: 36,
+            lineHeight: 1.15,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            marginRight: ht ? 4 : 0,
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: 0.3
+          }
+        }, "Yes"),
         (typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
@@ -17896,12 +17952,44 @@ function App() {
       marginBottom: 10
     }
   }),
+  // Habit flavor toggle: Yes/No vs Target & Unit. Switches whether
+  // the rows below render. When switching to Yes/No, the target /
+  // unit / +per-tap state stays in memory so flipping back doesn't
+  // wipe the user's typed values; the save path just ignores them
+  // when eHHasTarget is false.
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, marginBottom: 10 }
+  },
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => sEHHasTarget(false),
+      style: {
+        flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+        cursor: "pointer",
+        border: "1px solid " + (!eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
+        background: !eHHasTarget ? "var(--c-tint-green)" : "#fff",
+        color: !eHHasTarget ? "#2d5a2d" : "#6b7280"
+      }
+    }, "Yes / No"),
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => sEHHasTarget(true),
+      style: {
+        flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+        cursor: "pointer",
+        border: "1px solid " + (eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
+        background: eHHasTarget ? "var(--c-tint-green)" : "#fff",
+        color: eHHasTarget ? "#2d5a2d" : "#6b7280"
+      }
+    }, "Target & Unit")
+  ),
   // Sub-unit target rows. The previous single 3-column row (Target /
   // Unit / +/tap) wrapped awkwardly on narrow phones where Unit was
   // squeezed and +/tap's placeholder text overflowed. Split into two
   // rows: Target + Unit on top with more breathing room, +/tap on
   // its own row below with a fuller "+ per tap" label.
-  /*#__PURE__*/React.createElement("div", {
+  // Hidden in Yes/No mode.
+  eHHasTarget && /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", gap: 6, marginBottom: 6 }
   },
     // Comparison op — required choice before the target count.
@@ -17940,7 +18028,8 @@ function App() {
       style: { ...IS, flex: 2, minWidth: 0 }
     })
   ),
-  /*#__PURE__*/React.createElement("div", {
+  // +per-tap row + helper text — both hidden in Yes/No mode.
+  eHHasTarget && /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }
   },
     /*#__PURE__*/React.createElement("input", {
@@ -17956,7 +18045,7 @@ function App() {
       style: { fontSize: 12, color: "#6b7280", flex: 1 }
     }, "units added per tap (default 1)")
   ),
-  /*#__PURE__*/React.createElement("div", {
+  eHHasTarget && /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
   // Link to Goals — multi-select. A habit can drive several goals
