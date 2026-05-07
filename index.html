@@ -12167,7 +12167,13 @@ function App() {
         // every other section, completion is a positive "Yes I did
         // it." Both states are still visually identical green
         // pills — only the word changes.
-        (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
+        // Hide both the Yes/No pill and the target chip whenever
+        // the card is expanded — the metadata pill row underneath
+        // already crowds the right edge, and the chip would
+        // visually overlap the duration / importance / freq pills.
+        // The chip reappears as soon as the user collapses the
+        // card.
+        (!expHabitGoals[habit.id] && typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
             display: "flex",
@@ -12191,7 +12197,7 @@ function App() {
             letterSpacing: 0.3
           }
         }, habit.section === "avoid" ? "No" : "Yes"),
-        (typeof habit.target === "number") && (() => {
+        (!expHabitGoals[habit.id] && typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const shown = op === "≤" ? units : Math.min(habit.target, units);
