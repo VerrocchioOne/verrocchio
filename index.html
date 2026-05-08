@@ -12153,24 +12153,33 @@ function App() {
                   });
                 }, 320);
               } else {
-                // Right-to-left swipe = "reset today" rather than the
-                // old "mark missed" behavior. For sub-unit habits this
-                // wipes the day's count back to 0; for plain habits
-                // it clears any done/missed mark. Goes through the
-                // existing increment/"reset" sentinel in togHabit so
-                // ≤ habits land back on done (you've avoided so far),
-                // ≥ habits land back on none, and plain habits clear.
-                // Light single-pulse vibrate + neutral toast — this
-                // is now an undo gesture, not a self-judgement.
-                setSwipeAnim(p => ({
-                  ...p,
-                  [habit.id]: "reset"
-                }));
-                if (navigator.vibrate) navigator.vibrate(20);
-                setSwipeFeedback({ msg: "Cleared for today", type: "reset" });
+                // Right-to-left swipe is a two-stage toggle:
+                //   1st swipe → mark MISSED (the opposite outcome)
+                //   2nd swipe (already missed) → reset to neutral
+                // For ≤ Avoid habits "missed" means "I went over the
+                // cap"; for ≥ habits and plain habits it means "I
+                // didn't do it." Sub-unit habits go through the
+                // increment/"reset" sentinel so the day's count
+                // also wipes back to 0 on the second swipe.
+                const wasMissed = isMissed(habit, selDate);
+                const animTag = wasMissed ? "reset" : "missed";
+                setSwipeAnim(p => ({ ...p, [habit.id]: animTag }));
+                if (navigator.vibrate) navigator.vibrate(wasMissed ? 20 : 30);
+                setSwipeFeedback({
+                  msg: wasMissed ? "Cleared for today" : "Marked missed",
+                  type: animTag
+                });
                 setTimeout(() => setSwipeFeedback(null), 1800);
                 setTimeout(() => {
-                  togHabit(habit.id, selDate, "increment", "reset");
+                  if (wasMissed) {
+                    if (typeof habit.target === "number") {
+                      togHabit(habit.id, selDate, "increment", "reset");
+                    } else {
+                      togHabit(habit.id, selDate, "none");
+                    }
+                  } else {
+                    togHabit(habit.id, selDate, "missed");
+                  }
                   setSwipeAnim(p => {
                     const n = { ...p };
                     delete n[habit.id];
