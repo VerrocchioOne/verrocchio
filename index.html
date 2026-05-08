@@ -11286,6 +11286,116 @@ function App() {
       );
     })();
 
+    // Today's-schedule card — lives at the bottom of the home tab
+    // so the user has a peek at the day's clock-time habits without
+    // jumping into the Calendar tab. Same scheduling shape as the
+    // calendar's day view (sub-habits / avoid filtered out, parent
+    // duration = sum of children, concurrent slots share a start
+    // time) but rendered as a compact list with a CTA to open the
+    // full Calendar tab.
+    const calendarCard = (() => {
+      const todayKey = tk();
+      const ranges = getTimeRanges(data);
+      const top = (data.habits || []).filter(h =>
+        h && h.section !== "all-day" && h.section !== "avoid" && !h.parentId && isHabitDueOn(h, todayKey)
+      );
+      const childrenOf = (parent) => (data.habits || [])
+        .filter(c => c.parentId != null && String(c.parentId) === String(parent.id))
+        .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+      const slots = [];
+      for (const sec of ["morning", "afternoon", "evening"]) {
+        const r = ranges[sec] || DEFAULT_TIME_RANGES[sec];
+        const inSec = top.filter(h => (h.section || "morning") === sec)
+          .sort((a, b) => (a._order ?? 999) - (b._order ?? 999) || (Number(a.id) || 0) - (Number(b.id) || 0));
+        let cursor = (r.start || 0) * 60;
+        let prevStart = null;
+        for (const h of inSec) {
+          const kids = childrenOf(h);
+          const baseDur = kids.length > 0
+            ? kids.reduce((s, c) => s + (parseInt(c.duration, 10) || 0), 0)
+            : (parseInt(h.duration, 10) || 30);
+          const dur = Math.max(5, baseDur || 30);
+          let start;
+          if (h.concurrent && prevStart != null) {
+            start = prevStart;
+            if (start + dur > cursor) cursor = start + dur;
+          } else {
+            start = cursor;
+            cursor = start + dur;
+          }
+          slots.push({ habit: h, kids, startMin: start, durationMin: dur });
+          prevStart = start;
+        }
+      }
+      const fmtMins = mins => {
+        const h = Math.floor(mins / 60) % 24;
+        const m = mins % 60;
+        const h12 = ((h + 11) % 12) + 1;
+        const ampm = h < 12 ? "am" : "pm";
+        return h12 + (m === 0 ? "" : ":" + String(m).padStart(2, "0")) + ampm;
+      };
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "#fff",
+          border: "1px solid var(--c-border)",
+          borderRadius: 12,
+          padding: "12px 14px",
+          marginBottom: 12,
+          boxShadow: "0 1px 2px rgba(0,0,0,.04)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.5 }
+          }, "Today's Schedule"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => setTab("calendar"),
+            style: {
+              background: "transparent", border: "none",
+              color: "#2d5a2d", fontSize: 11, fontWeight: 700,
+              cursor: "pointer", padding: 0
+            }
+          }, "Open calendar →")
+        ),
+        slots.length === 0
+          ? /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#9ca3af", padding: "6px 0" }
+            }, "Nothing scheduled today.")
+          : /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 4 }
+            }, slots.map(slot => {
+              const h = slot.habit;
+              const ht = HT.find(t => t.value === h.type);
+              const stripe = ht ? ht.color : "#9ca3af";
+              return /*#__PURE__*/React.createElement("div", {
+                key: h.id,
+                onClick: () => setTab("calendar"),
+                style: {
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "6px 8px",
+                  background: "var(--c-surface-raised)",
+                  border: "1px solid var(--c-border)",
+                  borderLeft: "3px solid " + stripe,
+                  borderRadius: 8,
+                  cursor: "pointer"
+                }
+              },
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, color: "#6b7280", fontWeight: 600, fontVariantNumeric: "tabular-nums", minWidth: 50 }
+                }, fmtMins(slot.startMin)),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                }, h.text + (slot.kids.length > 0 ? " (" + slot.kids.length + ")" : "")),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, color: "#9ca3af", fontWeight: 600 }
+                }, slot.durationMin + "m")
+              );
+            }))
+      );
+    })();
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
@@ -11301,7 +11411,11 @@ function App() {
       intentionInput,
       progressCard,
       pillsSection,
-      sheet
+      sheet,
+      // Calendar peek lives at the very bottom — a user who scrolls
+      // past the daily ritual / progress / tips lands on a quick
+      // schedule view they can tap to enter the full calendar tab.
+      calendarCard
     );
   })(), tab === "habits" && (() => {
     const hmap = pastDays(30).reverse().map(day => {
