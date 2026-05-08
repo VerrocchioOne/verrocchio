@@ -2928,9 +2928,9 @@ const RadarChart = React.memo(function RadarChart(_ref) {
    that fires from a skipped-over render still sees fresh state. Other
    handlers (setSwipeAnim etc.) use functional setState which is
    stale-safe by construction. */
-const HabitCardShell = React.memo(function HabitCardShell({ habit, sig, renderImpl }) {
-  return renderImpl(habit);
-}, (prev, next) => prev.habit === next.habit && prev.sig === next.sig);
+const HabitCardShell = React.memo(function HabitCardShell({ habit, sig, renderImpl, compact }) {
+  return renderImpl(habit, { compact: !!compact });
+}, (prev, next) => prev.habit === next.habit && prev.sig === next.sig && !!prev.compact === !!next.compact);
 
 /* ── MAIN APP ── */
 function App() {
@@ -12053,7 +12053,13 @@ function App() {
       const doneCount = group.habits.filter(h => isDone(h, selDate)).length;
       const totalMins = group.habits.reduce((s, h) => s + (parseInt(h.duration) || 0), 0);
       const fmtTotal = totalMins >= 60 ? `${Math.floor(totalMins / 60)}h${totalMins % 60 > 0 ? ` ${totalMins % 60}m` : ""}` : totalMins > 0 ? `${totalMins}m` : "";
-      const renderCard = habit => {
+      const renderCard = (habit, opts) => {
+        // `compact` is set by the parent loop when this card is one
+        // of two-or-more side-by-side concurrent habits. The card
+        // re-flows into a taller two-row layout: action button +
+        // target chip share the top row; habit name + meta sit
+        // below. Wider readable text on a narrow column.
+        const compact = !!(opts && opts.compact);
         const d = isDone(habit, selDate);
         const missed = isMissed(habit, selDate);
         const isE = eHId === habit.id;
@@ -12177,7 +12183,17 @@ function App() {
           style: {
             display: "flex",
             alignItems: "center",
-            gap: 10,
+            gap: compact ? 6 : 10,
+            // Compact (side-by-side concurrent) cards wrap their
+            // contents into two horizontal lines: action button +
+            // target chip share the top line; habit name + meta
+            // wrap to a full-width line below. Doubles the card
+            // height so the narrower column has room for the title.
+            // We rely on flex-wrap + per-child `order` rather than
+            // restructuring the children so the default layout
+            // stays unchanged when compact === false.
+            flexWrap: compact ? "wrap" : "nowrap",
+            rowGap: compact ? 4 : 0,
             background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : animState === "reset" ? "var(--c-surface-muted)" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
             border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : animState === "reset" ? "var(--c-border)" : "var(--c-border)"}`,
             borderRadius: 12,
@@ -12185,7 +12201,7 @@ function App() {
             // when the user taps to expand, vertical padding grows so
             // the metadata row has breathing room.
             padding: expHabitGoals[habit.id] ? "10px 12px" : "7px 12px",
-            paddingRight: ht ? "30px" : "12px",
+            paddingRight: ht && !compact ? "30px" : "12px",
             transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
             transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s",
             boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : missed || animState === "missed" ? "0 1px 3px rgba(220,38,38,.08)" : "0 1px 2px rgba(0,0,0,.04)",
@@ -12368,8 +12384,14 @@ function App() {
             })));
         })(), /*#__PURE__*/React.createElement("div", {
           style: {
-            flex: 1,
+            flex: compact ? "1 0 100%" : "1 1 auto",
             minWidth: 0,
+            // order:3 in compact mode pushes the name column to the
+            // bottom of the wrap-flex row; flex-basis:100% guarantees
+            // the line break so action button + chip share the line
+            // above. The default layout (compact=false) keeps
+            // flex:1 + auto basis, matching the prior look.
+            order: compact ? 3 : 0,
             display: "flex",
             flexDirection: "column",
             gap: 4
@@ -12776,9 +12798,10 @@ function App() {
         // sig so toggling a sub-habit (or expanding the group) bumps
         // the memo and re-renders the parent's "3/5" chip.
         const childSig = kids.length > 0 ? (kids.length + "|" + kidsDone + "|" + (expChildren[h.id] ? 1 : 0)) : "";
-        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig;
+        const isCompact = cohort.length > 1;
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "");
         const out = [
-          /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard })
+          /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard, compact: isCompact })
         ];
         // Sub-habit chevron + count chip — shown only when the
         // parent has children. Tapping it toggles the children's
@@ -12845,25 +12868,25 @@ function App() {
                   childCohorts.push([c]);
                 }
               }
-              const renderChild = (child) => {
+              const renderChild = (child, isCompact) => {
                 const cGoalText = habitGoalIds(child)
                   .map(gid => (data.goals || []).find(g => String(g.id) === String(gid))?.text)
                   .filter(Boolean)
                   .join(" ");
                 const cTodayUnits = (child.completionUnits && child.completionUnits[selDate]) || 0;
                 const cTargetSig = (child.target == null ? "" : child.target) + "/" + (child.targetOp || "") + "/" + (child.unitLabel || "") + "/" + cTodayUnits;
-                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[child.id] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText;
-                return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard });
+                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[child.id] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + (isCompact ? "c" : "");
+                return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard, compact: !!isCompact });
               };
               return childCohorts.map((cohort, ki) => {
-                if (cohort.length === 1) return renderChild(cohort[0]);
+                if (cohort.length === 1) return renderChild(cohort[0], false);
                 return /*#__PURE__*/React.createElement("div", {
                   key: "ckg-" + h.id + "-" + ki,
                   style: { display: "flex", gap: 4 }
                 }, cohort.map(child => /*#__PURE__*/React.createElement("div", {
                   key: child.id,
                   style: { flex: 1, minWidth: 0 }
-                }, renderChild(child))));
+                }, renderChild(child, true))));
               });
             })()));
           }
