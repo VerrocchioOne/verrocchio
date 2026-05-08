@@ -4295,6 +4295,10 @@ function App() {
   const [nHIncrement, sNHIncrement] = useState("");
   const [nHGoal, sNHGoal] = useState("");
   const [showAddHabit, setShowAddHabit] = useState(false);
+  // When true, the toolbar's Organize button has opened the
+  // section-picker overlay — the user picks a time-of-day section
+  // there, then we route into the per-section Organize modal.
+  const [organizePickerOpen, setOrganizePickerOpen] = useState(false);
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
   // Generic custom-order reorder modal. `reorderCtx` is null when
   // closed, else an object describing what's being reordered:
@@ -11340,6 +11344,31 @@ function App() {
         fontWeight: 300
       }
     }, "+")),
+      // Global Organize entry point — sits next to the [+] button
+      // so reorder + parent/child + concurrent grouping live in
+      // one obvious toolbar slot. Tapping opens a tiny section
+      // picker; the section's existing per-row organize modal
+      // takes over from there. The per-section ⇅ button on each
+      // header has been removed in favor of this.
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setOrganizePickerOpen(true),
+        title: "Organize habits — reorder, group sub-habits, layer concurrent",
+        "aria-label": "Organize habits",
+        style: {
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "4px 9px",
+          borderRadius: 20,
+          border: "1px solid var(--c-border)",
+          background: "#fff",
+          color: "#6b7280",
+          fontSize: 11, fontWeight: 500,
+          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          WebkitTapHighlightColor: "transparent", userSelect: "none"
+        }
+      },
+        /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 12, lineHeight: 1 } }, "⇅"),
+        "Organize"
+      ),
       // NOTE: the "Time" compact filter pill has been intentionally
       // removed — time-of-day filtering is now expressed by the section
       // headers themselves (tap a header to expand/collapse its habits).
@@ -12753,30 +12782,11 @@ function App() {
           color: "#9ca3af"
         }
       }, doneCount, "/", group.habits.length),
-      // Reorder button — explicit affordance so the user doesn't have
-      // to discover the long-press gesture. stopPropagation on the
-      // pointer events keeps the surrounding header's collapse-toggle
-      // / long-press handlers from firing when this is tapped.
-      group.habits.length > 1 && /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        onPointerDown: e => e.stopPropagation(),
-        onPointerUp: e => e.stopPropagation(),
-        onClick: e => { e.stopPropagation(); openSectionReorder(group.value); },
-        title: "Organize habits in " + group.label + " — reorder, group sub-habits under a parent, layer concurrent habits",
-        "aria-label": "Organize " + group.label + " habits",
-        style: {
-          background: "transparent",
-          border: "none",
-          padding: "2px 6px",
-          marginLeft: 2,
-          fontSize: 14,
-          lineHeight: 1,
-          color: group.color,
-          opacity: .7,
-          cursor: "pointer",
-          WebkitTapHighlightColor: "transparent"
-        }
-      }, "⇅"),
+      // Per-section ⇅ Organize button has been removed — the
+      // global Organize entry point lives in the toolbar at the
+      // top of the Habits page (next to the [+] add button) and
+      // routes through a section picker. Long-press on the
+      // section header still works as a backdoor for power users.
       // Chevron indicator — rotates 180° when the section is collapsed
       // (down arrow = "tap to expand", up arrow = "tap to collapse").
       /*#__PURE__*/React.createElement("span", {
@@ -19212,6 +19222,83 @@ function App() {
   //    edited; the draft id list is shuffled by up/down arrows and
   //    committed by saveReorder (which also flips that page's sort
   //    pref to "custom" so the edit is immediately visible).
+  // Section-picker bottom sheet — shown when the toolbar's
+  // Organize button is tapped. The user picks a time-of-day
+  // section, which then opens the existing per-section organize
+  // modal (the ⇅ button on individual section headers has been
+  // retired in favor of this single global entry point).
+  organizePickerOpen && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    style: {
+      position: "fixed", inset: 0,
+      background: "rgba(0,0,0,0.5)",
+      zIndex: 305,
+      display: "flex", alignItems: "flex-end", justifyContent: "center"
+    },
+    onClick: e => { if (e.target === e.currentTarget) setOrganizePickerOpen(false); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      background: "var(--c-surface, #fff)",
+      borderRadius: "20px 20px 0 0",
+      padding: "20px 18px 22px",
+      width: "100%", maxWidth: 520,
+      boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+    }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
+      }, "Organize"),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button", "aria-label": "Close",
+        onClick: () => setOrganizePickerOpen(false),
+        style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 28, height: 28, fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
+      }, "×")
+    ),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 12, color: "#6b7280", marginBottom: 14, lineHeight: 1.45 }
+    }, "Pick a section to reorder, group sub-habits, or layer concurrent habits."),
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", flexDirection: "column", gap: 6 }
+    },
+      SECTIONS.map(sec => {
+        const count = (data.habits || []).filter(h => h.section === sec.value).length;
+        const enabled = count > 0;
+        return /*#__PURE__*/React.createElement("button", {
+          key: sec.value,
+          type: "button",
+          disabled: !enabled,
+          onClick: () => {
+            setOrganizePickerOpen(false);
+            openSectionReorder(sec.value);
+          },
+          style: {
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "12px 14px",
+            background: enabled ? "var(--c-surface-raised)" : "var(--c-surface-muted)",
+            border: "1px solid var(--c-border)",
+            borderLeft: "3px solid " + (enabled ? sec.color : "var(--c-border)"),
+            borderRadius: 8,
+            fontSize: 14, fontWeight: 600,
+            color: enabled ? "var(--c-text)" : "#9ca3af",
+            cursor: enabled ? "pointer" : "default",
+            opacity: enabled ? 1 : 0.6,
+            textAlign: "left"
+          }
+        },
+          /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 16 } }, sec.icon || ""),
+          /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, sec.label),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 11, fontWeight: 700, color: "#9ca3af" }
+          }, count + " habit" + (count === 1 ? "" : "s"))
+        );
+      })
+    )
+  )),
   reorderCtx && (() => {
     const ctx = reorderCtx;
     const pool =
