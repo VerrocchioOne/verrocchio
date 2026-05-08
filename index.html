@@ -4305,6 +4305,12 @@ function App() {
   // the up/down arrows.
   const [reorderCtx, setReorderCtx] = useState(null);
   const [reorderDraft, setReorderDraft] = useState([]);
+  // Per-row overrides for the Habits-section Organize modal. Keyed
+  // by habit id, holds the in-progress { parentId, concurrent }
+  // edits the user is making. Empty for goals / todos (their
+  // reorder modal is just a position list). Saved into the habit
+  // records on commit; discarded on cancel.
+  const [organizeOverrides, setOrganizeOverrides] = useState({});
   // Which page's sort menu is open: "habits" | "goals" | "todos" | null
   const [openSortMenu, setOpenSortMenu] = useState(null);
   // Routine-view tab selection. Was originally a modal (null = closed)
@@ -6552,40 +6558,25 @@ function App() {
       targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
       unitLabel: eHHasTarget ? ((eHUnitLabel || "").trim() || null) : null,
       increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
-      parentId: eHParentId ? (Number(eHParentId) || eHParentId) : null,
-      concurrent: !!eHConcurrent,
+      // New habits start as top-level, non-concurrent. The user
+      // can later move them under a parent or layer them with a
+      // sibling via the section-level Organize modal.
+      parentId: null,
+      concurrent: false,
       completions: {},
       completionTimes: {},
       completionUnits: {}
     };
-    // Insert into the section's _order sequence per the After picker
-    // ("First in section" = front, otherwise after the chosen habit)
-    // and renormalise that section's _order indices in one save so
-    // the new habit is positioned atomically with creation.
+    // Append to the section: the new habit gets the next available
+    // _order slot. Repositioning happens in the Organize modal.
     const cur = data;
-    const inSec = (cur.habits || [])
+    const sectionMax = (cur.habits || [])
       .filter(h => (h.section || "morning") === nextSec)
-      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-    const seq = inSec.slice();
-    let insertAt;
-    if (!eHAfterId) {
-      insertAt = 0;
-    } else {
-      const anchorIdx = seq.findIndex(h => String(h.id) === String(eHAfterId));
-      insertAt = anchorIdx >= 0 ? anchorIdx + 1 : seq.length;
-    }
-    seq.splice(insertAt, 0, newHabit);
-    const orderById = {};
-    seq.forEach((h, i) => { orderById[h.id] = i; });
-    const allHabits = [...(cur.habits || []), newHabit].map(h =>
-      (h.section || "morning") === nextSec
-        ? { ...h, _order: orderById[h.id] != null ? orderById[h.id] : (h._order ?? 999) }
-        : h
-    );
+      .reduce((m, h) => Math.max(m, (h._order ?? -1)), -1);
+    newHabit._order = sectionMax + 1;
     save({
       ...cur,
-      habits: allHabits,
-      sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" }
+      habits: [...(cur.habits || []), newHabit]
     });
     touchFeature("habit.create");
     const targetN = parseInt(eHTarget, 10);
@@ -6700,55 +6691,15 @@ function App() {
         targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
         unitLabel: eHHasTarget ? (eHUnitLabel.trim() || null) : null,
         increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
-        parentId: eHParentId ? (Number(eHParentId) || eHParentId) : null,
-        concurrent: !!eHConcurrent,
+        // parentId / concurrent / _order are NOT touched here —
+        // those are cross-habit relationships, owned by the
+        // section-level Organize modal. Saving the edit form
+        // preserves whatever the user last set there.
         history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
       } : h)
     });
     const targetN = parseInt(eHTarget, 10);
     if (isFinite(targetN) && targetN >= 0) touchFeature("habit.subunits");
-    // Apply position change driven by the After picker:
-    //   eHAfterId === ""    → first in section
-    //   eHAfterId === "<X>" → comes immediately after habit X
-    // Resolves to a target index in the section sequence, splices,
-    // and renormalises every habit in the section to clean
-    // integer _orders via reorderHabitSection.
-    {
-      const cur = latestData.current || data;
-      const inSec = (cur.habits || [])
-        .filter(h => (h.section || "morning") === nextSec)
-        .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-      const fromIdx = inSec.findIndex(h => h.id === id);
-      let targetIdx;
-      if (!eHAfterId) {
-        targetIdx = 0;
-      } else {
-        const anchorIdx = inSec.findIndex(h => String(h.id) === String(eHAfterId));
-        if (anchorIdx < 0) {
-          targetIdx = -1; // anchor not in section — leave order alone
-        } else {
-          // If we're moving forward, anchor's index already accounts
-          // for our removal; if backward, we need anchorIdx + 1
-          // BEFORE the splice. Use a safe pattern: splice removes
-          // self first, then re-find the anchor in the shorter list.
-          const seq = inSec.slice();
-          const removed = fromIdx >= 0 ? seq.splice(fromIdx, 1) : [];
-          const newAnchorIdx = seq.findIndex(h => String(h.id) === String(eHAfterId));
-          targetIdx = newAnchorIdx + 1;
-          if (fromIdx >= 0 && targetIdx >= 0 && targetIdx !== fromIdx) {
-            seq.splice(targetIdx, 0, removed[0]);
-            reorderHabitSection(nextSec, seq);
-          }
-          targetIdx = -2; // sentinel — already handled
-        }
-      }
-      if (targetIdx >= 0 && fromIdx >= 0 && targetIdx !== fromIdx) {
-        const seq = inSec.slice();
-        const [moved] = seq.splice(fromIdx, 1);
-        seq.splice(targetIdx, 0, moved);
-        reorderHabitSection(nextSec, seq);
-      }
-    }
     sEHId(null);
   };
   const reordHabits = l => save({
@@ -7071,10 +7022,35 @@ function App() {
   // from the section's current _order sort.
   const openSectionReorder = (sectionValue) => {
     const sec = SECTIONS.find(s => s.value === sectionValue) || { value: sectionValue, label: sectionValue, icon: "", color: "#6b7280" };
-    const inSection = (data.habits || [])
-      .filter(h => h.section === sectionValue)
+    // Pull every habit in the section, including current children,
+    // so the Organize modal can show the full hierarchy and let
+    // the user re-parent / unparent in one place. Children render
+    // immediately after their parent in the list.
+    const all = (data.habits || [])
+      .filter(h => h.section === sectionValue);
+    const tops = all
+      .filter(h => !h.parentId)
       .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-    setReorderDraft(inSection.map(h => h.id));
+    const childOf = (parentId) => all
+      .filter(h => h.parentId != null && String(h.parentId) === String(parentId))
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    const ordered = [];
+    for (const t of tops) {
+      ordered.push(t.id);
+      for (const c of childOf(t.id)) ordered.push(c.id);
+    }
+    setReorderDraft(ordered);
+    // Seed the override map with each habit's current parent /
+    // concurrent flags so toggling them in the modal mutates a
+    // local copy rather than the saved record.
+    const overrides = {};
+    for (const h of all) {
+      overrides[h.id] = {
+        parentId: h.parentId != null ? String(h.parentId) : "",
+        concurrent: h.concurrent === true
+      };
+    }
+    setOrganizeOverrides(overrides);
     setReorderCtx({ kind: "habitSection", section: sectionValue, label: sec.label, icon: sec.icon, color: sec.color });
   };
   // Open the reorder modal for Goals or Todos. Unlike habits, both are
@@ -7103,7 +7079,14 @@ function App() {
       next.habits = (data.habits || []).map(h => {
         if (h.section !== reorderCtx.section) return h;
         const idx = idOrder.get(String(h.id));
-        return idx == null ? h : { ...h, _order: idx };
+        const ov = organizeOverrides[h.id];
+        const merged = { ...h };
+        if (idx != null) merged._order = idx;
+        if (ov) {
+          merged.parentId = ov.parentId ? (Number(ov.parentId) || ov.parentId) : null;
+          merged.concurrent = !!ov.concurrent;
+        }
+        return merged;
       });
       next.sortPrefs = { ...(data.sortPrefs || {}), habits: "custom" };
     } else if (reorderCtx.kind === "goal") {
@@ -7122,6 +7105,7 @@ function App() {
     save(next);
     setReorderCtx(null);
     setReorderDraft([]);
+    setOrganizeOverrides({});
   };
   // Open the time-entry modal (slow swipe / long-press path). Seeds the
   // input with the current local time as the default — one tap on "Log
@@ -12649,8 +12633,8 @@ function App() {
         onPointerDown: e => e.stopPropagation(),
         onPointerUp: e => e.stopPropagation(),
         onClick: e => { e.stopPropagation(); openSectionReorder(group.value); },
-        title: "Reorder habits in " + group.label,
-        "aria-label": "Reorder " + group.label + " habits",
+        title: "Organize habits in " + group.label + " — reorder, group sub-habits under a parent, layer concurrent habits",
+        "aria-label": "Organize " + group.label + " habits",
         style: {
           background: "transparent",
           border: "none",
@@ -19011,7 +18995,7 @@ function App() {
         alignItems: "flex-end",
         justifyContent: "center"
       },
-      onClick: e => { if (e.target === e.currentTarget) { setReorderCtx(null); setReorderDraft([]); } }
+      onClick: e => { if (e.target === e.currentTarget) { setReorderCtx(null); setReorderDraft([]); setOrganizeOverrides({}); } }
     },
       /*#__PURE__*/React.createElement("div", {
         className: "fade-in",
@@ -19033,12 +19017,12 @@ function App() {
           /*#__PURE__*/React.createElement("div", {
             id: "reorder-title",
             style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
-          }, "Reorder " + ctx.label)
+          }, (ctx.kind === "habitSection" ? "Organize " : "Reorder ") + ctx.label)
         ),
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 12, color: "#6b7280", marginBottom: 14 }
+          style: { fontSize: 12, color: "#6b7280", marginBottom: 14, lineHeight: 1.45 }
         }, ctx.kind === "habitSection"
-          ? "Use the arrows to set the order these habits appear in on the Habits page."
+          ? "Use ▲▼ to reorder. Tap ↳ Sub to make a habit a sub-habit of the one above it (e.g. Brush teeth under Morning routine). Tap ⇶ Sync to layer two habits at the same time slot (e.g. Stretch + Sunlight)."
           : `Use the arrows to set the custom order for your ${ctx.label.toLowerCase()}. Saving switches the sort mode to Custom.`),
         reorderDraft.length === 0
           ? /*#__PURE__*/React.createElement("div", {
@@ -19051,15 +19035,52 @@ function App() {
               if (!it) return null;
               const isFirst = i === 0;
               const isLast = i === reorderDraft.length - 1;
+              // Habit-section organize controls. Pulled out so the
+              // goal/todo branches stay simple.
+              const isHabitSec = ctx.kind === "habitSection";
+              const ov = (isHabitSec && organizeOverrides[id]) || { parentId: "", concurrent: false };
+              const prevId = i > 0 ? reorderDraft[i - 1] : null;
+              const prevOv = prevId != null ? organizeOverrides[prevId] : null;
+              // Predecessor must itself be a top-level habit for
+              // this row to be subbable — only one level of nesting.
+              const prevIsTopLevel = prevId != null && (!prevOv || !prevOv.parentId);
+              const isSub = !!ov.parentId;
+              const isConcurrent = !!ov.concurrent;
+              const toggleSub = () => {
+                if (!isHabitSec) return;
+                setOrganizeOverrides(p => {
+                  const cur = p[id] || { parentId: "", concurrent: false };
+                  if (cur.parentId) {
+                    return { ...p, [id]: { ...cur, parentId: "" } };
+                  }
+                  if (!prevId || !prevIsTopLevel) return p;
+                  // Subbing implies sequential, not concurrent.
+                  return { ...p, [id]: { ...cur, parentId: String(prevId), concurrent: false } };
+                });
+              };
+              const toggleConcurrent = () => {
+                if (!isHabitSec) return;
+                setOrganizeOverrides(p => {
+                  const cur = p[id] || { parentId: "", concurrent: false };
+                  // Concurrent layers two habits at the same slot;
+                  // doesn't make sense without a predecessor or for
+                  // a sub-habit (its slot belongs to the parent).
+                  if (cur.concurrent) return { ...p, [id]: { ...cur, concurrent: false } };
+                  if (!prevId || cur.parentId) return p;
+                  return { ...p, [id]: { ...cur, concurrent: true } };
+                });
+              };
               return /*#__PURE__*/React.createElement("div", {
                 key: id,
                 style: {
                   display: "flex",
                   alignItems: "center",
-                  gap: 8,
+                  gap: 6,
                   padding: "8px 10px",
-                  background: "var(--c-surface-raised)",
+                  paddingLeft: isSub ? 22 : 10,
+                  background: isSub ? "var(--c-surface-muted)" : "var(--c-surface-raised)",
                   border: "1px solid var(--c-border)",
+                  borderLeft: isSub ? "3px solid #c6dfc6" : "1px solid var(--c-border)",
                   borderRadius: 8
                 }
               },
@@ -19068,7 +19089,41 @@ function App() {
                 }, i + 1),
                 /*#__PURE__*/React.createElement("span", {
                   style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                }, it.text),
+                }, (isSub ? "↳ " : "") + it.text + (isConcurrent ? " · ⇶" : "")),
+                isHabitSec && /*#__PURE__*/React.createElement("button", {
+                  type: "button",
+                  "aria-label": isSub ? "Make top-level" : "Make sub-habit of previous",
+                  title: isSub ? "Tap to unindent — make this a top-level habit" : (prevIsTopLevel ? "Make this a sub-habit of the habit above" : "Move under a top-level habit first"),
+                  disabled: !isSub && !prevIsTopLevel,
+                  onClick: toggleSub,
+                  style: {
+                    background: isSub ? "#dcfce7" : "none",
+                    border: "1px solid " + (isSub ? "#86efac" : "var(--c-border)"),
+                    borderRadius: 6,
+                    padding: "4px 6px",
+                    cursor: (!isSub && !prevIsTopLevel) ? "default" : "pointer",
+                    opacity: (!isSub && !prevIsTopLevel) ? 0.35 : 1,
+                    color: isSub ? "#15803d" : "var(--c-text-soft)",
+                    fontSize: 11, lineHeight: 1, fontWeight: 600
+                  }
+                }, "↳"),
+                isHabitSec && /*#__PURE__*/React.createElement("button", {
+                  type: "button",
+                  "aria-label": isConcurrent ? "Stop layering" : "Layer with previous",
+                  title: isConcurrent ? "Tap to stop layering" : (prevId && !ov.parentId ? "Run at the same time as the habit above" : "Pick a top-level row with a predecessor"),
+                  disabled: !isConcurrent && (!prevId || !!ov.parentId),
+                  onClick: toggleConcurrent,
+                  style: {
+                    background: isConcurrent ? "#dbeafe" : "none",
+                    border: "1px solid " + (isConcurrent ? "#93c5fd" : "var(--c-border)"),
+                    borderRadius: 6,
+                    padding: "4px 6px",
+                    cursor: (!isConcurrent && (!prevId || !!ov.parentId)) ? "default" : "pointer",
+                    opacity: (!isConcurrent && (!prevId || !!ov.parentId)) ? 0.35 : 1,
+                    color: isConcurrent ? "#1d4ed8" : "var(--c-text-soft)",
+                    fontSize: 11, lineHeight: 1, fontWeight: 600
+                  }
+                }, "⇶"),
                 /*#__PURE__*/React.createElement("button", {
                   type: "button",
                   "aria-label": "Move up",
@@ -19098,7 +19153,7 @@ function App() {
         },
           /*#__PURE__*/React.createElement("button", {
             type: "button",
-            onClick: () => { setReorderCtx(null); setReorderDraft([]); },
+            onClick: () => { setReorderCtx(null); setReorderDraft([]); setOrganizeOverrides({}); },
             style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
           }, "Cancel"),
           /*#__PURE__*/React.createElement("button", {
@@ -19366,52 +19421,11 @@ function App() {
   eHHasTarget && /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
-  // Parent-habit picker. Pick an existing top-level habit in the
-  // same section to make THIS habit a child of it. Children are
-  // hidden from the top of the Habits page (they nest inside the
-  // parent's expanded card), don't get their own calendar event
-  // (the parent renders as one block; children show in the
-  // description), and the parent's done state auto-derives from
-  // "every child completed for the day". Replaces the legacy
-  // free-text bundle name + per-bundle duration override.
-  (() => {
-    const sec = eHSec || (editHabitModal && editHabitModal.section) || "morning";
-    const myId = editHabitModal && editHabitModal.id;
-    // Only top-level habits in the same section are eligible
-    // parents — keeps the hierarchy a single level deep, and
-    // prevents picking yourself or a descendant as your parent.
-    const eligibleParents = (data.habits || [])
-      .filter(x =>
-        (x.section || "morning") === sec
-        && x.id !== myId
-        && !x.parentId
-      )
-      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginBottom: 10,
-        padding: "8px 10px",
-        border: "1px solid var(--c-border)",
-        borderRadius: 8,
-        background: "var(--c-surface-muted)"
-      }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }
-      }, "Parent habit (optional)"),
-      /*#__PURE__*/React.createElement("select", {
-        value: eHParentId,
-        onChange: e => sEHParentId(e.target.value),
-        style: { ...S, width: "100%" }
-      },
-        /*#__PURE__*/React.createElement("option", { value: "" }, "(top-level habit)"),
-        eligibleParents.map(p => /*#__PURE__*/React.createElement("option", { key: p.id, value: String(p.id) }, "Sub-habit of " + p.text.slice(0, 32)))
-      ),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }
-      }, "Sub-habits don't appear on their own — they nest inside the parent and only the parent gets exported to calendar.")
-    );
-  })(),
+  // Cross-habit relationships (parent / child, concurrent layering,
+  // relative ordering) live in the section-level Organize modal —
+  // tap the ⇅ icon on a section header on the Habits page. Keeping
+  // those out of this modal lets the edit form stay focused on
+  // editing one habit's own properties.
   // Link to Goals — multi-select. A habit can drive several goals
   // at once (e.g. "Sleep 8 hours" supports both "Pass CFA" and
   // "Run a marathon"). Stored as goalIds: number[] on the habit.
@@ -19624,59 +19638,10 @@ function App() {
     key: i.value,
     value: i.value
   }, i.value)))),
-  // \u2500\u2500 Position picker \u2014 relative ordering \u2500\u2500
-  // Replaces the legacy numeric Order x/y. The user picks
-  // "First" or "After [habit]" from a dropdown of every other
-  // habit in the same section. The save path resolves the
-  // selection to a fractional _order so the existing schedule
-  // helpers / calendar / habits-page sort all keep working
-  // unchanged (afterwards every section gets renormalised to
-  // clean integer _orders).
-  // Concurrent checkbox: when ticked the habit shares its start
-  // time with the predecessor. Used for things like "stretch +
-  // morning sunlight" \u2014 same 10-min slot, two events.
-  (() => {
-    const sec = eHSec || (editHabitModal && editHabitModal.section) || "morning";
-    const myId = editHabitModal && editHabitModal.id;
-    const others = (data.habits || [])
-      .filter(x => (x.section || "morning") === sec && x.id !== myId)
-      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-    return /*#__PURE__*/React.createElement("div", {
-      style: {
-        marginBottom: 10,
-        padding: "8px 10px",
-        border: "1px solid var(--c-border)",
-        borderRadius: 8,
-        background: "var(--c-surface-muted)"
-      }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }
-      }, "Order — relative to other habits"),
-      /*#__PURE__*/React.createElement("select", {
-        value: eHAfterId,
-        onChange: e => {
-          sEHAfterId(e.target.value);
-          // First-in-section can't be concurrent with anything.
-          if (!e.target.value) sEHConcurrent(false);
-        },
-        style: { ...S, width: "100%", marginBottom: eHAfterId ? 6 : 0 }
-      },
-        /*#__PURE__*/React.createElement("option", { value: "" }, "First in " + (SECTIONS.find(s => s.value === sec)?.label || sec)),
-        others.map(o => /*#__PURE__*/React.createElement("option", { key: o.id, value: String(o.id) }, "After " + o.text.slice(0, 32)))
-      ),
-      eHAfterId && /*#__PURE__*/React.createElement("label", {
-        style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--c-text-soft)", cursor: "pointer", userSelect: "none" }
-      },
-        /*#__PURE__*/React.createElement("input", {
-          type: "checkbox",
-          checked: eHConcurrent,
-          onChange: e => sEHConcurrent(e.target.checked)
-        }),
-        "Run at the same time as the habit above (concurrent)"
-      )
-    );
-  })(),
+  // Order, parent/child, and concurrent layering live in the
+  // section-level Organize modal (tap the reorder icon on any
+  // Habits-page section header). The edit-habit modal stays
+  // focused on this one habit's own properties.
   // Frequency picker (edit modal mirror of the add-habit flow).
   renderFreqPicker(eHFreq, sEHFreq, eHStart, sEHStart, { includeStart: false }),
   /*#__PURE__*/React.createElement("select", {
