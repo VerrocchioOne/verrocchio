@@ -12435,34 +12435,32 @@ function App() {
             textDecoration: d || missed ? "line-through" : "none",
           }, compact
             // Compact (concurrent column) — wrap multi-word names
-            // ("Dream Journal" → two lines) and clamp to 2 lines so
-            // long titles still cap the card height. Word-break
-            // keeps long single tokens from blowing out the column.
+            // freely. Each word can land on its own line if the
+            // narrow column can't hold them.
             ? {
                 whiteSpace: "normal",
                 wordBreak: "break-word",
+                overflowWrap: "anywhere",
                 lineHeight: 1.2,
+                width: "100%"
+              }
+            // Default — also wrap to 2 lines max if the title is
+            // too long for one row (e.g. "Dream Journal" landing
+            // next to a chip), so the second word never overlaps
+            // a sibling element. The 30-char cap is dropped: clamp
+            // by visual line count, not character count.
+            : {
+                whiteSpace: "normal",
+                wordBreak: "break-word",
+                overflowWrap: "anywhere",
+                lineHeight: 1.25,
                 display: "-webkit-box",
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: "vertical",
                 overflow: "hidden"
-              }
-            : {
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis"
               }),
           title: habit.text
-        },
-          // Default mode: hard 30-character cap on the displayed title.
-          // Compact mode skips the cap so the wrap can use the full
-          // string (the line-clamp limits visual height instead).
-          compact
-            ? (habit.text || "")
-            : ((habit.text || "").length > 30
-                ? (habit.text || "").slice(0, 29) + "…"
-                : (habit.text || ""))
-        ),
+        }, habit.text || ""),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
