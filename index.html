@@ -7398,7 +7398,17 @@ function App() {
         cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
         WebkitTapHighlightColor: "transparent", userSelect: "none"
       }
-    }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "⇅"), SORT_LABEL[current] || "Default");
+    },
+      /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, lineHeight: 1 } }, "⇅"),
+      "Sort",
+      // When a non-default sort is active, surface its name as a
+      // small badge after the word "Sort" so the user can see
+      // which mode they're in without losing the constant
+      // "Sort" label they asked for.
+      current !== "default" && /*#__PURE__*/React.createElement("span", {
+        style: { fontSize: 9, fontWeight: 700, opacity: 0.75 }
+      }, "· " + (SORT_LABEL[current] || ""))
+    );
   };
   const renderSortSheet = () => {
     if (!openSortMenu) return null;
@@ -11626,19 +11636,29 @@ function App() {
         title: "Organize habits — reorder, group sub-habits, layer concurrent",
         "aria-label": "Organize habits",
         style: {
-          display: "flex", alignItems: "center", gap: 4,
-          padding: "4px 9px",
-          borderRadius: 20,
+          width: 32, height: 32,
+          borderRadius: "50%",
           border: "1px solid var(--c-border)",
           background: "#fff",
-          color: "#6b7280",
-          fontSize: 11, fontWeight: 500,
-          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-          WebkitTapHighlightColor: "transparent", userSelect: "none"
+          cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0,
+          WebkitTapHighlightColor: "transparent",
+          padding: 0
         }
       },
-        /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 12, lineHeight: 1 } }, "⇅"),
-        "Organize"
+        // Three-bar (hamburger) glyph — readable at this size
+        // without a text label. Same medium-weight strokes as the
+        // section chevrons elsewhere on the page.
+        /*#__PURE__*/React.createElement("svg", {
+          "aria-hidden": true,
+          width: 14, height: 14, viewBox: "0 0 14 14", fill: "none"
+        },
+          /*#__PURE__*/React.createElement("path", {
+            d: "M2 3.5h10M2 7h10M2 10.5h10",
+            stroke: "#6b7280", strokeWidth: 1.6, strokeLinecap: "round"
+          })
+        )
       )
     ),
     // (Time of Day expanded pill row removed — see comment above about
@@ -12458,32 +12478,22 @@ function App() {
             fontWeight: 500,
             color: d || missed ? "#6b7280" : "var(--c-text)",
             textDecoration: d || missed ? "line-through" : "none",
-          }, compact
-            // Compact (concurrent column) — wrap multi-word names
-            // freely. Each word can land on its own line if the
-            // narrow column can't hold them.
-            ? {
-                whiteSpace: "normal",
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-                lineHeight: 1.2,
-                width: "100%"
-              }
-            // Default — also wrap to 2 lines max if the title is
-            // too long for one row (e.g. "Dream Journal" landing
-            // next to a chip), so the second word never overlaps
-            // a sibling element. The 30-char cap is dropped: clamp
-            // by visual line count, not character count.
-            : {
-                whiteSpace: "normal",
-                wordBreak: "break-word",
-                overflowWrap: "anywhere",
-                lineHeight: 1.25,
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden"
-              }),
+          }, {
+            // Always wrap. Free word-wrap with overflow-wrap:anywhere
+            // forces a line break wherever the column can't hold
+            // the next word — "Dream Journal" lands as "Dream\n
+            // Journal" if the column is narrow, instead of running
+            // under the chip. No clamp — let the card grow.
+            whiteSpace: "normal",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            lineHeight: 1.25,
+            // 100% in compact so the column carves out a full-
+            // width line; auto in default so the title shares the
+            // row with action button + chip and only wraps when
+            // it actually runs out of space.
+            width: compact ? "100%" : undefined
+          }),
           title: habit.text
         }, habit.text || ""),
         habit.notes && /*#__PURE__*/React.createElement("div", {
