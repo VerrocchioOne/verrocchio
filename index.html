@@ -12665,7 +12665,24 @@ function App() {
       // Body: hidden when the section is collapsed. For each
       // top-level habit we render its card and (when expChildren
       // is on for that habit) its children indented underneath.
-      !collapsed && /*#__PURE__*/React.createElement("div", null, group.habits.flatMap(h => {
+      // Consecutive habits flagged `concurrent` are grouped into a
+      // flex-row so simultaneous habits sit side-by-side instead
+      // of stacking vertically (mirrors the calendar day view).
+      !collapsed && /*#__PURE__*/React.createElement("div", null, (() => {
+        // Walk the (already _order-sorted) section list and
+        // bucket consecutive items where current.concurrent ===
+        // true into one cohort. The first habit in a section
+        // never starts a layered cohort on its own.
+        const cohorts = [];
+        for (const h of group.habits) {
+          if (h.concurrent && cohorts.length > 0) {
+            cohorts[cohorts.length - 1].push(h);
+          } else {
+            cohorts.push([h]);
+          }
+        }
+        return cohorts.flatMap((cohort, ci) => {
+          const towers = cohort.map(h => {
         // Signature: every piece of state that affects how this
         // specific card renders but isn't carried on the habit
         // object itself. If sig matches last render AND the habit
@@ -12747,20 +12764,53 @@ function App() {
                 flexDirection: "column",
                 gap: 4
               }
-            }, kids.map(child => {
-              const cGoalText = habitGoalIds(child)
-                .map(gid => (data.goals || []).find(g => String(g.id) === String(gid))?.text)
-                .filter(Boolean)
-                .join(" ");
-              const cTodayUnits = (child.completionUnits && child.completionUnits[selDate]) || 0;
-              const cTargetSig = (child.target == null ? "" : child.target) + "/" + (child.targetOp || "") + "/" + (child.unitLabel || "") + "/" + cTodayUnits;
-              const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[child.id] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText;
-              return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard });
-            })));
+            }, (() => {
+              // Group children the same way as the top-level
+              // cohort logic — consecutive concurrent children
+              // sit side-by-side under the parent.
+              const childCohorts = [];
+              for (const c of kids) {
+                if (c.concurrent && childCohorts.length > 0) {
+                  childCohorts[childCohorts.length - 1].push(c);
+                } else {
+                  childCohorts.push([c]);
+                }
+              }
+              const renderChild = (child) => {
+                const cGoalText = habitGoalIds(child)
+                  .map(gid => (data.goals || []).find(g => String(g.id) === String(gid))?.text)
+                  .filter(Boolean)
+                  .join(" ");
+                const cTodayUnits = (child.completionUnits && child.completionUnits[selDate]) || 0;
+                const cTargetSig = (child.target == null ? "" : child.target) + "/" + (child.targetOp || "") + "/" + (child.unitLabel || "") + "/" + cTodayUnits;
+                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[child.id] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText;
+                return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard });
+              };
+              return childCohorts.map((cohort, ki) => {
+                if (cohort.length === 1) return renderChild(cohort[0]);
+                return /*#__PURE__*/React.createElement("div", {
+                  key: "ckg-" + h.id + "-" + ki,
+                  style: { display: "flex", gap: 4 }
+                }, cohort.map(child => /*#__PURE__*/React.createElement("div", {
+                  key: child.id,
+                  style: { flex: 1, minWidth: 0 }
+                }, renderChild(child))));
+              });
+            })()));
           }
         }
-        return out;
-      })));
+          return out;
+          });
+          if (cohort.length === 1) return towers[0];
+          return [/*#__PURE__*/React.createElement("div", {
+            key: "rg-" + ci,
+            style: { display: "flex", gap: 6, marginBottom: 0 }
+          }, towers.map((tower, ti) => /*#__PURE__*/React.createElement("div", {
+            key: "rg-" + ci + "-" + ti,
+            style: { flex: 1, minWidth: 0 }
+          }, tower)))];
+        });
+      })()));
     }), filtH.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
