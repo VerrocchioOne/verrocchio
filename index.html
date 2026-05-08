@@ -3838,9 +3838,13 @@ function App() {
     });
     // Merge consecutive same-bundleKey slots into one event so
     // micro-habits (≤3 min) bundled under e.g. "Morning routine"
-    // export as a single calendar block whose duration is the
-    // sum of the members. Bundle name becomes the SUMMARY;
-    // member names are joined into the DESCRIPTION.
+    // export as a single calendar block. Bundle name becomes the
+    // SUMMARY; member names are joined into the DESCRIPTION. If
+    // the user set data.habitBundles[name].durationMin, that
+    // value overrides the sum-of-members default — useful for
+    // rounding 13 min of micro-habits up to a clean 15-min
+    // calendar block.
+    const bundleOverrides = (data.habitBundles || {});
     const habitTimes = [];
     for (const s of rawTimes) {
       const key = s.habit.bundleKey || "";
@@ -3857,6 +3861,14 @@ function App() {
           startMin: s.startMin,
           allDay: false
         });
+      }
+    }
+    // Apply duration overrides for bundles that have one.
+    for (const ht of habitTimes) {
+      if (!ht.bundleKey) continue;
+      const ov = bundleOverrides[ht.bundleKey];
+      if (ov && typeof ov.durationMin === "number" && ov.durationMin > 0) {
+        ht.durationMin = ov.durationMin;
       }
     }
     const dtstamp = utcStamp(new Date());
@@ -14924,9 +14936,25 @@ function App() {
         }
       }
       // Use the bundle name as the display label when multiple
-      // habits merged into one slot.
+      // habits merged into one slot, AND apply the user's
+      // optional duration override (data.habitBundles[name]
+      // .durationMin). The end time shifts so following habits
+      // in the section flow visually correctly when the override
+      // differs from the sum.
+      const bundles = (data.habitBundles || {});
+      let drift = 0;
       for (const slot of bundled) {
-        if (slot.members.length > 1) slot.displayName = slot.bundleKey;
+        slot.startMin += drift;
+        if (slot.members.length > 1 || (slot.bundleKey && bundles[slot.bundleKey])) {
+          slot.displayName = slot.bundleKey;
+          const override = bundles[slot.bundleKey];
+          if (override && typeof override.durationMin === "number" && override.durationMin > 0) {
+            const newDur = override.durationMin;
+            drift += newDur - slot.durationMin;
+            slot.durationMin = newDur;
+          }
+        }
+        slot.endMin = slot.startMin + slot.durationMin;
       }
       return bundled;
     };
@@ -19152,12 +19180,13 @@ function App() {
   eHHasTarget && /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
-  // Bundle name. Habits sharing the same non-empty bundle name get
-  // merged into one calendar block / iCal VEVENT. Useful when
-  // multiple short (≤ 3-min) habits would otherwise round to
-  // nothing in a 15-min calendar grid — bundle them under "Morning
-  // routine" or similar and they export as a single block whose
-  // duration is the sum of the members.
+  // Bundle name + optional total-duration override. Habits sharing
+  // the same non-empty bundle name get merged into one calendar
+  // block / iCal VEVENT. The "Total" minutes input writes to
+  // data.habitBundles[name].durationMin and overrides the
+  // sum-of-members default — handy when the user wants the export
+  // to round to a clean 15-min block instead of the literal sum.
+  // Empty Total = use the sum-of-members default.
   /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }
   },
@@ -19169,6 +19198,27 @@ function App() {
       placeholder: "Bundle name (optional, e.g. Morning routine)",
       title: "Habits with the same bundle name merge into one calendar block on export.",
       style: { ...IS, flex: 1, minWidth: 0, fontSize: 12 }
+    }),
+    eHBundleKey.trim() && /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: 0,
+      inputMode: "numeric",
+      value: (() => {
+        const b = (data.habitBundles || {})[eHBundleKey.trim()];
+        return (b && typeof b.durationMin === "number") ? String(b.durationMin) : "";
+      })(),
+      onChange: e => {
+        const raw = e.target.value.replace(/[^0-9]/g, "");
+        const key = eHBundleKey.trim();
+        if (!key) return;
+        const next = { ...(data.habitBundles || {}) };
+        if (raw === "") delete next[key];
+        else next[key] = { ...(next[key] || {}), durationMin: parseInt(raw, 10) };
+        save({ ...data, habitBundles: next });
+      },
+      placeholder: "Total min",
+      title: "Override the bundle's total duration. Empty = sum of members.",
+      style: { ...IS, width: 84, fontSize: 12, textAlign: "center" }
     })
   ),
   // Link to Goals — multi-select. A habit can drive several goals
