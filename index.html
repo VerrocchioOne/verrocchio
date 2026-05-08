@@ -11344,31 +11344,10 @@ function App() {
         fontWeight: 300
       }
     }, "+")),
-      // Global Organize entry point — sits next to the [+] button
-      // so reorder + parent/child + concurrent grouping live in
-      // one obvious toolbar slot. Tapping opens a tiny section
-      // picker; the section's existing per-row organize modal
-      // takes over from there. The per-section ⇅ button on each
-      // header has been removed in favor of this.
-      /*#__PURE__*/React.createElement("button", {
-        onClick: () => setOrganizePickerOpen(true),
-        title: "Organize habits — reorder, group sub-habits, layer concurrent",
-        "aria-label": "Organize habits",
-        style: {
-          display: "flex", alignItems: "center", gap: 4,
-          padding: "4px 9px",
-          borderRadius: 20,
-          border: "1px solid var(--c-border)",
-          background: "#fff",
-          color: "#6b7280",
-          fontSize: 11, fontWeight: 500,
-          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-          WebkitTapHighlightColor: "transparent", userSelect: "none"
-        }
-      },
-        /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 12, lineHeight: 1 } }, "⇅"),
-        "Organize"
-      ),
+      // The global Organize button now sits at the END of this
+      // toolbar row (after the duration pill) so the leading
+      // controls stay focused on filtering/sorting; see the
+      // matching insertion further down.
       // NOTE: the "Time" compact filter pill has been intentionally
       // removed — time-of-day filtering is now expressed by the section
       // headers themselves (tap a header to expand/collapse its habits).
@@ -11636,14 +11615,31 @@ function App() {
       })(),
       // (The "Routine" pill previously lived here. Moved to Profile →
       // App Settings → Routine Compare so the Habits tab's filter row
-      // stays focused on filters. The view itself was also simplified
-      // to a week-vs-month consistency comparison — see routineView
-      // modal at the bottom of this file.)
-      // Sort button moved up next to the master Filter pill so the
-      // default closed-Filter row reads [+] [Today] [Filter] [Sort]
-      // on a single line. The sub-filter pills above render after
-      // Sort and wrap below it when expanded.
-      null
+      // stays focused on filters.)
+      // Global Organize entry point — last item in the toolbar row.
+      // Tapping opens a section picker, which in turn opens the
+      // existing per-section organize modal. Sitting at the end of
+      // the row (vs next to [+]) keeps the Add and Filter controls
+      // grouped on the left and gives Organize its own quiet slot.
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setOrganizePickerOpen(true),
+        title: "Organize habits — reorder, group sub-habits, layer concurrent",
+        "aria-label": "Organize habits",
+        style: {
+          display: "flex", alignItems: "center", gap: 4,
+          padding: "4px 9px",
+          borderRadius: 20,
+          border: "1px solid var(--c-border)",
+          background: "#fff",
+          color: "#6b7280",
+          fontSize: 11, fontWeight: 500,
+          cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          WebkitTapHighlightColor: "transparent", userSelect: "none"
+        }
+      },
+        /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 12, lineHeight: 1 } }, "⇅"),
+        "Organize"
+      )
     ),
     // (Time of Day expanded pill row removed — see comment above about
     // the Time compact toggle being removed in favor of collapsible
@@ -19473,11 +19469,36 @@ function App() {
           ? /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 13, color: "#9ca3af", padding: "18px 4px" }
             }, "Nothing to reorder yet.")
-          : /*#__PURE__*/React.createElement("div", {
-              style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }
-            }, reorderDraft.map((id, i) => {
+          : (() => {
+            // Build a parent → [children ids] map from the draft +
+            // overrides so the row renderer can color-code each
+            // family with its parent's area-of-life color. A row
+            // is treated as a "parent" only if at least one other
+            // row points to it via parentId.
+            const childrenByParent = {};
+            for (const cid of reorderDraft) {
+              const cov = organizeOverrides[cid];
+              const pid = cov && cov.parentId;
+              if (!pid) continue;
+              if (!childrenByParent[pid]) childrenByParent[pid] = [];
+              childrenByParent[pid].push(cid);
+            }
+            const colorForId = (id) => {
+              const ov = organizeOverrides[id] || {};
+              const lookup = ov.parentId ? String(ov.parentId) : String(id);
+              const it = itemsById.get(lookup);
+              const ht = HT.find(t => t.value === (it && it.type));
+              return ht || null;
+            };
+            return /*#__PURE__*/React.createElement("div", {
+              // gap:0 + per-row marginTop so layered (concurrent)
+              // pairs can sit flush against each other with a
+              // bridge element in between, while non-layered rows
+              // keep their normal vertical spacing.
+              style: { display: "flex", flexDirection: "column", gap: 0, marginBottom: 16 }
+            }, reorderDraft.flatMap((id, i) => {
               const it = itemsById.get(String(id));
-              if (!it) return null;
+              if (!it) return [];
               const isFirst = i === 0;
               const isLast = i === reorderDraft.length - 1;
               // Habit-section organize controls. Pulled out so the
@@ -19491,6 +19512,8 @@ function App() {
               const prevIsTopLevel = prevId != null && (!prevOv || !prevOv.parentId);
               const isSub = !!ov.parentId;
               const isConcurrent = !!ov.concurrent;
+              const isParent = !!childrenByParent[id];
+              const groupColor = colorForId(id);
               const toggleSub = () => {
                 if (!isHabitSec) return;
                 setOrganizeOverrides(p => {
@@ -19522,7 +19545,75 @@ function App() {
                   ? prev.filter(x => x !== id)
                   : [...prev, id]);
               };
-              return /*#__PURE__*/React.createElement("div", {
+              const out = [];
+              // Vertical spacer above this row when it ISN'T a
+              // concurrent-with-previous bridge row. With container
+              // gap:0, this preserves the prior 6-px rhythm between
+              // unrelated rows.
+              if (!isFirst && !isConcurrent) {
+                out.push(/*#__PURE__*/React.createElement("div", {
+                  key: "spacer-" + id, "aria-hidden": true,
+                  style: { height: 6 }
+                }));
+              }
+              // Bridge above a concurrent row — explicitly draws
+              // the "these two run at the same time" connection so
+              // the user can SEE the layering rather than reading
+              // the ⇶ marker. Two stacked vertical bars frame a
+              // pill labelled "Same time".
+              if (!isFirst && isConcurrent) {
+                out.push(/*#__PURE__*/React.createElement("div", {
+                  key: "bridge-" + id, "aria-hidden": true,
+                  style: {
+                    position: "relative",
+                    height: 18,
+                    display: "flex", alignItems: "center", justifyContent: "center"
+                  }
+                },
+                  /*#__PURE__*/React.createElement("div", {
+                    style: {
+                      position: "absolute", left: 16, right: 16, top: 0, bottom: 0,
+                      display: "flex", alignItems: "center"
+                    }
+                  },
+                    /*#__PURE__*/React.createElement("div", {
+                      style: { flex: 1, height: 0, borderTop: "2px dashed #93c5fd" }
+                    })
+                  ),
+                  /*#__PURE__*/React.createElement("span", {
+                    style: {
+                      position: "relative",
+                      background: "#dbeafe",
+                      border: "1px solid #93c5fd",
+                      color: "#1d4ed8",
+                      fontSize: 9, fontWeight: 700,
+                      letterSpacing: 0.4, textTransform: "uppercase",
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      whiteSpace: "nowrap"
+                    }
+                  }, "⇶ Same time")
+                ));
+              }
+              // Color-coded left bar: parents get their area color,
+              // children get the SAME color as their parent so the
+              // family reads as one unit. Concurrent (no parent) and
+              // selected states still win the priority for visual
+              // emphasis. Falls back to the previous neutral border
+              // when no group color is available (no area set).
+              const familyColor = (isParent || isSub) && groupColor ? groupColor.color : null;
+              const familyTint  = (isParent || isSub) && groupColor ? groupColor.bg    : null;
+              const leftBar =
+                isSelected   ? "3px solid #15803d"
+                : familyColor ? "4px solid " + familyColor
+                : isConcurrent ? "3px solid #93c5fd"
+                : "1px solid var(--c-border)";
+              const rowBg =
+                isSelected ? "#dcfce7"
+                : familyTint ? familyTint
+                : isConcurrent ? "#eff6ff"
+                : "var(--c-surface-raised)";
+              out.push(/*#__PURE__*/React.createElement("div", {
                 key: id,
                 onClick: isHabitSec ? toggleSelection : undefined,
                 style: {
@@ -19531,9 +19622,9 @@ function App() {
                   gap: 6,
                   padding: "8px 10px",
                   paddingLeft: isSub ? 22 : 10,
-                  background: isSelected ? "#dcfce7" : (isSub ? "var(--c-surface-muted)" : "var(--c-surface-raised)"),
-                  border: "1px solid " + (isSelected ? "#86efac" : "var(--c-border)"),
-                  borderLeft: isSelected ? "3px solid #15803d" : (isSub ? "3px solid #c6dfc6" : "1px solid var(--c-border)"),
+                  background: rowBg,
+                  border: "1px solid " + (isSelected ? "#86efac" : (isConcurrent ? "#bfdbfe" : "var(--c-border)")),
+                  borderLeft: leftBar,
                   borderRadius: 8,
                   cursor: isHabitSec ? "pointer" : "default",
                   userSelect: "none"
@@ -19612,8 +19703,10 @@ function App() {
                     opacity: isLast ? 0.35 : 1, color: "var(--c-text-soft)", fontSize: 12, lineHeight: 1
                   }
                 }, "▼")
-              );
-            })),
+              ));
+              return out;
+            }));
+          })(),
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", gap: 8 }
         },
