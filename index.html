@@ -2159,6 +2159,21 @@ const SEED_HABITS = [{
   type: "Physical",
   duration: "",
   completions: {}
+}, {
+  id: "sh30",
+  text: "Instagram",
+  section: "avoid",
+  importance: "Important",
+  type: "Mental",
+  duration: "",
+  // Capped Avoid habit — under 15 minutes a day still counts as
+  // "winning" the day. ≤ comparison makes the chip read "≤ 15 min"
+  // and the in-app log uses tap-to-add minutes against the cap.
+  target: 15,
+  targetOp: "<=",
+  unitLabel: "min",
+  increment: 5,
+  completions: {}
 }];
 
 /* ── UTILS ── */
@@ -3828,13 +3843,26 @@ function App() {
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
     const sectionCursor = { morning: 0, afternoon: 0, evening: 0 };
+    // Track each section's previous startMin so habits flagged
+    // h.concurrent share the predecessor's start (stretch + sunlight
+    // exported as overlapping events at the same time).
+    const sectionPrevStart = { morning: null, afternoon: null, evening: null };
     const rawTimes = sortedHabits.map(h => {
       const dur = Math.max(5, parseInt(h.duration, 10) || 30);
       const sec = h.section;
       const anchor = SECTION_START[sec] != null ? SECTION_START[sec] : 12 * 60;
-      const offset = sectionCursor[sec] || 0;
-      sectionCursor[sec] = offset + dur;
-      return { habit: h, allDay: false, durationMin: dur, startMin: anchor + offset };
+      let startMin;
+      if (h.concurrent && sectionPrevStart[sec] != null) {
+        startMin = sectionPrevStart[sec];
+        const endOffset = (startMin - anchor) + dur;
+        if (endOffset > (sectionCursor[sec] || 0)) sectionCursor[sec] = endOffset;
+      } else {
+        const offset = sectionCursor[sec] || 0;
+        startMin = anchor + offset;
+        sectionCursor[sec] = offset + dur;
+      }
+      sectionPrevStart[sec] = startMin;
+      return { habit: h, allDay: false, durationMin: dur, startMin };
     });
     // Merge consecutive same-bundleKey slots into one event so
     // micro-habits (≤3 min) bundled under e.g. "Morning routine"
@@ -3850,7 +3878,9 @@ function App() {
       const key = s.habit.bundleKey || "";
       if (key && habitTimes.length > 0 && habitTimes[habitTimes.length - 1].bundleKey === key) {
         const prev = habitTimes[habitTimes.length - 1];
-        prev.durationMin = (s.startMin + s.durationMin) - prev.startMin;
+        // Math.max guards against concurrent habits inside a bundle
+        // (same startMin as prev, shorter dur) shrinking the block.
+        prev.durationMin = Math.max(prev.durationMin, (s.startMin + s.durationMin) - prev.startMin);
         prev.members.push(s.habit);
       } else {
         habitTimes.push({
@@ -4366,11 +4396,19 @@ function App() {
   // most calendar apps' 15-min grid. Stored as h.bundleKey on the
   // habit. Empty / null = no bundle.
   const [eHBundleKey, sEHBundleKey] = useState("");
-  // Position-within-section input for the edit-habit modal. Stored
-  // as a string so the input controls cleanly. On save, we reorder
-  // the habit's _order to slot it at this 1-indexed position inside
-  // its section (drag-and-drop was removed in favor of this).
-  const [eHOrder, sEHOrder] = useState("");
+  // Relative-position picker for the edit-habit modal. "After"
+  // = the id of the habit this one should follow within the
+  // section, or "" for "first." Replaces the old numeric Order
+  // x/y input — the user picks "After Wake Up" rather than
+  // "position 3 of 7", and the save path renormalizes _order so
+  // the existing schedule code keeps working.
+  // eHConcurrent — when true, this habit shares its start time
+  // with the predecessor (used for "stretch outside while
+  // getting morning sunlight"). The schedule helper draws the
+  // two events at the same startMin instead of stacking by
+  // duration. Stored as h.concurrent on the saved habit.
+  const [eHAfterId, sEHAfterId] = useState("");
+  const [eHConcurrent, sEHConcurrent] = useState(false);
   // Habit flavor toggle in the edit-habit modal:
   //   true  → target + unit + +per-tap fields visible; the chip on
   //           the card reads e.g. "≥ 4/8 cups"
@@ -5332,16 +5370,26 @@ function App() {
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
   const [expHabitGoals, setExpHabitGoals] = useState({});
-  // Per-subsection expansion for the goal detail view. When a goal
-  // card is first opened, every sub-block (SMART, Linked, History)
-  // starts collapsed — just a title row with a count. Clicking the
-  // title toggles only THAT block. Key format: `${goalId}:${subId}`.
+  // Per-subsection expansion for the goal detail view. Linked Habits
+  // and Linked To-Dos start OPEN by default (those are the actionable
+  // bits the user reaches for first); SMART starts collapsed because
+  // it's reference info filled in once and rarely revisited. Toggling
+  // a section writes an explicit boolean to expGoalSub, overriding
+  // the default. Key format: `${goalId}:${subId}`.
+  const GOAL_SUB_DEFAULT_OPEN = { habits: true, todos: true, smart: false };
   const [expGoalSub, setExpGoalSub] = useState({});
+  const goalSubDefault = subId => GOAL_SUB_DEFAULT_OPEN[subId] === true;
   const toggleGoalSub = (goalId, subId) => {
     const k = goalId + ":" + subId;
-    setExpGoalSub(p => ({ ...p, [k]: !p[k] }));
+    setExpGoalSub(p => {
+      const cur = typeof p[k] === "boolean" ? p[k] : goalSubDefault(subId);
+      return { ...p, [k]: !cur };
+    });
   };
-  const isGoalSubOpen = (goalId, subId) => !!expGoalSub[goalId + ":" + subId];
+  const isGoalSubOpen = (goalId, subId) => {
+    const v = expGoalSub[goalId + ":" + subId];
+    return typeof v === "boolean" ? v : goalSubDefault(subId);
+  };
   // Version-history accordions on the goal detail view. `expGoalHistory`
   // tracks whether the goal's own history panel is open; `expHabitHistory`
   // tracks each linked habit's history panel independently, so opening one
@@ -6435,7 +6483,8 @@ function App() {
     sEHTargetOp(">=");
     sEHUnitLabel("");
     sEHIncrement("");
-    sEHOrder("");
+    sEHAfterId("");
+    sEHConcurrent(false);
     sEHBundleKey("");
     // New habits start in Yes/No mode (no target). The user flips
     // the toggle in the modal header to switch to Target & Unit
@@ -6462,36 +6511,64 @@ function App() {
     if (!eHTxt.trim()) return;
     const newId = Date.now();
     const todayISO = dk(new Date());
+    const nextSec = eHSec || "morning";
+    const newHabit = {
+      id: newId,
+      text: eHTxt.trim(),
+      section: nextSec,
+      importance: eHImp || "Important",
+      type: eHType || null,
+      duration: eHDur || null,
+      notes: (eHNotes && eHNotes.trim()) || null,
+      goalIds: (eHGoalIds || []).slice(),
+      goalId: (eHGoalIds && eHGoalIds[0] != null) ? eHGoalIds[0] : null,
+      location: eHLoc || "both",
+      startDate: eHStart || todayISO,
+      frequency: {
+        type: (eHFreq && eHFreq.type) || "daily",
+        days: Array.isArray(eHFreq && eHFreq.days) ? eHFreq.days.slice() : [],
+        day:      typeof (eHFreq && eHFreq.day)      === "number" ? eHFreq.day      : null,
+        monthDay: typeof (eHFreq && eHFreq.monthDay) === "number" ? eHFreq.monthDay : 1,
+        month:    typeof (eHFreq && eHFreq.month)    === "number" ? eHFreq.month    : 0
+      },
+      target:    eHHasTarget ? (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
+      targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
+      unitLabel: eHHasTarget ? ((eHUnitLabel || "").trim() || null) : null,
+      increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
+      bundleKey: (eHBundleKey || "").trim() || null,
+      concurrent: !!eHConcurrent,
+      completions: {},
+      completionTimes: {},
+      completionUnits: {}
+    };
+    // Insert into the section's _order sequence per the After picker
+    // ("First in section" = front, otherwise after the chosen habit)
+    // and renormalise that section's _order indices in one save so
+    // the new habit is positioned atomically with creation.
+    const cur = data;
+    const inSec = (cur.habits || [])
+      .filter(h => (h.section || "morning") === nextSec)
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    const seq = inSec.slice();
+    let insertAt;
+    if (!eHAfterId) {
+      insertAt = 0;
+    } else {
+      const anchorIdx = seq.findIndex(h => String(h.id) === String(eHAfterId));
+      insertAt = anchorIdx >= 0 ? anchorIdx + 1 : seq.length;
+    }
+    seq.splice(insertAt, 0, newHabit);
+    const orderById = {};
+    seq.forEach((h, i) => { orderById[h.id] = i; });
+    const allHabits = [...(cur.habits || []), newHabit].map(h =>
+      (h.section || "morning") === nextSec
+        ? { ...h, _order: orderById[h.id] != null ? orderById[h.id] : (h._order ?? 999) }
+        : h
+    );
     save({
-      ...data,
-      habits: [...(data.habits || []), {
-        id: newId,
-        text: eHTxt.trim(),
-        section: eHSec || "morning",
-        importance: eHImp || "Important",
-        type: eHType || null,
-        duration: eHDur || null,
-        notes: (eHNotes && eHNotes.trim()) || null,
-        goalIds: (eHGoalIds || []).slice(),
-        goalId: (eHGoalIds && eHGoalIds[0] != null) ? eHGoalIds[0] : null,
-        location: eHLoc || "both",
-        startDate: eHStart || todayISO,
-        frequency: {
-          type: (eHFreq && eHFreq.type) || "daily",
-          days: Array.isArray(eHFreq && eHFreq.days) ? eHFreq.days.slice() : [],
-          day:      typeof (eHFreq && eHFreq.day)      === "number" ? eHFreq.day      : null,
-          monthDay: typeof (eHFreq && eHFreq.monthDay) === "number" ? eHFreq.monthDay : 1,
-          month:    typeof (eHFreq && eHFreq.month)    === "number" ? eHFreq.month    : 0
-        },
-        target:    eHHasTarget ? (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
-        targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
-        unitLabel: eHHasTarget ? ((eHUnitLabel || "").trim() || null) : null,
-        increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
-        bundleKey: (eHBundleKey || "").trim() || null,
-        completions: {},
-        completionTimes: {},
-        completionUnits: {}
-      }]
+      ...cur,
+      habits: allHabits,
+      sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" }
     });
     touchFeature("habit.create");
     const targetN = parseInt(eHTarget, 10);
@@ -6521,16 +6598,19 @@ function App() {
     sEHUnitLabel(h.unitLabel || "");
     sEHIncrement(typeof h.increment === "number" && h.increment > 0 ? String(h.increment) : "");
     sEHBundleKey(typeof h.bundleKey === "string" ? h.bundleKey : "");
-    // Seed Order input from the habit's current 1-indexed position
-    // within its section, sorted by _order.
+    // Seed the After picker from the habit's current position —
+    // the predecessor in section sorted by _order, or "" if this
+    // habit is already first. eHConcurrent reflects h.concurrent
+    // verbatim; defaults to false on legacy habits.
     {
       const sec = h.section || "morning";
       const inSec = (data.habits || [])
         .filter(x => (x.section || "morning") === sec)
         .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
       const pos = inSec.findIndex(x => x.id === h.id);
-      sEHOrder(pos >= 0 ? String(pos + 1) : "1");
+      sEHAfterId(pos > 0 ? String(inSec[pos - 1].id) : "");
     }
+    sEHConcurrent(h.concurrent === true);
     setEditHabitModal(h);
   };
   const svEHabit = id => {
@@ -6604,34 +6684,52 @@ function App() {
         unitLabel: eHHasTarget ? (eHUnitLabel.trim() || null) : null,
         increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
         bundleKey: (eHBundleKey || "").trim() || null,
+        concurrent: !!eHConcurrent,
         history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
       } : h)
     });
     const targetN = parseInt(eHTarget, 10);
     if (isFinite(targetN) && targetN >= 0) touchFeature("habit.subunits");
-    // Apply Order change. The save above already wrote the new
-    // section, so resolve the section context off nextSec (not the
-    // old prev.section). If the requested position differs from the
-    // current one, splice the habit into the new slot and rewrite
-    // _order via reorderHabitSection. Skipped silently if the input
-    // is empty or matches today's position.
+    // Apply position change driven by the After picker:
+    //   eHAfterId === ""    → first in section
+    //   eHAfterId === "<X>" → comes immediately after habit X
+    // Resolves to a target index in the section sequence, splices,
+    // and renormalises every habit in the section to clean
+    // integer _orders via reorderHabitSection.
     {
-      const orderN = parseInt(eHOrder, 10);
-      if (isFinite(orderN)) {
-        // Pull the freshest habits list — the save above just ran
-        // synchronously, so latestData.current is already updated.
-        const cur = latestData.current || data;
-        const inSec = (cur.habits || [])
-          .filter(h => (h.section || "morning") === nextSec)
-          .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-        const fromIdx = inSec.findIndex(h => h.id === id);
-        const targetIdx = Math.max(0, Math.min(inSec.length - 1, orderN - 1));
-        if (fromIdx >= 0 && targetIdx !== fromIdx) {
+      const cur = latestData.current || data;
+      const inSec = (cur.habits || [])
+        .filter(h => (h.section || "morning") === nextSec)
+        .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+      const fromIdx = inSec.findIndex(h => h.id === id);
+      let targetIdx;
+      if (!eHAfterId) {
+        targetIdx = 0;
+      } else {
+        const anchorIdx = inSec.findIndex(h => String(h.id) === String(eHAfterId));
+        if (anchorIdx < 0) {
+          targetIdx = -1; // anchor not in section — leave order alone
+        } else {
+          // If we're moving forward, anchor's index already accounts
+          // for our removal; if backward, we need anchorIdx + 1
+          // BEFORE the splice. Use a safe pattern: splice removes
+          // self first, then re-find the anchor in the shorter list.
           const seq = inSec.slice();
-          const [moved] = seq.splice(fromIdx, 1);
-          seq.splice(targetIdx, 0, moved);
-          reorderHabitSection(nextSec, seq);
+          const removed = fromIdx >= 0 ? seq.splice(fromIdx, 1) : [];
+          const newAnchorIdx = seq.findIndex(h => String(h.id) === String(eHAfterId));
+          targetIdx = newAnchorIdx + 1;
+          if (fromIdx >= 0 && targetIdx >= 0 && targetIdx !== fromIdx) {
+            seq.splice(targetIdx, 0, removed[0]);
+            reorderHabitSection(nextSec, seq);
+          }
+          targetIdx = -2; // sentinel — already handled
         }
+      }
+      if (targetIdx >= 0 && fromIdx >= 0 && targetIdx !== fromIdx) {
+        const seq = inSec.slice();
+        const [moved] = seq.splice(fromIdx, 1);
+        seq.splice(targetIdx, 0, moved);
+        reorderHabitSection(nextSec, seq);
       }
     }
     sEHId(null);
@@ -14436,7 +14534,18 @@ function App() {
           transition: "width 0.4s ease",
           minWidth: linkedDone > 0 ? 4 : 0
         }
-      })), expGoalHabits[goal.id] && !isE && (() => {
+      })), expGoalHabits[goal.id] && !isE && /*#__PURE__*/React.createElement("div", {
+        // Visual order is Linked Habits → Linked To-Dos → SMART:
+        // those are the actionable bits the user reaches for first;
+        // SMART is reference info filled once and rarely revisited.
+        // We keep the source order (SMART block, then Linked block)
+        // and let `column-reverse` flip the rendered order, so the
+        // SMART body's helpers (smOpen, etc.) and the Linked body's
+        // helpers (linked, linkedTodos, habitsOpen, todosOpen) each
+        // stay scoped to their own IIFE without a 300-line shuffle.
+        style: { display: "flex", flexDirection: "column-reverse" }
+      },
+      (() => {
         // SMART header always renders when the goal panel is open,
         // even on goals with zero SMART fields filled in. Earlier
         // we gated this on hasSm — that hid the sub-section
@@ -14532,7 +14641,8 @@ function App() {
           }
         }, shown));
       })));
-      })(), expGoalHabits[goal.id] && !isE && (() => {
+      })(),
+      (() => {
         // Linked Habits + Linked To-Dos sub-sections. Both headers
         // ALWAYS render whenever the goal panel is open — even on a
         // goal with zero linked items — so the user can see the
@@ -14761,6 +14871,7 @@ function App() {
         )
         );
       })()
+      )
       );
     })));
   }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("div", {
@@ -14904,10 +15015,23 @@ function App() {
         // start; we cap end at 23:59 for display so an over-long
         // evening stack doesn't paint into next-day hours.
         let cursor = (r.start || 0) * 60;
+        let prevStart = null;
         for (const h of bySection[sec]) {
           const dur = Math.max(5, parseInt(h.duration, 10) || 30);
-          out.push({ habit: h, startMin: cursor, endMin: cursor + dur, durationMin: dur });
-          cursor += dur;
+          // Concurrent habits share the predecessor's start time
+          // (stretch + sunlight at 6:00am) instead of stacking.
+          // The cursor still advances to whichever end is later so
+          // following habits don't overlap.
+          let start;
+          if (h.concurrent && prevStart != null) {
+            start = prevStart;
+            if (start + dur > cursor) cursor = start + dur;
+          } else {
+            start = cursor;
+            cursor = start + dur;
+          }
+          out.push({ habit: h, startMin: start, endMin: start + dur, durationMin: dur });
+          prevStart = start;
         }
       }
       out.sort((a, b) => a.startMin - b.startMin);
@@ -14920,7 +15044,9 @@ function App() {
         const key = s.habit.bundleKey || "";
         if (key && bundled.length > 0 && bundled[bundled.length - 1].bundleKey === key) {
           const prev = bundled[bundled.length - 1];
-          prev.endMin = s.endMin;
+          // Math.max so a concurrent habit (same startMin as prev,
+          // possibly shorter duration) doesn't shrink the bundle.
+          prev.endMin = Math.max(prev.endMin, s.endMin);
           prev.durationMin = prev.endMin - prev.startMin;
           prev.members.push(s.habit);
         } else {
@@ -18935,77 +19061,36 @@ function App() {
       boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
     }
   }, /*#__PURE__*/React.createElement("div", {
+    // Two-row header: row 1 is title + close X (always edge-to-edge
+    // on a 402-px iPhone); row 2 is the compact "Starts <date>" pill
+    // on its own line. The previous one-row layout had the title,
+    // the date pill (which contains a 90-px date input), and the
+    // close X all jammed into the same flex line — at 402 px the
+    // "Edit Habit" text would overlap the pill on long titles.
+    // Stacking guarantees no horizontal collision.
     style: {
       display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
+      flexDirection: "column",
+      gap: 8,
       marginBottom: 16
     }
   },
-    // Title on the left, alone — no longer adjacent to Order.
     /*#__PURE__*/React.createElement("div", {
       style: {
-        fontFamily: "'Lora',serif",
-        fontSize: 17,
-        fontWeight: 700,
-        color: "var(--c-text-strong)"
-      }
-    }, editHabitModal && editHabitModal.id === "__new__" ? "New Habit" : "Edit Habit"),
-    // Center cluster: compact "Starts <date>" pill that opens the
-    // native date picker. Moved out of its own row at the bottom
-    // of the form so the modal is a noticeably shorter card.
-    // Hidden in container query — flex-shrinks first if the
-    // header gets cramped, but typically renders inline.
-    /*#__PURE__*/React.createElement("label", {
-      title: "Starts on " + (eHStart || dk(new Date())),
-      style: {
-        display: "inline-flex", alignItems: "center", gap: 4,
-        padding: "3px 8px",
-        borderRadius: 14,
-        border: "1px solid var(--c-border)",
-        background: "var(--c-surface-muted)",
-        fontSize: 10, fontWeight: 600, color: "var(--c-text-soft)",
-        cursor: "pointer", whiteSpace: "nowrap",
-        flexShrink: 1, overflow: "hidden"
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8
       }
     },
-      /*#__PURE__*/React.createElement("span", { style: { opacity: 0.7 } }, "Starts"),
-      /*#__PURE__*/React.createElement("input", {
-        type: "date",
-        value: eHStart || dk(new Date()),
-        onChange: e => sEHStart(e.target.value || dk(new Date())),
-        "aria-label": "Start date",
-        style: { border: "none", background: "transparent", padding: 0, fontSize: 10, fontWeight: 600, color: "var(--c-text)", outline: "none", cursor: "pointer", width: 90 }
-      })
-    ),
-    // Right cluster: Order x/y (existing habits only) + close X.
-    /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", alignItems: "center", gap: 10 }
-    },
-      // Order x / y — only meaningful when editing an existing
-      // habit. New habits don't have a position yet (they'll be
-      // appended to the end of their section on save), so the
-      // input is suppressed in create mode.
-      editHabitModal && editHabitModal.id !== "__new__" && (() => {
-        const sec = (editHabitModal && editHabitModal.section) || eHSec || "morning";
-        const total = (data.habits || []).filter(h => (h.section || "morning") === sec).length;
-        return /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--c-text-soft)", fontWeight: 600 }
-        },
-          /*#__PURE__*/React.createElement("span", null, "Order"),
-          /*#__PURE__*/React.createElement("input", {
-            type: "number",
-            inputMode: "numeric",
-            min: 1,
-            max: total || 1,
-            value: eHOrder,
-            onChange: e => sEHOrder(e.target.value.replace(/[^0-9]/g, "")),
-            "aria-label": "Position within " + sec,
-            style: { ...IS, width: 40, padding: "4px 6px", textAlign: "center", fontSize: 12 }
-          }),
-          /*#__PURE__*/React.createElement("span", { style: { color: "#9ca3af" } }, "/ " + (total || 1))
-        );
-      })(),
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontFamily: "'Lora',serif",
+          fontSize: 17,
+          fontWeight: 700,
+          color: "var(--c-text-strong)"
+        }
+      }, editHabitModal && editHabitModal.id === "__new__" ? "New Habit" : "Edit Habit"),
       /*#__PURE__*/React.createElement("button", {
         onClick: () => setEditHabitModal(null),
         style: {
@@ -19019,9 +19104,34 @@ function App() {
           color: "#6b7280",
           display: "flex",
           alignItems: "center",
-          justifyContent: "center"
+          justifyContent: "center",
+          flexShrink: 0
         }
-  }, "\xD7"))), /*#__PURE__*/React.createElement("input", {
+      }, "\xD7")
+    ),
+    /*#__PURE__*/React.createElement("label", {
+      title: "Starts on " + (eHStart || dk(new Date())),
+      style: {
+        alignSelf: "flex-start",
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: "3px 8px",
+        borderRadius: 14,
+        border: "1px solid var(--c-border)",
+        background: "var(--c-surface-muted)",
+        fontSize: 10, fontWeight: 600, color: "var(--c-text-soft)",
+        cursor: "pointer", whiteSpace: "nowrap"
+      }
+    },
+      /*#__PURE__*/React.createElement("span", { style: { opacity: 0.7 } }, "Starts"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "date",
+        value: eHStart || dk(new Date()),
+        onChange: e => sEHStart(e.target.value || dk(new Date())),
+        "aria-label": "Start date",
+        style: { border: "none", background: "transparent", padding: 0, fontSize: 10, fontWeight: 600, color: "var(--c-text)", outline: "none", cursor: "pointer", width: 110 }
+      })
+    )
+  ), /*#__PURE__*/React.createElement("input", {
     value: eHTxt,
     onChange: e => sEHTxt(e.target.value),
     placeholder: "Habit name",
@@ -19433,6 +19543,57 @@ function App() {
     key: i.value,
     value: i.value
   }, i.value)))),
+  // \u2500\u2500 Position picker \u2014 relative ordering \u2500\u2500
+  // Replaces the legacy numeric Order x/y. The user picks
+  // "First" or "After [habit]" from a dropdown of every other
+  // habit in the same section. The save path resolves the
+  // selection to a fractional _order so the existing schedule
+  // helpers / calendar / habits-page sort all keep working
+  // unchanged (afterwards every section gets renormalised to
+  // clean integer _orders).
+  // Concurrent checkbox: when ticked the habit shares its start
+  // time with the predecessor. Used for things like "stretch +
+  // morning sunlight" \u2014 same 10-min slot, two events.
+  (() => {
+    const sec = eHSec || (editHabitModal && editHabitModal.section) || "morning";
+    const myId = editHabitModal && editHabitModal.id;
+    const others = (data.habits || [])
+      .filter(x => (x.section || "morning") === sec && x.id !== myId)
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    return /*#__PURE__*/React.createElement("div", {
+      style: { marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }
+      },
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, fontWeight: 600, color: "#6b7280", flexShrink: 0 }
+        }, "Position"),
+        /*#__PURE__*/React.createElement("select", {
+          value: eHAfterId,
+          onChange: e => {
+            sEHAfterId(e.target.value);
+            // First-in-section can't be concurrent with anything.
+            if (!e.target.value) sEHConcurrent(false);
+          },
+          style: { ...S, flex: 1, minWidth: 0 }
+        },
+          /*#__PURE__*/React.createElement("option", { value: "" }, "First in " + (SECTIONS.find(s => s.value === sec)?.label || sec)),
+          others.map(o => /*#__PURE__*/React.createElement("option", { key: o.id, value: String(o.id) }, "After " + o.text.slice(0, 28)))
+        )
+      ),
+      eHAfterId && /*#__PURE__*/React.createElement("label", {
+        style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--c-text-soft)", cursor: "pointer", userSelect: "none" }
+      },
+        /*#__PURE__*/React.createElement("input", {
+          type: "checkbox",
+          checked: eHConcurrent,
+          onChange: e => sEHConcurrent(e.target.checked)
+        }),
+        "Run at the same time as the habit above (concurrent)"
+      )
+    );
+  })(),
   // Frequency picker (edit modal mirror of the add-habit flow).
   renderFreqPicker(eHFreq, sEHFreq, eHStart, sEHStart, { includeStart: false }),
   /*#__PURE__*/React.createElement("select", {
