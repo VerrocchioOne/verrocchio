@@ -12728,12 +12728,25 @@ function App() {
               style: { transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform .15s", display: "inline-block" }
             }, "▸")
           ));
-          // Children — indented + slightly muted to read as
-          // contained inside the parent's group.
+          // Children — each one indented inside a left-bar gutter
+          // matching the parent's area-of-life color so the visual
+          // grouping is obvious. The container marks the whole
+          // sub-list as a unit; each child card sits at the same
+          // indent level (multi-row flat hierarchy, not a tree).
           if (open) {
+            const parentArea = HT.find(t => t.value === h.type);
+            const parentBar = (parentArea && parentArea.color) || "#9ca3af";
             out.push(/*#__PURE__*/React.createElement("div", {
               key: h.id + ":kids",
-              style: { paddingLeft: 16, marginBottom: 10, borderLeft: "2px solid var(--c-border)" }
+              style: {
+                marginLeft: 18,
+                marginBottom: 10,
+                paddingLeft: 12,
+                borderLeft: "3px solid " + parentBar,
+                display: "flex",
+                flexDirection: "column",
+                gap: 4
+              }
             }, kids.map(child => {
               const cGoalText = habitGoalIds(child)
                 .map(gid => (data.goals || []).find(g => String(g.id) === String(gid))?.text)
