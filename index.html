@@ -12213,6 +12213,75 @@ function App() {
           const isUnderOp = habit.targetOp === "<=";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const bg = d ? "#22c55e" : missed ? "#ef4444" : (hasTarget && units > 0 ? "#3d7a3d" : "var(--c-border)");
+          // Parent habits (have sub-habits) render a proportional
+          // progress ring instead of the binary done/empty donut.
+          // The ring fills as children are completed and only goes
+          // fully green + check when every child is done. The
+          // donut is non-tappable for parents — completion is
+          // auto-derived, so the user can't directly mark a parent
+          // done without finishing its children.
+          const parentKids = habitChildren(habit);
+          if (parentKids.length > 0) {
+            const kDone = parentKids.filter(c => isDone(c, selDate)).length;
+            const kTotal = parentKids.length;
+            const ratio = kTotal > 0 ? kDone / kTotal : 0;
+            const allDone = kDone === kTotal;
+            const r = 11;
+            const C = 2 * Math.PI * r;
+            const ringColor = allDone ? "#22c55e" : "#3d7a3d";
+            return /*#__PURE__*/React.createElement("div", {
+              "aria-label": kDone + " of " + kTotal + " sub-habits done",
+              title: kDone + " / " + kTotal + " sub-habits done — completion auto-derives from children",
+              onClick: e => e.stopPropagation(),
+              onDoubleClick: e => e.stopPropagation(),
+              style: {
+                width: 28, height: 28, borderRadius: "50%",
+                flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: allDone ? "#22c55e" : "transparent",
+                boxShadow: allDone ? "0 2px 8px rgba(34,197,94,.4)" : "none",
+                position: "relative",
+                transition: "background .2s, box-shadow .2s"
+              }
+            },
+              /*#__PURE__*/React.createElement("svg", {
+                width: 28, height: 28, viewBox: "0 0 28 28",
+                style: { position: "absolute", inset: 0, transform: "rotate(-90deg)" }
+              },
+                /*#__PURE__*/React.createElement("circle", {
+                  cx: 14, cy: 14, r,
+                  fill: "none", stroke: "#e5e7eb", strokeWidth: 3
+                }),
+                /*#__PURE__*/React.createElement("circle", {
+                  cx: 14, cy: 14, r,
+                  fill: "none",
+                  stroke: ringColor,
+                  strokeWidth: 3,
+                  strokeDasharray: (ratio * C) + " " + (C - ratio * C),
+                  strokeLinecap: "round"
+                })
+              ),
+              allDone
+                ? /*#__PURE__*/React.createElement("svg", {
+                    width: 14, height: 14, viewBox: "0 0 18 18", fill: "none",
+                    style: { position: "relative", zIndex: 1 }
+                  }, /*#__PURE__*/React.createElement("path", {
+                    d: "M3.5 9L7.5 13L14.5 5",
+                    stroke: "#fff",
+                    strokeWidth: 2.2,
+                    strokeLinecap: "round",
+                    strokeLinejoin: "round"
+                  }))
+                : /*#__PURE__*/React.createElement("span", {
+                    style: {
+                      position: "relative", zIndex: 1,
+                      fontSize: 9, fontWeight: 700,
+                      color: ringColor,
+                      fontVariantNumeric: "tabular-nums"
+                    }
+                  }, kDone + "/" + kTotal)
+            );
+          }
           return /*#__PURE__*/React.createElement("div", {
           "aria-label": hasTarget
             ? "Log " + (habit.increment || 1) + " " + (habit.unitLabel || "unit")
