@@ -15500,29 +15500,47 @@ function App() {
                     }
                   }, fmtHour(h))
                 )),
-                dueOnFocus.map(slot => {
-                  const h = slot.habit;
-                  const top = Math.max(0, (slot.startMin - dayStartHour * 60) * pxPerMin);
-                  // Strict proportional height — even a 5-min
-                  // habit gets exactly 5px. The callout to the
-                  // right carries the text, so the block doesn't
-                  // need to be tap-tall.
-                  const height = Math.max(3, slot.durationMin * pxPerMin - 1);
-                  const a = areaOf(h);
-                  return /*#__PURE__*/React.createElement("div", {
-                    key: h.id,
-                    title: fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin) + " · " + h.text + " · " + (h.importance || "Important"),
-                    style: {
-                      position: "absolute",
-                      top: top + "px",
-                      left: 38, right: 4,
-                      height: height + "px",
-                      background: a.bg,
-                      border: "1px solid " + a.border,
-                      borderRadius: 4
-                    }
-                  });
-                })
+                (() => {
+                  // Group concurrent slots (those sharing startMin)
+                  // so simultaneous habits render side-by-side in
+                  // their shared time strip — Stretch + Sunlight
+                  // at 6:00am show as two adjacent half-width blocks
+                  // instead of one obscuring the other.
+                  const byStart = new Map();
+                  for (const slot of dueOnFocus) {
+                    const k = slot.startMin;
+                    if (!byStart.has(k)) byStart.set(k, []);
+                    byStart.get(k).push(slot);
+                  }
+                  const blocks = [];
+                  for (const slot of dueOnFocus) {
+                    const peers = byStart.get(slot.startMin) || [slot];
+                    const idx = peers.indexOf(slot);
+                    const cols = peers.length;
+                    const h = slot.habit;
+                    const top = Math.max(0, (slot.startMin - dayStartHour * 60) * pxPerMin);
+                    const height = Math.max(3, slot.durationMin * pxPerMin - 1);
+                    const a = areaOf(h);
+                    // Strip occupies left:38 → right:4 (~46-px wide
+                    // band). Divide that band into `cols` columns.
+                    const stripPct = 100 / cols;
+                    blocks.push(/*#__PURE__*/React.createElement("div", {
+                      key: h.id,
+                      title: fmtMins(slot.startMin) + "–" + fmtMins(slot.endMin) + " · " + h.text + " · " + (h.importance || "Important") + (cols > 1 ? " · concurrent" : ""),
+                      style: {
+                        position: "absolute",
+                        top: top + "px",
+                        left: "calc(38px + " + (idx * stripPct) + "% * (100% - 42px) / 100%)",
+                        width: "calc((100% - 42px) * " + stripPct + " / 100 - 1px)",
+                        height: height + "px",
+                        background: a.bg,
+                        border: "1px solid " + a.border,
+                        borderRadius: 4
+                      }
+                    }));
+                  }
+                  return blocks;
+                })()
               ),
               // ── RIGHT: callout cards
               // ─────────────────────────────────────────────────
@@ -15543,25 +15561,58 @@ function App() {
                 ? /*#__PURE__*/React.createElement("div", {
                     style: { fontSize: 12, color: "#9ca3af", padding: "8px 0", textAlign: "center" }
                   }, "Nothing scheduled.")
-                : dueOnFocus.flatMap((slot, i) => {
-                    const h = slot.habit;
-                    const a = areaOf(h);
-                    const prev = i > 0 ? dueOnFocus[i - 1].habit : null;
-                    // Render a section header before EVERY section
-                    // change — including the very first habit.
-                    const showBreak = !prev || prev.section !== h.section;
-                    const card = /*#__PURE__*/React.createElement("div", {
-                      key: h.id,
-                      title: (h.importance || "Important") + " · " + (h.type || "Uncategorized"),
-                      style: {
-                        display: "flex", alignItems: "stretch", gap: 0,
-                        background: a.bg,
-                        border: "1px solid " + a.border,
-                        borderRadius: 8,
-                        overflow: "hidden",
-                        padding: 0
+                : (() => {
+                    // Group consecutive slots that share startMin so
+                    // simultaneous habits render side-by-side in one
+                    // flex-row. Section breaks still render before
+                    // the first card of each section.
+                    const groups = [];
+                    for (let i = 0; i < dueOnFocus.length; i++) {
+                      const slot = dueOnFocus[i];
+                      const last = groups[groups.length - 1];
+                      if (last && last[0].startMin === slot.startMin && last[0].habit.section === slot.habit.section) {
+                        last.push(slot);
+                      } else {
+                        groups.push([slot]);
                       }
-                    },
+                    }
+                    const out = [];
+                    let prevSec = null;
+                    groups.forEach(group => {
+                      const firstSlot = group[0];
+                      const h0 = firstSlot.habit;
+                      if (h0.section !== prevSec) {
+                        out.push(/*#__PURE__*/React.createElement("div", {
+                          key: "brk-" + h0.section + "-" + firstSlot.startMin,
+                          style: {
+                            display: "flex", alignItems: "center", gap: 6,
+                            fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+                            color: "#9ca3af", textTransform: "uppercase",
+                            margin: "4px 0"
+                          }
+                        },
+                          /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed #e5e7eb" } }),
+                          /*#__PURE__*/React.createElement("span", null, sectionIcon(h0.section) + " " + (h0.section === "morning" ? "Morning" : h0.section === "afternoon" ? "Afternoon" : "Evening")),
+                          /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed #e5e7eb" } })
+                        ));
+                        prevSec = h0.section;
+                      }
+                      const cards = group.map(slot => {
+                        const h = slot.habit;
+                        const a = areaOf(h);
+                        return /*#__PURE__*/React.createElement("div", {
+                          key: h.id,
+                          title: (h.importance || "Important") + " · " + (h.type || "Uncategorized") + (group.length > 1 ? " · concurrent" : ""),
+                          style: {
+                            display: "flex", alignItems: "stretch", gap: 0,
+                            flex: 1, minWidth: 0,
+                            background: a.bg,
+                            border: "1px solid " + a.border,
+                            borderRadius: 8,
+                            overflow: "hidden",
+                            padding: 0
+                          }
+                        },
                       // Importance "stoplight" stripe — solid /
                       // striped / outlined per impStripe(). The
                       // area-of-life color carries through both
@@ -15593,25 +15644,18 @@ function App() {
                         )
                       )
                     );
-                    if (showBreak) {
-                      const brk = /*#__PURE__*/React.createElement("div", {
-                        key: "brk-" + h.id,
-                        style: {
-                          display: "flex", alignItems: "center", gap: 6,
-                          fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
-                          color: "#9ca3af",
-                          textTransform: "uppercase",
-                          margin: "4px 0"
-                        }
-                      },
-                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed #e5e7eb" } }),
-                        /*#__PURE__*/React.createElement("span", null, sectionIcon(h.section) + " " + (h.section === "morning" ? "Morning" : h.section === "afternoon" ? "Afternoon" : "Evening")),
-                        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 0, borderTop: "1px dashed #e5e7eb" } })
-                      );
-                      return [brk, card];
-                    }
-                    return [card];
-                  })
+                      });
+                      // Wrap concurrent cards in a flex-row so they
+                      // sit side-by-side; a single-card group still
+                      // renders as one full-width card (flex with
+                      // one child = no visual change).
+                      out.push(/*#__PURE__*/React.createElement("div", {
+                        key: "grp-" + group[0].habit.id,
+                        style: { display: "flex", gap: 6 }
+                      }, cards));
+                    });
+                    return out;
+                  })()
               )
             );
           })(),
