@@ -3828,7 +3828,7 @@ function App() {
       return (Number(a.id) || 0) - (Number(b.id) || 0);
     });
     const sectionCursor = { morning: 0, afternoon: 0, evening: 0 };
-    const habitTimes = sortedHabits.map(h => {
+    const rawTimes = sortedHabits.map(h => {
       const dur = Math.max(5, parseInt(h.duration, 10) || 30);
       const sec = h.section;
       const anchor = SECTION_START[sec] != null ? SECTION_START[sec] : 12 * 60;
@@ -3836,6 +3836,29 @@ function App() {
       sectionCursor[sec] = offset + dur;
       return { habit: h, allDay: false, durationMin: dur, startMin: anchor + offset };
     });
+    // Merge consecutive same-bundleKey slots into one event so
+    // micro-habits (≤3 min) bundled under e.g. "Morning routine"
+    // export as a single calendar block whose duration is the
+    // sum of the members. Bundle name becomes the SUMMARY;
+    // member names are joined into the DESCRIPTION.
+    const habitTimes = [];
+    for (const s of rawTimes) {
+      const key = s.habit.bundleKey || "";
+      if (key && habitTimes.length > 0 && habitTimes[habitTimes.length - 1].bundleKey === key) {
+        const prev = habitTimes[habitTimes.length - 1];
+        prev.durationMin = (s.startMin + s.durationMin) - prev.startMin;
+        prev.members.push(s.habit);
+      } else {
+        habitTimes.push({
+          habit: s.habit,
+          members: [s.habit],
+          bundleKey: key,
+          durationMin: s.durationMin,
+          startMin: s.startMin,
+          allDay: false
+        });
+      }
+    }
     const dtstamp = utcStamp(new Date());
     const lines = [
       "BEGIN:VCALENDAR",
@@ -3856,13 +3879,28 @@ function App() {
       const h = ht.habit;
       const freq = getFreq(h);
       const first = firstOccurrence(freq);
-      const uid = (h.id || ("h-" + Math.random().toString(36).slice(2, 10))) + "@verrocchio.app";
-      const summary = escapeICS(h.text || "Habit");
+      const isBundle = ht.members && ht.members.length > 1 && ht.bundleKey;
+      // Bundles get a stable UID derived from the bundle name so
+      // re-imports merge with the same calendar event instead of
+      // duplicating. Single-habit slots keep the per-habit id.
+      const uid = (isBundle
+        ? ("bundle-" + ht.bundleKey.toLowerCase().replace(/[^a-z0-9]+/g, "-"))
+        : (h.id || ("h-" + Math.random().toString(36).slice(2, 10))))
+        + "@verrocchio.app";
+      const summary = escapeICS(isBundle ? ht.bundleKey : (h.text || "Habit"));
       const descParts = [];
-      if (h.importance) descParts.push(h.importance);
-      if (h.type)       descParts.push(h.type);
-      if (h.duration)   descParts.push(h.duration + " min");
-      const description = escapeICS(descParts.join(" · "));
+      if (isBundle) {
+        // Bundle: list each member habit on its own line in the
+        // description so the event still tells the user what's
+        // inside the block.
+        descParts.push(ht.members.map(m => "• " + m.text).join("\n"));
+        descParts.push(ht.durationMin + " min total · " + ht.members.length + " habits");
+      } else {
+        if (h.importance) descParts.push(h.importance);
+        if (h.type)       descParts.push(h.type);
+        if (h.duration)   descParts.push(h.duration + " min");
+      }
+      const description = escapeICS(descParts.join(isBundle ? "\n\n" : " · "));
       // CATEGORIES tags the event so calendar apps can filter or
       // colour-code by area-of-life and importance tier.
       const categories = [];
@@ -4310,6 +4348,12 @@ function App() {
   const [eHTargetOp, sEHTargetOp] = useState(">=");
   const [eHUnitLabel, sEHUnitLabel] = useState("");
   const [eHIncrement, sEHIncrement] = useState("");
+  // Bundle name. Habits that share the same non-empty bundle name
+  // are merged into one calendar block / iCal VEVENT — useful for
+  // 5×3-min micro-habits that would otherwise round to nothing in
+  // most calendar apps' 15-min grid. Stored as h.bundleKey on the
+  // habit. Empty / null = no bundle.
+  const [eHBundleKey, sEHBundleKey] = useState("");
   // Position-within-section input for the edit-habit modal. Stored
   // as a string so the input controls cleanly. On save, we reorder
   // the habit's _order to slot it at this 1-indexed position inside
@@ -6380,6 +6424,7 @@ function App() {
     sEHUnitLabel("");
     sEHIncrement("");
     sEHOrder("");
+    sEHBundleKey("");
     // New habits start in Yes/No mode (no target). The user flips
     // the toggle in the modal header to switch to Target & Unit
     // when they want sub-unit logging.
@@ -6430,6 +6475,7 @@ function App() {
         targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
         unitLabel: eHHasTarget ? ((eHUnitLabel || "").trim() || null) : null,
         increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
+        bundleKey: (eHBundleKey || "").trim() || null,
         completions: {},
         completionTimes: {},
         completionUnits: {}
@@ -6462,6 +6508,7 @@ function App() {
     sEHTargetOp(h.targetOp === "<=" ? "<=" : ">=");
     sEHUnitLabel(h.unitLabel || "");
     sEHIncrement(typeof h.increment === "number" && h.increment > 0 ? String(h.increment) : "");
+    sEHBundleKey(typeof h.bundleKey === "string" ? h.bundleKey : "");
     // Seed Order input from the habit's current 1-indexed position
     // within its section, sorted by _order.
     {
@@ -6544,6 +6591,7 @@ function App() {
         targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
         unitLabel: eHHasTarget ? (eHUnitLabel.trim() || null) : null,
         increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
+        bundleKey: (eHBundleKey || "").trim() || null,
         history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
       } : h)
     });
@@ -14851,7 +14899,36 @@ function App() {
         }
       }
       out.sort((a, b) => a.startMin - b.startMin);
-      return out;
+      // Merge consecutive same-bundleKey slots into one bundled
+      // entry. Calendar apps round events to 15-min increments,
+      // so 5×3-min micro-habits with the same bundle name read
+      // cleanly as a single 15-min "Morning routine" block.
+      const bundled = [];
+      for (const s of out) {
+        const key = s.habit.bundleKey || "";
+        if (key && bundled.length > 0 && bundled[bundled.length - 1].bundleKey === key) {
+          const prev = bundled[bundled.length - 1];
+          prev.endMin = s.endMin;
+          prev.durationMin = prev.endMin - prev.startMin;
+          prev.members.push(s.habit);
+        } else {
+          bundled.push({
+            habit: s.habit,
+            members: [s.habit],
+            bundleKey: key,
+            displayName: s.habit.text,
+            startMin: s.startMin,
+            endMin: s.endMin,
+            durationMin: s.durationMin
+          });
+        }
+      }
+      // Use the bundle name as the display label when multiple
+      // habits merged into one slot.
+      for (const slot of bundled) {
+        if (slot.members.length > 1) slot.displayName = slot.bundleKey;
+      }
+      return bundled;
     };
     const habitsDueOn = key => scheduleHabitsForDay(key);
     const fmtMins = mins => {
@@ -15284,7 +15361,13 @@ function App() {
                       },
                         /*#__PURE__*/React.createElement("div", {
                           style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                        }, h.text),
+                        }, slot.displayName || h.text),
+                        // For bundles, list the member names tiny+
+                        // muted on a second line so the user can
+                        // still tell which habits got merged.
+                        slot.members && slot.members.length > 1 && /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 10, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                        }, slot.members.map(m => m.text).join(" · ")),
                         /*#__PURE__*/React.createElement("div", {
                           style: { fontSize: 10, color: a.color, display: "flex", gap: 6, fontVariantNumeric: "tabular-nums", flexWrap: "wrap", fontWeight: 600 }
                         },
@@ -19069,6 +19152,25 @@ function App() {
   eHHasTarget && /*#__PURE__*/React.createElement("div", {
     style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
+  // Bundle name. Habits sharing the same non-empty bundle name get
+  // merged into one calendar block / iCal VEVENT. Useful when
+  // multiple short (≤ 3-min) habits would otherwise round to
+  // nothing in a 15-min calendar grid — bundle them under "Morning
+  // routine" or similar and they export as a single block whose
+  // duration is the sum of the members.
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }
+  },
+    /*#__PURE__*/React.createElement("input", {
+      type: "text",
+      maxLength: 28,
+      value: eHBundleKey,
+      onChange: e => sEHBundleKey(e.target.value.slice(0, 28)),
+      placeholder: "Bundle name (optional, e.g. Morning routine)",
+      title: "Habits with the same bundle name merge into one calendar block on export.",
+      style: { ...IS, flex: 1, minWidth: 0, fontSize: 12 }
+    })
+  ),
   // Link to Goals — multi-select. A habit can drive several goals
   // at once (e.g. "Sleep 8 hours" supports both "Pass CFA" and
   // "Run a marathon"). Stored as goalIds: number[] on the habit.
