@@ -9755,16 +9755,22 @@ function App() {
           todayPillLastTapRef.current = now;
           setSelDate(tk());
         },
-        title: isTodaySel ? "Showing today (double-click to save)" : "Jump to today (double-click to save)",
+        title: isTodaySel ? "Showing today (double-click to save)" : "Viewing a different day — tap to jump to today",
         "data-tour": "header-date",
+        // Red pill + red label when the selected date isn't today, so
+        // the user can't miss that they're editing past data (e.g.
+        // after "Review yesterday" jumps the date back). Green pill
+        // when on Today — the normal state. Border + tint stay
+        // consistent with the section's red palette so it reads as
+        // a warning chip, not an error.
         style: {
-          background: isTodaySel ? "#2d5a2d" : "var(--c-tint-green)",
-          border: "1px solid #c6dfc6",
+          background: isTodaySel ? "#2d5a2d" : "#fef2f2",
+          border: isTodaySel ? "1px solid #c6dfc6" : "1px solid #fca5a5",
           borderRadius: 20,
           padding: "5px 14px",
           fontSize: 11,
           fontWeight: 700,
-          color: isTodaySel ? "#fff" : "#2d5a2d",
+          color: isTodaySel ? "#fff" : "#b91c1c",
           cursor: "pointer",
           whiteSpace: "nowrap",
           touchAction: "manipulation",
