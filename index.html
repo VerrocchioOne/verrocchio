@@ -12569,13 +12569,13 @@ function App() {
             borderRadius: 8,
             padding: "2px 4px",
             boxSizing: "border-box",
-            width: 64,
-            height: 36,
+            width: 44,
+            height: 32,
             lineHeight: 1.15,
             whiteSpace: "nowrap",
             overflow: "hidden",
             marginRight: ht ? 4 : 0,
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: 700,
             letterSpacing: 0.3
           }
@@ -12594,7 +12594,7 @@ function App() {
               // same horizontal space — no jitter when the count
               // grows from 1 to 12 or the unit changes from "min"
               // to "Calories". boxSizing:border-box keeps the
-              // padding inside the 64px box.
+              // padding inside the box.
               flexShrink: 0,
               display: "flex",
               flexDirection: "column",
@@ -12605,21 +12605,21 @@ function App() {
               background: d ? "#dcfce7" : overLimit ? "#fee2e2" : "var(--c-surface-muted)",
               border: "1px solid " + (d || overLimit ? "transparent" : "var(--c-border)"),
               borderRadius: 8,
-              padding: "2px 4px",
+              padding: "2px 3px",
               boxSizing: "border-box",
-              width: 64,
-              height: 36,
-              lineHeight: 1.15,
+              width: 48,
+              height: 32,
+              lineHeight: 1.1,
               whiteSpace: "nowrap",
               overflow: "hidden",
               marginRight: ht ? 4 : 0
             }
           },
             /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 10, fontWeight: 600, letterSpacing: 0.2, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }
+              style: { fontSize: 9, fontWeight: 600, letterSpacing: 0.1, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }
             }, op + " " + shown + "/" + habit.target),
             habit.unitLabel && /*#__PURE__*/React.createElement("span", {
-              style: { fontSize: 9, fontWeight: 500, fontStyle: "italic", opacity: 0.85, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }
+              style: { fontSize: 8, fontWeight: 500, fontStyle: "italic", opacity: 0.85, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }
             }, habit.unitLabel)
           );
         })()
