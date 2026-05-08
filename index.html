@@ -12208,9 +12208,13 @@ function App() {
             borderRadius: 12,
             // Compact height by default (matches goal-card density);
             // when the user taps to expand, vertical padding grows so
-            // the metadata row has breathing room.
-            padding: expHabitGoals[habit.id] ? "10px 12px" : "7px 12px",
-            paddingRight: ht && !compact ? "30px" : "12px",
+            // the metadata row has breathing room. Side-by-side
+            // concurrent cards use tighter padding to claw back
+            // horizontal space for the title.
+            padding: compact
+              ? (expHabitGoals[habit.id] ? "8px 8px" : "6px 8px")
+              : (expHabitGoals[habit.id] ? "10px 12px" : "7px 12px"),
+            paddingRight: compact ? 8 : (ht ? "30px" : "12px"),
             transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
             transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s",
             boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : missed || animState === "missed" ? "0 1px 3px rgba(220,38,38,.08)" : "0 1px 2px rgba(0,0,0,.04)",
@@ -12246,12 +12250,16 @@ function App() {
           // auto-derived, so the user can't directly mark a parent
           // done without finishing its children.
           const parentKids = habitChildren(habit);
+          // In compact mode the donut shrinks to ~22px so the chip
+          // can sit next to it inside a 3-up row (~120 px wide each
+          // at iPhone 17 Pro width). Default keeps the original 28.
+          const dSize = compact ? 22 : 28;
           if (parentKids.length > 0) {
             const kDone = parentKids.filter(c => isDone(c, selDate)).length;
             const kTotal = parentKids.length;
             const ratio = kTotal > 0 ? kDone / kTotal : 0;
             const allDone = kDone === kTotal;
-            const r = 11;
+            const r = compact ? 9 : 11;
             const C = 2 * Math.PI * r;
             const ringColor = allDone ? "#22c55e" : "#3d7a3d";
             return /*#__PURE__*/React.createElement("div", {
@@ -12260,7 +12268,7 @@ function App() {
               onClick: e => e.stopPropagation(),
               onDoubleClick: e => e.stopPropagation(),
               style: {
-                width: 28, height: 28, borderRadius: "50%",
+                width: dSize, height: dSize, borderRadius: "50%",
                 flexShrink: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: allDone ? "#22c55e" : "transparent",
@@ -12270,18 +12278,18 @@ function App() {
               }
             },
               /*#__PURE__*/React.createElement("svg", {
-                width: 28, height: 28, viewBox: "0 0 28 28",
+                width: dSize, height: dSize, viewBox: "0 0 " + dSize + " " + dSize,
                 style: { position: "absolute", inset: 0, transform: "rotate(-90deg)" }
               },
                 /*#__PURE__*/React.createElement("circle", {
-                  cx: 14, cy: 14, r,
-                  fill: "none", stroke: "#e5e7eb", strokeWidth: 3
+                  cx: dSize / 2, cy: dSize / 2, r,
+                  fill: "none", stroke: "#e5e7eb", strokeWidth: compact ? 2.5 : 3
                 }),
                 /*#__PURE__*/React.createElement("circle", {
-                  cx: 14, cy: 14, r,
+                  cx: dSize / 2, cy: dSize / 2, r,
                   fill: "none",
                   stroke: ringColor,
-                  strokeWidth: 3,
+                  strokeWidth: compact ? 2.5 : 3,
                   strokeDasharray: (ratio * C) + " " + (C - ratio * C),
                   strokeLinecap: "round"
                 })
@@ -12331,8 +12339,8 @@ function App() {
             }
           },
           style: {
-            width: 28,
-            height: 28,
+            width: dSize,
+            height: dSize,
             borderRadius: "50%",
             border: "none",
             background: bg,
@@ -12413,28 +12421,40 @@ function App() {
         // freedom to shrink and the chip's natural width is bounded
         // by the row's flex layout instead of overflowing it.
         /*#__PURE__*/React.createElement("div", {
-          style: {
+          style: Object.assign({
             fontSize: 13,
             fontWeight: 500,
             color: d || missed ? "#6b7280" : "var(--c-text)",
             textDecoration: d || missed ? "line-through" : "none",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis"
-          },
+          }, compact
+            // Compact (concurrent column) — wrap multi-word names
+            // ("Dream Journal" → two lines) and clamp to 2 lines so
+            // long titles still cap the card height. Word-break
+            // keeps long single tokens from blowing out the column.
+            ? {
+                whiteSpace: "normal",
+                wordBreak: "break-word",
+                lineHeight: 1.2,
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden"
+              }
+            : {
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }),
           title: habit.text
         },
-          // Hard 30-character cap on the displayed title with an
-          // explicit ellipsis. The CSS overflow:hidden + textOverflow
-          // already truncates by container width, but on wider
-          // screens a 60-char habit name would still render fully —
-          // which clashes visually with neighbouring shorter
-          // habits. Slicing here gives a deterministic display
-          // length regardless of viewport. Hover-title preserves
-          // the full text for the curious user.
-          (habit.text || "").length > 30
-            ? (habit.text || "").slice(0, 29) + "…"
-            : (habit.text || "")
+          // Default mode: hard 30-character cap on the displayed title.
+          // Compact mode skips the cap so the wrap can use the full
+          // string (the line-clamp limits visual height instead).
+          compact
+            ? (habit.text || "")
+            : ((habit.text || "").length > 30
+                ? (habit.text || "").slice(0, 29) + "…"
+                : (habit.text || ""))
         ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
@@ -12450,7 +12470,11 @@ function App() {
             display: "flex",
             alignItems: "center",
             gap: 3,
-            flexWrap: "nowrap",
+            // Compact mode: pills wrap to a new line instead of being
+            // clipped, since the column is only ~120px wide at iPhone
+            // 17 Pro width with 3 simultaneous habits.
+            flexWrap: compact ? "wrap" : "nowrap",
+            rowGap: compact ? 3 : 0,
             overflow: "hidden",
             marginTop: 2
           }
