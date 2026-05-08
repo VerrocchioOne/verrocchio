@@ -10641,47 +10641,73 @@ function App() {
     }
     const yesterdayCard = yestReviewed
       ? null
-      : /*#__PURE__*/React.createElement("div", { key: "yd", style: cardStyle },
-          /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
-          /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, `Confirm each entry \u2014 ${yestDone} of ${activeH.length} recorded.`),
-          activeH.length > 0 ? /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 12, maxHeight: 260, overflowY: "auto" }
-          },
-            activeH.map(h => {
-              const cs = h.completions && h.completions[yest];
-              const done = cs && cs !== "missed";
-              return /*#__PURE__*/React.createElement("div", {
-                key: "yh-" + h.id,
-                onClick: () => {
-                  const next = done ? null : "completed";
-                  const nh = data.habits.map(hh => hh.id === h.id
-                    ? { ...hh, completions: { ...(hh.completions || {}), [yest]: next } }
-                    : hh);
-                  save({ ...data, habits: nh });
+      : (() => {
+          // Order matches the Habits page / Calendar: section
+          // (morning \u2192 afternoon \u2192 evening \u2192 all-day \u2192 avoid)
+          // then by _order then id within each section. So the
+          // review reads as the day's actual schedule, not a
+          // random insertion order.
+          const SEC_RANK = { morning: 0, afternoon: 1, evening: 2, "all-day": 3, avoid: 4 };
+          const sorted = activeH.slice().sort((a, b) => {
+            const ra = SEC_RANK[a.section] != null ? SEC_RANK[a.section] : 9;
+            const rb = SEC_RANK[b.section] != null ? SEC_RANK[b.section] : 9;
+            if (ra !== rb) return ra - rb;
+            const ao = a._order ?? 999, bo = b._order ?? 999;
+            if (ao !== bo) return ao - bo;
+            return (Number(a.id) || 0) - (Number(b.id) || 0);
+          });
+          // One tap on the whole module (anywhere on a row) opens
+          // the Habits tab with yesterday selected \u2014 that's the
+          // surface the user reviews / corrects entries on. The
+          // "Mark Reviewed \u2713" button at the bottom is kept as the
+          // explicit "I'm done with this card" action so the home
+          // ritual flow can advance.
+          const openYesterdayInHabits = () => {
+            setSelDate(yest);
+            setTab("habits");
+          };
+          return /*#__PURE__*/React.createElement("div", { key: "yd", style: cardStyle },
+            /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
+            /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, `Tap any habit to open it on yesterday \u2014 ${yestDone} of ${activeH.length} recorded.`),
+            sorted.length > 0 ? /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 12, maxHeight: 260, overflowY: "auto" }
+            },
+              sorted.map(h => {
+                const cs = h.completions && h.completions[yest];
+                const done = cs && cs !== "missed";
+                return /*#__PURE__*/React.createElement("div", {
+                  key: "yh-" + h.id,
+                  onClick: openYesterdayInHabits,
+                  style: {
+                    display: "flex", alignItems: "center", gap: 10,
+                    background: done ? "var(--c-tint-green)" : "var(--c-surface-raised)",
+                    border: "1px solid " + (done ? "#c6dfc6" : "var(--c-border)"),
+                    borderRadius: 8, padding: "8px 10px", cursor: "pointer"
+                  }
                 },
-                style: {
-                  display: "flex", alignItems: "center", gap: 10,
-                  background: done ? "var(--c-tint-green)" : "var(--c-surface-raised)",
-                  border: "1px solid " + (done ? "#c6dfc6" : "var(--c-border)"),
-                  borderRadius: 8, padding: "8px 10px", cursor: "pointer"
-                }
-              },
-                /*#__PURE__*/React.createElement("div", {
-                  style: { width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (done ? "#2d5a2d" : "#d1d5db"), background: done ? "#2d5a2d" : "transparent", color: "#fff", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }
-                }, done ? "\u2713" : ""),
-                /*#__PURE__*/React.createElement("div", {
-                  style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
-                }, h.text)
-              );
-            })
-          ) : /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: 12, textAlign: "center", padding: "12px 0" }
-          }, "No habits tracked yesterday."),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => updateRitual({ yesterdayReviewed: true }),
-            style: { ...AB, width: "100%", padding: "9px" }
-          }, "Mark Reviewed \u2713")
-        );
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (done ? "#2d5a2d" : "#d1d5db"), background: done ? "#2d5a2d" : "transparent", color: "#fff", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }
+                  }, done ? "\u2713" : ""),
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { flex: 1, fontSize: 13, color: "var(--c-text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                  }, h.text),
+                  // Section pill so the user sees the time-of-day
+                  // ordering at a glance \u2014 same labels the
+                  // Habits page section headers use.
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { fontSize: 9, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }
+                  }, (SECTIONS.find(s => s.value === h.section) || { label: h.section || "" }).label || "")
+                );
+              })
+            ) : /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: 12, textAlign: "center", padding: "12px 0" }
+            }, "No habits tracked yesterday."),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => updateRitual({ yesterdayReviewed: true }),
+              style: { ...AB, width: "100%", padding: "9px" }
+            }, "Mark Reviewed \u2713")
+          );
+        })();
 
     // Review Goals card.
     const goalsList = (data.goals || []).slice(0, 6);
