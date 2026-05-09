@@ -11798,7 +11798,10 @@ function App() {
     // passed) or fast-approaching (dueDate within 3 days). Lifted
     // up to the top of Home so the user sees what's bleeding before
     // the rest of the daily ritual. Hidden when nothing qualifies.
-    const todoUrgentCard = (() => {
+    // Urgent To-Dos card data shared between the top-of-Home review
+    // card AND the To-Dos tab return banner. Anything overdue or
+    // due within 3 days qualifies as urgent.
+    const urgentTodos = (() => {
       const today0 = new Date(); today0.setHours(0, 0, 0, 0);
       const all = (data.todos || []).filter(t => t && !t.completedDate && t.dueDate);
       const annotated = all.map(t => {
@@ -11808,8 +11811,50 @@ function App() {
         const days = Math.round((due - today0) / 86400000);
         return { todo: t, due, days };
       }).filter(Boolean);
-      const urgent = annotated.filter(({ days }) => days <= 3).sort((a, b) => a.days - b.days);
-      if (urgent.length === 0) return null;
+      return annotated.filter(({ days }) => days <= 3).sort((a, b) => a.days - b.days);
+    })();
+    const todosReviewed = !!rit.todosReviewed;
+    // Once todos are reviewed, the top card collapses into a bottom
+    // pill — same shape as the Yesterday Review pill: green tint,
+    // ✓ icon, count chip, tap → To-Dos tab. Long-press → action sheet.
+    if (todosReviewed && urgentTodos.length > 0) {
+      const pillKey = "td-p";
+      const pillActions = [
+        { label: "Open To-Dos", onClick: () => { setExpandedPill(null); setTab("todos"); } },
+        { label: "Undo review", onClick: () => { setExpandedPill(null); updateRitual({ todosReviewed: false }); } }
+      ];
+      let pressTimer = null;
+      let longFired = false;
+      const startPress = () => {
+        longFired = false;
+        pressTimer = setTimeout(() => {
+          longFired = true;
+          setPillSheet({ title: "Urgent to-dos reviewed", actions: pillActions });
+        }, 500);
+      };
+      const endPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+      const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } longFired = true; };
+      bottomPills.push(/*#__PURE__*/React.createElement("div", {
+        key: pillKey,
+        onClick: () => { if (longFired) return; setTab("todos"); },
+        onMouseDown: startPress, onMouseUp: endPress, onMouseLeave: cancelPress,
+        onTouchStart: startPress, onTouchEnd: endPress, onTouchMove: cancelPress, onTouchCancel: cancelPress,
+        onContextMenu: e => e.preventDefault(),
+        style: {
+          background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 10,
+          padding: "10px 14px", marginBottom: 10, cursor: "pointer",
+          userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "✓"),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "var(--c-text)" } }, "Urgent to-dos reviewed"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", fontWeight: 500 } }, urgentTodos.length)
+        )
+      ));
+    }
+    const todoUrgentCard = (() => {
+      if (todosReviewed || urgentTodos.length === 0) return null;
       return /*#__PURE__*/React.createElement("div", {
         key: "todo-urgent",
         style: {
@@ -11827,7 +11872,7 @@ function App() {
         },
           /*#__PURE__*/React.createElement("div", {
             style: { fontSize: 11, fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: 0.5 }
-          }, "Urgent To-Dos · " + urgent.length),
+          }, "Urgent To-Dos · " + urgentTodos.length),
           /*#__PURE__*/React.createElement("button", {
             onClick: () => setTab("todos"),
             style: {
@@ -11835,11 +11880,11 @@ function App() {
               color: "#b91c1c", fontSize: 11, fontWeight: 700,
               cursor: "pointer", padding: 0
             }
-          }, "Open To-Dos →")
+          }, "View To-Dos →")
         ),
         /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", flexDirection: "column", gap: 5 }
-        }, urgent.slice(0, 5).map(({ todo, days }) => {
+          style: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 10 }
+        }, urgentTodos.slice(0, 5).map(({ todo, days }) => {
           const overdue = days < 0;
           const today = days === 0;
           const dayLabel = overdue
@@ -11869,7 +11914,11 @@ function App() {
               style: { flex: 1, fontSize: 13, color: "var(--c-text)", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }
             }, todo.text)
           );
-        }))
+        })),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => updateRitual({ todosReviewed: true }),
+          style: { ...AB, width: "100%", padding: "9px" }
+        }, "Mark Reviewed ✓")
       );
     })();
 
@@ -13869,9 +13918,59 @@ function App() {
     // filter is active, only that section renders below. An "All" pill
     // collapses the filter back to the full list.
     const secFilterOn = (key) => todoSecFilter.length === 0 || todoSecFilter.includes(key);
+    // "Return to home review" banner — shown whenever the home
+    // urgent-todos card is still pending review. Mirrors the
+    // yesterday-habit banner on the Habits tab. Tapping it jumps
+    // back to the home tab so the user can hit Mark Reviewed ✓.
+    const todoTodayKey = tk();
+    const todoRit = (data.dailyRitual && data.dailyRitual[todoTodayKey]) || {};
+    const todoHasUrgent = (data.todos || []).some(t => {
+      if (!t || t.completedDate || !t.dueDate) return false;
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t.dueDate);
+      if (!m) return false;
+      const due = new Date(+m[1], +m[2] - 1, +m[3]); due.setHours(0, 0, 0, 0);
+      const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+      return Math.round((due - today0) / 86400000) <= 3;
+    });
+    const todoReturnBanner = (!todoRit.todosReviewed && todoHasUrgent)
+      ? /*#__PURE__*/React.createElement("div", {
+          onClick: () => setTab("brief"),
+          style: {
+            display: "flex", alignItems: "center", gap: 10,
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderLeft: "4px solid #1d4ed8",
+            borderRadius: 10,
+            padding: "10px 14px",
+            marginBottom: 10,
+            cursor: "pointer",
+            boxShadow: "0 1px 3px rgba(29,78,216,.08)"
+          }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { fontSize: 16, color: "#1d4ed8", flexShrink: 0 }
+          }, "←"),
+          /*#__PURE__*/React.createElement("div", {
+            style: { flex: 1, minWidth: 0 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: 0.4 }
+            }, "Reviewing urgent to-dos"),
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 }
+            }, "Triage anything overdue or due soon, then tap here to return to the home page review.")
+          ),
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", flexShrink: 0 }
+          }, "Return →")
+        )
+      : null;
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in"
     },
+      todoReturnBanner,
       // Header row: + button + filter pills.
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, marginBottom: 8 }
