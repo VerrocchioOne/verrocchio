@@ -4768,7 +4768,10 @@ function App() {
   // list pivots around. The view toggle (day/week/month) lives at
   // the top of the tab; calendarFocus is the date the user is
   // currently inspecting.
-  const [calendarView, setCalendarView] = useState("day");
+  // Default to month view: opening the calendar should land on a
+  // big grid the user can scan to pick any day, not the day-view
+  // timeline which only shows today's schedule.
+  const [calendarView, setCalendarView] = useState("month");
   const [calendarFocus, setCalendarFocus] = useState(() => dk(new Date()));
   const [showXpChart, setShowXpChart] = useState(false);
   const [xpChartGrain, setXpChartGrain] = useState("day"); // "day" | "week" | "month"
