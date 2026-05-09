@@ -4416,6 +4416,11 @@ function App() {
   // section-picker overlay — the user picks a time-of-day section
   // there, then we route into the per-section Organize modal.
   const [organizePickerOpen, setOrganizePickerOpen] = useState(false);
+  // Full-screen calendar modal opened from the header calendar icon.
+  // Pulls the day/week/month + ics-export module out of the Home tab
+  // (where it used to live at the bottom) so Home stays focused on
+  // the daily ritual and the calendar gets its own destination.
+  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   // Voice-capture modal state. Opened from the header mic; lets the
   // user dictate freely and then pick which collection (goals,
   // habits, to-dos, journal) the transcript should land in.
@@ -10099,7 +10104,7 @@ function App() {
       gap: 4
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setHeaderExpanded(p => !p),
+    onClick: () => setCalendarModalOpen(true),
     "data-tour": "header-calendar",
     "aria-label": "Open calendar",
     style: {
@@ -10739,7 +10744,12 @@ function App() {
       d.setDate(d.getDate() - (6 - i));
       return dk(d);
     });
-    const activeH = habits.filter(h => h.section !== "avoid" && matchesRoutine(h));
+    // activeH covers EVERY habit the user follows under the current
+    // routine — Daily Completion (all-day) and Avoid habits are part
+    // of the daily checklist too, so they belong in the per-day
+    // counts. Only habits that are turned off by routine (home-only
+    // while travelling, etc.) get filtered out here.
+    const activeH = habits.filter(h => matchesRoutine(h));
     // Per-day denominators: count only the habits that were
     // actually DUE on that day (frequency-aware) — a weekly
     // Monday habit shouldn't count toward yesterday's total on
@@ -16013,11 +16023,12 @@ function App() {
         opacity: 0
       }
     }, "\xD7")));
-  })))), tab === "brief" && (() => {
+  })))), calendarModalOpen && (() => {
     // Calendar module — day / week / month views over the user's habits.
-    // Originally a standalone tab; moved to render at the bottom of the
-    // Home (brief) tab per user request, so the daily ritual flows
-    // straight into the schedule view without a tab switch.
+    // Lives in a full-screen modal opened from the header calendar
+    // icon. Used to render at the bottom of the Home tab; moved here
+    // so Home stays focused on the daily ritual + a user who wants to
+    // browse the schedule taps the dedicated calendar entry point.
     // Each cell shows a small badge of how many habits are due that
     // day; tapping a cell selects it and the bottom panel lists the
     // due habits with their importance dot, scheduled time, and end
@@ -16373,7 +16384,42 @@ function App() {
       )));
     };
     const dueOnFocus = habitsDueOn(calendarFocus);
-    return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
+    // Modal wrapper — overlay + bottom sheet so the calendar feels
+    // like a destination launched from the header icon. Tapping the
+    // backdrop or the X closes; the inner card holds the existing
+    // day/week/month content unchanged.
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog", "aria-modal": "true",
+      style: {
+        position: "fixed", inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        zIndex: 290,
+        display: "flex", alignItems: "flex-end", justifyContent: "center"
+      },
+      onClick: e => { if (e.target === e.currentTarget) setCalendarModalOpen(false); }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: {
+        background: "var(--c-surface, #fff)",
+        borderRadius: "20px 20px 0 0",
+        padding: "20px 18px 22px",
+        width: "100%", maxWidth: 640,
+        maxHeight: "90vh", overflowY: "auto",
+        boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
+        }, "Calendar"),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button", "aria-label": "Close calendar",
+          onClick: () => setCalendarModalOpen(false),
+          style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 28, height: 28, fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
+        }, "×")
+      ),
       // View toggle
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", gap: 6, marginBottom: 10 }
@@ -16679,13 +16725,27 @@ function App() {
               );
             }))
       ),
-      // (Export to iCalendar button removed from the home calendar
-      // module per user request. The exportHabitsICS function and
-      // its export elsewhere — accessible via the .ics export entry
-      // points in the app — still work; this just drops the button
-      // here at the bottom of Home.)
-      null
-    );
+      // Export — hooks the existing exportHabitsICS, which stamps
+      // PRIORITY (Non-Negotiable=1, Important=5, Additive=7) and
+      // CATEGORIES so any calendar app (Apple, Google, Yahoo, Outlook)
+      // can colour-code or filter by importance and area.
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: exportHabitsICS,
+        style: {
+          marginTop: 16, width: "100%",
+          padding: "11px 14px",
+          borderRadius: 10,
+          border: "1px solid var(--c-border)",
+          background: "var(--c-surface-raised)",
+          color: "var(--c-text)",
+          fontSize: 13, fontWeight: 600, cursor: "pointer"
+        }
+      }, "📅 Export to iCalendar (.ics)"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 10, color: "#9ca3af", textAlign: "center", marginTop: 6, lineHeight: 1.5 }
+      }, "Imports into Apple Calendar, Google Calendar, Yahoo, Outlook. Importance is stamped as iCalendar PRIORITY (Non-Negotiable = highest, Additive = lowest).")
+    ));
   })(), false && tab === "social" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   }, /*#__PURE__*/React.createElement("div", {
