@@ -14931,7 +14931,11 @@ function App() {
     // 'Family', etc.) also belong here, so we no longer gate on
     // the hardcoded JTAGS allowlist — only goal entries (tag
     // 'goals' or a goalId set) are excluded.
-    const dailyEntries = (data.journal || []).filter(e => e && e.tag !== "goals" && !e.goalId);
+    // Unified catalog: all entries (daily, goal-specific, other)
+    // render in one chronological list. The kind chip on each
+    // entry already tells the user what type it is, so splitting
+    // them across two sections was redundant.
+    const dailyEntries = (data.journal || []).filter(e => e);
     const _sd = new Date(selDate + "T12:00:00");
     const _wStart = new Date(_sd); _wStart.setDate(_sd.getDate() - _sd.getDay()); _wStart.setHours(0, 0, 0, 0);
     const _wEnd = new Date(_wStart); _wEnd.setDate(_wStart.getDate() + 7);
@@ -15187,7 +15191,7 @@ function App() {
       padding: "8px 18px",
       fontSize: 12
     }
-  }, "Save Goal Entry"))), (() => {
+  }, "Save Goal Entry"))), false && (() => {
     const goalEntries = (data.journal || []).filter(e => e.tag === "goals" || e.goalId);
     return goalEntries.length === 0 ? /*#__PURE__*/React.createElement("div", {
       style: {
