@@ -6678,6 +6678,34 @@ function App() {
       .filter(c => c.parentId != null && String(c.parentId) === String(parent.id))
       .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
   };
+  // Incompleteness checks — items created via voice capture or
+  // a fast manual entry often miss a category, time slot, or
+  // target date. We surface a red 🚨 on the card so the user
+  // sees what still needs filling in. The check is intentionally
+  // loose: missing area-of-life is the strongest signal that
+  // someone dictated 'add a habit to floss' and didn't pick a
+  // section / duration / freq yet.
+  const isHabitIncomplete = (h) => {
+    if (!h) return false;
+    if (!h.type) return true;            // area-of-life missing
+    if (!h.section) return true;         // time-of-day missing
+    if (!h.frequency || !h.frequency.type) return true; // freq missing
+    return false;
+  };
+  const isGoalIncomplete = (g) => {
+    if (!g) return false;
+    if (!g.type) return true;            // area-of-life missing
+    const sm = g.smart || {};
+    const hasAnySmart = ["specific","measurable","achievable","relevant","timebound"].some(k => sm[k] && String(sm[k]).trim());
+    if (!hasAnySmart) return true;       // no SMART fields touched
+    if (!sm.timebound) return true;      // no target date
+    return false;
+  };
+  const isTodoIncomplete = (t) => {
+    if (!t) return false;
+    if (!t.dueDate) return true;         // no due date
+    return false;
+  };
   // Concurrency-aware total duration for an ordered habit list.
   // Walks the list and groups consecutive habits flagged
   // h.concurrent into one cohort; the cohort's contribution is the
@@ -10991,6 +11019,46 @@ function App() {
     }
     const noSmartGoal = data.goals.find(g => !g.smart || !Object.values(g.smart).some(v => v && v.trim()));
     if (noSmartGoal) smartTips.push({ icon: "🎯", title: "Add S.M.A.R.T. details", body: `Your goal "${noSmartGoal.text.slice(0, 40)}…" has no SMART framework. Tap to add specifics.`, action: () => setTab("goals") });
+    // Incomplete-item tips — voice-captured / fast-add items
+    // missing area / section / due date / SMART. The 🚨 chip on
+    // each card is the inline cue; this surfaces the same items
+    // up at the top of Home so the user can fix them in batch.
+    const incompleteHabits = (data.habits || []).filter(h => isHabitIncomplete(h));
+    if (incompleteHabits.length > 0) {
+      const sample = incompleteHabits[0];
+      smartTips.push({
+        icon: "🚨",
+        title: "Fill in habit details",
+        body: incompleteHabits.length === 1
+          ? `"${sample.text.slice(0, 40)}" is missing area, section, or frequency. Tap to finish it.`
+          : `${incompleteHabits.length} habits (starting with "${sample.text.slice(0, 30)}") are missing area / section / freq. Tap to finish them.`,
+        action: () => setTab("habits")
+      });
+    }
+    const incompleteGoals = (data.goals || []).filter(g => isGoalIncomplete(g));
+    if (incompleteGoals.length > 0) {
+      const sample = incompleteGoals[0];
+      smartTips.push({
+        icon: "🚨",
+        title: "Fill in goal details",
+        body: incompleteGoals.length === 1
+          ? `"${sample.text.slice(0, 40)}" is missing area, SMART, or target date.`
+          : `${incompleteGoals.length} goals (starting with "${sample.text.slice(0, 30)}") need area / SMART / target date.`,
+        action: () => setTab("goals")
+      });
+    }
+    const incompleteTodos = (data.todos || []).filter(t => isTodoIncomplete(t));
+    if (incompleteTodos.length > 0) {
+      const sample = incompleteTodos[0];
+      smartTips.push({
+        icon: "🚨",
+        title: "Set due dates",
+        body: incompleteTodos.length === 1
+          ? `"${(sample.text || "").slice(0, 40)}" has no due date — when does it need to happen?`
+          : `${incompleteTodos.length} to-dos are missing due dates. Tap to assign them.`,
+        action: () => setTab("todos")
+      });
+    }
     const lowHabit = activeH.find(h => getCR(h).pct < 30);
     if (lowHabit) smartTips.push({ icon: "📉", title: "Habit needs attention", body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`, action: () => setTab("habits") });
     const yestIncomplete = activeH.filter(h => !isDone(h, yest) && !isMissed(h, yest));
@@ -13553,6 +13621,13 @@ function App() {
           }),
           title: habit.text
         },
+          // Incompleteness flag — voice-captured / fast-add habits
+          // often miss area / section / freq. The 🚨 prompts the
+          // user to double-tap the card and finish the form.
+          isHabitIncomplete(habit) && /*#__PURE__*/React.createElement("span", {
+            title: "Incomplete — double-tap to fill in area, section, or frequency.",
+            style: { marginRight: 4, fontSize: 12 }
+          }, "🚨"),
           // Compact: every word becomes its own flex-item span. Flex
           // wrap will move a word to the next line when it doesn't
           // fit — independent of any white-space / min-content /
@@ -14269,7 +14344,10 @@ function App() {
           /*#__PURE__*/React.createElement("div", {
             onClick: () => setExpTodoIds(p => ({ ...p, [todo.id]: !p[todo.id] })),
             style: { flex: 1, fontSize: 13, color: "var(--c-text-soft)", wordBreak: "break-word", cursor: linkedGoal ? "pointer" : "default" }
-          }, todo.text),
+          }, isTodoIncomplete(todo) && /*#__PURE__*/React.createElement("span", {
+            title: "Incomplete — pick a due date for this to-do.",
+            style: { marginRight: 4 }
+          }, "🚨"), todo.text),
           ds && /*#__PURE__*/React.createElement("span", {
             style: { fontSize: 10, fontWeight: 600, color: ds.color, background: ds.bg, padding: "2px 8px", borderRadius: 8, flexShrink: 0, whiteSpace: "nowrap" }
           }, ds.label),
@@ -16176,7 +16254,10 @@ function App() {
           overflow: "hidden",
           textOverflow: "ellipsis"
         }
-      }, goal.text)),
+      }, isGoalIncomplete(goal) && /*#__PURE__*/React.createElement("span", {
+        title: "Incomplete — open the goal to fill in area, SMART details, or target date.",
+        style: { marginRight: 4 }
+      }, "🚨"), goal.text)),
       // Days-to-deadline chip. Top line is the prominent "# Days"
       // count (the most useful at-a-glance number); bottom line is
       // the target date formatted as M/D/YY in a smaller, italic,
@@ -16694,7 +16775,10 @@ function App() {
         color: "var(--c-text)",
         fontWeight: 500
       }
-    }, goal.text), /*#__PURE__*/React.createElement("button", {
+    }, isGoalIncomplete(goal) && /*#__PURE__*/React.createElement("span", {
+      title: "Incomplete — open the goal to fill in area, SMART details, or target date.",
+      style: { marginRight: 4 }
+    }, "🚨"), goal.text), /*#__PURE__*/React.createElement("button", {
       className: "edit-btn",
       onClick: () => sEGoal(goal),
       style: {
@@ -20121,21 +20205,34 @@ function App() {
           });
           return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
             /*#__PURE__*/React.createElement("div", { style: labelS }, "Location & Notifications"),
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "Optional. Track habits by location and get a nudge when you leave home."),
-            // Home location row
-            /*#__PURE__*/React.createElement("div", { style: rowS },
-              /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-                /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "var(--c-text)", fontWeight: 600 } }, "Home location"),
-                /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } },
-                  hasCoords
-                    ? `Saved ${new Date(coords.capturedAt).toLocaleDateString()} · ${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)}`
-                    : "Not set")
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "var(--c-text-soft)", marginBottom: 8 } }, "Optional. Track habits by location and get a nudge when you leave home. You can type a city/region manually if you'd rather not grant GPS access."),
+            // Home location row — typed home label (city, neighborhood,
+            // 'Home', etc.) doesn't require location permission. The
+            // 'Capture GPS' button below is opt-in and only matters
+            // for the away-detection toggle.
+            /*#__PURE__*/React.createElement("div", { style: { ...rowS, flexDirection: "column", alignItems: "stretch" } },
+              /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 } },
+                /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "var(--c-text)", fontWeight: 600 } }, "Home location"),
+                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-soft)", marginTop: 2 } },
+                    hasCoords
+                      ? `GPS saved ${new Date(coords.capturedAt).toLocaleDateString()} · ${coords.lat.toFixed(3)}, ${coords.lng.toFixed(3)}`
+                      : ((data.homeLocation || "").trim() ? "Manual: typed below" : "Not set"))
+                ),
+                /*#__PURE__*/React.createElement("button", {
+                  type: "button",
+                  onClick: hasCoords ? clearHome : captureHome,
+                  title: hasCoords ? "Remove the saved GPS coordinates" : "One-shot GPS fix — only needed for the 'when you leave home' nudge below",
+                  style: { minHeight: 36, padding: "7px 12px", borderRadius: 8, border: "1px solid " + (hasCoords ? "#991b1b" : "var(--c-border)"), background: "transparent", color: hasCoords ? "#991b1b" : "var(--c-text-soft)", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }
+                }, hasCoords ? "Clear GPS" : "Capture GPS")
               ),
-              /*#__PURE__*/React.createElement("button", {
-                type: "button",
-                onClick: hasCoords ? clearHome : captureHome,
-                style: { minHeight: 36, padding: "7px 12px", borderRadius: 8, border: "1px solid " + (hasCoords ? "#991b1b" : "#2d5a2d"), background: "transparent", color: hasCoords ? "#991b1b" : "#2d5a2d", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }
-              }, hasCoords ? "Clear" : "Capture")
+              /*#__PURE__*/React.createElement("input", {
+                type: "text",
+                value: data.homeLocation || "",
+                onChange: e => save({ ...data, homeLocation: e.target.value.slice(0, 60) }),
+                placeholder: "e.g. Brooklyn NY, Home, Mom's house — typed only, no GPS",
+                style: { ...inputS, fontSize: 12, padding: "7px 10px", marginTop: 8 }
+              })
             ),
             // Auto-detect toggle
             /*#__PURE__*/React.createElement("div", { style: rowS },
@@ -22543,28 +22640,37 @@ function App() {
   }, {
     key: "goals",
     label: "Goals",
-    icon: a => /*#__PURE__*/React.createElement("svg", {
-      width: "22",
-      height: "22",
-      viewBox: "0 0 24 24",
-      fill: "none",
-      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
-      strokeWidth: "2",
-      strokeLinecap: "round",
-      strokeLinejoin: "round"
-    }, /*#__PURE__*/React.createElement("circle", {
-      cx: "12",
-      cy: "12",
-      r: "10"
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: "12",
-      cy: "12",
-      r: "6"
-    }), /*#__PURE__*/React.createElement("circle", {
-      cx: "12",
-      cy: "12",
-      r: "2"
-    }))
+    // Bullseye target with an arrow piercing the center — three
+    // concentric rings + a small filled bullseye, plus a stylised
+    // arrow shaft running diagonally from the upper-right with a
+    // tiny arrowhead at the center and fletching feathers at the
+    // tail.
+    icon: a => {
+      const accent = a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af";
+      return /*#__PURE__*/React.createElement("svg", {
+        width: "22",
+        height: "22",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: accent,
+        strokeWidth: "1.8",
+        strokeLinecap: "round",
+        strokeLinejoin: "round"
+      },
+        // Concentric rings (target)
+        /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "12", r: "10" }),
+        /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "12", r: "6" }),
+        // Filled bullseye dot — solid so the arrow's tip looks
+        // like it's stuck in.
+        /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "12", r: "1.6", fill: accent, stroke: "none" }),
+        // Arrow shaft from upper-right corner into the bullseye
+        /*#__PURE__*/React.createElement("path", { d: "M22 2L13 11" }),
+        // Arrowhead at the center
+        /*#__PURE__*/React.createElement("path", { d: "M13 11L11.6 11.4M13 11L12.6 12.4" }),
+        // Fletching at the tail (two short feathers)
+        /*#__PURE__*/React.createElement("path", { d: "M22 2L18.6 2.6M22 2L21.4 5.4" })
+      );
+    }
   }, {
     // HABITS — daily-rhythm glyph (sun). Habits are the things you do
     // every day / repeatedly, so the sun reads as "the day's cadence"
