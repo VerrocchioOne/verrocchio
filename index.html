@@ -12376,11 +12376,15 @@ function App() {
             // target chip share the top line; habit name + meta
             // wrap to a full-width line below. Doubles the card
             // height so the narrower column has room for the title.
-            // We rely on flex-wrap + per-child `order` rather than
-            // restructuring the children so the default layout
-            // stays unchanged when compact === false.
+            // flex:1 (in compact only) is read by the cohort wrapper
+            // (a flex column) so every card in a row stretches to
+            // the tallest card's height — a 'Read' card next to a
+            // longer 'Spanish practice 15 min' card no longer looks
+            // ragged.
             flexWrap: compact ? "wrap" : "nowrap",
             rowGap: compact ? 4 : 0,
+            flex: compact ? "1 0 auto" : undefined,
+            alignContent: compact ? "flex-start" : undefined,
             background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : animState === "reset" ? "var(--c-surface-muted)" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
             border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : animState === "reset" ? "var(--c-border)" : "var(--c-border)"}`,
             borderRadius: 12,
@@ -13084,12 +13088,18 @@ function App() {
           return out;
           });
           if (cohort.length === 1) return towers[0];
+          // align-items:stretch (the flex default) + each tower
+          // wrapper as a flex-column with the card inside set to
+          // flex-grow:1 makes every card in the cohort match the
+          // tallest sibling's height. A 'Read' card next to a
+          // 'Read 25 pages of biography' card both render at the
+          // longer card's height instead of looking ragged.
           return [/*#__PURE__*/React.createElement("div", {
             key: "rg-" + ci,
-            style: { display: "flex", gap: 6, marginBottom: 0 }
+            style: { display: "flex", gap: 6, marginBottom: 0, alignItems: "stretch" }
           }, towers.map((tower, ti) => /*#__PURE__*/React.createElement("div", {
             key: "rg-" + ci + "-" + ti,
-            style: { flex: 1, minWidth: 0 }
+            style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }
           }, tower)))];
         });
       })()));
