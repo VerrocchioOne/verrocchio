@@ -10392,7 +10392,17 @@ function App() {
       // on date selection + travel assignment; this opens the
       // dedicated calendar destination as a bottom-sheet modal.
       /*#__PURE__*/React.createElement("button", {
-        onClick: () => { setHeaderExpanded(false); setCalendarModalOpen(true); },
+        onClick: () => {
+          // Default the modal to Day view + sync focus to the
+          // currently-selected date. The user just picked a day
+          // in the header grid (or is on today by default), so
+          // they want the modal to land on THAT day's schedule,
+          // not whichever date the modal last viewed.
+          setCalendarView("day");
+          setCalendarFocus(selDate);
+          setHeaderExpanded(false);
+          setCalendarModalOpen(true);
+        },
         title: "Open the full calendar (day, week, month + .ics export)",
         "aria-label": "Open full calendar",
         style: {
