@@ -11286,14 +11286,10 @@ function App() {
       );
     })();
 
-    // Today's-schedule card — lives at the bottom of the home tab
-    // so the user has a peek at the day's clock-time habits without
-    // jumping into the Calendar tab. Same scheduling shape as the
-    // calendar's day view (sub-habits / avoid filtered out, parent
-    // duration = sum of children, concurrent slots share a start
-    // time) but rendered as a compact list with a CTA to open the
-    // full Calendar tab.
-    const calendarCard = (() => {
+    // (Mini-calendar peek removed — the full Calendar tab content
+    // now renders at the bottom of this Home tab as its own React
+    // sibling, so a compact preview would be redundant.)
+    const calendarCard = (false && (() => {
       const todayKey = tk();
       const ranges = getTimeRanges(data);
       const top = (data.habits || []).filter(h =>
@@ -11351,7 +11347,7 @@ function App() {
             style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.5 }
           }, "Today's Schedule"),
           /*#__PURE__*/React.createElement("button", {
-            onClick: () => setTab("calendar"),
+            onClick: () => setTab("brief"),
             style: {
               background: "transparent", border: "none",
               color: "#2d5a2d", fontSize: 11, fontWeight: 700,
@@ -11371,7 +11367,7 @@ function App() {
               const stripe = ht ? ht.color : "#9ca3af";
               return /*#__PURE__*/React.createElement("div", {
                 key: h.id,
-                onClick: () => setTab("calendar"),
+                onClick: () => setTab("brief"),
                 style: {
                   display: "flex", alignItems: "center", gap: 8,
                   padding: "6px 8px",
@@ -11394,7 +11390,7 @@ function App() {
               );
             }))
       );
-    })();
+    })());
 
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
@@ -15364,8 +15360,11 @@ function App() {
         opacity: 0
       }
     }, "\xD7")));
-  })))), tab === "calendar" && (() => {
-    // Calendar tab — day / week / month views over the user's habits.
+  })))), tab === "brief" && (() => {
+    // Calendar module — day / week / month views over the user's habits.
+    // Originally a standalone tab; moved to render at the bottom of the
+    // Home (brief) tab per user request, so the daily ritual flows
+    // straight into the schedule view without a tab switch.
     // Each cell shows a small badge of how many habits are due that
     // day; tapping a cell selects it and the bottom panel lists the
     // due habits with their importance dot, scheduled time, and end
@@ -20510,21 +20509,8 @@ function App() {
       /*#__PURE__*/React.createElement("path", { d: "M8.5 17l1.5 1.5L13 15.5" })
     )
   }, {
-    // CALENDAR — day/week/month views over scheduled habits, plus
-    // an iCalendar (.ics) export hook for Apple/Google/Yahoo/Outlook.
-    key: "calendar",
-    label: "Calendar",
-    icon: a => /*#__PURE__*/React.createElement("svg", {
-      width: "22", height: "22", viewBox: "0 0 24 24", fill: "none",
-      stroke: a ? (settingsMode === "custom" && !themeLocked ? accentColor : "#2d5a2d") : "#9ca3af",
-      strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
-    },
-      /*#__PURE__*/React.createElement("rect", { x: "3", y: "4", width: "18", height: "18", rx: "2", ry: "2" }),
-      /*#__PURE__*/React.createElement("line", { x1: "16", y1: "2", x2: "16", y2: "6" }),
-      /*#__PURE__*/React.createElement("line", { x1: "8",  y1: "2", x2: "8",  y2: "6" }),
-      /*#__PURE__*/React.createElement("line", { x1: "3",  y1: "10", x2: "21", y2: "10" })
-    )
-  }, {
+    // (CALENDAR tab removed — its content now lives at the bottom
+    // of the Home tab. The .ics export entry point moved with it.)
     key: "reflection",
     label: "Reflect",
     icon: a => /*#__PURE__*/React.createElement("svg", {
