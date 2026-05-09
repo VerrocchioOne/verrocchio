@@ -16312,6 +16312,12 @@ function App() {
     // the default (18→6), so the schedule helper clamps to a 24-h
     // local-day window for display.
     const ranges = getTimeRanges(data);
+    // Importance → dot color for the calendar's compact rows.
+    // Was being referenced without being defined, which threw a
+    // ReferenceError at modal open and blanked the screen.
+    const impColor = (imp) => imp === "Non-Negotiable" ? "#dc2626"
+                            : imp === "Additive" ? "#16a34a"
+                            : "#eab308";
     // Schedule helper — returns the due habits for a date with an
     // assigned [startMin, endMin] in minutes from midnight, ordered
     // by their _order within each section, stacked by duration so
