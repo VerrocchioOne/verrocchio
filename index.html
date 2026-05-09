@@ -10,15 +10,11 @@
 <link rel="manifest" href="manifest.json">
 <title>Verrocchio</title>
 <!-- iOS "Add to Home Screen" requires a raster apple-touch-icon; Safari
-     silently ignores data:image/svg+xml here and falls back to a
-     screenshot-of-the-page icon, which is what the previous build
-     shipped. Pointing at the 180×180 PNG (plus the 1024×1024 for
-     high-DPI spring loaders) renders the real logo on the home
-     screen. Favicon link uses the same PNGs so browser tabs and the
-     saved-page thumbnail stay on-brand. -->
-<link rel="icon" type="image/png" sizes="180x180" href="apple-touch-icon.png">
+     silently ignores data:image/svg+xml here. Single 1024×1024 PNG
+     covers both home-screen install and high-DPI favicon — iOS
+     downscales it for the home-screen tile (typically 180×180) and
+     browsers downscale it for tab favicons. -->
 <link rel="icon" type="image/png" sizes="1024x1024" href="apple-touch-icon-1024.png">
-<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="apple-touch-icon" sizes="1024x1024" href="apple-touch-icon-1024.png">
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
@@ -2667,20 +2663,12 @@ function IllusHabitsEmpty({ size = 84 }) {
   );
 }
 
-// Verrocchio brand mark — recreates the icon saved at
-// "Verrocchio Icon ChatGPT.png": a 4-3-2-1 pyramid of green blocks
-// with a serif "V" overlaid. The V sits higher on the pyramid than
-// the source PNG (per spec) — its baseline lands near the top of
-// the second row instead of the middle, so the apex peeks through
-// the V's vertex and the top serifs extend above the pyramid.
-//
-// SVG so the mark scales cleanly into login screens, splash, and
-// share cards without re-rasterising. Pyramid coords mirror the
-// splashv4 .b1–.b10 stride (44×26 blocks at 52×30 grid) but in a
-// 240×240 viewBox so the V has headroom above the apex.
+// Verrocchio brand mark — 4-3-2-1 stack of 10 green blocks.
+// Mirrors the splashv4 .b1–.b10 stride (44×26 blocks at 52×30 grid)
+// in a 240×240 viewBox so the mark sits centered with breathing room.
 function VerrocchioIcon({ size = 96, color = "#2d5a2d", bg = "transparent" }) {
   const W = 44, H = 26, GX = 52, GY = 30;
-  const baseY = 200;       // y of the bottom-row blocks' top edge
+  const baseY = 180;       // y of the bottom-row blocks' top edge
   const baseX = 20;        // x of the bottom-row leftmost block
   const blocks = [
     // Row 1 — 4 blocks
@@ -2701,27 +2689,13 @@ function VerrocchioIcon({ size = 96, color = "#2d5a2d", bg = "transparent" }) {
     bg && bg !== "transparent" ? /*#__PURE__*/React.createElement("rect", {
       x: 0, y: 0, width: 240, height: 240, fill: bg, rx: 32
     }) : null,
-    // Pyramid blocks
     ...blocks.map(([cx, cy], i) => /*#__PURE__*/React.createElement("rect", {
       key: "b" + i,
       x: baseX + cx * GX,
       y: baseY - cy * GY,
       width: W, height: H, rx: 3,
       fill: color
-    })),
-    // Serif "V" — uses Lora/Playfair (already loaded by the app) so
-    // the mark reads as the same family as the wordmark. Baseline at
-    // y=150 lands the bottom vertex on top of row 2; font-size 220
-    // pushes the top serifs well above the apex (y≈4ish).
-    /*#__PURE__*/React.createElement("text", {
-      x: 120, y: 150,
-      fontSize: 220,
-      fontWeight: 700,
-      textAnchor: "middle",
-      fontFamily: "'Lora','Playfair Display',Georgia,'Times New Roman',serif",
-      fill: color,
-      style: { letterSpacing: 0 }
-    }, "V")
+    }))
   );
 }
 
@@ -7568,7 +7542,7 @@ function App() {
     notify: (title, body, opts) => {
       if (!("Notification" in window) || Notification.permission !== "granted") return false;
       try {
-        new Notification(title, { body, icon: "apple-touch-icon.png", ...(opts || {}) });
+        new Notification(title, { body, icon: "apple-touch-icon-1024.png", ...(opts || {}) });
         return true;
       } catch { return false; }
     }

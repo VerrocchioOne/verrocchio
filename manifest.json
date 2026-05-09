@@ -8,7 +8,6 @@
   "background_color": "#f8f7f4",
   "theme_color": "#2d5a2d",
   "icons": [
-    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
     { "src": "apple-touch-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
   ]
 }

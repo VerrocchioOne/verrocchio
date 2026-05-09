@@ -16,7 +16,7 @@
 // Bump CACHE_NAME whenever the precache list meaningfully changes so
 // old caches get purged on next activation.
 
-const CACHE_NAME = "verrocchio-shell-v6";
+const CACHE_NAME = "verrocchio-shell-v7";
 
 const APP_SHELL = [
   "./",
@@ -24,7 +24,6 @@ const APP_SHELL = [
   "./utils.js",
   "./manifest.json",
   "./splash-animation.html",
-  "./apple-touch-icon.png",
   "./apple-touch-icon-1024.png"
 ];
 
