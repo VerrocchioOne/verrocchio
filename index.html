@@ -917,7 +917,7 @@ const MOODS = [{
   icon: "🪞",
   color: "#db2777"
 }];
-const JTAGS = ["reflection", "gratitude", "wins", "challenges", "ideas", "feelings", "goals", "learning"];
+const JTAGS = ["daily-recap", "reflection", "gratitude", "wins", "challenges", "ideas", "feelings", "goals", "learning"];
 const DURS = [{
   value: "5",
   label: "5 min"
@@ -2247,22 +2247,60 @@ function startSpeechSession({ onChunk, onError, onEnd, lang } = {}) {
 function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
   const [active, setActive] = React.useState(false);
   const sessionRef = React.useRef(null);
+  // activeRef mirrors `active` for the closures inside onEnd —
+  // useState's value is stale by the time the recognizer's onend
+  // fires, so we keep a ref that callbacks read instead.
+  const activeRef = React.useRef(false);
+  // Hard cap so a forgotten-on mic doesn't loop forever. 6 min
+  // is enough for the 5-minute target with a one-minute buffer.
+  const startedAtRef = React.useRef(0);
+  const MAX_MS = 6 * 60 * 1000;
   if (!speechRecAvailable) return null;
   const stop = () => {
+    activeRef.current = false;
     if (sessionRef.current) { sessionRef.current.stop(); sessionRef.current = null; }
     setActive(false);
   };
   const start = () => {
     if (sessionRef.current) return;
-    sessionRef.current = startSpeechSession({
-      onChunk: ({ text, isFinal }) => {
-        if (!text) return;
-        if (isFinal) { if (onTranscript) onTranscript(text); }
-        else { if (onInterim) onInterim(text); }
-      },
-      onError: () => stop(),
-      onEnd: () => { sessionRef.current = null; setActive(false); }
-    });
+    activeRef.current = true;
+    startedAtRef.current = Date.now();
+    const launch = () => {
+      sessionRef.current = startSpeechSession({
+        onChunk: ({ text, isFinal }) => {
+          if (!text) return;
+          if (isFinal) { if (onTranscript) onTranscript(text); }
+          else { if (onInterim) onInterim(text); }
+        },
+        onError: (err) => {
+          // 'no-speech' / 'aborted' happen routinely on iOS Safari
+          // when the recognizer pauses on silence. Don't surface
+          // them; just attempt a relaunch if the user is still
+          // active. Other errors give up.
+          if (activeRef.current && (err === "no-speech" || err === "aborted") && (Date.now() - startedAtRef.current) < MAX_MS) {
+            sessionRef.current = null;
+            setTimeout(() => { if (activeRef.current) launch(); }, 250);
+          } else {
+            stop();
+          }
+        },
+        onEnd: () => {
+          // Browsers cap a single recognition session (Chrome ~60s,
+          // Safari ~5 min). When it auto-stops, restart it as long
+          // as the user is still in active mode and we're under
+          // the 6-min hard cap. This is what unlocks the 5-min
+          // dictation the user asked for.
+          sessionRef.current = null;
+          if (activeRef.current && (Date.now() - startedAtRef.current) < MAX_MS) {
+            setTimeout(() => { if (activeRef.current) launch(); }, 100);
+          } else {
+            activeRef.current = false;
+            setActive(false);
+          }
+        }
+      });
+    };
+    launch();
     if (sessionRef.current) setActive(true);
   };
   const px = size || 28;
@@ -12077,8 +12115,14 @@ function App() {
       // Selecting yesterday's date in the header turns the date pill
       // red (the same affordance used by the Yesterday Habits flow),
       // so the user always knows they're looking at the past while
-      // they're writing the entry.
-      const openReflection = () => { setSelDate(yest); setTab("reflection"); };
+      // they're writing the entry. Theme defaults to 'daily-recap'
+      // since that's almost always what a yesterday-journal entry
+      // is — the user can still pick a different one in the form.
+      const openReflection = () => {
+        setSelDate(yest);
+        sJTag("daily-recap");
+        setTab("reflection");
+      };
       return /*#__PURE__*/React.createElement("div", { key: "yest-journal", style: cardStyle },
         /*#__PURE__*/React.createElement("div", {
           onClick: openReflection,
@@ -14678,9 +14722,34 @@ function App() {
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
-      justifyContent: "flex-end"
+      gap: 8,
+      alignItems: "center"
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  },
+    // Theme picker — defaults to whatever the user picked for the
+    // current draft (jTag), with the eight built-in JTAGS as
+    // suggestions. Free-form text so a voice-recorded entry can
+    // be tagged with any custom theme. Sits above the Save button
+    // so categorising is one tap, not a buried edit-mode action.
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", alignItems: "center", gap: 6, marginRight: 10, flex: 1, minWidth: 0 }
+    },
+      /*#__PURE__*/React.createElement("span", {
+        style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-soft)", textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }
+      }, "Theme"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        value: jTag || "",
+        onChange: e => sJTag(e.target.value.replace(/[\r\n]/g, "")),
+        placeholder: "daily-recap, reflection, or your own…",
+        list: "journal-theme-suggestions-new",
+        style: { ...IS, flex: 1, minWidth: 0, fontSize: 12, padding: "6px 10px" }
+      }),
+      /*#__PURE__*/React.createElement("datalist", { id: "journal-theme-suggestions-new" },
+        JTAGS.map(t => /*#__PURE__*/React.createElement("option", { key: t, value: t }))
+      )
+    ),
+    /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       if (!jTxt.trim()) return;
       save({
@@ -14689,9 +14758,16 @@ function App() {
           id: Date.now(),
           text: jTxt.trim(),
           mood: "",
-          tag: "general",
+          // Use the user-picked theme (defaults to "daily-recap" when
+          // they came from Write Yesterday's Journal). Falls back to
+          // 'reflection' if somehow empty.
+          tag: (jTag && jTag.trim()) || "reflection",
           timestamp: new Date().toISOString(),
-          dateKey: tk()
+          // Save against the SELECTED date so a yesterday-journal
+          // entry actually lands on yesterday — not whichever date
+          // the page rendered. Was hardcoded to tk() (today), which
+          // was the bug the user reported.
+          dateKey: selDate || tk()
         }]
       });
       sJTxt("");
