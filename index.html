@@ -4424,6 +4424,16 @@ function App() {
   const [voiceInterim, setVoiceInterim] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const voiceSessionRef = useRef(null);
+  // Resistance-flow UI state. After the user confirms yesterday's
+  // habits, if any were missed we route into a 2-step follow-up:
+  //   "rank" — tap the habits you're most resisting
+  //   "plan" — type how you'll restructure today to fit them in
+  // Both steps live inside the yesterdayCard's lifecycle. State is
+  // local UX (which step + the in-progress draft); committed
+  // answers persist to data.resistanceLog and the journal.
+  const [resistanceStep, setResistanceStep] = useState(null);
+  const [resistanceFlagged, setResistanceFlagged] = useState([]);
+  const [resistancePlanText, setResistancePlanText] = useState("");
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
   // Generic custom-order reorder modal. `reorderCtx` is null when
   // closed, else an object describing what's being reordered:
@@ -10985,9 +10995,143 @@ function App() {
         ]
       ));
     }
-    const yesterdayCard = yestReviewed
-      ? null
-      : (() => {
+    // Habits not completed yesterday \u2014 the "missed" set drives the
+    // optional resistance follow-up that runs after Review Yesterday.
+    const yMissedHabits = activeH.filter(h => !isDone(h, yest));
+    const yMissedIds = yMissedHabits.map(h => h.id);
+    const ritResistanceDoneFor = (data.dailyRitual && data.dailyRitual[tk()] && data.dailyRitual[tk()].resistanceCompletedFor) || null;
+    const resistanceAlreadyDone = ritResistanceDoneFor === yest;
+    const inResistance = yestReviewed && resistanceStep && yMissedHabits.length > 0 && !resistanceAlreadyDone;
+    const yesterdayCard = inResistance
+      ? (() => {
+          const todayKey = tk();
+          const flagged = resistanceFlagged.filter(id => yMissedIds.includes(id));
+          const flaggedHabits = yMissedHabits.filter(h => flagged.includes(h.id));
+          const finishResistance = ({ skipPlan } = {}) => {
+            // Persist: append to data.resistanceLog (per yesterday key)
+            // and stash the plan as a journal entry tagged 'plan' so
+            // it shows up in Reflection alongside the user's other
+            // writing. Mark the day's ritual as resistance-handled
+            // so we don't loop the prompt later in the day.
+            const cur = latestData.current || data;
+            const log = { ...(cur.resistanceLog || {}) };
+            log[yest] = {
+              ranked: flagged.slice(),
+              plan: (resistancePlanText || "").trim(),
+              ts: Date.now()
+            };
+            const nextRitual = { ...(cur.dailyRitual || {}) };
+            nextRitual[todayKey] = {
+              ...(nextRitual[todayKey] || {}),
+              resistanceCompletedFor: yest
+            };
+            const journalAddition = (!skipPlan && (resistancePlanText || "").trim())
+              ? [{
+                  id: Date.now(),
+                  text: "Restructure plan: " + resistancePlanText.trim(),
+                  mood: "",
+                  tag: "plan",
+                  timestamp: new Date().toISOString(),
+                  dateKey: todayKey
+                }]
+              : [];
+            save({
+              ...cur,
+              resistanceLog: log,
+              dailyRitual: nextRitual,
+              journal: [...(cur.journal || []), ...journalAddition]
+            });
+            setResistanceStep(null);
+            setResistanceFlagged([]);
+            setResistancePlanText("");
+          };
+          if (resistanceStep === "rank") {
+            return /*#__PURE__*/React.createElement("div", { key: "yd-rank", style: cardStyle },
+              /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Which Are You Resisting?"),
+              /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "Tap the habits you avoided yesterday to rank them \u2014 most resisted first."),
+              /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 12, maxHeight: 260, overflowY: "auto" }
+              }, yMissedHabits.map(h => {
+                const idx = flagged.indexOf(h.id);
+                const isFlagged = idx >= 0;
+                return /*#__PURE__*/React.createElement("div", {
+                  key: "rh-" + h.id,
+                  onClick: () => {
+                    setResistanceFlagged(prev => prev.includes(h.id)
+                      ? prev.filter(x => x !== h.id)
+                      : [...prev, h.id]);
+                  },
+                  style: {
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "8px 10px",
+                    background: isFlagged ? "#fef2f2" : "var(--c-surface-raised)",
+                    border: "1px solid " + (isFlagged ? "#fca5a5" : "var(--c-border)"),
+                    borderLeft: isFlagged ? "3px solid #b91c1c" : "1px solid var(--c-border)",
+                    borderRadius: 8, cursor: "pointer", userSelect: "none"
+                  }
+                },
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { width: 22, textAlign: "center", fontSize: 11, fontWeight: 700, color: isFlagged ? "#b91c1c" : "#9ca3af" }
+                  }, isFlagged ? "#" + (idx + 1) : "\u00b7"),
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { flex: 1, fontSize: 13, color: "var(--c-text)", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }
+                  }, h.text),
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { fontSize: 9, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }
+                  }, (SECTIONS.find(s => s.value === h.section) || { label: h.section || "" }).label || "")
+                );
+              })),
+              /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", gap: 8 }
+              },
+                /*#__PURE__*/React.createElement("button", {
+                  onClick: () => finishResistance({ skipPlan: true }),
+                  style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
+                }, "Skip"),
+                /*#__PURE__*/React.createElement("button", {
+                  onClick: () => setResistanceStep("plan"),
+                  disabled: flagged.length === 0,
+                  style: { flex: 2, background: flagged.length === 0 ? "#9ca3af" : "#b91c1c", border: "none", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 700, color: "#fff", cursor: flagged.length === 0 ? "default" : "pointer", opacity: flagged.length === 0 ? 0.6 : 1 }
+                }, "Next: Restructure \u2192")
+              )
+            );
+          }
+          // Plan step \u2014 textarea so the user can sketch how today
+          // will be different. Pre-fills the prompt with the names
+          // of the flagged habits so the response stays specific.
+          return /*#__PURE__*/React.createElement("div", { key: "yd-plan", style: cardStyle },
+            /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Restructure Today"),
+            /*#__PURE__*/React.createElement("div", { style: subTitleStyle },
+              "How will today be different so " +
+              (flaggedHabits.length === 1
+                ? `"${flaggedHabits[0].text.slice(0, 40)}"`
+                : flaggedHabits.length + " habits") +
+              " actually happen?"
+            ),
+            /*#__PURE__*/React.createElement("textarea", {
+              value: resistancePlanText,
+              onChange: e => setResistancePlanText(e.target.value),
+              placeholder: "Move it earlier, stack it after coffee, prep the gear the night before, schedule a reminder...",
+              rows: 4,
+              style: { width: "100%", background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", color: "var(--c-text)", fontSize: 13, lineHeight: 1.5, outline: "none", fontFamily: "system-ui,-apple-system,sans-serif", resize: "none", marginBottom: 10, boxSizing: "border-box" }
+            }),
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", gap: 8 }
+            },
+              /*#__PURE__*/React.createElement("button", {
+                onClick: () => setResistanceStep("rank"),
+                style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
+              }, "\u2190 Back"),
+              /*#__PURE__*/React.createElement("button", {
+                onClick: () => finishResistance(),
+                style: { flex: 2, background: "#2d5a2d", border: "none", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 700, color: "#fff", cursor: "pointer" }
+              }, resistancePlanText.trim() ? "Save plan & continue" : "Skip plan & continue")
+            )
+          );
+        })()
+      : (yestReviewed
+        ? null
+        : (() => {
           // Order matches the Habits page / Calendar: section
           // (morning \u2192 afternoon \u2192 evening \u2192 all-day \u2192 avoid)
           // then by _order then id within each section. So the
@@ -11049,11 +11193,22 @@ function App() {
               style: { fontSize: 12, color: "#9ca3af", fontStyle: "italic", marginBottom: 12, textAlign: "center", padding: "12px 0" }
             }, "No habits tracked yesterday."),
             /*#__PURE__*/React.createElement("button", {
-              onClick: () => updateRitual({ yesterdayReviewed: true }),
+              onClick: () => {
+                updateRitual({ yesterdayReviewed: true });
+                // If anything was missed yesterday, route into the
+                // resistance flow instead of just collapsing the
+                // card to a pill. Reset the local rank/plan drafts
+                // first so a re-entry doesn't carry stale state.
+                if (yMissedHabits.length > 0 && !resistanceAlreadyDone) {
+                  setResistanceFlagged([]);
+                  setResistancePlanText("");
+                  setResistanceStep("rank");
+                }
+              },
               style: { ...AB, width: "100%", padding: "9px" }
             }, "Mark Reviewed \u2713")
           );
-        })();
+        })());
 
     // Review Goals card.
     const goalsList = (data.goals || []).slice(0, 6);
@@ -12462,6 +12617,24 @@ function App() {
       const doneCount = group.habits.filter(h => isDone(h, selDate)).length;
       const totalMins = group.habits.reduce((s, h) => s + (parseInt(h.duration) || 0), 0);
       const fmtTotal = totalMins >= 60 ? `${Math.floor(totalMins / 60)}h${totalMins % 60 > 0 ? ` ${totalMins % 60}m` : ""}` : totalMins > 0 ? `${totalMins}m` : "";
+      // Persistent-resistance lookup: count how many of the most
+      // recent resistance-log entries flagged this habit. ≥ 2 hits
+      // in the last 14 days earns the card a dotted-red border
+      // treatment, calling out a habit the user keeps avoiding so
+      // it doesn't blend in with the others.
+      const resistanceCountFor = (() => {
+        const log = data.resistanceLog || {};
+        const days = pastDays(14);
+        const tally = {};
+        for (const day of days) {
+          const entry = log[day];
+          if (!entry || !Array.isArray(entry.ranked)) continue;
+          for (const id of entry.ranked) {
+            tally[id] = (tally[id] || 0) + 1;
+          }
+        }
+        return tally;
+      })();
       const renderCard = (habit, opts) => {
         // `compact` is set by the parent loop when this card is one
         // of two-or-more side-by-side concurrent habits. The card
@@ -12471,6 +12644,8 @@ function App() {
         const compact = !!(opts && opts.compact);
         const d = isDone(habit, selDate);
         const missed = isMissed(habit, selDate);
+        const resistedCount = resistanceCountFor[habit.id] || 0;
+        const isPersistentlyResisted = resistedCount >= 2;
         const isE = eHId === habit.id;
         const animState = swipeAnim[habit.id];
         const ht = HT.find(t => t.value === habit.type);
@@ -12617,7 +12792,21 @@ function App() {
             flex: compact ? "1 0 auto" : undefined,
             alignContent: compact ? "flex-start" : undefined,
             background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : animState === "reset" ? "var(--c-surface-muted)" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
-            border: `1px solid ${d || animState === "done" ? "#86efac" : missed || animState === "missed" ? "#fca5a5" : animState === "reset" ? "var(--c-border)" : "var(--c-border)"}`,
+            // Persistently-resisted habits wear a dotted red outline
+            // so they pop out of the list — a quiet "you keep
+            // avoiding this one" signal that survives day-to-day
+            // until the user breaks the pattern. Done / missed /
+            // animation states still win the border treatment so
+            // the resistance flag never hides today's status.
+            border: (d || animState === "done")
+              ? "1px solid #86efac"
+              : (missed || animState === "missed")
+                ? "1px solid #fca5a5"
+                : (animState === "reset")
+                  ? "1px solid var(--c-border)"
+                  : isPersistentlyResisted
+                    ? "1px dashed #b91c1c"
+                    : "1px solid var(--c-border)",
             borderRadius: 12,
             // Compact height by default (matches goal-card density);
             // when the user taps to expand, vertical padding grows so
@@ -13276,7 +13465,8 @@ function App() {
         // the memo and re-renders the parent's "3/5" chip.
         const childSig = kids.length > 0 ? (kids.length + "|" + kidsDone + "|" + (expChildren[h.id] ? 1 : 0)) : "";
         const isCompact = cohort.length > 1;
-        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "");
+        const resistSig = (resistanceCountFor[h.id] || 0);
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig;
         const out = [
           /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard, compact: isCompact })
         ];
