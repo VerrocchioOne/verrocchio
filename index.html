@@ -2165,6 +2165,20 @@ const SEED_HABITS = [{
 // dk, tk, pastDays, getStreak, daysSinceLast, getCR, getLast14 are
 // defined in utils.js (loaded above) so the test suite can import the
 // same source of truth. Everything below is UI-specific and stays here.
+// Decimal-input sanitizer for habit target / increment fields.
+// Strips anything that isn't a digit or dot, collapses extra dots so
+// the user can't type "1.2.3", and caps the fractional portion at
+// 2 chars so saved values stay 2-decimal-place precision (4.50, not
+// 4.5000). An empty string survives untouched so the input can be
+// cleared without snapping back to "0".
+const sanitizeDecimal = (raw) => {
+  const cleaned = String(raw == null ? "" : raw).replace(/[^0-9.]/g, "");
+  const firstDot = cleaned.indexOf(".");
+  if (firstDot < 0) return cleaned;
+  const intPart = cleaned.slice(0, firstDot);
+  const fracPart = cleaned.slice(firstDot + 1).replace(/\./g, "").slice(0, 2);
+  return intPart + "." + fracPart;
+};
 const fmtDur = v => {
   if (!v) return null;
   const n = parseInt(v);
@@ -6127,10 +6141,10 @@ function App() {
         // Yes/No vs Target & Unit toggle to Target & Unit on
         // Step 4. Yes/No mode writes nulls so the habit reads as
         // a plain Yes/No card.
-        target:    nHHasTarget ? (() => { const n = parseInt(nHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
+        target:    nHHasTarget ? (() => { const n = parseFloat(nHTarget); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; })() : null,
         targetOp:  nHHasTarget ? (nHTargetOp === "<=" ? "<=" : ">=") : ">=",
         unitLabel: nHHasTarget ? ((nHUnitLabel || "").trim() || null) : null,
-        increment: nHHasTarget ? (() => { const n = parseInt(nHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null
+        increment: nHHasTarget ? (() => { const n = parseFloat(nHIncrement); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; })() : null
       }]
     });
     touchFeature("goal.create");
@@ -6392,7 +6406,9 @@ function App() {
         if (atTime === "fill") {
           nextUnits = Math.max(curUnits, targetH.target);
         } else {
-          nextUnits = Math.max(0, curUnits + (Number(targetH.increment) || 1));
+          // Round to 2 decimals so float-arithmetic sums like
+          // 0.1 + 0.2 don't drift into 0.30000000000000004.
+          nextUnits = Math.round(Math.max(0, curUnits + (Number(targetH.increment) || 1)) * 100) / 100;
         }
         const op = targetH.targetOp === "<=" ? "<=" : ">=";
         if (op === "<=") {
@@ -6564,10 +6580,10 @@ function App() {
         monthDay: typeof (eHFreq && eHFreq.monthDay) === "number" ? eHFreq.monthDay : 1,
         month:    typeof (eHFreq && eHFreq.month)    === "number" ? eHFreq.month    : 0
       },
-      target:    eHHasTarget ? (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
+      target:    eHHasTarget ? (() => { const n = parseFloat(eHTarget); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; })() : null,
       targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
       unitLabel: eHHasTarget ? ((eHUnitLabel || "").trim() || null) : null,
-      increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
+      increment: eHHasTarget ? (() => { const n = parseFloat(eHIncrement); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; })() : null,
       // New habits start as top-level, non-concurrent. The user
       // can later move them under a parent or layer them with a
       // sibling via the section-level Organize modal.
@@ -6697,10 +6713,10 @@ function App() {
         // residual values from a previous Target & Unit attempt
         // shouldn't leak into the saved record. Target & Unit
         // mode parses normally; explicit 0 is preserved (≤ 0 cap).
-        target:    eHHasTarget ? (() => { const n = parseInt(eHTarget, 10); return isFinite(n) && n >= 0 ? n : null; })() : null,
+        target:    eHHasTarget ? (() => { const n = parseFloat(eHTarget); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; })() : null,
         targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
         unitLabel: eHHasTarget ? (eHUnitLabel.trim() || null) : null,
-        increment: eHHasTarget ? (() => { const n = parseInt(eHIncrement, 10); return isFinite(n) && n > 0 ? n : null; })() : null,
+        increment: eHHasTarget ? (() => { const n = parseFloat(eHIncrement); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; })() : null,
         // parentId / concurrent / _order are NOT touched here —
         // those are cross-habit relationships, owned by the
         // section-level Organize modal. Saving the edit form
@@ -14329,9 +14345,10 @@ function App() {
         /*#__PURE__*/React.createElement("input", {
           type: "number",
           min: 0,
-          inputMode: "numeric",
+          step: "0.01",
+          inputMode: "decimal",
           value: nHTarget,
-          onChange: e => sNHTarget(e.target.value.replace(/[^0-9]/g, "")),
+          onChange: e => sNHTarget(sanitizeDecimal(e.target.value)),
           placeholder: "Target",
           style: { ...IS, flex: 1, minWidth: 0 }
         }),
@@ -14349,10 +14366,11 @@ function App() {
       },
         /*#__PURE__*/React.createElement("input", {
           type: "number",
-          min: 1,
-          inputMode: "numeric",
+          min: 0,
+          step: "0.01",
+          inputMode: "decimal",
           value: nHIncrement,
-          onChange: e => sNHIncrement(e.target.value.replace(/[^0-9]/g, "")),
+          onChange: e => sNHIncrement(sanitizeDecimal(e.target.value)),
           placeholder: "1",
           style: { ...IS, width: 60, textAlign: "center" }
         }),
@@ -20072,10 +20090,15 @@ function App() {
     ),
     /*#__PURE__*/React.createElement("input", {
       type: "number",
-      min: 1,
-      inputMode: "numeric",
+      min: 0,
+      step: "0.01",
+      inputMode: "decimal",
       value: eHTarget,
-      onChange: e => sEHTarget(e.target.value.replace(/[^0-9]/g, "")),
+      // Accept up to 2 decimal places (4.5 cups, 0.25 mg). Strips
+      // anything non-digit/dot, collapses extra dots, caps the
+      // fractional portion at 2 chars so the saved value is
+      // always a clean two-decimal number.
+      onChange: e => sEHTarget(sanitizeDecimal(e.target.value)),
       placeholder: "Target",
       style: { ...IS, flex: 1, minWidth: 0 }
     }),
@@ -20099,10 +20122,14 @@ function App() {
   },
     /*#__PURE__*/React.createElement("input", {
       type: "number",
-      min: 1,
-      inputMode: "numeric",
+      min: 0,
+      step: "0.01",
+      inputMode: "decimal",
       value: eHIncrement,
-      onChange: e => sEHIncrement(e.target.value.replace(/[^0-9]/g, "")),
+      // Decimal increments (0.1, 0.25, 0.5) work the same way as
+      // the target input — same sanitizer keeps the user from
+      // typing "1.2.3" or stacking >2 fractional digits.
+      onChange: e => sEHIncrement(sanitizeDecimal(e.target.value)),
       placeholder: "1",
       style: { ...IS, width: 60, textAlign: "center" }
     }),
