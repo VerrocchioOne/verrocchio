@@ -7301,9 +7301,19 @@ function App() {
   // single flat lists with no sub-sections, so we just seed the draft
   // from the current _order.
   const openGoalReorder = () => {
-    const sorted = [...(data.goals || [])].sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-    setReorderDraft(sorted.map(g => g.id));
-    setReorderCtx({ kind: "goal", label: "Goals", icon: "🎯" });
+    // Custom sort on the Goals tab now reorders the AREAS-OF-LIFE
+    // sections (Physical, Mental, Career, …), not the individual
+    // goals. Seed the draft with the current area order — either
+    // the user's saved data.areaOrder, or the canonical HT order
+    // as a fallback. Saved order writes back to data.areaOrder
+    // and flips sortPrefs.goals to "custom".
+    const savedOrder = Array.isArray(data.areaOrder) && data.areaOrder.length > 0
+      ? data.areaOrder.filter(v => HT.some(t => t.value === v))
+      : [];
+    const remaining = HT.map(t => t.value).filter(v => !savedOrder.includes(v));
+    const draftOrder = [...savedOrder, ...remaining];
+    setReorderDraft(draftOrder);
+    setReorderCtx({ kind: "goalAreas", label: "Areas of Life", icon: "🌱" });
   };
   const openTodoReorder = () => {
     const sorted = [...(data.todos || [])].sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
@@ -7338,6 +7348,12 @@ function App() {
         const idx = idOrder.get(String(g.id));
         return idx == null ? g : { ...g, _order: idx };
       });
+      next.sortPrefs = { ...(data.sortPrefs || {}), goals: "custom" };
+    } else if (reorderCtx.kind === "goalAreas") {
+      // Save the area order as a string array. The Goals tab reads
+      // this when goalSortMode === 'custom' and uses it instead of
+      // the default least-progress-first ordering.
+      next.areaOrder = reorderDraft.slice();
       next.sortPrefs = { ...(data.sortPrefs || {}), goals: "custom" };
     } else if (reorderCtx.kind === "todo") {
       next.todos = (data.todos || []).map(t => {
@@ -15646,9 +15662,41 @@ function App() {
     // each area is what users expect.
     const goalSortMode = (data.sortPrefs && data.sortPrefs.goals) || "default";
     const isDateSort = goalSortMode === "date-asc" || goalSortMode === "date-desc";
+    // Default Areas-of-Life ordering — areas with the LEAST recent
+    // progress surface first so the user is nudged toward what
+    // they've been neglecting. Progress = mean completion rate of
+    // habits in that area over the last 30 days. Areas with no
+    // habits land at the end (nothing to score; nothing pressing
+    // to re-engage with).
+    const sortAreasByProgress = (areas) => {
+      const allH = data.habits || [];
+      const score = (areaValue) => {
+        const inArea = allH.filter(h => h && h.type === areaValue);
+        if (inArea.length === 0) return Infinity; // no data → bottom of list
+        const total = inArea.reduce((s, h) => s + (getCR(h).pct || 0), 0);
+        return total / inArea.length;
+      };
+      return areas.slice().sort((a, b) => {
+        const sa = score(a.value);
+        const sb = score(b.value);
+        if (sa !== sb) return sa - sb; // ascending: lowest progress first
+        return 0; // tie-break: keep original HT order
+      });
+    };
+    // Custom: use the user-saved area order (Sort → Custom →
+    // arrows in the modal). Falls back to HT canonical order for
+    // any area missing from the saved list.
+    const sortAreasCustom = (areas) => {
+      const order = Array.isArray(data.areaOrder) ? data.areaOrder : [];
+      const idx = (val) => {
+        const i = order.indexOf(val);
+        return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+      };
+      return areas.slice().sort((a, b) => idx(a.value) - idx(b.value));
+    };
     const groups = isDateSort
       ? [{ value: "__all__", color: "#9ca3af", border: "var(--c-border)", merged: true }]
-      : HT;
+      : (goalSortMode === "custom" ? sortAreasCustom(HT) : sortAreasByProgress(HT));
     return groups;
   })().map(ht => {
     const goalSortMode = (data.sortPrefs && data.sortPrefs.goals) || "default";
@@ -21339,6 +21387,7 @@ function App() {
     const pool =
       ctx.kind === "goal" ? (data.goals || [])
       : ctx.kind === "todo" ? (data.todos || [])
+      : ctx.kind === "goalAreas" ? HT.map(t => ({ id: t.value, text: t.value }))
       : (data.habits || []);
     const itemsById = new Map(pool.map(x => [String(x.id), x]));
     return /*#__PURE__*/React.createElement("div", {
