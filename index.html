@@ -11969,14 +11969,76 @@ function App() {
       );
     })();
 
+    // Yesterday's daily journal prompt — sits between Yesterday
+    // Review and Urgent To-Dos so the user closes out yesterday
+    // (habits → reflection) before facing today's pressure list.
+    // Tappable header routes to Reflection tab; Mark Reviewed
+    // pin pillsSection.
+    const yestJournalReviewed = !!rit.yestJournalReviewed;
+    const yestJournalCard = (() => {
+      if (yestJournalReviewed) return null;
+      const yestEntries = (data.journal || []).filter(e => e && e.dateKey === yest && e.tag !== "goals" && !e.goalId);
+      const wroteCount = yestEntries.length;
+      const openReflection = () => setTab("reflection");
+      return /*#__PURE__*/React.createElement("div", { key: "yest-journal", style: cardStyle },
+        /*#__PURE__*/React.createElement("div", {
+          onClick: openReflection,
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: 8 }
+        },
+          /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Write Yesterday's Daily Journal"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 11, fontWeight: 700, color: wroteCount > 0 ? "#15803d" : "#b45309", flexShrink: 0, marginLeft: 8, background: wroteCount > 0 ? "var(--c-tint-green)" : "#fef3c7", padding: "3px 8px", borderRadius: 12 }
+          }, wroteCount > 0 ? (wroteCount + " wrote ✓") : "Pending")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          onClick: openReflection,
+          style: { fontSize: 12, color: "#9ca3af", marginBottom: 10, lineHeight: 1.45, cursor: "pointer" }
+        }, wroteCount > 0
+          ? "You wrote " + wroteCount + " entry" + (wroteCount === 1 ? "" : "ies") + " for yesterday. Tap to revisit or add more."
+          : "Tap to capture how yesterday actually went — the reflection feeds your weekly insights."
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => updateRitual({ yestJournalReviewed: true }),
+          style: { ...AB, width: "100%", padding: "9px" }
+        }, "Mark Reviewed ✓")
+      );
+    })();
+    // Bottom-pill mirror for the daily journal once reviewed,
+    // matching the Yesterday Review + Urgent To-Dos pattern.
+    if (yestJournalReviewed) {
+      bottomPills.push(/*#__PURE__*/React.createElement("div", {
+        key: "yj-p",
+        onClick: () => setTab("reflection"),
+        style: {
+          background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 10,
+          padding: "10px 14px", marginBottom: 10, cursor: "pointer",
+          userSelect: "none", WebkitUserSelect: "none"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "✓"),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "var(--c-text)" } }, "Yesterday's journal reviewed")
+        )
+      ));
+    }
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
-      // Yesterday review sits above the urgent to-dos so the daily
-      // ritual leads with closing out yesterday before today's
-      // pressure list.
+      // Daily ritual order:
+      //   1. Yesterday's habits  — close out the day's checklist
+      //   2. Yesterday's journal — capture how it actually went
+      //   3. Urgent to-dos       — triage today's pressure list
+      //   4. Today's intention   — set the tone for today
+      //   5. Today's progress    — see live progress + tips
       yesterdayCard,
+      yestJournalCard,
       todoUrgentCard,
+      intentionInput,
+      progressCard,
+      // Daily AI briefing reads after the daily ritual proper,
+      // since it summarizes / coaches based on the data the user
+      // just entered above.
       briefingCard,
       // (Goals review card removed per user request — the goals
       // are visible on the Goals tab and the daily ritual reads
@@ -11987,8 +12049,6 @@ function App() {
       // data.upcomingDates field stays in place so any custom
       // dates the user added remain on disk in case they want to
       // re-enable.
-      intentionInput,
-      progressCard,
       pillsSection,
       sheet,
       // Calendar peek lives at the very bottom — a user who scrolls
@@ -16586,7 +16646,7 @@ function App() {
     return /*#__PURE__*/React.createElement("div", {
       role: "dialog", "aria-modal": "true",
       style: {
-        position: "fixed", inset: 0,
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
         background: "rgba(0,0,0,0.5)",
         zIndex: 290,
         display: "flex", alignItems: "flex-end", justifyContent: "center"
@@ -16597,9 +16657,15 @@ function App() {
       style: {
         background: "var(--c-surface, #fff)",
         borderRadius: "20px 20px 0 0",
-        padding: "20px 18px 22px",
+        padding: "20px 18px calc(22px + env(safe-area-inset-bottom, 0px))",
         width: "100%", maxWidth: 640,
-        maxHeight: "90vh", overflowY: "auto",
+        // dvh (dynamic viewport) avoids the iOS Safari issue where
+        // 90vh can exceed the visible area when the address bar is
+        // showing, pushing the modal's content above the viewport.
+        // Fall back to vh on browsers that don't support dvh.
+        maxHeight: "min(90vh, 90dvh)",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
         boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
       }
     },
