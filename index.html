@@ -10740,8 +10740,19 @@ function App() {
       return dk(d);
     });
     const activeH = habits.filter(h => h.section !== "avoid" && matchesRoutine(h));
-    const todayDone = activeH.filter(h => isDone(h, tk())).length;
-    const yestDone = activeH.filter(h => isDone(h, yest)).length;
+    // Per-day denominators: count only the habits that were
+    // actually DUE on that day (frequency-aware) — a weekly
+    // Monday habit shouldn't count toward yesterday's total on
+    // a Friday. The previous code used `activeH.length` as the
+    // denominator for both today and yesterday, which inflated
+    // both counts on days when one-off / weekly habits weren't
+    // scheduled.
+    const dueToday = activeH.filter(h => isHabitDueOn(h, tk()));
+    const dueYesterday = activeH.filter(h => isHabitDueOn(h, yest));
+    const todayDone = dueToday.filter(h => isDone(h, tk())).length;
+    const yestDone = dueYesterday.filter(h => isDone(h, yest)).length;
+    const todayDueCount = dueToday.length;
+    const yestDueCount = dueYesterday.length;
     const pct7 = activeH.length ? Math.round(today7.reduce((s, d) => s + activeH.filter(h => isDone(h, d)).length, 0) / (activeH.length * 7) * 100) : 0;
     const bestStreak = activeH.length > 0 ? Math.max(0, ...activeH.map(h => getStreak(h))) : 0;
     const perfect7 = today7.filter(d => activeH.length > 0 && activeH.every(h => isDone(h, d))).length;
@@ -11179,7 +11190,7 @@ function App() {
               /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
               /*#__PURE__*/React.createElement("span", {
                 style: { fontSize: 11, fontWeight: 700, color: "#15803d", flexShrink: 0, marginLeft: 8, background: "#dcfce7", padding: "3px 8px", borderRadius: 12 }
-              }, "✓ " + yestDone + "/" + activeH.length)
+              }, "✓ " + yestDone + "/" + yestDueCount)
             ),
             /*#__PURE__*/React.createElement("div", {
               onClick: () => { setSelDate(yest); setTab("habits"); },
@@ -11231,13 +11242,13 @@ function App() {
               /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
               /*#__PURE__*/React.createElement("span", {
                 style: { fontSize: 11, fontWeight: 700, color: "#6b7280", flexShrink: 0, marginLeft: 8 }
-              }, yestDone + "/" + activeH.length + " confirmed")
+              }, yestDone + "/" + yestDueCount + " confirmed")
             ),
             /*#__PURE__*/React.createElement("div", {
               onClick: openYesterdayInHabits,
               style: { fontSize: 12, color: "#9ca3af", marginBottom: 12, lineHeight: 1.45, cursor: "pointer" }
-            }, activeH.length === 0
-              ? "No habits tracked yesterday."
+            }, yestDueCount === 0
+              ? "No habits were scheduled for yesterday."
               : "Tap to open yesterday's habits and mark each one done or missed."
             ),
             /*#__PURE__*/React.createElement("button", {
@@ -11357,9 +11368,9 @@ function App() {
           style: { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", cursor: "pointer" }
         },
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", marginBottom: 4 } }, "Yesterday"),
-          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 700, color: (yestDone === activeH.length && activeH.length > 0) ? "#22c55e" : "#d97706" } },
+          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 700, color: (yestDueCount > 0 && yestDone === yestDueCount) ? "#22c55e" : "#d97706" } },
             yestDone,
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#9ca3af" } }, "/", activeH.length)
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#9ca3af" } }, "/", yestDueCount)
           ),
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, "habits done")
         ),
@@ -11370,7 +11381,7 @@ function App() {
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 600, color: "#2d5a2d", textTransform: "uppercase", marginBottom: 4 } }, "Today"),
           /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 22, fontWeight: 700, color: "#2d5a2d" } },
             todayDone,
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#9ca3af" } }, "/", activeH.length)
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#9ca3af" } }, "/", todayDueCount)
           ),
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, "habits done")
         )
