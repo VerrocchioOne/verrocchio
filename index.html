@@ -12842,22 +12842,39 @@ function App() {
             fontWeight: 500,
             color: d || missed ? "#6b7280" : "var(--c-text)",
             textDecoration: d || missed ? "line-through" : "none",
-          }, {
-            // Always wrap. Free word-wrap with overflow-wrap:anywhere
-            // forces a line break wherever the column can't hold
-            // the next word — "Dream Journal" lands as "Dream\n
-            // Journal" if the column is narrow, instead of running
-            // under the chip. No clamp — let the card grow.
+          }, compact ? {
+            // Compact (3-up concurrent) mode: each card lives in a
+            // ~120 px wide tower, so the title column is only ~100 px
+            // wide. To guarantee that "Dream Journal Entry" wraps at
+            // word boundaries (and never overflows the row's
+            // overflow:hidden, clipping the trailing letters), the
+            // title becomes a flex-wrap container. Each word is a
+            // flex item rendered separately below; flex layout hard-
+            // bounds children to the container's width — no
+            // intrinsic-width / min-content escape hatch that plain
+            // `whiteSpace: normal + width: 100%` leaves open on iOS
+            // Safari. min-width:0 + max-width:100% pins the title's
+            // outer box to the column's track width, never wider.
+            display: "flex",
+            flexWrap: "wrap",
+            columnGap: 4,
+            rowGap: 0,
+            alignItems: "baseline",
+            lineHeight: 1.25,
+            minWidth: 0,
+            maxWidth: "100%",
+            width: "100%",
+            wordBreak: "break-word",
+            overflowWrap: "anywhere"
+          } : {
+            // Non-compact path is unchanged — the original single-row
+            // layout (with optional natural wrap) keeps working for
+            // standalone cards where the title has the full row width
+            // to play with.
             whiteSpace: "normal",
             wordBreak: "break-word",
             overflowWrap: "anywhere",
             lineHeight: 1.25,
-            // Cap to the column's width so a title that exceeds
-            // the available horizontal space wraps to a new line
-            // instead of pushing past the row's overflow:hidden
-            // boundary (which would clip mid-word, not wrap).
-            // minWidth:0 lets the flex column shrink properly so
-            // 100% here means 100% of the column, not the card.
             width: "100%",
             maxWidth: "100%",
             minWidth: 0,
@@ -12865,28 +12882,27 @@ function App() {
           }),
           title: habit.text
         },
-          // Compact (3-up concurrent) mode: render each word as its
-          // own inline-block <span> so the browser ALWAYS has explicit
-          // break opportunities between words — independent of any
-          // flex/min-content width quirks that might cause the title
-          // to render as a single unbreakable line and get clipped by
-          // the row's overflow:hidden. Each span is atomic; if the
-          // next word doesn't fit, it wraps to a new line. This works
-          // around iOS Safari's tendency to compute the title's
-          // intrinsic width from its uninterrupted text content even
-          // when the column has explicit width:100% + minWidth:0.
-          // Non-compact: leave the plain text path so the existing
-          // single-line layout (with optional natural wrap) is
-          // unchanged.
+          // Compact: every word becomes its own flex-item span. Flex
+          // wrap will move a word to the next line when it doesn't
+          // fit — independent of any white-space / min-content /
+          // grid-track width quirks that the previous non-flex
+          // approaches couldn't fully bypass on iOS Safari. maxWidth
+          // 100% on each span lets even a single oversize word
+          // (rare, but e.g. "Pneumonoultramicroscopic…") shrink and
+          // word-break inside its own line instead of overflowing.
           compact
-            ? (habit.text || "").split(/(\s+)/).map((tok, i) => {
-                if (!tok) return null;
-                if (/^\s+$/.test(tok)) return tok;
-                return /*#__PURE__*/React.createElement("span", {
+            ? (habit.text || "").split(/\s+/).filter(Boolean).map((word, i) => (
+                /*#__PURE__*/React.createElement("span", {
                   key: i,
-                  style: { display: "inline-block", maxWidth: "100%", overflowWrap: "anywhere", wordBreak: "break-word" }
-                }, tok);
-              })
+                  style: {
+                    display: "inline-block",
+                    maxWidth: "100%",
+                    minWidth: 0,
+                    wordBreak: "break-word",
+                    overflowWrap: "anywhere"
+                  }
+                }, word)
+              ))
             : (habit.text || "")
         ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
