@@ -11773,11 +11773,12 @@ function App() {
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
-      // Urgent to-dos sit at the top so anything overdue or due soon
-      // is the first thing the user sees on Home.
+      // Yesterday review sits above the urgent to-dos so the daily
+      // ritual leads with closing out yesterday before today's
+      // pressure list.
+      yesterdayCard,
       todoUrgentCard,
       briefingCard,
-      yesterdayCard,
       // (Goals review card removed per user request — the goals
       // are visible on the Goals tab and the daily ritual reads
       // tighter without an extra step.)
