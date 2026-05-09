@@ -4451,6 +4451,13 @@ function App() {
   // (where it used to live at the bottom) so Home stays focused on
   // the daily ritual and the calendar gets its own destination.
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  // Per-section total-time breakdown popover. Tapping the green
+  // total-time chip on a Habits-page section header opens an
+  // inline panel below the header that walks through the cohort
+  // math (concurrent layered habits roll up to MAX, sub-habits
+  // sum into the parent). Set to the section's value (morning /
+  // afternoon / evening / avoid / all-day) when open; null hides.
+  const [openTotalBreakdown, setOpenTotalBreakdown] = useState(null);
   // My Content panel inputs — title + url draft for the 'Add a
   // link' row at the top of the panel. File uploads write straight
   // to data.userContent without a draft.
@@ -13786,7 +13793,20 @@ function App() {
           textTransform: "uppercase",
           color: group.color
         }
-      }, group.label), fmtTotal && /*#__PURE__*/React.createElement("span", {
+      }, group.label), fmtTotal && /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        // Tap toggles a breakdown panel that explains how this
+        // section's total was computed. stopPropagation prevents
+        // the surrounding header tap (which collapses / expands
+        // the section) from also firing, so the chip is its own
+        // affordance and the rest of the header still toggles.
+        onClick: e => {
+          e.stopPropagation();
+          setOpenTotalBreakdown(p => p === group.value ? null : group.value);
+        },
+        onPointerDown: e => e.stopPropagation(),
+        onPointerUp: e => e.stopPropagation(),
+        title: "Tap to see how this total is calculated",
         style: {
           fontSize: 10,
           fontWeight: 600,
@@ -13794,8 +13814,10 @@ function App() {
           background: group.bg,
           border: `1px solid ${group.border}`,
           borderRadius: 10,
-          padding: "1px 8px",
-          opacity: .85
+          padding: "2px 9px",
+          opacity: .85,
+          cursor: "pointer",
+          fontFamily: "inherit"
         }
       }, fmtTotal), /*#__PURE__*/React.createElement("div", {
         style: {
@@ -13828,6 +13850,102 @@ function App() {
           transition: "transform .15s"
         }
       }, "\u25BE")),
+      // Total-time breakdown panel \u2014 shown when the user tapped
+      // the green chip on this section's header. Walks through
+      // each cohort (concurrent habits roll up to MAX, sub-habits
+      // sum into the parent) so the user sees WHY '15m' instead
+      // of '25m' or '30m'.
+      openTotalBreakdown === group.value && (() => {
+        const cohorts = [];
+        for (const h of group.habits) {
+          if (h.concurrent && cohorts.length > 0) cohorts[cohorts.length - 1].push(h);
+          else cohorts.push([h]);
+        }
+        const effDur = (h) => {
+          const kids = habitChildren(h);
+          if (kids.length > 0) {
+            const sum = kids.reduce((s, c) => s + (parseInt(c.duration, 10) || 0), 0);
+            if (sum > 0) return sum;
+          }
+          return parseInt(h.duration, 10) || 0;
+        };
+        let runningTotal = 0;
+        return /*#__PURE__*/React.createElement("div", {
+          style: {
+            background: "var(--c-surface-raised)",
+            border: "1px solid var(--c-border)",
+            borderRadius: 8,
+            padding: "10px 12px",
+            marginBottom: 10,
+            fontSize: 11,
+            color: "var(--c-text-soft)",
+            lineHeight: 1.5
+          }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "var(--c-text-strong)", marginBottom: 6 }
+          }, "How this total adds up"),
+          cohorts.length === 0
+            ? /*#__PURE__*/React.createElement("div", null, "No habits scheduled in this section.")
+            : /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", flexDirection: "column", gap: 5 }
+              }, cohorts.map((cohort, ci) => {
+                const isLayered = cohort.length > 1;
+                const memberDurs = cohort.map(h => effDur(h));
+                const cohortContribution = isLayered ? Math.max(...memberDurs) : memberDurs[0];
+                runningTotal += cohortContribution;
+                return /*#__PURE__*/React.createElement("div", {
+                  key: "ck-" + ci,
+                  style: {
+                    background: isLayered ? "#dbeafe" : "var(--c-surface-muted)",
+                    border: "1px solid " + (isLayered ? "#93c5fd" : "var(--c-border)"),
+                    borderRadius: 6,
+                    padding: "6px 8px"
+                  }
+                },
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: cohort.length > 1 ? 4 : 0 }
+                  },
+                    /*#__PURE__*/React.createElement("span", {
+                      style: { fontSize: 10, fontWeight: 700, color: isLayered ? "#1d4ed8" : "var(--c-text-soft)", textTransform: "uppercase", letterSpacing: 0.3 }
+                    }, isLayered ? "\u21F6 Layered (max of " + cohort.length + ")" : "Sequential"),
+                    /*#__PURE__*/React.createElement("span", {
+                      style: { fontSize: 11, fontWeight: 700, color: "var(--c-text)", fontVariantNumeric: "tabular-nums" }
+                    }, "+" + cohortContribution + " min")
+                  ),
+                  /*#__PURE__*/React.createElement("div", {
+                    style: { display: "flex", flexDirection: "column", gap: 2 }
+                  }, cohort.map((h, hi) => {
+                    const kids = habitChildren(h);
+                    const own = parseInt(h.duration, 10) || 0;
+                    const kidSum = kids.reduce((s, c) => s + (parseInt(c.duration, 10) || 0), 0);
+                    const eff = effDur(h);
+                    const isMax = isLayered && eff === cohortContribution;
+                    return /*#__PURE__*/React.createElement("div", {
+                      key: "h-" + h.id,
+                      style: { display: "flex", alignItems: "center", gap: 6, fontSize: 11 }
+                    },
+                      /*#__PURE__*/React.createElement("span", {
+                        style: { color: isMax ? "#1d4ed8" : "var(--c-text-soft)", fontWeight: isMax ? 700 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                      }, (h.concurrent && hi > 0 ? "\u21B3 " : "") + (h.text || "(unnamed)")),
+                      kids.length > 0 && kidSum > 0 && /*#__PURE__*/React.createElement("span", {
+                        style: { fontSize: 10, color: "var(--c-text-soft)", fontStyle: "italic" }
+                      }, kids.length + " sub \u00D7 " + (kidSum / kids.length).toFixed(0) + "m avg"),
+                      /*#__PURE__*/React.createElement("span", {
+                        style: { fontSize: 10, fontWeight: 600, color: isMax ? "#1d4ed8" : "var(--c-text-soft)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }
+                      }, eff + "m" + (isMax ? " \u2190" : ""))
+                    );
+                  }))
+                );
+              })),
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, paddingTop: 6, borderTop: "1px solid var(--c-border)" }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-strong)", textTransform: "uppercase", letterSpacing: 0.4 } }, "Section total"),
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: group.color, fontVariantNumeric: "tabular-nums" } }, runningTotal + " min" + (runningTotal >= 60 ? " \u00B7 " + fmtTotal : ""))
+          )
+        );
+      })(),
       // Body: hidden when the section is collapsed. For each
       // top-level habit we render its card and (when expChildren
       // is on for that habit) its children indented underneath.
