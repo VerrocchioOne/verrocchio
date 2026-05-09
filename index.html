@@ -10983,18 +10983,10 @@ function App() {
           }, "Mark as Reviewed \u2713")
         );
 
-    // Review Yesterday card — quick tap to toggle yesterday's entries.
-    if (yestReviewed) {
-      bottomPills.push(reviewedPill(
-        "yd-p",
-        "Yesterday's habits reviewed",
-        `${yestDone} of ${activeH.length} habits recorded for yesterday.`,
-        [
-          { label: "Edit yesterday in Habits", onClick: () => { setExpandedPill(null); setSelDate(yest); setTab("habits"); } },
-          { label: "Undo review", onClick: () => { setExpandedPill(null); updateRitual({ yesterdayReviewed: false }); } }
-        ]
-      ));
-    }
+    // (The bottom 'Yesterday's habits reviewed' pill has been
+    // retired — the Review Yesterday card itself now stays at the
+    // top of Home in a tappable post-review state, so duplicating
+    // the entry as a pill at the bottom would clutter the page.)
     // Habits the user has missed for multiple consecutive due-days
     // (NOT just yesterday). The resistance flow now surfaces only
     // these \u2014 habits the user is genuinely avoiding, not one-off
@@ -11179,7 +11171,33 @@ function App() {
           );
         })()
       : (yestReviewed
-        ? null
+        ? /*#__PURE__*/React.createElement("div", { key: "yd-rev", style: cardStyle },
+            /*#__PURE__*/React.createElement("div", {
+              onClick: () => { setSelDate(yest); setTab("habits"); },
+              style: { display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: 8 }
+            },
+              /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
+              /*#__PURE__*/React.createElement("span", {
+                style: { fontSize: 11, fontWeight: 700, color: "#15803d", flexShrink: 0, marginLeft: 8, background: "#dcfce7", padding: "3px 8px", borderRadius: 12 }
+              }, "✓ " + yestDone + "/" + activeH.length)
+            ),
+            /*#__PURE__*/React.createElement("div", {
+              onClick: () => { setSelDate(yest); setTab("habits"); },
+              style: { fontSize: 12, color: "#9ca3af", marginBottom: 10, lineHeight: 1.45, cursor: "pointer" }
+            }, "Reviewed. Tap to revisit yesterday's habits and adjust."),
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", gap: 8 }
+            },
+              /*#__PURE__*/React.createElement("button", {
+                onClick: () => { setSelDate(yest); setTab("habits"); },
+                style: { flex: 2, background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 700, color: "#2d5a2d", cursor: "pointer" }
+              }, "Open Yesterday →"),
+              /*#__PURE__*/React.createElement("button", {
+                onClick: () => updateRitual({ yesterdayReviewed: false }),
+                style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
+              }, "Undo")
+            )
+          )
         : (() => {
           // Order matches the Habits page / Calendar: section
           // (morning \u2192 afternoon \u2192 evening \u2192 all-day \u2192 avoid)
@@ -11335,7 +11353,7 @@ function App() {
         style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }
       },
         /*#__PURE__*/React.createElement("div", {
-          onClick: () => setTab("habits"),
+          onClick: () => { setSelDate(yest); setTab("habits"); },
           style: { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", cursor: "pointer" }
         },
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", marginBottom: 4 } }, "Yesterday"),
@@ -11855,16 +11873,20 @@ function App() {
         p: total ? done / total : 0
       };
     });
-    // "Return to home review" banner — shown only when the user
-    // has opened yesterday's habits FROM the home review (i.e.
-    // they're viewing yest AND the home ritual still has the
-    // yesterday-review step pending). Pinned to the top of the
-    // Habits tab so the user always sees the path back.
+    // "Return to home" banner — pinned to the top of the Habits
+    // tab whenever the user is viewing yesterday's date. Common
+    // entry points: the home Review Yesterday card AND the
+    // dashboard's Yesterday stat tile. Tap the banner to jump
+    // back to today's home view.
     const yestKey = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return dk(d); })();
     const todayKey = tk();
     const ritToday = (data.dailyRitual && data.dailyRitual[todayKey]) || {};
     const homeReviewPending = !ritToday.yesterdayReviewed;
-    const showReturnBanner = selDate === yestKey && homeReviewPending;
+    const showReturnBanner = selDate === yestKey;
+    const bannerHeadline = homeReviewPending ? "Reviewing yesterday" : "Viewing yesterday";
+    const bannerBody = homeReviewPending
+      ? "Mark each habit done or missed, then tap here to return to the home page review."
+      : "Adjust any habits as needed, then tap here to return to the home page.";
     const returnBanner = showReturnBanner ? /*#__PURE__*/React.createElement("div", {
       onClick: () => { setSelDate(todayKey); setTab("brief"); },
       style: {
@@ -11888,10 +11910,10 @@ function App() {
       },
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: 0.4 }
-        }, "Reviewing yesterday"),
+        }, bannerHeadline),
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 }
-        }, "Mark each habit done or missed, then tap here to return to the home page review.")
+        }, bannerBody)
       ),
       /*#__PURE__*/React.createElement("span", {
         "aria-hidden": true,
