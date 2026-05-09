@@ -10154,7 +10154,7 @@ function App() {
       gap: 4
     }
   }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => setCalendarModalOpen(true),
+    onClick: () => setHeaderExpanded(p => !p),
     "data-tour": "header-calendar",
     "aria-label": "Open calendar",
     style: {
@@ -10365,24 +10365,51 @@ function App() {
       }
     }, "\u203A")),
     /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", gap: 6, marginBottom: 8, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, padding: 3 }
+      style: { display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }
     },
-      [{ val: false, label: "\uD83D\uDCC5 Select date", color: "#2d5a2d", bg: "var(--c-tint-green)", border: "#c6dfc6" },
-       { val: true,  label: "\u2708 Assign travel",  color: "#0891b2", bg: "#f0f9ff", border: "#bae6fd" }].map(o => {
-        const on = calTravelMode === o.val;
-        return /*#__PURE__*/React.createElement("button", {
-          key: String(o.val),
-          onClick: () => setCalTravelMode(o.val),
-          style: {
-            flex: 1, minWidth: 0, padding: "5px 8px", borderRadius: 14,
-            border: on ? `1px solid ${o.border}` : "1px solid transparent",
-            background: on ? o.bg : "transparent",
-            color: on ? o.color : "#9ca3af",
-            fontSize: 11, fontWeight: on ? 700 : 500, cursor: "pointer",
-            whiteSpace: "nowrap", textAlign: "center", transition: "all .15s"
-          }
-        }, o.label);
-      })),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", gap: 6, flex: 1, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 18, padding: 3 }
+      },
+        [{ val: false, label: "\uD83D\uDCC5 Select date", color: "#2d5a2d", bg: "var(--c-tint-green)", border: "#c6dfc6" },
+         { val: true,  label: "\u2708 Assign travel",  color: "#0891b2", bg: "#f0f9ff", border: "#bae6fd" }].map(o => {
+          const on = calTravelMode === o.val;
+          return /*#__PURE__*/React.createElement("button", {
+            key: String(o.val),
+            onClick: () => setCalTravelMode(o.val),
+            style: {
+              flex: 1, minWidth: 0, padding: "5px 8px", borderRadius: 14,
+              border: on ? `1px solid ${o.border}` : "1px solid transparent",
+              background: on ? o.bg : "transparent",
+              color: on ? o.color : "#9ca3af",
+              fontSize: 11, fontWeight: on ? 700 : 500, cursor: "pointer",
+              whiteSpace: "nowrap", textAlign: "center", transition: "all .15s"
+            }
+          }, o.label);
+        })
+      ),
+      // Entry point into the full calendar app (day / week / month
+      // views + ics export). The header sub-row above stays focused
+      // on date selection + travel assignment; this opens the
+      // dedicated calendar destination as a bottom-sheet modal.
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => { setHeaderExpanded(false); setCalendarModalOpen(true); },
+        title: "Open the full calendar (day, week, month + .ics export)",
+        "aria-label": "Open full calendar",
+        style: {
+          background: "#2d5a2d",
+          border: "1px solid #2d5a2d",
+          borderRadius: 14,
+          padding: "6px 10px",
+          fontSize: 11,
+          fontWeight: 700,
+          color: "#fff",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          WebkitTapHighlightColor: "transparent"
+        }
+      }, "Open Calendar \u2192"),
+    ),
     /*#__PURE__*/React.createElement("div", {
       style: {
         display: "grid",
