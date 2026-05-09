@@ -10994,10 +10994,48 @@ function App() {
           }, "Mark as Reviewed \u2713")
         );
 
-    // (The bottom 'Yesterday's habits reviewed' pill has been
-    // retired — the Review Yesterday card itself now stays at the
-    // top of Home in a tappable post-review state, so duplicating
-    // the entry as a pill at the bottom would clutter the page.)
+    // Once Yesterday is marked reviewed, the top card collapses
+    // and a small pill lands at the bottom of Home — same shape
+    // as the Daily Briefing reviewed pill, but tapping it routes
+    // straight to yesterday's habits (instead of toggling the
+    // detail accordion). Long-press still opens the action sheet
+    // (Edit / Undo) for power users.
+    if (yestReviewed) {
+      const pillKey = "yd-p";
+      const pillActions = [
+        { label: "Edit yesterday in Habits", onClick: () => { setExpandedPill(null); setSelDate(yest); setTab("habits"); } },
+        { label: "Undo review", onClick: () => { setExpandedPill(null); updateRitual({ yesterdayReviewed: false }); } }
+      ];
+      let pressTimer = null;
+      let longFired = false;
+      const startPress = () => {
+        longFired = false;
+        pressTimer = setTimeout(() => {
+          longFired = true;
+          setPillSheet({ title: "Yesterday's habits reviewed", actions: pillActions });
+        }, 500);
+      };
+      const endPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+      const cancelPress = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } longFired = true; };
+      bottomPills.push(/*#__PURE__*/React.createElement("div", {
+        key: pillKey,
+        onClick: () => { if (longFired) return; setSelDate(yest); setTab("habits"); },
+        onMouseDown: startPress, onMouseUp: endPress, onMouseLeave: cancelPress,
+        onTouchStart: startPress, onTouchEnd: endPress, onTouchMove: cancelPress, onTouchCancel: cancelPress,
+        onContextMenu: e => e.preventDefault(),
+        style: {
+          background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 10,
+          padding: "10px 14px", marginBottom: 10, cursor: "pointer",
+          userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: "#2d5a2d" } }, "✓"),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, fontWeight: 600, color: "var(--c-text)" } }, "Yesterday's habits reviewed"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", fontWeight: 500 } }, yestDone + "/" + yestDueCount)
+        )
+      ));
+    }
     // Habits the user has missed for multiple consecutive due-days
     // (NOT just yesterday). The resistance flow now surfaces only
     // these \u2014 habits the user is genuinely avoiding, not one-off
@@ -11182,33 +11220,7 @@ function App() {
           );
         })()
       : (yestReviewed
-        ? /*#__PURE__*/React.createElement("div", { key: "yd-rev", style: cardStyle },
-            /*#__PURE__*/React.createElement("div", {
-              onClick: () => { setSelDate(yest); setTab("habits"); },
-              style: { display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: 8 }
-            },
-              /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
-              /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 11, fontWeight: 700, color: "#15803d", flexShrink: 0, marginLeft: 8, background: "#dcfce7", padding: "3px 8px", borderRadius: 12 }
-              }, "✓ " + yestDone + "/" + yestDueCount)
-            ),
-            /*#__PURE__*/React.createElement("div", {
-              onClick: () => { setSelDate(yest); setTab("habits"); },
-              style: { fontSize: 12, color: "#9ca3af", marginBottom: 10, lineHeight: 1.45, cursor: "pointer" }
-            }, "Reviewed. Tap to revisit yesterday's habits and adjust."),
-            /*#__PURE__*/React.createElement("div", {
-              style: { display: "flex", gap: 8 }
-            },
-              /*#__PURE__*/React.createElement("button", {
-                onClick: () => { setSelDate(yest); setTab("habits"); },
-                style: { flex: 2, background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 700, color: "#2d5a2d", cursor: "pointer" }
-              }, "Open Yesterday →"),
-              /*#__PURE__*/React.createElement("button", {
-                onClick: () => updateRitual({ yesterdayReviewed: false }),
-                style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 10, fontSize: 12, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
-              }, "Undo")
-            )
-          )
+        ? null  // collapses into a bottom pill — see bottomPills below
         : (() => {
           // Order matches the Habits page / Calendar: section
           // (morning \u2192 afternoon \u2192 evening \u2192 all-day \u2192 avoid)
@@ -16667,26 +16679,12 @@ function App() {
               );
             }))
       ),
-      // Export — hooks the existing exportHabitsICS, which now stamps
-      // PRIORITY (Non-Negotiable=1, Important=5, Additive=7) and
-      // CATEGORIES so any calendar app (Apple, Google, Yahoo, Outlook)
-      // can colour-code or filter by importance and area.
-      /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        onClick: exportHabitsICS,
-        style: {
-          marginTop: 16, width: "100%",
-          padding: "11px 14px",
-          borderRadius: 10,
-          border: "1px solid var(--c-border)",
-          background: "var(--c-surface-raised)",
-          color: "var(--c-text)",
-          fontSize: 13, fontWeight: 600, cursor: "pointer"
-        }
-      }, "📅 Export to iCalendar (.ics)"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 10, color: "#9ca3af", textAlign: "center", marginTop: 6, lineHeight: 1.5 }
-      }, "Imports into Apple Calendar, Google Calendar, Yahoo, Outlook. Importance is stamped as iCalendar PRIORITY (Non-Negotiable = highest, Additive = lowest).")
+      // (Export to iCalendar button removed from the home calendar
+      // module per user request. The exportHabitsICS function and
+      // its export elsewhere — accessible via the .ics export entry
+      // points in the app — still work; this just drops the button
+      // here at the bottom of Home.)
+      null
     );
   })(), false && tab === "social" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
