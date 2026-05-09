@@ -6592,6 +6592,53 @@ function App() {
       .filter(c => c.parentId != null && String(c.parentId) === String(parent.id))
       .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
   };
+  // Concurrency-aware total duration for an ordered habit list.
+  // Walks the list and groups consecutive habits flagged
+  // h.concurrent into one cohort; the cohort's contribution is the
+  // MAX of its members' effective durations (parent durations roll
+  // up children), not the sum. Used by the section header total
+  // and the toolbar 'Total scheduled time' pill so layered habits
+  // ('Red Light Therapy 15m' with two layered sub-15m habits) read
+  // as one 15-minute block instead of stacking to 25 or 30.
+  const cohortDurationSum = (list) => {
+    if (!Array.isArray(list) || list.length === 0) return 0;
+    const sorted = list.slice().sort((a, b) => {
+      const sectionRank = (s) => s === "morning" ? 0 : s === "afternoon" ? 1 : s === "evening" ? 2 : s === "all-day" ? 3 : s === "avoid" ? 4 : 9;
+      const ra = sectionRank(a.section), rb = sectionRank(b.section);
+      if (ra !== rb) return ra - rb;
+      const ao = a._order ?? 999, bo = b._order ?? 999;
+      if (ao !== bo) return ao - bo;
+      return (Number(a.id) || 0) - (Number(b.id) || 0);
+    });
+    const effDur = (h) => {
+      const kids = habitChildren(h);
+      if (kids.length > 0) {
+        const sum = kids.reduce((s, c) => s + (parseInt(c.duration, 10) || 0), 0);
+        if (sum > 0) return sum;
+      }
+      return parseInt(h.duration, 10) || 0;
+    };
+    let total = 0;
+    let cohortMax = 0;
+    let cohortStarted = false;
+    let prevSection = null;
+    for (const h of sorted) {
+      const d = effDur(h);
+      // h.concurrent only links to the IMMEDIATE predecessor in the
+      // same section. A section change breaks the cohort.
+      const sec = h.section || "morning";
+      if (h.concurrent && cohortStarted && sec === prevSection) {
+        cohortMax = Math.max(cohortMax, d);
+      } else {
+        if (cohortStarted) total += cohortMax;
+        cohortMax = d;
+        cohortStarted = true;
+      }
+      prevSection = sec;
+    }
+    if (cohortStarted) total += cohortMax;
+    return total;
+  };
   const isDone = (h, fd) => {
     if (!h) return false;
     // Parent habits auto-derive: done iff every child is done for
@@ -12143,7 +12190,10 @@ function App() {
       // set + due-date toggle. Hidden when zero so an empty
       // filter result doesn't leave a "0m" pill dangling.
       (() => {
-        const totalMin = filtH.reduce((s, h) => s + (parseInt(h.duration) || 0), 0);
+        // Layered (concurrent) habits roll up to MAX, not SUM, so
+        // the pill matches the actual block of time on the calendar.
+        // Sub-habits also roll up under their parent's duration.
+        const totalMin = cohortDurationSum(filtH.filter(h => !h.parentId));
         if (totalMin <= 0) return null;
         const fmt = totalMin >= 60
           ? Math.floor(totalMin / 60) + "h" + (totalMin % 60 > 0 ? " " + (totalMin % 60) + "m" : "")
@@ -12798,7 +12848,10 @@ function App() {
     }, "Add")))), groupedH.map(group => {
       const isAvoid = group.value === "avoid";
       const doneCount = group.habits.filter(h => isDone(h, selDate)).length;
-      const totalMins = group.habits.reduce((s, h) => s + (parseInt(h.duration) || 0), 0);
+      // Layered habits collapse to MAX, sub-habits roll up under their
+      // parent's effective duration, so the section header time matches
+      // the actual block on the calendar.
+      const totalMins = cohortDurationSum(group.habits);
       const fmtTotal = totalMins >= 60 ? `${Math.floor(totalMins / 60)}h${totalMins % 60 > 0 ? ` ${totalMins % 60}m` : ""}` : totalMins > 0 ? `${totalMins}m` : "";
       // Persistent-resistance lookup: count how many of the most
       // recent resistance-log entries flagged this habit. ≥ 2 hits
