@@ -12098,6 +12098,38 @@ function App() {
       ));
     }
 
+    // Weekly Review prompt — only shows on the user's configured
+    // weekly-review day (default Sunday). Asks them to look ahead
+    // at the next week and pin any upcoming travel before it
+    // sneaks up. Dismissed by tapping 'Mark Reviewed ✓'; resets
+    // to visible the next time their review day rolls around.
+    const weeklyReviewCard = (() => {
+      const wr = (data && data.weeklyReview) || { day: 0 };
+      const todayDow = new Date().getDay();
+      if (todayDow !== wr.day) return null;
+      if (rit.weeklyReviewDone) return null;
+      return /*#__PURE__*/React.createElement("div", { key: "weekly-review", style: cardStyle },
+        /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Weekly Review"),
+        /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "Look at the next 7 days. Anything you're traveling for, big meetings, family time? Pencil it in now so the calendar reflects reality."),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 8, marginBottom: 8 }
+        },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { setHeaderExpanded(true); window.scrollTo({ top: 0, behavior: "smooth" }); },
+            style: { flex: 1, background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 8, padding: "8px", fontSize: 12, fontWeight: 600, color: "#2d5a2d", cursor: "pointer" }
+          }, "📅 Open calendar to assign travel"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { setCalendarView("week"); setCalendarFocus(tk()); setCalendarModalOpen(true); },
+            style: { flex: 1, background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px", fontSize: 12, fontWeight: 600, color: "var(--c-text)", cursor: "pointer" }
+          }, "📊 Browse next week →")
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => updateRitual({ weeklyReviewDone: true }),
+          style: { ...AB, width: "100%", padding: "9px" }
+        }, "Mark Reviewed ✓")
+      );
+    })();
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
@@ -12105,11 +12137,16 @@ function App() {
       //   1. Yesterday's habits  — close out the day's checklist
       //   2. Yesterday's journal — capture how it actually went
       //   3. Urgent to-dos       — triage today's pressure list
-      //   4. Today's intention   — set the tone for today
-      //   5. Today's progress    — see live progress + tips
+      //   4. Weekly Review       — only appears on the user's
+      //                            configured review day; asks them
+      //                            to scan the upcoming week and
+      //                            mark any travel before it lands
+      //   5. Today's intention   — set the tone for today
+      //   6. Today's progress    — see live progress + tips
       yesterdayCard,
       yestJournalCard,
       todoUrgentCard,
+      weeklyReviewCard,
       intentionInput,
       progressCard,
       // Daily AI briefing reads after the daily ritual proper,
@@ -19470,24 +19507,25 @@ function App() {
             style: { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 8, overflow: "hidden" }
           },
             /*#__PURE__*/React.createElement("div", {
-              onClick: isBuiltIn && desc ? () => setExpandedDefault(p => ({ ...p, [rowKey]: !p[rowKey] })) : undefined,
               style: {
-                display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
-                cursor: isBuiltIn && desc ? "pointer" : "default"
+                display: "flex", alignItems: "center", gap: 8, padding: "8px 10px"
               }
             },
               iconField && c[iconField] ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 14 } }, c[iconField]) : swatch(c.color),
               /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "var(--c-text-strong)", fontWeight: 500, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, label),
               isBuiltIn
-                ? /*#__PURE__*/React.createElement("span", { title: "Built-in (read-only)", style: { fontSize: 11, color: "#9ca3af", flexShrink: 0, transition: "transform .15s", transform: expanded ? "rotate(90deg)" : "none" } }, desc ? "\u203A" : "\uD83D\uDD12")
+                ? /*#__PURE__*/React.createElement("span", { title: "Built-in (read-only)", style: { fontSize: 11, color: "var(--c-text-soft)", flexShrink: 0 } }, "\uD83D\uDD12")
                 : /*#__PURE__*/React.createElement("button", {
                     onClick: (e) => { e.stopPropagation(); onDelete(c); },
                     "aria-label": "Delete",
                     style: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 2 }
                   }, "\u00D7")
             ),
-            expanded && desc ? /*#__PURE__*/React.createElement("div", {
-              style: { padding: "0 12px 10px 30px", fontSize: 11, lineHeight: 1.55, color: "#6b7280" }
+            // Built-in row descriptions are now ALWAYS visible
+            // (used to be tap-to-expand). Custom rows still have
+            // no description since the user authored them.
+            isBuiltIn && desc ? /*#__PURE__*/React.createElement("div", {
+              style: { padding: "0 12px 10px 30px", fontSize: 11, lineHeight: 1.55, color: "var(--c-text-soft)" }
             }, desc) : null
           );
         };
@@ -19652,15 +19690,27 @@ function App() {
           },
             Array.from({ length: 24 }, (_, h) => /*#__PURE__*/React.createElement("option", { key: h, value: h }, fmtHr(h)))
           );
-          const row = (section, icon, label) => /*#__PURE__*/React.createElement("div", {
+          // Per-section description — surfaces the intent of each
+          // bucket so the user understands what kinds of habits go
+          // where (Morning = wake-up routine, Avoid = "don't do" lines,
+          // etc.). Sub-text below the start/end pickers, not the
+          // section label, so the row stays compact.
+          const row = (section, icon, label, description) => /*#__PURE__*/React.createElement("div", {
             key: section,
-            style: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 6 }
+            style: { display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, marginBottom: 6 }
           },
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, icon),
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-strong)", width: 76, flexShrink: 0 } }, label),
-            hourSelect(section, "start"),
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", flexShrink: 0 } }, "to"),
-            hourSelect(section, "end")
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", alignItems: "center", gap: 8 }
+            },
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, icon),
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-strong)", width: 76, flexShrink: 0 } }, label),
+              hourSelect(section, "start"),
+              /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--c-text-soft)", flexShrink: 0 } }, "to"),
+              hourSelect(section, "end")
+            ),
+            description && /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.45, paddingLeft: 22 }
+            }, description)
           );
           // Coverage check \u2014 the three sections together must
           // cover a full 24-hour day. Compute the span of each
@@ -19674,10 +19724,40 @@ function App() {
           const coverageOk = totalHrs === 24;
           return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
             /*#__PURE__*/React.createElement("div", { style: labelS }, "Time-of-Day Hours"),
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "When \"Morning\", \"Afternoon\", and \"Evening\" start and end \u2014 evening can wrap past midnight."),
-            row("morning",   "\uD83C\uDF05", "Morning"),
-            row("afternoon", "\u2600\uFE0F", "Afternoon"),
-            row("evening",   "\uD83C\uDF19", "Evening"),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "var(--c-text-soft)", marginBottom: 8, lineHeight: 1.45 } }, "When \"Morning\", \"Afternoon\", and \"Evening\" start and end \u2014 evening can wrap past midnight. Habits and to-dos are sorted into these buckets on the Habits and Calendar tabs."),
+            row("morning",   "\uD83C\uDF05", "Morning",
+              "Wake-up routine and the work you front-load before the day starts pulling at you. Habits that need willpower or a fresh head go here."),
+            row("afternoon", "\u2600\uFE0F", "Afternoon",
+              "The productive middle of the day \u2014 meetings, deep work, exercise, errands. Habits that fit between meals or breaks."),
+            row("evening",   "\uD83C\uDF19", "Evening",
+              "Wind-down hours \u2014 family time, reflection, prep for tomorrow, sleep prep. Habits that benefit from a slower pace."),
+            // Reference rows for the two non-clock sections so the
+            // user understands them too. No hour selects since they
+            // don't take a time range.
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, marginBottom: 6, opacity: 0.85 }
+            },
+              /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, "\u2713"),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-strong)" } }, "Daily Completion"),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "var(--c-text-soft)", marginLeft: "auto" } }, "all-day")
+              ),
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.45, paddingLeft: 22 }
+              }, "Habits that just need to happen sometime today \u2014 no specific clock time. They sit at the bottom of the day on the Habits page and don't appear on the Calendar timeline.")
+            ),
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 8, marginBottom: 6, opacity: 0.85 }
+            },
+              /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, "\uD83D\uDEAB"),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-strong)" } }, "Avoid"),
+                /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "var(--c-text-soft)", marginLeft: "auto" } }, "anti-habits")
+              ),
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.45, paddingLeft: 22 }
+              }, "Behaviors you're trying NOT to do \u2014 phone scrolling before bed, alcohol on weeknights, sugar after 8pm. Completing an Avoid habit means you successfully avoided it for the day. Pair with a \u2264 target (e.g. \u2264 15 min) for tracked tolerances.")
+            ),
             !coverageOk && /*#__PURE__*/React.createElement("div", {
               style: {
                 marginTop: 8,
