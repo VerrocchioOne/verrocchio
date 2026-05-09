@@ -21004,16 +21004,12 @@ function App() {
   }, /*#__PURE__*/React.createElement("div", {
     // Two-row header: row 1 is title + close X (always edge-to-edge
     // on a 402-px iPhone); row 2 is the compact "Starts <date>" pill
-    // on its own line. The previous one-row layout had the title,
-    // the date pill (which contains a 90-px date input), and the
-    // close X all jammed into the same flex line — at 402 px the
-    // "Edit Habit" text would overlap the pill on long titles.
-    // Stacking guarantees no horizontal collision.
+    // on its own line. Stacking guarantees no horizontal collision.
     style: {
       display: "flex",
       flexDirection: "column",
-      gap: 8,
-      marginBottom: 16
+      gap: 6,
+      marginBottom: 10
     }
   },
     /*#__PURE__*/React.createElement("div", {
@@ -21121,7 +21117,7 @@ function App() {
       style: {
         display: "flex", justifyContent: "space-between", gap: 12,
         fontSize: 10, color: "#9ca3af",
-        marginBottom: 10, paddingBottom: 6,
+        marginBottom: 6, paddingBottom: 4,
         borderBottom: "1px dashed var(--c-border)"
       }
     },
@@ -21136,12 +21132,9 @@ function App() {
     );
   })(),
   // Habit flavor toggle: Yes/No vs Target & Unit. Switches whether
-  // the rows below render. When switching to Yes/No, the target /
-  // unit / +per-tap state stays in memory so flipping back doesn't
-  // wipe the user's typed values; the save path just ignores them
-  // when eHHasTarget is false.
+  // the rows below render.
   /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", gap: 6, marginBottom: 10 }
+    style: { display: "flex", gap: 6, marginBottom: 6 }
   },
     /*#__PURE__*/React.createElement("button", {
       type: "button",
@@ -21391,7 +21384,7 @@ function App() {
     style: {
       display: "flex",
       gap: 8,
-      marginBottom: 10
+      marginBottom: 6
     }
   }, /*#__PURE__*/React.createElement("select", {
     value: eHSec,
@@ -21422,7 +21415,7 @@ function App() {
     style: {
       display: "flex",
       gap: 8,
-      marginBottom: 10
+      marginBottom: 6
     }
   }, /*#__PURE__*/React.createElement("select", {
     value: eHType,
@@ -21466,7 +21459,7 @@ function App() {
   /*#__PURE__*/React.createElement("select", {
     value: eHLoc,
     onChange: e => sEHLoc(e.target.value),
-    style: { ...S, width: "100%", marginBottom: 10, color: eHLoc === "home" ? "#2d5a2d" : eHLoc === "travel" ? "#0891b2" : "var(--c-text-soft)" }
+    style: { ...S, width: "100%", marginBottom: 6, color: eHLoc === "home" ? "#2d5a2d" : eHLoc === "travel" ? "#0891b2" : "var(--c-text-soft)" }
   }, /*#__PURE__*/React.createElement("option", { value: "both" }, "\uD83D\uDCCD Available: Home & Travel"),
      /*#__PURE__*/React.createElement("option", { value: "home" }, "\uD83C\uDFE0 Home only"),
      /*#__PURE__*/React.createElement("option", { value: "travel" }, "\u2708 Travel only")
@@ -21484,7 +21477,7 @@ function App() {
     style: {
       ...IS,
       width: "100%",
-      marginBottom: 10,
+      marginBottom: 6,
       resize: "none",
       lineHeight: 1.4,
       padding: "6px 12px",
