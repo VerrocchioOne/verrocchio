@@ -247,6 +247,7 @@ select{-webkit-appearance:none;appearance:none}
 textarea{resize:vertical}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.55)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
 .fade-in{animation:fadeIn .2s ease forwards}
 .pulsing{animation:pulse 1.5s ease infinite}
 /* ── Verrocchio welcome splash ("Ink V") ──────────────────────────────
@@ -2165,6 +2166,108 @@ const SEED_HABITS = [{
 // dk, tk, pastDays, getStreak, daysSinceLast, getCR, getLast14 are
 // defined in utils.js (loaded above) so the test suite can import the
 // same source of truth. Everything below is UI-specific and stays here.
+
+/* Web Speech API singleton. The browser's SpeechRecognition surface
+   sits behind a vendor prefix on iOS Safari (webkitSpeechRecognition).
+   We expose a tiny wrapper so the rest of the app can ask "is dictation
+   supported?" and "start a session" without re-implementing the prefix
+   dance everywhere.
+
+   The session callback fires twice — once with isFinal=false for live
+   interim text (so callers can show a building transcript), then once
+   with isFinal=true when the recognizer commits. Callers append final
+   chunks and replace interim chunks. */
+const SpeechRec = (typeof window !== "undefined")
+  ? (window.SpeechRecognition || window.webkitSpeechRecognition || null)
+  : null;
+const speechRecAvailable = !!SpeechRec;
+function startSpeechSession({ onChunk, onError, onEnd, lang } = {}) {
+  if (!SpeechRec) return null;
+  const rec = new SpeechRec();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = lang || (typeof navigator !== "undefined" && navigator.language) || "en-US";
+  rec.onresult = (e) => {
+    let interim = "";
+    let final = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      const txt = (r[0] && r[0].transcript) || "";
+      if (r.isFinal) final += txt;
+      else interim += txt;
+    }
+    if (final && onChunk) onChunk({ text: final.trim(), isFinal: true });
+    if (interim && onChunk) onChunk({ text: interim.trim(), isFinal: false });
+  };
+  rec.onerror = (e) => { if (onError) onError(e && e.error ? e.error : "speech_error"); };
+  rec.onend = () => { if (onEnd) onEnd(); };
+  try { rec.start(); }
+  catch (err) { if (onError) onError("speech_start_failed"); return null; }
+  return {
+    stop: () => { try { rec.stop(); } catch (e) { /* already stopped */ } },
+    abort: () => { try { rec.abort(); } catch (e) {} }
+  };
+}
+
+// React component: little microphone button that toggles a dictation
+// session. While listening, the button pulses red. Each final chunk
+// is forwarded to onTranscript(text); the caller decides whether to
+// append (default) or replace. Interim text is shown via onInterim
+// for live preview.
+function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
+  const [active, setActive] = React.useState(false);
+  const sessionRef = React.useRef(null);
+  if (!speechRecAvailable) return null;
+  const stop = () => {
+    if (sessionRef.current) { sessionRef.current.stop(); sessionRef.current = null; }
+    setActive(false);
+  };
+  const start = () => {
+    if (sessionRef.current) return;
+    sessionRef.current = startSpeechSession({
+      onChunk: ({ text, isFinal }) => {
+        if (!text) return;
+        if (isFinal) { if (onTranscript) onTranscript(text); }
+        else { if (onInterim) onInterim(text); }
+      },
+      onError: () => stop(),
+      onEnd: () => { sessionRef.current = null; setActive(false); }
+    });
+    if (sessionRef.current) setActive(true);
+  };
+  const px = size || 28;
+  return React.createElement("button", {
+    type: "button",
+    "aria-label": active ? "Stop dictation" : (label || "Voice to text"),
+    title: active ? "Tap to stop" : (label || "Voice to text"),
+    onClick: e => { e.stopPropagation(); active ? stop() : start(); },
+    style: Object.assign({
+      width: px, height: px,
+      borderRadius: "50%",
+      border: "1px solid " + (active ? "#fca5a5" : "var(--c-border)"),
+      background: active ? "#fee2e2" : "#fff",
+      color: active ? "#b91c1c" : "#6b7280",
+      cursor: "pointer",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexShrink: 0,
+      padding: 0,
+      WebkitTapHighlightColor: "transparent",
+      animation: active ? "pulseDot 1s ease-in-out infinite" : "none"
+    }, style || {})
+  },
+    React.createElement("svg", {
+      width: Math.round(px * 0.5), height: Math.round(px * 0.5),
+      viewBox: "0 0 24 24", fill: "none",
+      stroke: "currentColor", strokeWidth: "2",
+      strokeLinecap: "round", strokeLinejoin: "round"
+    },
+      React.createElement("rect", { x: "9", y: "2", width: "6", height: "11", rx: "3" }),
+      React.createElement("path", { d: "M5 11a7 7 0 0014 0" }),
+      React.createElement("line", { x1: "12", y1: "18", x2: "12", y2: "22" })
+    )
+  );
+}
+
 // Decimal-input sanitizer for habit target / increment fields.
 // Strips anything that isn't a digit or dot, collapses extra dots so
 // the user can't type "1.2.3", and caps the fractional portion at
@@ -4313,6 +4416,14 @@ function App() {
   // section-picker overlay — the user picks a time-of-day section
   // there, then we route into the per-section Organize modal.
   const [organizePickerOpen, setOrganizePickerOpen] = useState(false);
+  // Voice-capture modal state. Opened from the header mic; lets the
+  // user dictate freely and then pick which collection (goals,
+  // habits, to-dos, journal) the transcript should land in.
+  const [voiceCaptureOpen, setVoiceCaptureOpen] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceInterim, setVoiceInterim] = useState("");
+  const [voiceListening, setVoiceListening] = useState(false);
+  const voiceSessionRef = useRef(null);
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
   // Generic custom-order reorder modal. `reorderCtx` is null when
   // closed, else an object describing what's being reordered:
@@ -9855,6 +9966,34 @@ function App() {
       justifyContent: "flex-end"
     }
   },
+    // Header voice button — opens a routing modal where the user
+    // dictates and picks whether the captured text becomes a goal,
+    // habit, to-do, or journal entry.
+    speechRecAvailable && /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: () => setVoiceCaptureOpen(true),
+      title: "Capture by voice — talk to add a goal, habit, to-do, or journal entry",
+      "aria-label": "Voice capture",
+      style: {
+        width: 30, height: 30,
+        borderRadius: "50%",
+        border: "1px solid var(--c-border)",
+        background: "#fff",
+        cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        flexShrink: 0,
+        padding: 0,
+        WebkitTapHighlightColor: "transparent"
+      }
+    }, /*#__PURE__*/React.createElement("svg", {
+      "aria-hidden": true,
+      width: 14, height: 14, viewBox: "0 0 24 24", fill: "none",
+      stroke: "#2d5a2d", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
+    },
+      /*#__PURE__*/React.createElement("rect", { x: "9", y: "2", width: "6", height: "11", rx: "3" }),
+      /*#__PURE__*/React.createElement("path", { d: "M5 11a7 7 0 0014 0" }),
+      /*#__PURE__*/React.createElement("line", { x1: "12", y1: "18", x2: "12", y2: "22" })
+    )),
     (() => {
     // App-wide streak: consecutive days (back from today) where at least one habit was logged (done or missed). Today may be blank.
     const hs = data.habits || [];
@@ -10968,12 +11107,20 @@ function App() {
 
     // Intention input card — only when the intention hasn't been saved yet.
     const intentionInput = !intentionSet ? /*#__PURE__*/React.createElement("div", { key: "int-in", style: cardStyle },
-      /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Set Today's Intention"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 4 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { ...titleStyle, marginBottom: 0 } }, "Set Today's Intention"),
+        /*#__PURE__*/React.createElement(VoiceMicButton, {
+          label: "Dictate intention",
+          onTranscript: (txt) => sJTxt(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + txt)
+        })
+      ),
       /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "What is the one thing you must accomplish today?"),
       /*#__PURE__*/React.createElement("textarea", {
         value: jTxt,
         onChange: e => sJTxt(e.target.value),
-        placeholder: "Write your intention for today...",
+        placeholder: "Write your intention for today (or tap the mic)...",
         rows: 3,
         style: { width: "100%", background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", color: "var(--c-text)", fontSize: 13, lineHeight: 1.6, outline: "none", fontFamily: "system-ui,-apple-system,sans-serif", resize: "none", marginBottom: 10, boxSizing: "border-box" }
       }),
@@ -11408,12 +11555,96 @@ function App() {
       );
     })());
 
+    // Urgent To-Dos card — surfaces anything overdue (dueDate has
+    // passed) or fast-approaching (dueDate within 3 days). Lifted
+    // up to the top of Home so the user sees what's bleeding before
+    // the rest of the daily ritual. Hidden when nothing qualifies.
+    const todoUrgentCard = (() => {
+      const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+      const all = (data.todos || []).filter(t => t && !t.completedDate && t.dueDate);
+      const annotated = all.map(t => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t.dueDate);
+        if (!m) return null;
+        const due = new Date(+m[1], +m[2] - 1, +m[3]);
+        const days = Math.round((due - today0) / 86400000);
+        return { todo: t, due, days };
+      }).filter(Boolean);
+      const urgent = annotated.filter(({ days }) => days <= 3).sort((a, b) => a.days - b.days);
+      if (urgent.length === 0) return null;
+      return /*#__PURE__*/React.createElement("div", {
+        key: "todo-urgent",
+        style: {
+          background: "#fff",
+          border: "1px solid #fecaca",
+          borderLeft: "4px solid #dc2626",
+          borderRadius: 12,
+          padding: "12px 14px",
+          marginBottom: 12,
+          boxShadow: "0 1px 3px rgba(220,38,38,.06)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 11, fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: 0.5 }
+          }, "Urgent To-Dos · " + urgent.length),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => setTab("todos"),
+            style: {
+              background: "transparent", border: "none",
+              color: "#b91c1c", fontSize: 11, fontWeight: 700,
+              cursor: "pointer", padding: 0
+            }
+          }, "Open To-Dos →")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 5 }
+        }, urgent.slice(0, 5).map(({ todo, days }) => {
+          const overdue = days < 0;
+          const today = days === 0;
+          const dayLabel = overdue
+            ? Math.abs(days) + "d overdue"
+            : today
+              ? "Due today"
+              : "in " + days + "d";
+          const tint = overdue ? "#fee2e2" : today ? "#fef3c7" : "#fff7ed";
+          const stroke = overdue ? "#fca5a5" : today ? "#fde68a" : "#fed7aa";
+          const text = overdue ? "#991b1b" : today ? "#92400e" : "#9a3412";
+          return /*#__PURE__*/React.createElement("div", {
+            key: todo.id,
+            onClick: () => setTab("todos"),
+            style: {
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "6px 8px",
+              background: tint,
+              border: "1px solid " + stroke,
+              borderRadius: 8,
+              cursor: "pointer"
+            }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 9, fontWeight: 700, color: text, textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0, minWidth: 70 }
+            }, dayLabel),
+            /*#__PURE__*/React.createElement("span", {
+              style: { flex: 1, fontSize: 13, color: "var(--c-text)", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }
+            }, todo.text)
+          );
+        }))
+      );
+    })();
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
+      // Urgent to-dos sit at the top so anything overdue or due soon
+      // is the first thing the user sees on Home.
+      todoUrgentCard,
       briefingCard,
       yesterdayCard,
-      goalsCard,
+      // (Goals review card removed per user request — the goals
+      // are visible on the Goals tab and the daily ritual reads
+      // tighter without an extra step.)
       // Key Upcoming Dates card removed from the home layout per
       // user request — the goal-target deadlines it surfaced are
       // already visible on the Goals tab. The underlying
@@ -12633,7 +12864,31 @@ function App() {
             display: "block"
           }),
           title: habit.text
-        }, habit.text || ""),
+        },
+          // Compact (3-up concurrent) mode: render each word as its
+          // own inline-block <span> so the browser ALWAYS has explicit
+          // break opportunities between words — independent of any
+          // flex/min-content width quirks that might cause the title
+          // to render as a single unbreakable line and get clipped by
+          // the row's overflow:hidden. Each span is atomic; if the
+          // next word doesn't fit, it wraps to a new line. This works
+          // around iOS Safari's tendency to compute the title's
+          // intrinsic width from its uninterrupted text content even
+          // when the column has explicit width:100% + minWidth:0.
+          // Non-compact: leave the plain text path so the existing
+          // single-line layout (with optional natural wrap) is
+          // unchanged.
+          compact
+            ? (habit.text || "").split(/(\s+)/).map((tok, i) => {
+                if (!tok) return null;
+                if (/^\s+$/.test(tok)) return tok;
+                return /*#__PURE__*/React.createElement("span", {
+                  key: i,
+                  style: { display: "inline-block", maxWidth: "100%", overflowWrap: "anywhere", wordBreak: "break-word" }
+                }, tok);
+              })
+            : (habit.text || "")
+        ),
         habit.notes && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
@@ -13559,10 +13814,19 @@ function App() {
       marginBottom: 12,
       boxShadow: "0 1px 3px rgba(0,0,0,.04)"
     }
-  }, /*#__PURE__*/React.createElement("textarea", {
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", justifyContent: "flex-end", marginBottom: 6 }
+    },
+      /*#__PURE__*/React.createElement(VoiceMicButton, {
+        label: "Dictate journal entry",
+        onTranscript: (txt) => sJTxt(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + txt)
+      })
+    ),
+    /*#__PURE__*/React.createElement("textarea", {
     value: jTxt,
     onChange: e => sJTxt(e.target.value),
-    placeholder: "What happened today? What are you grateful for? What did you learn?",
+    placeholder: "What happened today? What are you grateful for? What did you learn? (or tap the mic)",
     rows: 4,
     "data-tour": "reflect-input",
     style: {
@@ -13861,13 +14125,25 @@ function App() {
   }, "\uD83C\uDFAF Select a Goal (optional)"), data.goals.map(g => /*#__PURE__*/React.createElement("option", {
     key: g.id,
     value: g.id
-  }, g.text.slice(0, 50)))), /*#__PURE__*/React.createElement("textarea", {
+  }, g.text.slice(0, 50)))),
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", justifyContent: "flex-end", marginBottom: 6 }
+  },
+    /*#__PURE__*/React.createElement(VoiceMicButton, {
+      label: "Dictate goal journal entry",
+      onTranscript: (txt) => sJTxt(prev => {
+        const body = (prev || "").startsWith("GOAL:") ? prev : "GOAL:" + (prev || "");
+        return body + (body.endsWith(":") ? "" : " ") + txt;
+      })
+    })
+  ),
+  /*#__PURE__*/React.createElement("textarea", {
     value: jTxt.startsWith("GOAL:") ? jTxt : "",
     onChange: e => sJTxt("GOAL:" + e.target.value.replace(/^GOAL:/, "")),
     onFocus: e => {
       if (!jTxt.startsWith("GOAL:")) sJTxt("GOAL:");
     },
-    placeholder: "Journal about this goal \u2014 progress, obstacles, reflections...",
+    placeholder: "Journal about this goal \u2014 progress, obstacles, reflections... (or tap the mic)",
     rows: 4,
     style: {
       width: "100%",
@@ -19391,6 +19667,240 @@ function App() {
   //    edited; the draft id list is shuffled by up/down arrows and
   //    committed by saveReorder (which also flips that page's sort
   //    pref to "custom" so the edit is immediately visible).
+  // Voice-capture modal. Opened from the header mic. Listens via
+  // the Web Speech API, shows the live transcript building, and
+  // routes the captured text into a goal / habit / to-do / journal
+  // entry based on the user's pick. Tapping a destination commits
+  // the entry and closes the modal; cancel discards.
+  voiceCaptureOpen && (() => {
+    const closeModal = () => {
+      if (voiceSessionRef.current) { voiceSessionRef.current.stop(); voiceSessionRef.current = null; }
+      setVoiceListening(false);
+      setVoiceCaptureOpen(false);
+      setVoiceTranscript("");
+      setVoiceInterim("");
+    };
+    const startListening = () => {
+      if (voiceSessionRef.current) return;
+      const session = startSpeechSession({
+        onChunk: ({ text, isFinal }) => {
+          if (!text) return;
+          if (isFinal) {
+            setVoiceTranscript(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + text);
+            setVoiceInterim("");
+          } else {
+            setVoiceInterim(text);
+          }
+        },
+        onError: () => { voiceSessionRef.current = null; setVoiceListening(false); },
+        onEnd: () => { voiceSessionRef.current = null; setVoiceListening(false); }
+      });
+      voiceSessionRef.current = session;
+      if (session) setVoiceListening(true);
+    };
+    const stopListening = () => {
+      if (voiceSessionRef.current) { voiceSessionRef.current.stop(); voiceSessionRef.current = null; }
+      setVoiceListening(false);
+    };
+    const finalText = (voiceTranscript || "").trim();
+    const hasText = finalText.length > 0;
+    const todayKey = tk();
+    // Destination handlers — each takes the captured transcript and
+    // commits it into the right collection using the same shape the
+    // app's own creation flows use.
+    const saveAsHabit = () => {
+      if (!hasText) return;
+      stopListening();
+      const newId = Date.now();
+      const sectionMax = (data.habits || [])
+        .filter(h => (h.section || "morning") === "morning")
+        .reduce((m, h) => Math.max(m, (h._order ?? -1)), -1);
+      save({
+        ...data,
+        habits: [...(data.habits || []), {
+          id: newId,
+          text: finalText,
+          section: "morning",
+          importance: "Important",
+          type: null, duration: null, notes: null,
+          goalIds: [], goalId: null,
+          location: "both",
+          startDate: todayKey,
+          frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
+          target: null, targetOp: ">=", unitLabel: null, increment: null,
+          parentId: null, concurrent: false,
+          completions: {}, completionTimes: {}, completionUnits: {},
+          _order: sectionMax + 1
+        }]
+      });
+      closeModal();
+      setTab("habits");
+    };
+    const saveAsGoal = () => {
+      if (!hasText) return;
+      stopListening();
+      save({
+        ...data,
+        goals: [...(data.goals || []), {
+          id: Date.now(),
+          text: finalText,
+          type: null,
+          smart: { specific: "", measurable: "", measurableUnit: "", achievable: "", relevant: "", timebound: "" },
+          notes: null,
+          history: []
+        }]
+      });
+      closeModal();
+      setTab("goals");
+    };
+    const saveAsTodo = () => {
+      if (!hasText) return;
+      stopListening();
+      save({
+        ...data,
+        todos: [...(data.todos || []), {
+          id: Date.now(),
+          text: finalText,
+          dueDate: null,
+          goalId: null
+        }]
+      });
+      closeModal();
+      setTab("todos");
+    };
+    const saveAsJournal = () => {
+      if (!hasText) return;
+      stopListening();
+      save({
+        ...data,
+        journal: [...(data.journal || []), {
+          id: Date.now(),
+          text: finalText,
+          mood: "",
+          tag: "",
+          timestamp: new Date().toISOString(),
+          dateKey: todayKey
+        }]
+      });
+      closeModal();
+      setTab("reflection");
+    };
+    const previewText = (finalText + (voiceInterim ? " " + voiceInterim : "")).trim();
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog", "aria-modal": "true",
+      style: {
+        position: "fixed", inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        zIndex: 320,
+        display: "flex", alignItems: "flex-end", justifyContent: "center"
+      },
+      onClick: e => { if (e.target === e.currentTarget) closeModal(); }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: {
+        background: "var(--c-surface, #fff)",
+        borderRadius: "20px 20px 0 0",
+        padding: "20px 18px 22px",
+        width: "100%", maxWidth: 520,
+        maxHeight: "85vh", overflowY: "auto",
+        boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
+        }, "Voice Capture"),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button", onClick: closeModal, "aria-label": "Close",
+          style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 28, height: 28, fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
+        }, "×")
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, color: "#6b7280", marginBottom: 12, lineHeight: 1.45 }
+      }, "Tap the mic, dictate your thought, then pick where it lands."),
+      // Transcript area + record button
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex", alignItems: "stretch", gap: 10,
+          marginBottom: 14
+        }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => voiceListening ? stopListening() : startListening(),
+          style: {
+            width: 56, height: 56,
+            borderRadius: "50%",
+            border: "1px solid " + (voiceListening ? "#fca5a5" : "var(--c-border)"),
+            background: voiceListening ? "#fee2e2" : "#fff",
+            color: voiceListening ? "#b91c1c" : "#2d5a2d",
+            cursor: "pointer", flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            animation: voiceListening ? "pulseDot 1s ease-in-out infinite" : "none"
+          }
+        }, /*#__PURE__*/React.createElement("svg", {
+          width: 24, height: 24, viewBox: "0 0 24 24", fill: "none",
+          stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
+        },
+          /*#__PURE__*/React.createElement("rect", { x: "9", y: "2", width: "6", height: "11", rx: "3" }),
+          /*#__PURE__*/React.createElement("path", { d: "M5 11a7 7 0 0014 0" }),
+          /*#__PURE__*/React.createElement("line", { x1: "12", y1: "18", x2: "12", y2: "22" })
+        )),
+        /*#__PURE__*/React.createElement("div", {
+          style: {
+            flex: 1, minWidth: 0,
+            background: "var(--c-surface-raised)",
+            border: "1px solid var(--c-border)",
+            borderRadius: 12,
+            padding: "10px 12px",
+            fontSize: 13, lineHeight: 1.5,
+            color: previewText ? "var(--c-text)" : "#9ca3af",
+            minHeight: 56,
+            whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere"
+          }
+        }, previewText || (voiceListening ? "Listening..." : "Tap the mic and start talking."))
+      ),
+      // Destination buttons. Disabled until there's a final transcript.
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }
+      },
+        ([
+          { label: "Save as Goal",   color: "#7c3aed", onClick: saveAsGoal },
+          { label: "Save as Habit",  color: "#2d5a2d", onClick: saveAsHabit },
+          { label: "Save as To-Do",  color: "#b45309", onClick: saveAsTodo },
+          { label: "Save as Journal", color: "#0891b2", onClick: saveAsJournal }
+        ]).map(b => /*#__PURE__*/React.createElement("button", {
+          key: b.label,
+          type: "button",
+          onClick: b.onClick,
+          disabled: !hasText,
+          style: {
+            background: hasText ? b.color : "var(--c-surface-muted)",
+            color: hasText ? "#fff" : "#9ca3af",
+            border: "none",
+            borderRadius: 10,
+            padding: "11px 12px",
+            fontSize: 12, fontWeight: 700,
+            cursor: hasText ? "pointer" : "default",
+            opacity: hasText ? 1 : 0.6,
+            whiteSpace: "nowrap"
+          }
+        }, b.label))
+      ),
+      hasText && /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => { setVoiceTranscript(""); setVoiceInterim(""); },
+        style: {
+          marginTop: 8,
+          background: "transparent", border: "none",
+          color: "#9ca3af", fontSize: 11, fontWeight: 600,
+          cursor: "pointer", padding: 4, width: "100%"
+        }
+      }, "Clear and start over")
+    ));
+  })(),
   // Section-picker bottom sheet — shown when the toolbar's
   // Organize button is tapped. The user picks a time-of-day
   // section, which then opens the existing per-section organize
