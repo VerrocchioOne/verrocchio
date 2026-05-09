@@ -142,6 +142,36 @@ body.dark [style*="color: rgb(153, 27, 27)"]{color:#fca5a5!important}
 body.dark [style*="color: rgb(21, 128, 61)"]{color:#86efac!important}
 body.dark [style*="color: rgb(194, 65, 12)"]{color:#fdba74!important}
 body.dark [style*="color: rgb(217, 119, 6)"]{color:#fbbf24!important}
+/* Additional unmapped accents — caught by audit. Without these,
+   text bakes in mid-saturation hues that vanish on a dark surface
+   (info banners, danger-zone buttons, days-til-deadline chips). */
+body.dark [style*="color: rgb(220, 38, 38)"]{color:#fca5a5!important}    /* #dc2626 */
+body.dark [style*="color: rgb(185, 28, 28)"]{color:#fca5a5!important}    /* #b91c1c */
+body.dark [style*="color: rgb(180, 83, 9)"]{color:#fcd34d!important}     /* #b45309 */
+body.dark [style*="color: rgb(29, 78, 216)"]{color:#93c5fd!important}    /* #1d4ed8 */
+body.dark [style*="color: rgb(30, 58, 138)"]{color:#bfdbfe!important}    /* #1e3a8a */
+body.dark [style*="color: rgb(124, 58, 237)"]{color:#c4b5fd!important}   /* #7c3aed */
+body.dark [style*="color: rgb(219, 39, 119)"]{color:#f9a8d4!important}   /* #db2777 */
+body.dark [style*="color: rgb(13, 148, 136)"]{color:#5eead4!important}   /* #0d9488 */
+body.dark [style*="color: rgb(180, 83, 9)"]{color:#fcd34d!important}     /* #b45309 */
+body.dark [style*="color: rgb(22, 163, 74)"]{color:#86efac!important}    /* #16a34a */
+/* Light-blue/light-yellow borders for return banners and sub-pills
+   — keep them visible on a now-dark fill. */
+body.dark [style*="border: 1px solid rgb(191, 219, 254)"]{border-color:#1e40af!important}    /* #bfdbfe */
+body.dark [style*="border: 4px solid rgb(29, 78, 216)"]{border-color:#3b82f6!important}     /* #1d4ed8 */
+body.dark [style*="border: 1px solid rgb(253, 230, 138)"]{border-color:#a16207!important}   /* #fde68a */
+body.dark [style*="borderTop: 1px solid rgb(198, 223, 198)"]{border-top-color:#2a3d2a!important}
+/* Light divider lines (#f3f4f6) — left as near-white on dark. */
+body.dark [style*="border: 1px solid rgb(243, 244, 246)"]{border-color:#2a2f34!important}
+body.dark [style*="borderBottom: 1px solid rgb(243, 244, 246)"]{border-bottom-color:#2a2f34!important}
+body.dark [style*="border: 1px solid rgb(229, 231, 235)"]{border-color:#2a2f34!important}    /* #e5e7eb */
+body.dark [style*="borderBottom: 1px solid rgb(229, 231, 235)"]{border-bottom-color:#2a2f34!important}
+body.dark [style*="borderTop: 1px solid rgb(229, 231, 235)"]{border-top-color:#2a2f34!important}
+body.dark [style*="border: 1.5px solid rgb(209, 213, 219)"]{border-color:#3a3f44!important}  /* #d1d5db */
+/* SVG attribute strokes that the inline-style overrides can't catch. */
+body.dark circle[stroke="#e5e7eb"]{stroke:#2a2f34!important}
+body.dark circle[stroke="#d1d5db"]{stroke:#3a3f44!important}
+body.dark circle[stroke="#f3f4f6"]{stroke:#2a2f34!important}
 /* ── dashed travel-day outlines: stay visible on dark calendar ── */
 body.dark [style*="dashed rgb(103, 232, 249)"]{border-color:#67e8f9!important}
 /* Custom accent: remap the default green button background / accent
@@ -4421,6 +4451,11 @@ function App() {
   // (where it used to live at the bottom) so Home stays focused on
   // the daily ritual and the calendar gets its own destination.
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  // My Content panel inputs — title + url draft for the 'Add a
+  // link' row at the top of the panel. File uploads write straight
+  // to data.userContent without a draft.
+  const [ucDraftTitle, sUcDraftTitle] = useState("");
+  const [ucDraftUrl, sUcDraftUrl] = useState("");
   // Voice-capture modal state. Opened from the header mic; lets the
   // user dictate freely and then pick which collection (goals,
   // habits, to-dos, journal) the transcript should land in.
@@ -18592,14 +18627,18 @@ function App() {
       }
     }, "Next: ", nextGoal.text)));
   })))), showProfile && (() => {
+    // Profile nav \u2014 emoji icons removed per user request, the
+    // typeface-only labels read cleaner. My Routines is gone since
+    // the Calendar modal already shows the unique-cadence habits
+    // (week + month views surface anything weekly-or-less-frequent).
     const NAV_ITEMS = [
-      { val: "account", label: "My Account", icon: "\uD83D\uDC64" },
-      { val: "scorecard", label: "App Progress", icon: "\u2705" },
-      { val: "routines", label: "My Routines", icon: "\uD83D\uDDD3\uFE0F" },
-      { val: "inspiration", label: "My Inspiration", icon: "\uD83D\uDCA1" },
-      { val: "history", label: "Goal History", icon: "\uD83D\uDCDC" },
-      { val: "reports", label: "Habit Reports", icon: "\uD83D\uDCCA" },
-      { val: "settings", label: "App Settings", icon: "\u2699\uFE0F" }
+      { val: "account", label: "My Account" },
+      { val: "scorecard", label: "App Progress" },
+      { val: "inspiration", label: "My Inspiration" },
+      { val: "content", label: "My Content" },
+      { val: "history", label: "Goal History" },
+      { val: "reports", label: "Habit Reports" },
+      { val: "settings", label: "App Settings" }
     ];
     const navBtn = (item, on) => /*#__PURE__*/React.createElement("button", {
       key: item.val,
@@ -18613,10 +18652,9 @@ function App() {
         fontWeight: on ? 700 : 500, textAlign: "left",
         transition: "background .15s"
       }
-    }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 14 } }, item.icon),
-       /*#__PURE__*/React.createElement("span", { style: { lineHeight: 1.2 } }, item.label));
+    }, /*#__PURE__*/React.createElement("span", { style: { lineHeight: 1.2 } }, item.label));
     const labelS = { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 5, textTransform: "uppercase", letterSpacing: .5 };
-    const inputS = { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
+    const inputS = { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", color: "var(--c-text)", borderRadius: 8, padding: "10px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
     const sectionTitle = t => /*#__PURE__*/React.createElement("div", {
       style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 14 }
     }, t);
@@ -18984,6 +19022,254 @@ function App() {
         routineView === "month" ? renderMonthTab() : renderWeekTab()
       );
     })();
+    // My Content panel — file/audio library that the user can link
+    // to specific habits, to-dos, or goals. Stored as base-64 data
+    // URLs in data.userContent so the content syncs with the rest
+    // of the app. Capped per file to keep the Firestore document
+    // under its 1 MB doc-size limit; the upload picker enforces a
+    // soft warning. Audio files render with a native <audio> tag
+    // so the user can preview without downloading.
+    const myContentPanel = /*#__PURE__*/React.createElement("div", null,
+      sectionTitle("My Content"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, color: "#9ca3af", marginBottom: 14, lineHeight: 1.45 }
+      }, "Upload audio, video, PDFs, or paste a URL — link each item to the habits, to-dos, or goals it belongs to. Audio + image previews play right here; everything else opens in your default app."),
+      // Add via URL row
+      /*#__PURE__*/React.createElement("div", {
+        style: { background: "var(--c-surface-raised)", borderRadius: 10, padding: "12px", marginBottom: 10 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Add a link"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
+          /*#__PURE__*/React.createElement("input", {
+            type: "text",
+            value: ucDraftTitle,
+            onChange: e => sUcDraftTitle(e.target.value.slice(0, 60)),
+            placeholder: "Title",
+            style: { ...inputS, flex: 1 }
+          }),
+          /*#__PURE__*/React.createElement("input", {
+            type: "url",
+            value: ucDraftUrl,
+            onChange: e => sUcDraftUrl(e.target.value.slice(0, 500)),
+            placeholder: "https://…",
+            style: { ...inputS, flex: 2 }
+          }),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            disabled: !ucDraftTitle.trim() || !ucDraftUrl.trim(),
+            onClick: () => {
+              const title = ucDraftTitle.trim();
+              const url = ucDraftUrl.trim();
+              if (!title || !url) return;
+              save({
+                ...data,
+                userContent: [...(data.userContent || []), {
+                  id: Date.now(),
+                  kind: "link",
+                  title,
+                  url,
+                  linkedHabitIds: [],
+                  linkedTodoIds: [],
+                  linkedGoalIds: [],
+                  createdAt: Date.now()
+                }]
+              });
+              sUcDraftTitle("");
+              sUcDraftUrl("");
+            },
+            style: {
+              background: (ucDraftTitle.trim() && ucDraftUrl.trim()) ? "#2d5a2d" : "#9ca3af",
+              color: "#fff", border: "none", borderRadius: 8,
+              padding: "0 14px", fontSize: 12, fontWeight: 700,
+              cursor: (ucDraftTitle.trim() && ucDraftUrl.trim()) ? "pointer" : "default"
+            }
+          }, "Save")
+        )
+      ),
+      // Add via file upload
+      /*#__PURE__*/React.createElement("div", {
+        style: { background: "var(--c-surface-raised)", borderRadius: 10, padding: "12px", marginBottom: 16 }
+      },
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Upload a file"),
+        /*#__PURE__*/React.createElement("input", {
+          type: "file",
+          accept: "audio/*,video/*,application/pdf,image/*",
+          onChange: (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const MAX = 800 * 1024; // 800 KB soft cap (Firestore doc-size headroom)
+            if (file.size > MAX) {
+              alert("File is " + Math.round(file.size / 1024) + " KB — that's larger than the 800 KB limit. Pick a smaller file or paste a URL instead.");
+              e.target.value = "";
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+              save({
+                ...data,
+                userContent: [...(data.userContent || []), {
+                  id: Date.now(),
+                  kind: "file",
+                  title: file.name.replace(/\.[^.]+$/, ""),
+                  fileName: file.name,
+                  fileType: file.type || "application/octet-stream",
+                  fileSize: file.size,
+                  fileData: reader.result,
+                  linkedHabitIds: [],
+                  linkedTodoIds: [],
+                  linkedGoalIds: [],
+                  createdAt: Date.now()
+                }]
+              });
+            };
+            reader.readAsDataURL(file);
+            e.target.value = "";
+          },
+          style: { fontSize: 12, color: "var(--c-text-soft)" }
+        }),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }
+        }, "Up to 800 KB per file (≈ 30 sec of MP3 at 128 kbps). For longer audio or video, paste a URL above instead.")
+      ),
+      // List of saved items
+      ((data.userContent || []).length === 0)
+        ? /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "24px 0" }
+          }, "Nothing saved yet — add a link or a file above.")
+        : /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", gap: 10 }
+          }, (data.userContent || []).slice().reverse().map(item => {
+            const linkedHabitNames = (item.linkedHabitIds || []).map(id => (data.habits || []).find(h => String(h.id) === String(id))).filter(Boolean);
+            const linkedTodoNames = (item.linkedTodoIds || []).map(id => (data.todos || []).find(t => String(t.id) === String(id))).filter(Boolean);
+            const linkedGoalNames = (item.linkedGoalIds || []).map(id => (data.goals || []).find(g => String(g.id) === String(id))).filter(Boolean);
+            const isAudio = item.kind === "file" && (item.fileType || "").startsWith("audio/");
+            const isImage = item.kind === "file" && (item.fileType || "").startsWith("image/");
+            const isVideo = item.kind === "file" && (item.fileType || "").startsWith("video/");
+            const updateItem = (patch) => {
+              save({
+                ...data,
+                userContent: (data.userContent || []).map(c => c.id === item.id ? { ...c, ...patch } : c)
+              });
+            };
+            const toggleLink = (kind, id) => {
+              const key = kind === "habit" ? "linkedHabitIds" : kind === "todo" ? "linkedTodoIds" : "linkedGoalIds";
+              const cur = item[key] || [];
+              const has = cur.some(x => String(x) === String(id));
+              updateItem({ [key]: has ? cur.filter(x => String(x) !== String(id)) : [...cur, id] });
+            };
+            const removeItem = () => {
+              if (!confirm("Remove '" + item.title + "' from My Content?")) return;
+              save({
+                ...data,
+                userContent: (data.userContent || []).filter(c => c.id !== item.id)
+              });
+            };
+            return /*#__PURE__*/React.createElement("div", {
+              key: item.id,
+              style: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", boxShadow: "0 1px 2px rgba(0,0,0,.04)" }
+            },
+              /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }
+              },
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 9, fontWeight: 700, color: item.kind === "link" ? "#0891b2" : "#7c3aed", background: item.kind === "link" ? "#f0f9ff" : "#f5f3ff", border: "1px solid " + (item.kind === "link" ? "#bae6fd" : "#ddd6fe"), borderRadius: 4, padding: "2px 6px", textTransform: "uppercase", letterSpacing: 0.4 }
+                }, item.kind === "link" ? "Link" : (isAudio ? "Audio" : isImage ? "Image" : isVideo ? "Video" : "File")),
+                /*#__PURE__*/React.createElement("input", {
+                  type: "text",
+                  value: item.title || "",
+                  onChange: e => updateItem({ title: e.target.value.slice(0, 60) }),
+                  style: { flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, fontWeight: 600, color: "var(--c-text)" }
+                }),
+                /*#__PURE__*/React.createElement("button", {
+                  onClick: removeItem,
+                  title: "Remove",
+                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 8px", color: "#9ca3af", fontSize: 14, cursor: "pointer", lineHeight: 1 }
+                }, "×")
+              ),
+              // Preview block
+              isAudio && /*#__PURE__*/React.createElement("audio", {
+                controls: true, src: item.fileData,
+                style: { width: "100%", marginBottom: 8 }
+              }),
+              isImage && /*#__PURE__*/React.createElement("img", {
+                src: item.fileData, alt: item.title,
+                style: { maxWidth: "100%", maxHeight: 180, borderRadius: 6, marginBottom: 8 }
+              }),
+              isVideo && /*#__PURE__*/React.createElement("video", {
+                controls: true, src: item.fileData,
+                style: { width: "100%", maxHeight: 240, borderRadius: 6, marginBottom: 8 }
+              }),
+              item.kind === "link" && /*#__PURE__*/React.createElement("a", {
+                href: item.url, target: "_blank", rel: "noopener noreferrer",
+                style: { display: "block", fontSize: 11, color: "#0891b2", marginBottom: 8, wordBreak: "break-all" }
+              }, item.url),
+              item.kind === "file" && !isAudio && !isImage && !isVideo && /*#__PURE__*/React.createElement("a", {
+                href: item.fileData, download: item.fileName,
+                style: { display: "inline-block", fontSize: 12, color: "#2d5a2d", fontWeight: 600, marginBottom: 8 }
+              }, "⬇ " + item.fileName + (item.fileSize ? " (" + Math.round(item.fileSize / 1024) + " KB)" : "")),
+              // Linked-to picker
+              /*#__PURE__*/React.createElement("div", {
+                style: { borderTop: "1px dashed #e5e7eb", paddingTop: 8, marginTop: 4 }
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }
+                }, "Linked to"),
+                (linkedHabitNames.length === 0 && linkedTodoNames.length === 0 && linkedGoalNames.length === 0)
+                  ? /*#__PURE__*/React.createElement("div", {
+                      style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 }
+                    }, "Nothing yet — pick from below.")
+                  : /*#__PURE__*/React.createElement("div", {
+                      style: { display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }
+                    },
+                      linkedHabitNames.map(h => /*#__PURE__*/React.createElement("span", {
+                        key: "lh-" + h.id,
+                        onClick: () => toggleLink("habit", h.id),
+                        style: { fontSize: 10, fontWeight: 600, color: "#2d5a2d", background: "var(--c-tint-green)", border: "1px solid #c6dfc6", borderRadius: 12, padding: "2px 8px", cursor: "pointer" }
+                      }, "🌿 " + h.text + " ×")),
+                      linkedTodoNames.map(t => /*#__PURE__*/React.createElement("span", {
+                        key: "lt-" + t.id,
+                        onClick: () => toggleLink("todo", t.id),
+                        style: { fontSize: 10, fontWeight: 600, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "2px 8px", cursor: "pointer" }
+                      }, "✓ " + t.text + " ×")),
+                      linkedGoalNames.map(g => /*#__PURE__*/React.createElement("span", {
+                        key: "lg-" + g.id,
+                        onClick: () => toggleLink("goal", g.id),
+                        style: { fontSize: 10, fontWeight: 600, color: "#7c3aed", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12, padding: "2px 8px", cursor: "pointer" }
+                      }, "🎯 " + g.text + " ×"))
+                    ),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { display: "flex", gap: 6, flexWrap: "wrap" }
+                },
+                  /*#__PURE__*/React.createElement("select", {
+                    value: "",
+                    onChange: e => { if (e.target.value) toggleLink("habit", Number(e.target.value) || e.target.value); },
+                    style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
+                  },
+                    /*#__PURE__*/React.createElement("option", { value: "" }, "Link a habit…"),
+                    (data.habits || []).filter(h => !(item.linkedHabitIds || []).some(id => String(id) === String(h.id))).map(h => /*#__PURE__*/React.createElement("option", { key: h.id, value: h.id }, h.text.slice(0, 36)))
+                  ),
+                  /*#__PURE__*/React.createElement("select", {
+                    value: "",
+                    onChange: e => { if (e.target.value) toggleLink("todo", Number(e.target.value) || e.target.value); },
+                    style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
+                  },
+                    /*#__PURE__*/React.createElement("option", { value: "" }, "Link a to-do…"),
+                    (data.todos || []).filter(t => !(item.linkedTodoIds || []).some(id => String(id) === String(t.id))).map(t => /*#__PURE__*/React.createElement("option", { key: t.id, value: t.id }, (t.text || "").slice(0, 36)))
+                  ),
+                  /*#__PURE__*/React.createElement("select", {
+                    value: "",
+                    onChange: e => { if (e.target.value) toggleLink("goal", Number(e.target.value) || e.target.value); },
+                    style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
+                  },
+                    /*#__PURE__*/React.createElement("option", { value: "" }, "Link a goal…"),
+                    (data.goals || []).filter(g => !(item.linkedGoalIds || []).some(id => String(id) === String(g.id))).map(g => /*#__PURE__*/React.createElement("option", { key: g.id, value: g.id }, (g.text || "").slice(0, 36)))
+                  )
+                )
+              )
+            );
+          }))
+    );
+
     const historyPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("Goal History"),
       (data.goalArchive || []).length === 0 ? /*#__PURE__*/React.createElement("div", {
@@ -19376,12 +19662,45 @@ function App() {
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#6b7280", flexShrink: 0 } }, "to"),
             hourSelect(section, "end")
           );
+          // Coverage check \u2014 the three sections together must
+          // cover a full 24-hour day. Compute the span of each
+          // (allowing the evening section to wrap midnight) and
+          // surface a red banner when the sum drifts away from
+          // 24. Default values (6\u219212, 12\u219218, 18\u21926) total exactly
+          // 24, so the banner stays hidden until the user pulls
+          // a slider that creates a gap or an overlap.
+          const span = sec => ((ranges[sec].end - ranges[sec].start + 24) % 24) || 24;
+          const totalHrs = span("morning") + span("afternoon") + span("evening");
+          const coverageOk = totalHrs === 24;
           return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
             /*#__PURE__*/React.createElement("div", { style: labelS }, "Time-of-Day Hours"),
             /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", marginBottom: 8 } }, "When \"Morning\", \"Afternoon\", and \"Evening\" start and end \u2014 evening can wrap past midnight."),
             row("morning",   "\uD83C\uDF05", "Morning"),
             row("afternoon", "\u2600\uFE0F", "Afternoon"),
-            row("evening",   "\uD83C\uDF19", "Evening")
+            row("evening",   "\uD83C\uDF19", "Evening"),
+            !coverageOk && /*#__PURE__*/React.createElement("div", {
+              style: {
+                marginTop: 8,
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderLeft: "3px solid #dc2626",
+                borderRadius: 8,
+                padding: "8px 10px",
+                fontSize: 11,
+                color: "#b91c1c",
+                lineHeight: 1.45
+              }
+            },
+              /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, marginBottom: 2 } }, "Hours don't add up to a full day"),
+              /*#__PURE__*/React.createElement("div", null,
+                "Morning + Afternoon + Evening currently cover ",
+                /*#__PURE__*/React.createElement("strong", null, totalHrs + " hr"),
+                " \u2014 should be 24. Adjust the start/end times so the three sections leave no gap and no overlap."
+              )
+            ),
+            coverageOk && /*#__PURE__*/React.createElement("div", {
+              style: { marginTop: 6, fontSize: 10, color: "#15803d", fontWeight: 600 }
+            }, "\u2713 Hours total 24 \u2014 full-day coverage")
           );
         })(),
         // Location & Notifications — scaffolded for Capacitor. The
@@ -19682,7 +20001,7 @@ function App() {
         ))
       );
     })();
-    const panels = { account: accountPanel, scorecard: scorecardPanel, routines: myRoutinesPanel, inspiration: inspirationPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
+    const panels = { account: accountPanel, scorecard: scorecardPanel, inspiration: inspirationPanel, content: myContentPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
     return /*#__PURE__*/React.createElement("div", {
       style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
       onClick: e => { if (e.target === e.currentTarget) setShowProfile(false); }
