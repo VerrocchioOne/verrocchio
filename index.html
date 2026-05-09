@@ -12583,22 +12583,20 @@ function App() {
             })));
         })(), /*#__PURE__*/React.createElement("div", {
           style: {
-            // 1 1 0 (instead of 1 1 auto) starts the column at zero
-            // basis and grows it into the leftover row space. This
-            // matters for text wrap: with `auto` the column would
-            // try to be at least as wide as its content (the title
-            // on one line), and only shrink under pressure — which
-            // can leave it sized to fit "Dream Journal Entry" + "l"
-            // overflowing the card by one pixel and getting clipped
-            // by the row's overflow:hidden. Zero basis pins the
-            // column width purely to "what's left over" so the
-            // title wraps cleanly within whatever fits.
+            // CSS Grid (instead of flex column) is what unblocks
+            // reliable text wrap inside narrow flex containers. A
+            // single-track `minmax(0, 1fr)` track tells the browser
+            // explicitly: this child gets 100% of the leftover row
+            // space AND can shrink to zero. Plain flex columns
+            // sometimes preserve a child's intrinsic min-content
+            // width on iOS Safari, which is what was leaving the
+            // tail of "Dream Journal" hanging past the card edge.
             flex: compact ? "1 0 100%" : "1 1 0",
             minWidth: 0,
             order: compact ? 3 : 0,
-            display: "flex",
-            flexDirection: "column",
-            gap: 4
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr)",
+            rowGap: 4
           }
         },
         // Habit name row. The target chip used to sit here too as a
@@ -12716,7 +12714,21 @@ function App() {
             style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
           }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#1d4ed8"}}, cold));
           return null;
-        })()), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {style:{display:"flex",alignItems:"flex-start",gap:4,marginTop:5,paddingTop:5,borderTop:"1px dashed #e5e7eb",minWidth:0}}, /*#__PURE__*/React.createElement("span",{style:{fontSize:9,color:"#9ca3af",fontWeight:700,flexShrink:0,textTransform:"uppercase",lineHeight:1.4}},"Goal: "), /*#__PURE__*/React.createElement("span",{style:{fontSize:10,fontWeight:600,color:"#2d5a2d",whiteSpace:"normal",wordBreak:"break-word",overflowWrap:"anywhere",lineHeight:1.4,minWidth:0,flex:1}},data.goals.find(g=>String(g.id)===String(habit.goalId))?.text||"")), ht && /*#__PURE__*/React.createElement("div", {
+        })()), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
+          // Stacked layout: 'Goal:' label on its own line, then the
+          // linked goal's name on the line below it. Long goal
+          // titles ('Develop lucid dreaming capability') no longer
+          // share a line with the label so they have the full card
+          // width to wrap into.
+          style: { display: "block", marginTop: 5, paddingTop: 5, borderTop: "1px dashed #e5e7eb", minWidth: 0 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 9, color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", lineHeight: 1.4, marginBottom: 1 }
+          }, "Goal:"),
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 10, fontWeight: 600, color: "#2d5a2d", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.4 }
+          }, data.goals.find(g => String(g.id) === String(habit.goalId))?.text || "")
+        ), ht && /*#__PURE__*/React.createElement("div", {
           style: {
             position: "absolute",
             right: 0,
