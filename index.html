@@ -10995,9 +10995,55 @@ function App() {
         ]
       ));
     }
-    // Habits not completed yesterday \u2014 the "missed" set drives the
-    // optional resistance follow-up that runs after Review Yesterday.
-    const yMissedHabits = activeH.filter(h => !isDone(h, yest));
+    // Habits the user has missed for multiple consecutive due-days
+    // (NOT just yesterday). The resistance flow now surfaces only
+    // these \u2014 habits the user is genuinely avoiding, not one-off
+    // misses. Walking back from yesterday, count days where the
+    // habit was due but not completed; stop when we hit a done
+    // day or cross the habit's startDate. \u2265 2 consecutive misses
+    // qualifies the habit; we then sort by miss count desc and
+    // cap at 5 so the picker stays focused.
+    const missedDueStreak = (h) => {
+      if (!h) return 0;
+      const fq = h.frequency || { type: "daily" };
+      const type = fq.type === "weekly-day" ? "weekly" : (fq.type || "daily");
+      const startKey = h.startDate || null;
+      let s = 0;
+      for (let i = 1; i <= 60; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const k = dk(d);
+        if (startKey && k < startKey) break;
+        let due = true;
+        if (type === "weekdays") {
+          due = Array.isArray(fq.days) && fq.days.includes(d.getDay());
+        } else if (type === "weekly") {
+          due = (typeof fq.day === "number" ? fq.day : 1) === d.getDay();
+        } else if (type === "monthly") {
+          due = (fq.monthDay || 1) === d.getDate();
+        } else if (type === "quarterly") {
+          const m = typeof fq.month === "number" ? fq.month : 0;
+          const md = fq.monthDay || 1;
+          due = ((d.getMonth() - m) % 3 + 3) % 3 === 0 && d.getDate() === md;
+        } else if (type === "annual") {
+          const m = typeof fq.month === "number" ? fq.month : 0;
+          const md = fq.monthDay || 1;
+          due = d.getMonth() === m && d.getDate() === md;
+        }
+        if (!due) continue;
+        const v = h.completions && h.completions[k];
+        const done = v === "done" || v === true;
+        if (done) break;
+        s++;
+      }
+      return s;
+    };
+    const yMissedHabits = activeH
+      .map(h => ({ h, streak: missedDueStreak(h) }))
+      .filter(x => x.streak >= 2)
+      .sort((a, b) => b.streak - a.streak)
+      .slice(0, 5)
+      .map(x => x.h);
     const yMissedIds = yMissedHabits.map(h => h.id);
     const ritResistanceDoneFor = (data.dailyRitual && data.dailyRitual[tk()] && data.dailyRitual[tk()].resistanceCompletedFor) || null;
     const resistanceAlreadyDone = ritResistanceDoneFor === yest;
@@ -11076,9 +11122,12 @@ function App() {
                   /*#__PURE__*/React.createElement("div", {
                     style: { flex: 1, fontSize: 13, color: "var(--c-text)", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere" }
                   }, h.text),
+                  // Missed-streak chip \u2014 how many consecutive due-days
+                  // the user has skipped this habit. Lets the user
+                  // rank by the most-avoided rather than just by name.
                   /*#__PURE__*/React.createElement("div", {
-                    style: { fontSize: 9, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.4, flexShrink: 0 }
-                  }, (SECTIONS.find(s => s.value === h.section) || { label: h.section || "" }).label || "")
+                    style: { fontSize: 9, fontWeight: 700, color: "#b91c1c", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 4, padding: "2px 5px", flexShrink: 0, whiteSpace: "nowrap" }
+                  }, missedDueStreak(h) + "\u00d7 skipped")
                 );
               })),
               /*#__PURE__*/React.createElement("div", {
