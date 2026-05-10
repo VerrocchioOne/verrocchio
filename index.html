@@ -30,8 +30,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <!-- Storage SDK powers cross-device file sync for My Content. Files
-     above ~800 KB don't fit in a Firestore doc (1 MB hard limit), so
-     we upload to Storage and store the download URL in Firestore. -->
+     don't fit in a Firestore doc (1 MB hard limit), so we upload up
+     to 100 MB to Storage and store the download URL in Firestore. -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="utils.js"></script>
 <style>
@@ -1970,10 +1970,11 @@ function dedupeAppender(append) {
     const t = (chunk || "").trim();
     if (!t) return;
     if (lastText && (now - lastAt) < 4000) {
-      if (t === lastText) return;
-      // Strict-suffix: new chunk ends exactly with previous final.
-      // Only dedupe if the previous final is reasonably long (>=12
-      // chars) to avoid eating legitimate short echoes like "yes".
+      // Apply the same length gate to BOTH branches so legitimate
+      // consecutive short utterances ("yes", "yes" or "go", "go")
+      // still pass through. Only suppress repeats of substantial
+      // utterances (>=12 chars) where re-emission is the SDK glitch.
+      if (lastText.length >= 12 && t === lastText) return;
       if (lastText.length >= 12 && t.endsWith(lastText)) return;
     }
     lastText = t;
@@ -4299,20 +4300,42 @@ function App() {
   }, [demoMode, tourStep]);
 
   const [data, setData] = useState(() => loadData());
-  // Returns the first linked-audio item for a given entity (habit /
-  // todo / goal), or null. Powers the "▶ play linked" affordance on
-  // habit and goal rows so the user can tap a habit and have its
-  // attached meditation/breathwork mp3 just play. Audio is the only
-  // kind we surface as auto-play because non-audio doesn't have a
-  // natural "completion" signal.
+  // Pre-indexed linked-content lookups. Without this, every habit/goal
+  // row called `firstLinkedAudioFor` which did a linear scan of
+  // userContent — 50 habits × 50 items = 2,500 ops per render. The
+  // memo collapses that to a single pass per data.userContent change,
+  // so each row gets O(1) access to:
+  //   • all linked items for the entity (used by the compact list UI)
+  //   • the first linked AUDIO item (used by the ▶ play chip)
+  const linkedContentIndex = React.useMemo(() => {
+    const idx = {
+      all:   { habit: {}, todo: {}, goal: {} },
+      audio: { habit: {}, todo: {}, goal: {} }
+    };
+    const arr = (data && data.userContent) || [];
+    for (const c of arr) {
+      if (!c) continue;
+      const isAudio = c.kind === "file" && (c.fileType || "").startsWith("audio/");
+      const buckets = [
+        ["habit", c.linkedHabitIds],
+        ["todo",  c.linkedTodoIds],
+        ["goal",  c.linkedGoalIds]
+      ];
+      for (const [kind, ids] of buckets) {
+        if (!Array.isArray(ids)) continue;
+        for (const rawId of ids) {
+          const k = String(rawId);
+          (idx.all[kind][k] = idx.all[kind][k] || []).push(c);
+          if (isAudio) (idx.audio[kind][k] = idx.audio[kind][k] || []).push(c);
+        }
+      }
+    }
+    return idx;
+  }, [data && data.userContent]);
+  const linkedItemsFor = (kind, id) => (linkedContentIndex.all[kind] || {})[String(id)] || [];
   const firstLinkedAudioFor = (kind, id) => {
-    const arr = data.userContent || [];
-    const key = kind === "habit" ? "linkedHabitIds" : kind === "todo" ? "linkedTodoIds" : "linkedGoalIds";
-    return arr.find(c =>
-      c && c.kind === "file" &&
-      (c.fileType || "").startsWith("audio/") &&
-      (c[key] || []).some(x => String(x) === String(id))
-    ) || null;
+    const arr = (linkedContentIndex.audio[kind] || {})[String(id)];
+    return (arr && arr[0]) || null;
   };
   // Renders the "Linked content" block that surfaces inside an
   // expanded habit / to-do / goal row. Returns null when there's
@@ -4327,47 +4350,129 @@ function App() {
   // My Content). Tapping the small ↗ chip on the header jumps the
   // user to that panel for fast linking.
   const linkedContentForEntity = (kind, id) => {
-    const arr = data.userContent || [];
-    const key = kind === "habit" ? "linkedHabitIds" : kind === "todo" ? "linkedTodoIds" : "linkedGoalIds";
-    const linked = arr.filter(c => (c[key] || []).some(x => String(x) === String(id)));
+    const linked = linkedItemsFor(kind, id);
     if (linked.length === 0) return null;
+    // Per-kind mini icon — uses CSS gradients for visual distinction
+    // without shipping any image asset.
+    const kindStyle = (item) => {
+      if (item.kind === "link") return { bg: "linear-gradient(135deg,#cffafe,#06b6d4)", icon: "🔗" };
+      const ft = (item.fileType || "");
+      if (ft.startsWith("audio/")) return { bg: "linear-gradient(135deg,#7c3aed,#db2777)", icon: "♪" };
+      if (ft.startsWith("image/")) return { bg: "linear-gradient(135deg,#fde68a,#f59e0b)", icon: "🖼" };
+      if (ft.startsWith("video/")) return { bg: "linear-gradient(135deg,#1f2937,#4b5563)", icon: "▶" };
+      if (ft === "application/pdf" || /\.pdf$/i.test(item.fileName || "")) return { bg: "linear-gradient(135deg,#fee2e2,#fca5a5)", icon: "📄" };
+      return { bg: "linear-gradient(135deg,#e5e7eb,#9ca3af)", icon: "📎" };
+    };
+    const kindLabel = (item) => {
+      if (item.kind === "link") return "Link";
+      const ft = (item.fileType || "");
+      if (ft.startsWith("audio/")) return "Audio";
+      if (ft.startsWith("image/")) return "Image";
+      if (ft.startsWith("video/")) return "Video";
+      if (ft === "application/pdf" || /\.pdf$/i.test(item.fileName || "")) return "PDF";
+      return "File";
+    };
+    const openItem = (item) => {
+      const ft = (item.fileType || "");
+      const isPlayable = item.kind === "file" && (ft.startsWith("audio/") || ft.startsWith("video/"));
+      if (isPlayable) {
+        // Playable media → use the floating player (auto-checks the
+        // habit on audio end when kind === "habit").
+        setLinkedMediaPlayer({ kind, entityId: id, item });
+        return;
+      }
+      if (item.kind === "link") {
+        try { window.open(item.url, "_blank", "noopener,noreferrer"); } catch (_) {}
+        return;
+      }
+      // Files (PDF, image, generic) → open in a new tab; the browser
+      // handles inline-vs-download per content type.
+      const src = item.downloadURL || item.fileData;
+      if (src) { try { window.open(src, "_blank", "noopener,noreferrer"); } catch (_) {} }
+    };
     return /*#__PURE__*/React.createElement("div", {
       // Stop BOTH pointerdown and pointerup so taps inside the linked
-      // content (e.g. play on an audio control) don't bubble up to the
+      // content (e.g. tapping a play row) don't bubble up to the
       // habit/todo row's swipe-gesture handlers and accidentally
       // trigger a complete/edit action.
       onPointerDown: e => e.stopPropagation(),
       onPointerUp: e => e.stopPropagation(),
-      style: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed #e5e7eb" }
+      style: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--c-border)" }
     },
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
       },
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }
+          style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4 }
         }, "Linked Content (" + linked.length + ")"),
         /*#__PURE__*/React.createElement("button", {
           onClick: (e) => { e.stopPropagation(); setTab("profile"); setProfileSection("content"); },
           title: "Manage in My Content",
-          style: { fontSize: 10, fontWeight: 600, color: "#6b7280", background: "transparent", border: "1px solid #e5e7eb", borderRadius: 10, padding: "1px 8px", cursor: "pointer" }
+          style: { fontSize: 10, fontWeight: 600, color: "var(--c-text-faint)", background: "transparent", border: "1px solid var(--c-border)", borderRadius: 10, padding: "1px 8px", cursor: "pointer" }
         }, "Manage ↗")
       ),
+      // Spotify-like compact rows: small thumbnail tile + display name
+      // + kind tag. Click anywhere on the row to open / play. No inline
+      // <audio> / <img> here — keeps the row height predictable so a
+      // habit with 5 linked files doesn't push the whole page around.
       /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", flexDirection: "column", gap: 8 }
-      }, linked.map(item =>
-        /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexDirection: "column", gap: 4 }
+      }, linked.map(item => {
+        const k = kindStyle(item);
+        const displayName = item.title || item.fileName || (item.kind === "link" ? "Link" : "Untitled");
+        return /*#__PURE__*/React.createElement("button", {
           key: item.id,
-          style: { background: "#fff", border: "1px solid #f3f4f6", borderRadius: 8, padding: 8 }
+          type: "button",
+          onClick: (e) => { e.stopPropagation(); openItem(item); },
+          "aria-label": "Open linked " + kindLabel(item).toLowerCase() + ": " + displayName,
+          title: displayName,
+          style: {
+            display: "flex", alignItems: "center", gap: 8,
+            width: "100%", padding: 6,
+            background: "var(--c-surface-raised)",
+            border: "1px solid var(--c-border)", borderRadius: 8,
+            cursor: "pointer", textAlign: "left",
+            WebkitTapHighlightColor: "transparent"
+          }
         },
           /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 11, fontWeight: 600, color: "var(--c-text)", marginBottom: 6, wordBreak: "break-word" }
-          }, item.title || item.fileName || "Untitled"),
-          renderLinkedUserContent(item, { compact: true })
-        )
-      ))
+            style: {
+              flexShrink: 0, width: 28, height: 28, borderRadius: 6,
+              background: k.bg,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontSize: 14, lineHeight: 1
+            }
+          }, k.icon),
+          /*#__PURE__*/React.createElement("div", {
+            style: { flex: 1, minWidth: 0 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }
+            }, displayName),
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 9, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 700 }
+            }, kindLabel(item))
+          ),
+          /*#__PURE__*/React.createElement("div", {
+            "aria-hidden": true,
+            style: { fontSize: 14, color: "var(--c-text-faint)", flexShrink: 0, paddingRight: 4 }
+          }, "›")
+        );
+      }))
     );
   };
   const [tab, setTab] = useState("brief");
+  // Dismiss the floating linked-media player when the user navigates
+  // tabs — otherwise a habit's audio would keep playing while the user
+  // is on Reflect / Goals / etc., and onEnded would auto-complete a
+  // habit the user is no longer looking at.
+  useEffect(() => {
+    if (linkedMediaPlayer) {
+      if (linkedMediaTimerRef.current) { clearTimeout(linkedMediaTimerRef.current); linkedMediaTimerRef.current = null; }
+      setLinkedMediaPlayer(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
   const [saved, setSaved] = useState(false);
   // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
@@ -4546,11 +4651,21 @@ function App() {
   });
   const updateMyContentTypeFilter = v => {
     setMyContentTypeFilter(v);
+    // Clear the selection too — otherwise switching to "Audio" while a
+    // link is selected leaves the detail panel rendering an item that
+    // isn't visible in the grid below it. Same applies to search.
+    setMyContentExpanded(null);
     try { localStorage.setItem("v-mycontent-type", v); } catch (e) {}
   };
   // Search query (live, no debounce — list is small enough). Not
-  // persisted; clears on tab switch / session end intentionally.
-  const [myContentSearch, setMyContentSearch] = useState("");
+  // persisted; clears on tab switch / session end intentionally. Also
+  // clears the expanded selection so the detail panel never points at
+  // an item the user can no longer see in the filtered grid.
+  const [myContentSearch, setMyContentSearchRaw] = useState("");
+  const setMyContentSearch = v => {
+    setMyContentSearchRaw(v);
+    if (myContentExpanded != null) setMyContentExpanded(null);
+  };
   // Which card is expanded inline for editing/linking. null = all
   // collapsed (grid view); item.id = expand that card's edit panel
   // below it. Reuses the existing edit affordances rather than
@@ -4561,6 +4676,10 @@ function App() {
   // For habit context, onEnded auto-completes the habit. Shape:
   //   { kind: "habit"|"goal", entityId: <id>, item: <userContent> }
   const [linkedMediaPlayer, setLinkedMediaPlayer] = useState(null);
+  // Holds the auto-close setTimeout handle so manual close can cancel
+  // it — otherwise a user-dismiss inside the 800 ms window leaves a
+  // pending setLinkedMediaPlayer(null) that fires after unmount.
+  const linkedMediaTimerRef = useRef(null);
   // Voice-capture modal state. Opened from the header mic; lets the
   // user dictate freely and then pick which collection (goals,
   // habits, to-dos, journal) the transcript should land in.
@@ -6708,14 +6827,15 @@ function App() {
     goals: l
   });
   const completeGoal = (goalId, nextTxt, nextType) => {
-    const g = data.goals.find(x => x.id === goalId);
+    const cur = latestData.current || data;
+    const g = (cur.goals || []).find(x => String(x.id) === String(goalId));
     if (!g) return;
-    const newArchive = [...(data.goalArchive || []), {
+    const newArchive = [...(cur.goalArchive || []), {
       ...g,
       archivedAt: new Date().toISOString(),
       completedDate: selDate
     }];
-    const newGoals = data.goals.filter(x => x.id !== goalId);
+    const newGoals = (cur.goals || []).filter(x => String(x.id) !== String(goalId));
     let newGoalObj = null;
     if (nextTxt && nextTxt.trim()) {
       newGoalObj = {
@@ -6730,6 +6850,10 @@ function App() {
           relevant: "",
           timebound: ""
         },
+        // history: [] keeps the shape symmetric with every other goal
+        // creation path so consumers that read `g.history.length`
+        // without an `|| []` guard don't trip on follow-up goals.
+        history: [],
         parentGoalId: goalId,
         icon: null
       };
@@ -6744,10 +6868,10 @@ function App() {
       dateKey: tk()
     };
     save({
-      ...data,
+      ...cur,
       goals: newGoals,
       goalArchive: newArchive,
-      journal: [...(data.journal || []), je]
+      journal: [...(cur.journal || []), je]
     });
     setCompleteGoalModal(null);
     setNextGoalTxt("");
@@ -20227,48 +20351,60 @@ function App() {
           // Render the full edit/preview panel for the currently-selected
           // item. Reused identically by the inline detail panel above
           // the grid. Returns null if nothing is selected.
-          const detailPanel = (() => {
-            if (myContentExpanded == null) return null;
-            const item = (data.userContent || []).find(c => c.id === myContentExpanded);
+          // Pull the detail-panel out of the IIFE so we don't pay the
+          // closure + array-find cost on every render when nothing is
+          // selected (this fires on every search keystroke / chip
+          // toggle otherwise).
+          const detailPanel = myContentExpanded == null ? null : (() => {
+            const item = (data.userContent || []).find(c => String(c.id) === String(myContentExpanded));
             if (!item) return null;
             const kind = kindOf(item);
             const src = item.downloadURL || item.fileData;
             const linkedHabitNames = (item.linkedHabitIds || []).map(id => (data.habits || []).find(h => String(h.id) === String(id))).filter(Boolean);
             const linkedTodoNames = (item.linkedTodoIds || []).map(id => (data.todos || []).find(t => String(t.id) === String(id))).filter(Boolean);
             const linkedGoalNames = (item.linkedGoalIds || []).map(id => (data.goals || []).find(g => String(g.id) === String(id))).filter(Boolean);
+            // Read the freshest data snapshot on every mutation so a
+            // concurrent save (habit toggle, sync echo) doesn't get
+            // clobbered by spreading a stale closure-captured `data`.
+            // Same pattern togHabit / upload completion use.
             const updateItem = (patch) => {
+              const cur = latestData.current || data;
               save({
-                ...data,
-                userContent: (data.userContent || []).map(c => c.id === item.id ? { ...c, ...patch } : c)
+                ...cur,
+                userContent: (cur.userContent || []).map(c => String(c.id) === String(item.id) ? { ...c, ...patch } : c)
               });
             };
             const toggleLink = (k, id) => {
               const key = k === "habit" ? "linkedHabitIds" : k === "todo" ? "linkedTodoIds" : "linkedGoalIds";
               const cur = item[key] || [];
               const has = cur.some(x => String(x) === String(id));
-              updateItem({ [key]: has ? cur.filter(x => String(x) !== String(id)) : [...cur, id] });
+              // Normalize ids to strings on insert so the array doesn't
+              // accumulate heterogeneous types from select / chip paths.
+              updateItem({ [key]: has ? cur.filter(x => String(x) !== String(id)) : [...cur, String(id)] });
             };
             const removeItem = () => {
               if (!confirm("Remove '" + (item.title || item.fileName || "this item") + "' from My Content?")) return;
               if (item.storagePath) {
                 try { storage.ref(item.storagePath).delete().catch(err => { try { console.warn("[verrocchio mycontent delete] storage delete failed:", err && err.code); } catch (_) {} }); } catch (_) {}
               }
-              save({ ...data, userContent: (data.userContent || []).filter(c => c.id !== item.id) });
+              const cur = latestData.current || data;
+              save({ ...cur, userContent: (cur.userContent || []).filter(c => String(c.id) !== String(item.id)) });
               setMyContentExpanded(null);
             };
             return /*#__PURE__*/React.createElement("div", {
-              style: { background: "#fff", border: "1px solid #2d5a2d", borderRadius: 12, padding: 14, marginBottom: 14, boxShadow: "0 4px 16px rgba(45,90,45,.12)" }
+              style: { background: "var(--c-surface)", border: "1px solid var(--c-tint-brand-fg)", borderRadius: 12, padding: 14, marginBottom: 14, boxShadow: "0 4px 16px rgba(45,90,45,.12)" }
             },
               /*#__PURE__*/React.createElement("div", {
-                style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }
+                style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }
               },
                 /*#__PURE__*/React.createElement("span", {
-                  style: { fontSize: 9, fontWeight: 700, color: "#2d5a2d", background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 4, padding: "2px 6px", textTransform: "uppercase", letterSpacing: 0.4 }
+                  style: { fontSize: 9, fontWeight: 700, color: "var(--c-tint-brand-fg)", background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 4, padding: "2px 6px", textTransform: "uppercase", letterSpacing: 0.4 }
                 }, kind),
                 /*#__PURE__*/React.createElement("input", {
                   type: "text",
-                  "aria-label": "Title",
+                  "aria-label": "Display name (used everywhere this file is linked)",
                   value: item.title || "",
+                  placeholder: "Display name…",
                   onChange: e => updateItem({ title: e.target.value.slice(0, 80) }),
                   style: { flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 14, fontWeight: 700, color: "var(--c-text)" }
                 }),
@@ -20276,15 +20412,20 @@ function App() {
                   "aria-label": "Remove",
                   onClick: removeItem,
                   title: "Remove",
-                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 10px", color: "#b91c1c", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 10px", color: "var(--c-tint-danger-fg)", fontSize: 12, fontWeight: 700, cursor: "pointer" }
                 }, "Delete"),
                 /*#__PURE__*/React.createElement("button", {
                   "aria-label": "Close",
                   onClick: () => setMyContentExpanded(null),
                   title: "Close",
-                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 10px", color: "#6b7280", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 10px", color: "var(--c-text-faint)", fontSize: 12, fontWeight: 700, cursor: "pointer" }
                 }, "Close")
               ),
+              // Display-name hint — explicit so users know editing this
+              // changes how the file appears wherever it's linked.
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 10, color: "var(--c-text-faint)", marginBottom: 10, lineHeight: 1.5 }
+              }, "This is the display name shown wherever the file is linked. Originally: " + (item.fileName || (item.kind === "link" ? "(link)" : "(file)"))),
               // Preview block
               kind === "audio" && src && /*#__PURE__*/React.createElement("div", {
                 style: { marginBottom: 10 }
@@ -22156,27 +22297,34 @@ function App() {
   linkedMediaPlayer && (() => {
     const { kind, entityId, item } = linkedMediaPlayer;
     if (!item) return null;
-    const close = () => setLinkedMediaPlayer(null);
+    const close = () => {
+      if (linkedMediaTimerRef.current) { clearTimeout(linkedMediaTimerRef.current); linkedMediaTimerRef.current = null; }
+      setLinkedMediaPlayer(null);
+    };
     const ft = (item.fileType || "");
     const isAudio = ft.startsWith("audio/");
     const isVideo = ft.startsWith("video/");
     const src = item.downloadURL || item.fileData;
     const onEnded = () => {
-      // Habit auto-complete on audio finish. togHabit defaults to
-      // toggling — passing the today key + no mode mirrors a normal
-      // tap on the habit's checkbox. If already done, this is a no-op
-      // because togHabit toggles, but we guard with isDone first to
-      // avoid accidentally un-checking a habit the user already did.
+      // Habit auto-complete on audio finish. Only fires when the day's
+      // entry is "none" — if the user already marked it done OR
+      // explicitly missed it during playback, we do nothing rather
+      // than reset their deliberate decision.
       if (kind === "habit" && isAudio) {
         const cur = latestData.current || data;
-        const habit = (cur.habits || []).find(h => h.id === entityId);
-        if (habit && !isDone(habit, tk())) {
+        const habit = (cur.habits || []).find(h => String(h.id) === String(entityId));
+        const today = tk();
+        const v = habit && habit.completions && habit.completions[today];
+        const alreadyDecided = v === true || v === "done" || v === "missed";
+        if (habit && !alreadyDecided) {
           togHabit(entityId);
         }
       }
       // Auto-close after a short pause so the user sees the
-      // completion settle before the overlay disappears.
-      setTimeout(close, 800);
+      // completion settle before the overlay disappears. Tracked in a
+      // ref so manual close can clear it (avoids a duplicate state
+      // update + the React unmount-during-pending-state warning).
+      linkedMediaTimerRef.current = setTimeout(close, 800);
     };
     return /*#__PURE__*/React.createElement("div", {
       role: "dialog",
@@ -22315,16 +22463,19 @@ function App() {
     // Destination handlers — each takes the captured transcript and
     // commits it into the right collection using the same shape the
     // app's own creation flows use.
+    // All voice destinations spread `latestData.current` so a habit
+    // toggle / sync echo that landed during dictation isn't clobbered.
     const saveAsHabit = () => {
       if (!hasText) return;
       stopListening();
       const newId = Date.now();
-      const sectionMax = (data.habits || [])
+      const cur = latestData.current || data;
+      const sectionMax = (cur.habits || [])
         .filter(h => (h.section || "morning") === "morning")
         .reduce((m, h) => Math.max(m, (h._order ?? -1)), -1);
       save({
-        ...data,
-        habits: [...(data.habits || []), {
+        ...cur,
+        habits: [...(cur.habits || []), {
           id: newId,
           text: finalText,
           section: "morning",
@@ -22346,9 +22497,10 @@ function App() {
     const saveAsGoal = () => {
       if (!hasText) return;
       stopListening();
+      const cur = latestData.current || data;
       save({
-        ...data,
-        goals: [...(data.goals || []), {
+        ...cur,
+        goals: [...(cur.goals || []), {
           id: Date.now(),
           text: finalText,
           type: null,
@@ -22363,9 +22515,10 @@ function App() {
     const saveAsTodo = () => {
       if (!hasText) return;
       stopListening();
+      const cur = latestData.current || data;
       save({
-        ...data,
-        todos: [...(data.todos || []), {
+        ...cur,
+        todos: [...(cur.todos || []), {
           id: Date.now(),
           text: finalText,
           dueDate: null,
@@ -22378,9 +22531,10 @@ function App() {
     const saveAsJournal = () => {
       if (!hasText) return;
       stopListening();
+      const cur = latestData.current || data;
       save({
-        ...data,
-        journal: [...(data.journal || []), {
+        ...cur,
+        journal: [...(cur.journal || []), {
           id: Date.now(),
           text: finalText,
           mood: "",
