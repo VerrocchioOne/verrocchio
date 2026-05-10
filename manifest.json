@@ -1,13 +1,19 @@
 {
+  "id": "/verrocchio",
   "name": "Verrocchio",
   "short_name": "Verrocchio",
   "description": "Habits, goals, and daily reflection.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f8f7f4",
   "theme_color": "#2d5a2d",
+  "categories": ["lifestyle", "productivity", "health"],
   "icons": [
-    { "src": "apple-touch-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" }
+    { "src": "apple-touch-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "apple-touch-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
   ]
 }
