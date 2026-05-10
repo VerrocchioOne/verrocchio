@@ -85,6 +85,15 @@
   --c-tint-teal-bg:#f0fdfa;
   --c-tint-teal-border:#5eead4;
   --c-tint-teal-fg:#0d9488;
+  --c-tint-orange-bg:#fff7ed;
+  --c-tint-orange-border:#fed7aa;
+  --c-tint-orange-fg:#ea580c;
+  --c-tint-slate-bg:#f1f5f9;
+  --c-tint-slate-border:#cbd5e1;
+  --c-tint-slate-fg:#64748b;
+  --c-tint-yellow-bg:#fefce8;
+  --c-tint-yellow-border:#fde047;
+  --c-tint-yellow-fg:#ca8a04;
 }
 html{height:100%;-webkit-text-size-adjust:100%}
 /* iOS-26 chrome stack: SF Pro Text on Apple platforms, Segoe UI Variable
@@ -146,6 +155,15 @@ body.dark{
   --c-tint-teal-bg:#0f2626;
   --c-tint-teal-border:#2a3d3a;
   --c-tint-teal-fg:#5eead4;
+  --c-tint-orange-bg:#2a1a0d;
+  --c-tint-orange-border:#4d2e10;
+  --c-tint-orange-fg:#fdba74;
+  --c-tint-slate-bg:#1a1d22;
+  --c-tint-slate-border:#2a2e35;
+  --c-tint-slate-fg:#cbd5e1;
+  --c-tint-yellow-bg:#2a260d;
+  --c-tint-yellow-border:#4d4310;
+  --c-tint-yellow-fg:#fde047;
   --c-tint-green:var(--c-tint-success-bg);
 }
 /* ── neutral surface → dark card ── */
@@ -787,55 +805,55 @@ const SK = "verrocchio-v1"; // localStorage fallback key
 /* ── CONSTANTS ── */
 const IMP = [{
   value: "Non-Negotiable",
-  color: "#dc2626",
-  bg: "#fef2f2",
-  border: "#fecaca"
+  color: "var(--c-tint-danger-fg)",
+  bg: "var(--c-tint-danger-bg)",
+  border: "var(--c-tint-danger-border)"
 }, {
   value: "Important",
-  color: "#d97706",
-  bg: "#fffbeb",
-  border: "#fde68a"
+  color: "var(--c-tint-warn-fg)",
+  bg: "var(--c-tint-warn-bg)",
+  border: "var(--c-tint-warn-border)"
 }, {
   value: "Additive",
-  color: "#6b7280",
+  color: "var(--c-text-faint)",
   bg: "var(--c-surface-raised)",
   border: "var(--c-border)"
 }];
 const HT = [{
   value: "Physical",
-  color: "#16a34a",
-  bg: "#f0fdf4",
-  border: "#bbf7d0"
+  color: "var(--c-tint-success-fg)",
+  bg: "var(--c-tint-success-bg)",
+  border: "var(--c-tint-success-border)"
 }, {
   value: "Mental",
-  color: "#0891b2",
-  bg: "#f0f9ff",
-  border: "#bae6fd"
+  color: "var(--c-tint-travel-fg)",
+  bg: "var(--c-tint-travel-bg)",
+  border: "var(--c-tint-travel-border)"
 }, {
   value: "Career",
-  color: "#1d4ed8",
-  bg: "#eff6ff",
-  border: "#bfdbfe"
+  color: "var(--c-tint-info-fg)",
+  bg: "var(--c-tint-info-bg)",
+  border: "var(--c-tint-info-border)"
 }, {
   value: "Spiritual",
-  color: "#7c3aed",
-  bg: "#f5f3ff",
-  border: "#ddd6fe"
+  color: "var(--c-tint-purple-fg)",
+  bg: "var(--c-tint-purple-bg)",
+  border: "var(--c-tint-purple-border)"
 }, {
   value: "Social",
-  color: "#db2777",
-  bg: "#fdf4ff",
-  border: "#f0abfc"
+  color: "var(--c-tint-pink-fg)",
+  bg: "var(--c-tint-pink-bg)",
+  border: "var(--c-tint-pink-border)"
 }, {
   value: "Wealth",
-  color: "#d97706",
-  bg: "#fffbeb",
-  border: "#fde68a"
+  color: "var(--c-tint-warn-fg)",
+  bg: "var(--c-tint-warn-bg)",
+  border: "var(--c-tint-warn-border)"
 }, {
   value: "Creative",
-  color: "#0d9488",
-  bg: "#f0fdfa",
-  border: "#99f6e4"
+  color: "var(--c-tint-teal-fg)",
+  bg: "var(--c-tint-teal-bg)",
+  border: "var(--c-tint-teal-border)"
 }];
 // Default hour boundaries (24h) for each time-of-day block. Can be
 // overridden per-user via `data.timeRanges`. Evening wraps through
@@ -871,23 +889,23 @@ const SECTIONS = [{
   value: "morning",
   label: "Morning",
   icon: "🌅",
-  color: "#d97706",
-  bg: "#fffbeb",
-  border: "#fde68a"
+  color: "var(--c-tint-warn-fg)",
+  bg: "var(--c-tint-warn-bg)",
+  border: "var(--c-tint-warn-border)"
 }, {
   value: "afternoon",
   label: "Afternoon",
   icon: "☀️",
-  color: "#ea580c",
-  bg: "#fff7ed",
-  border: "#fed7aa"
+  color: "var(--c-tint-orange-fg)",
+  bg: "var(--c-tint-orange-bg)",
+  border: "var(--c-tint-orange-border)"
 }, {
   value: "evening",
   label: "Evening",
   icon: "🌙",
-  color: "#7c3aed",
-  bg: "#f5f3ff",
-  border: "#ddd6fe"
+  color: "var(--c-tint-purple-fg)",
+  bg: "var(--c-tint-purple-bg)",
+  border: "var(--c-tint-purple-border)"
 }, {
   // "Daily Completion" — habits that aren't tied to a specific time
   // of day (water intake, posture checks, anything ambient). Sits
@@ -896,16 +914,16 @@ const SECTIONS = [{
   value: "all-day",
   label: "Daily Completion",
   icon: "🔁",
-  color: "#0d9488",
-  bg: "#f0fdfa",
-  border: "#99f6e4"
+  color: "var(--c-tint-teal-fg)",
+  bg: "var(--c-tint-teal-bg)",
+  border: "var(--c-tint-teal-border)"
 }, {
   value: "avoid",
   label: "Avoid",
   icon: "🚫",
-  color: "#dc2626",
-  bg: "#fef2f2",
-  border: "#fecaca"
+  color: "var(--c-tint-danger-fg)",
+  bg: "var(--c-tint-danger-bg)",
+  border: "var(--c-tint-danger-border)"
 }];
 /* ── Brand glyphs ─────────────────────────────────────────────────
    Replaces stock emoji icons in achievements + smart-tips with small
@@ -958,11 +976,11 @@ function Glyph(token, opts) {
    automatically. Ordered: within each category, easier tiers come
    first so the UI can render them left-to-right as a ladder. */
 const ACHIEVEMENT_TIERS = {
-  Bronze:   { color: "#a16207", bg: "#fef3c7", border: "#fde68a" },
-  Silver:   { color: "#64748b", bg: "#f1f5f9", border: "#cbd5e1" },
-  Gold:     { color: "#ca8a04", bg: "#fefce8", border: "#fde047" },
-  Platinum: { color: "#0891b2", bg: "#ecfeff", border: "#a5f3fc" },
-  Diamond:  { color: "#7c3aed", bg: "#f5f3ff", border: "#c4b5fd" }
+  Bronze:   { color: "var(--c-tint-warn-fg)",   bg: "var(--c-tint-warn-bg)",   border: "var(--c-tint-warn-border)" },
+  Silver:   { color: "var(--c-tint-slate-fg)",  bg: "var(--c-tint-slate-bg)",  border: "var(--c-tint-slate-border)" },
+  Gold:     { color: "var(--c-tint-yellow-fg)", bg: "var(--c-tint-yellow-bg)", border: "var(--c-tint-yellow-border)" },
+  Platinum: { color: "var(--c-tint-travel-fg)", bg: "var(--c-tint-travel-bg)", border: "var(--c-tint-travel-border)" },
+  Diamond:  { color: "var(--c-tint-purple-fg)", bg: "var(--c-tint-purple-bg)", border: "var(--c-tint-purple-border)" }
 };
 const ACHIEVEMENTS = [
   // DEDICATION — days you opened the app. Icon ladder tracks the time
