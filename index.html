@@ -19817,13 +19817,13 @@ function App() {
           onChange: (e) => {
             const file = e.target.files && e.target.files[0];
             if (!file) return;
-            // 10 MB cap — matches storage.rules. Defense in depth: rules
+            // 100 MB cap — matches storage.rules. Defense in depth: rules
             // reject larger writes too, but checking here gives an
             // immediate, friendly error instead of a Firebase exception
             // halfway through a long upload.
-            const MAX = 10 * 1024 * 1024;
+            const MAX = 100 * 1024 * 1024;
             if (file.size > MAX) {
-              alert("File is " + Math.round(file.size / 1024 / 1024) + " MB — that's larger than the 10 MB limit. Pick a smaller file or paste a URL instead.");
+              alert("File is " + Math.round(file.size / 1024 / 1024) + " MB — that's larger than the 100 MB limit. Pick a smaller file or paste a URL instead.");
               e.target.value = "";
               return;
             }
@@ -19912,7 +19912,7 @@ function App() {
         ),
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }
-        }, "Up to 10 MB per file. Files sync across all your devices — sign in on a laptop or tablet to upload there too.")
+        }, "Up to 100 MB per file. Files sync across all your devices — sign in on a laptop or tablet to upload there too.")
       ),
       // List of saved items — preceded by a sort toolbar.
       ((data.userContent || []).length === 0)
