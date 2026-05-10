@@ -761,7 +761,7 @@ const AI_BACKEND_URL = null;
 // App version — shown in the Profile footer. Bump on every deploy.
 // Keep it semver-ish so the user can tell at a glance if the version
 // they're on matches the one support is asking about.
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.2.0";
 // Support / feedback address — shown as a mailto: link in Profile.
 // Replace with your real support alias when you have one; gmail
 // placeholder is OK for dev but will route to nowhere in production.
@@ -4400,15 +4400,17 @@ function App() {
       style: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--c-border)" }
     },
       /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
+        style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }
       },
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4 }
+          style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4 }
         }, "Linked Content (" + linked.length + ")"),
         /*#__PURE__*/React.createElement("button", {
           onClick: (e) => { e.stopPropagation(); setTab("profile"); setProfileSection("content"); },
           title: "Manage in My Content",
-          style: { fontSize: 10, fontWeight: 600, color: "var(--c-text-faint)", background: "transparent", border: "1px solid var(--c-border)", borderRadius: 10, padding: "1px 8px", cursor: "pointer" }
+          // 12px text + 6px vertical padding clears the 24x24 minimum
+          // tap target (WCAG 2.5.8) — was a ~14px-tall pill before.
+          style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-faint)", background: "transparent", border: "1px solid var(--c-border)", borderRadius: 10, padding: "6px 10px", cursor: "pointer" }
         }, "Manage ↗")
       ),
       // Spotify-like compact rows: small thumbnail tile + display name
@@ -4450,7 +4452,7 @@ function App() {
               style: { fontSize: 12, fontWeight: 600, color: "var(--c-text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.3 }
             }, displayName),
             /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 9, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 700 }
+              style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 700 }
             }, kindLabel(item))
           ),
           /*#__PURE__*/React.createElement("div", {
@@ -4671,6 +4673,12 @@ function App() {
   // below it. Reuses the existing edit affordances rather than
   // pushing them into a separate modal.
   const [myContentExpanded, setMyContentExpanded] = useState(null);
+  // Link-to sub-menu pick — one of habit / goal / todo / general,
+  // or null when the picker is closed. Resets to null whenever the
+  // expanded card changes (the menu belongs to the open detail panel,
+  // not to the My Content tab as a whole).
+  const [linkPickerKind, setLinkPickerKind] = useState(null);
+  useEffect(() => { setLinkPickerKind(null); }, [myContentExpanded]);
   // Floating linked-media player. Triggered from the play chip on a
   // habit/goal row; renders a modal-ish overlay with BgAudio (or video).
   // For habit context, onEnded auto-completes the habit. Shape:
@@ -8352,6 +8360,10 @@ function App() {
   };
   const allQuotes = useMemo(() => {
     const custom = data.quotes || [];
+    // Owner-only seeded quotes. Non-owner accounts start with an
+    // empty inspiration panel so the experience is theirs to curate
+    // — they can add their own custom quotes from the panel itself.
+    if (!canUploadFiles(authUser && authUser.email)) return custom;
     const presetWithIds = PRESET_QUOTES.map((q, i) => ({
       ...q,
       id: `pq${i}`,
@@ -8359,7 +8371,7 @@ function App() {
       dateKey: null
     }));
     return [...presetWithIds, ...custom];
-  }, [data.quotes]);
+  }, [data.quotes, authUser && authUser.email]);
   const todayQ = () => {
     const qs = allQuotes;
     if (!qs.length) return null;
@@ -14032,10 +14044,13 @@ function App() {
               onPointerDown: (e) => e.stopPropagation(),
               style: {
                 marginRight: 6, display: "inline-flex", alignItems: "center", justifyContent: "center",
-                width: 18, height: 18, borderRadius: "50%",
+                // 24x24 to clear WCAG 2.5.8 Target Size (Minimum). The
+                // play glyph stays visually balanced because the circle
+                // grows proportionally with the chip.
+                width: 24, height: 24, borderRadius: "50%",
                 background: "#2d5a2d", color: "#fff",
                 border: "none", cursor: "pointer",
-                fontSize: 9, lineHeight: 1, paddingLeft: 2,
+                fontSize: 12, lineHeight: 1, paddingLeft: 2,
                 verticalAlign: "middle", flexShrink: 0
               }
             }, "▶");
@@ -14063,14 +14078,20 @@ function App() {
               ))
             : (habit.text || "")
         ),
-        habit.notes && /*#__PURE__*/React.createElement("div", {
+        habit.notes && !compact && /*#__PURE__*/React.createElement("div", {
           style: {
-            fontSize: 11,
-            color: "#6b7280",
+            fontSize: 12,
+            color: "var(--c-text-soft)",
             fontStyle: "italic",
-            whiteSpace: "nowrap",
+            // Two-line clamp so user-authored notes (a recipe like
+            // "Sit-ups · Planks · Leg raises") aren't truncated to the
+            // first ~25 chars. Hidden in compact mode where the column
+            // is too narrow for prose anyway.
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
             overflow: "hidden",
-            textOverflow: "ellipsis"
+            lineHeight: 1.4
           }
         }, habit.notes), expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
           style: {
@@ -14100,7 +14121,7 @@ function App() {
           }
         }, /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 8,
+            fontSize: 11,
             fontWeight: 700,
             color: "#0891b2",
             whiteSpace: "nowrap"
@@ -14120,7 +14141,7 @@ function App() {
           }
         }, /*#__PURE__*/React.createElement("span", {
           style: {
-            fontSize: 8,
+            fontSize: 11,
             fontWeight: 700,
             color: imp.color,
             textTransform: "uppercase",
@@ -14131,17 +14152,17 @@ function App() {
         // count). Just the cadence bucket name, uppercase.
         (() => { const fqRow = FREQ.find(f => f.value === getFreq(habit).type); return fqRow ? /*#__PURE__*/React.createElement("div", {
           style: {height: 16, paddingLeft: 5, paddingRight: 5, background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
-        }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#475569", textTransform: "uppercase", whiteSpace: "nowrap"}}, fqRow.label)) : null; })(),
+        }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", whiteSpace: "nowrap"}}, fqRow.label)) : null; })(),
         // Fire/ice streak indicator: 🔥N for an active streak, 🧊N
         // for days since the habit went cold; nothing for brand-new.
         (() => {
           if (streak > 0) return /*#__PURE__*/React.createElement("div", {
             style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
-          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83D\uDD25"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#c2410c"}}, streak));
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83D\uDD25"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, fontWeight: 700, color: "#c2410c"}}, streak));
           const cold = daysSinceLast(habit);
           if (cold != null) return /*#__PURE__*/React.createElement("div", {
             style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
-          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 8, fontWeight: 700, color: "#1d4ed8"}}, cold));
+          }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, fontWeight: 700, color: "#1d4ed8"}}, cold));
           return null;
         })()), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
           // Stacked layout: 'Goal:' label on its own line, then the
@@ -14152,10 +14173,10 @@ function App() {
           style: { display: "block", marginTop: 5, paddingTop: 5, borderTop: "1px dashed #e5e7eb", minWidth: 0 }
         },
           /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 9, color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", lineHeight: 1.4, marginBottom: 1 }
+            style: { fontSize: 11, color: "var(--c-text-faint)", fontWeight: 700, textTransform: "uppercase", lineHeight: 1.4, marginBottom: 2 }
           }, "Goal:"),
           /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 10, fontWeight: 600, color: "#2d5a2d", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.4 }
+            style: { fontSize: 12, fontWeight: 600, color: "#2d5a2d", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.4 }
           }, data.goals.find(g => String(g.id) === String(habit.goalId))?.text || "")
         ),
         // Linked content surfaced when the habit row is expanded. As
@@ -14179,6 +14200,11 @@ function App() {
             borderBottomRightRadius: 8
           }
         }, /*#__PURE__*/React.createElement("span", {
+          // 7px rotated text fails contrast at most ht.color values
+          // and is illegible on any phone. Hide from screen readers
+          // (the parent stripe carries the area-of-life via title);
+          // sighted users still get the color band as the cue.
+          "aria-hidden": true,
           style: {
             fontSize: 7,
             fontWeight: 700,
@@ -16689,10 +16715,11 @@ function App() {
           onPointerDown: (e) => e.stopPropagation(),
           style: {
             marginRight: 6, display: "inline-flex", alignItems: "center", justifyContent: "center",
-            width: 18, height: 18, borderRadius: "50%",
+            // 24x24 to clear WCAG 2.5.8 Target Size (Minimum).
+            width: 24, height: 24, borderRadius: "50%",
             background: "#7c3aed", color: "#fff",
             border: "none", cursor: "pointer",
-            fontSize: 9, lineHeight: 1, paddingLeft: 2,
+            fontSize: 12, lineHeight: 1, paddingLeft: 2,
             verticalAlign: "middle", flexShrink: 0
           }
         }, "▶");
@@ -19628,6 +19655,16 @@ function App() {
             statCell(bestStreakEver, "Best streak"),
             statCell(archived.length, "Completed"),
             statCell(daysActive, "Days active")
+          ),
+          // Library row added v0.2.0 — surfaces user's My Content
+          // collection size alongside core counters so the user can see
+          // their library grow as they upload audio / link goals to PDFs.
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, paddingTop: 10, marginTop: 10, borderTop: "1px solid #c6dfc6" }
+          },
+            statCell((data.userContent || []).length, "Content"),
+            statCell((data.todos || []).length, "To-dos"),
+            statCell((data.journal || []).length, "Journal")
           )
         );
       })(),
@@ -19636,55 +19673,11 @@ function App() {
       // standard Firebase reset-email flow, and the in-app duplicate made
       // Profile busier without adding anything that isn't already
       // available before sign-in.
-      // ── Sync recovery ──
-      // Two manual recovery actions for the rare case where a user's
-      // local data and their Firestore doc have drifted apart (a
-      // device that's been offline for weeks, a write that silently
-      // failed mid-save, etc.). Both bypass the normal debounced save
-      // path and write/read straight against Firestore so a broken
-      // save can't swallow the operation.
-      authUser ? /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
-        /*#__PURE__*/React.createElement("div", { style: labelS }, "Sync"),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "Push this device's data up, or pull what's in the cloud down. Only use these if your devices are showing different data."),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
-          /*#__PURE__*/React.createElement("button", {
-            type: "button",
-            onClick: async () => {
-              if (!auth.currentUser) return;
-              try {
-                const cur = latestData.current || data;
-                if (!cur) return;
-                await userDoc(auth.currentUser.uid).set({ ...cur, _updatedAt: Date.now() });
-                setAcctFeedback({ kind: "ok", msg: "Pushed to cloud." });
-              } catch (e) {
-                setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
-              }
-            },
-            style: { flex: 1, minHeight: 44, padding: "11px 12px", borderRadius: 10, border: "1px solid #2d5a2d", background: "var(--c-tint-success-bg)", color: "#2d5a2d", fontSize: 12, fontWeight: 700, cursor: "pointer" }
-          }, "Push to cloud"),
-          /*#__PURE__*/React.createElement("button", {
-            type: "button",
-            onClick: async () => {
-              if (!auth.currentUser) return;
-              try {
-                const snap = await userDoc(auth.currentUser.uid).get();
-                if (!snap.exists) {
-                  setAcctFeedback({ kind: "err", msg: "No cloud data yet." });
-                  return;
-                }
-                const remote = hydrateCloudDoc(snap.data());
-                setData(remote);
-                latestData.current = remote;
-                try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
-                setAcctFeedback({ kind: "ok", msg: "Pulled from cloud." });
-              } catch (e) {
-                setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
-              }
-            },
-            style: { flex: 1, minHeight: 44, padding: "11px 12px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 12, fontWeight: 700, cursor: "pointer" }
-          }, "Pull from cloud")
-        )
-      ) : null,
+      // Manual sync (Push/Pull to cloud) removed per product decision —
+      // the normal save() path already writes through to Firestore on
+      // every change, and the manual buttons were both rarely needed
+      // and easy to misuse (a Pull on a stale tab could silently
+      // overwrite local edits).
       // ── Summary export ──
       /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Export summary"),
@@ -19749,7 +19742,7 @@ function App() {
       ),
       // ── About / support ──
       /*#__PURE__*/React.createElement("div", {
-        style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)", fontSize: 11, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }
+        style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)", fontSize: 11, color: "var(--c-text-faint)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }
       },
         /*#__PURE__*/React.createElement("span", null, "Verrocchio v", APP_VERSION),
         /*#__PURE__*/React.createElement("a", {
@@ -19757,6 +19750,25 @@ function App() {
           rel: "noopener",
           style: { color: "#2d5a2d", textDecoration: "none", fontWeight: 600 }
         }, "Send feedback →")
+      ),
+      // ── Sign out (always at the very bottom of My Account) ──
+      // Plain text, no glyph or emoji per product decision. Demo mode
+      // exits via doSignOut's branch; real users hit Firebase signOut.
+      /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 18 }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => { setShowProfile(false); doSignOut(); },
+          style: {
+            width: "100%", minHeight: 44,
+            padding: "12px 14px", borderRadius: 10,
+            border: "1px solid var(--c-tint-danger-border)",
+            background: "var(--c-tint-danger-bg)",
+            color: "var(--c-tint-danger-fg)",
+            fontSize: 13, fontWeight: 700, cursor: "pointer"
+          }
+        }, demoMode ? "Exit demo" : "Sign out")
       )
     );
     const qKeyP = (x) => (x.text || "") + "|" + (x.author || "");
@@ -20479,37 +20491,91 @@ function App() {
                         style: { fontSize: 10, fontWeight: 600, color: "#7c3aed", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 12, padding: "2px 8px", cursor: "pointer" }
                       }, "🎯 " + g.text + " ×"))
                     ),
-                /*#__PURE__*/React.createElement("div", {
-                  style: { display: "flex", gap: 6, flexWrap: "wrap" }
-                },
-                  /*#__PURE__*/React.createElement("select", {
-                    "aria-label": "Link a habit",
+                // Single "Link to" entry → sub-menu with four targets.
+                // "General" tags the file as a non-specific resource
+                // (no entity link) so it still surfaces in My Content
+                // but isn't pinned to any habit/goal/todo.
+                (() => {
+                  const segBtn = (val, label) => {
+                    const active = linkPickerKind === val;
+                    return /*#__PURE__*/React.createElement("button", {
+                      key: val,
+                      type: "button",
+                      onClick: () => setLinkPickerKind(active ? null : val),
+                      style: {
+                        flex: 1, minHeight: 36,
+                        padding: "8px 10px", borderRadius: 8,
+                        border: "1px solid " + (active ? "var(--c-tint-brand-fg)" : "var(--c-border)"),
+                        background: active ? "var(--c-tint-success-bg)" : "var(--c-surface-raised)",
+                        color: active ? "var(--c-tint-brand-fg)" : "var(--c-text-soft)",
+                        fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        WebkitTapHighlightColor: "transparent"
+                      }
+                    }, label);
+                  };
+                  const isGeneral = !!item.isGeneral;
+                  const pickerSelect = (kind, list, key) => /*#__PURE__*/React.createElement("select", {
+                    "aria-label": "Link a " + kind,
                     value: "",
-                    onChange: e => { if (e.target.value) toggleLink("habit", Number(e.target.value) || e.target.value); },
-                    style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
+                    onChange: e => {
+                      const v = e.target.value;
+                      if (!v) return;
+                      toggleLink(kind, Number(v) || v);
+                    },
+                    style: { ...inputS, width: "100%", marginTop: 8, minHeight: 40, fontSize: 13, padding: "8px 10px" }
                   },
-                    /*#__PURE__*/React.createElement("option", { value: "" }, "Link a habit…"),
-                    (data.habits || []).filter(h => !(item.linkedHabitIds || []).some(id => String(id) === String(h.id))).map(h => /*#__PURE__*/React.createElement("option", { key: h.id, value: h.id }, h.text.slice(0, 36)))
-                  ),
-                  /*#__PURE__*/React.createElement("select", {
-                    "aria-label": "Link a to-do",
-                    value: "",
-                    onChange: e => { if (e.target.value) toggleLink("todo", Number(e.target.value) || e.target.value); },
-                    style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
-                  },
-                    /*#__PURE__*/React.createElement("option", { value: "" }, "Link a to-do…"),
-                    (data.todos || []).filter(t => !(item.linkedTodoIds || []).some(id => String(id) === String(t.id))).map(t => /*#__PURE__*/React.createElement("option", { key: t.id, value: t.id }, (t.text || "").slice(0, 36)))
-                  ),
-                  /*#__PURE__*/React.createElement("select", {
-                    "aria-label": "Link a goal",
-                    value: "",
-                    onChange: e => { if (e.target.value) toggleLink("goal", Number(e.target.value) || e.target.value); },
-                    style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
-                  },
-                    /*#__PURE__*/React.createElement("option", { value: "" }, "Link a goal…"),
-                    (data.goals || []).filter(g => !(item.linkedGoalIds || []).some(id => String(id) === String(g.id))).map(g => /*#__PURE__*/React.createElement("option", { key: g.id, value: g.id }, (g.text || "").slice(0, 36)))
-                  )
-                )
+                    /*#__PURE__*/React.createElement("option", { value: "" }, "Pick a " + kind + " to link…"),
+                    list.filter(x => !(item[key] || []).some(id => String(id) === String(x.id)))
+                      .map(x => /*#__PURE__*/React.createElement("option", { key: x.id, value: x.id }, ((x.text || x.title || "") + "").slice(0, 48)))
+                  );
+                  return /*#__PURE__*/React.createElement("div", null,
+                    /*#__PURE__*/React.createElement("button", {
+                      type: "button",
+                      onClick: () => setLinkPickerKind(linkPickerKind ? null : "habit"),
+                      style: {
+                        width: "100%", minHeight: 40,
+                        padding: "10px 12px", borderRadius: 10,
+                        border: "1px solid var(--c-border)",
+                        background: "var(--c-surface-raised)",
+                        color: "var(--c-text)", fontSize: 13, fontWeight: 700,
+                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between"
+                      }
+                    }, "Link to…", /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 12, color: "var(--c-text-faint)" } }, linkPickerKind ? "▴" : "▾")),
+                    linkPickerKind && /*#__PURE__*/React.createElement("div", {
+                      style: { marginTop: 8, padding: 10, background: "var(--c-surface-muted)", borderRadius: 10 }
+                    },
+                      /*#__PURE__*/React.createElement("div", {
+                        style: { display: "flex", gap: 6, marginBottom: 8 }
+                      },
+                        segBtn("habit",   "Habits"),
+                        segBtn("goal",    "Goals"),
+                        segBtn("todo",    "To-dos"),
+                        segBtn("general", "General")
+                      ),
+                      linkPickerKind === "habit"   && pickerSelect("habit", data.habits || [], "linkedHabitIds"),
+                      linkPickerKind === "goal"    && pickerSelect("goal",  data.goals  || [], "linkedGoalIds"),
+                      linkPickerKind === "todo"    && pickerSelect("todo",  data.todos  || [], "linkedTodoIds"),
+                      linkPickerKind === "general" && /*#__PURE__*/React.createElement("div", {
+                        style: { padding: "10px 4px" }
+                      },
+                        /*#__PURE__*/React.createElement("label", {
+                          style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--c-text-soft)", cursor: "pointer" }
+                        },
+                          /*#__PURE__*/React.createElement("input", {
+                            type: "checkbox",
+                            checked: isGeneral,
+                            onChange: e => updateItem({ isGeneral: !!e.target.checked }),
+                            style: { width: 18, height: 18, cursor: "pointer" }
+                          }),
+                          "Mark as general (not specific to a habit, goal, or to-do)"
+                        ),
+                        /*#__PURE__*/React.createElement("div", {
+                          style: { fontSize: 11, color: "var(--c-text-faint)", marginTop: 6, lineHeight: 1.5 }
+                        }, "General items stay in My Content but won't surface inside any specific habit/goal/to-do panel.")
+                      )
+                    )
+                  );
+                })()
               )
             );
           })();
@@ -21451,14 +21517,10 @@ function App() {
         profileNavOpen && /*#__PURE__*/React.createElement("div", {
           style: { width: 150, flexShrink: 0, background: "var(--c-surface-raised)", borderRight: "1px solid #f3f4f6", padding: "12px 8px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }
         },
-          NAV_ITEMS.map(n => navBtn(n, profileSection === n.val)),
-          /*#__PURE__*/React.createElement("div", { style: { flex: 1, minHeight: 12 } }),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => { setShowProfile(false); doSignOut(); },
-            style: { display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 12px", borderRadius: 8, background: "transparent", color: "#b91c1c", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, textAlign: "left", marginTop: 4 }
-          },
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 14 } }, "\u21AA"),
-            /*#__PURE__*/React.createElement("span", null, "Sign Out"))),
+          NAV_ITEMS.map(n => navBtn(n, profileSection === n.val))
+          // Sign-out removed from the side nav; lives at the bottom of
+          // the My Account panel now per product decision.
+        ),
         /*#__PURE__*/React.createElement("div", {
           style: { flex: 1, minWidth: 0, padding: "16px 20px 24px", overflowY: "auto" }
         }, panels[profileSection] || panels.account))
