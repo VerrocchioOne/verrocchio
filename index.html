@@ -1921,17 +1921,29 @@ function startSpeechSession({ onChunk, onError, onEnd, lang } = {}) {
   const rec = new SpeechRec();
   rec.continuous = true;
   rec.interimResults = true;
+  // maxAlternatives is widely supported; defaulting to 1 keeps the
+  // result list shallow and the chosen alternative deterministic.
+  try { rec.maxAlternatives = 1; } catch (e) {}
   rec.lang = lang || (typeof navigator !== "undefined" && navigator.language) || "en-US";
+  // Track which final-result indices we've already emitted in this
+  // session. iOS Safari occasionally re-fires the same final result
+  // twice when the recognizer auto-pauses on a brief silence — that
+  // led to the same sentence being appended twice in the transcript.
+  // Indexing by result.resultIndex makes dedupe cheap and exact.
+  const emittedFinals = new Set();
   rec.onresult = (e) => {
     let interim = "";
-    let final = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const r = e.results[i];
       const txt = (r[0] && r[0].transcript) || "";
-      if (r.isFinal) final += txt;
-      else interim += txt;
+      if (r.isFinal) {
+        if (emittedFinals.has(i)) continue;
+        emittedFinals.add(i);
+        if (txt && onChunk) onChunk({ text: txt.trim(), isFinal: true });
+      } else {
+        interim += txt;
+      }
     }
-    if (final && onChunk) onChunk({ text: final.trim(), isFinal: true });
     if (interim && onChunk) onChunk({ text: interim.trim(), isFinal: false });
   };
   rec.onerror = (e) => { if (onError) onError(e && e.error ? e.error : "speech_error"); };
@@ -1941,6 +1953,32 @@ function startSpeechSession({ onChunk, onError, onEnd, lang } = {}) {
   return {
     stop: () => { try { rec.stop(); } catch (e) { /* already stopped */ } },
     abort: () => { try { rec.abort(); } catch (e) {} }
+  };
+}
+// Caller-side dedupe for chunks that survive across recognizer
+// relaunches. When the browser auto-stops a session and we restart it
+// (e.g. iOS Safari capping at ~5 min), the new session has its own
+// resultIndex space — the in-session Set above can't see across
+// sessions. Compare a chunk against the most-recent appended final and
+// drop exact-duplicate / strict-suffix matches that arrive within a
+// short window. Conservative: only suppresses true repeats.
+function dedupeAppender(append) {
+  let lastText = "";
+  let lastAt = 0;
+  return (chunk) => {
+    const now = Date.now();
+    const t = (chunk || "").trim();
+    if (!t) return;
+    if (lastText && (now - lastAt) < 4000) {
+      if (t === lastText) return;
+      // Strict-suffix: new chunk ends exactly with previous final.
+      // Only dedupe if the previous final is reasonably long (>=12
+      // chars) to avoid eating legitimate short echoes like "yes".
+      if (lastText.length >= 12 && t.endsWith(lastText)) return;
+    }
+    lastText = t;
+    lastAt = now;
+    append(t);
   };
 }
 
@@ -1971,11 +2009,19 @@ function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
     if (sessionRef.current) return;
     activeRef.current = true;
     startedAtRef.current = Date.now();
+    // Cross-session dedupe wrapper. iOS Safari sometimes re-fires the
+    // last final from session N at the start of session N+1 after a
+    // silence-triggered relaunch — the wrapper drops exact duplicates
+    // and strict suffix repeats so the user's transcript doesn't
+    // contain "I went to the store. I went to the store."
+    const dedupedAppend = dedupeAppender(text => {
+      if (onTranscript) onTranscript(text);
+    });
     const launch = () => {
       sessionRef.current = startSpeechSession({
         onChunk: ({ text, isFinal }) => {
           if (!text) return;
-          if (isFinal) { if (onTranscript) onTranscript(text); }
+          if (isFinal) { dedupedAppend(text); }
           else { if (onInterim) onInterim(text); }
         },
         onError: (err) => {
@@ -1985,7 +2031,11 @@ function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
           // active. Other errors give up.
           if (activeRef.current && (err === "no-speech" || err === "aborted") && (Date.now() - startedAtRef.current) < MAX_MS) {
             sessionRef.current = null;
-            setTimeout(() => { if (activeRef.current) launch(); }, 250);
+            // 600 ms gives the user time to take a breath without the
+            // recognizer popping back on mid-pause. Long enough that
+            // the next utterance gets captured as a fresh result;
+            // short enough that real continuation isn't dropped.
+            setTimeout(() => { if (activeRef.current) launch(); }, 600);
           } else {
             stop();
           }
@@ -1994,11 +2044,12 @@ function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
           // Browsers cap a single recognition session (Chrome ~60s,
           // Safari ~5 min). When it auto-stops, restart it as long
           // as the user is still in active mode and we're under
-          // the 6-min hard cap. This is what unlocks the 5-min
-          // dictation the user asked for.
+          // the 30-min hard cap. 300 ms gap is enough for the SDK
+          // to fully tear down the previous session before the next
+          // one starts (avoids spurious "already started" errors).
           sessionRef.current = null;
           if (activeRef.current && (Date.now() - startedAtRef.current) < MAX_MS) {
-            setTimeout(() => { if (activeRef.current) launch(); }, 100);
+            setTimeout(() => { if (activeRef.current) launch(); }, 300);
           } else {
             activeRef.current = false;
             setActive(false);
@@ -4248,6 +4299,21 @@ function App() {
   }, [demoMode, tourStep]);
 
   const [data, setData] = useState(() => loadData());
+  // Returns the first linked-audio item for a given entity (habit /
+  // todo / goal), or null. Powers the "▶ play linked" affordance on
+  // habit and goal rows so the user can tap a habit and have its
+  // attached meditation/breathwork mp3 just play. Audio is the only
+  // kind we surface as auto-play because non-audio doesn't have a
+  // natural "completion" signal.
+  const firstLinkedAudioFor = (kind, id) => {
+    const arr = data.userContent || [];
+    const key = kind === "habit" ? "linkedHabitIds" : kind === "todo" ? "linkedTodoIds" : "linkedGoalIds";
+    return arr.find(c =>
+      c && c.kind === "file" &&
+      (c.fileType || "").startsWith("audio/") &&
+      (c[key] || []).some(x => String(x) === String(id))
+    ) || null;
+  };
   // Renders the "Linked content" block that surfaces inside an
   // expanded habit / to-do / goal row. Returns null when there's
   // nothing linked, so callers can drop it in unconditionally:
@@ -4471,6 +4537,30 @@ function App() {
     setMyContentSort(v);
     try { localStorage.setItem("v-mycontent-sort", v); } catch (e) {}
   };
+  // My Content type-filter chip. "all" shows everything; otherwise
+  // restricts to a single kind. Persisted alongside the sort pref so the
+  // user's view is sticky across sessions.
+  const [myContentTypeFilter, setMyContentTypeFilter] = useState(() => {
+    try { return localStorage.getItem("v-mycontent-type") || "all"; }
+    catch (e) { return "all"; }
+  });
+  const updateMyContentTypeFilter = v => {
+    setMyContentTypeFilter(v);
+    try { localStorage.setItem("v-mycontent-type", v); } catch (e) {}
+  };
+  // Search query (live, no debounce — list is small enough). Not
+  // persisted; clears on tab switch / session end intentionally.
+  const [myContentSearch, setMyContentSearch] = useState("");
+  // Which card is expanded inline for editing/linking. null = all
+  // collapsed (grid view); item.id = expand that card's edit panel
+  // below it. Reuses the existing edit affordances rather than
+  // pushing them into a separate modal.
+  const [myContentExpanded, setMyContentExpanded] = useState(null);
+  // Floating linked-media player. Triggered from the play chip on a
+  // habit/goal row; renders a modal-ish overlay with BgAudio (or video).
+  // For habit context, onEnded auto-completes the habit. Shape:
+  //   { kind: "habit"|"goal", entityId: <id>, item: <userContent> }
+  const [linkedMediaPlayer, setLinkedMediaPlayer] = useState(null);
   // Voice-capture modal state. Opened from the header mic; lets the
   // user dictate freely and then pick which collection (goals,
   // habits, to-dos, journal) the transcript should land in.
@@ -13799,6 +13889,33 @@ function App() {
             title: "Incomplete — double-tap to fill in area, section, or frequency.",
             style: { marginRight: 4, display: "inline-flex", alignItems: "center", verticalAlign: "middle" }
           }, Glyph("🚨", { size: 12, color: "#b91c1c" })),
+          // Linked-audio play chip. If the habit has at least one
+          // linked audio in My Content, surface a tiny ▶ button right
+          // next to the habit name. Tapping opens the floating player
+          // overlay; when audio finishes, the player auto-completes
+          // the habit (e.g. "Breathwork" habit → linked breathwork mp3
+          // → tap ▶ → audio plays → habit checks itself off).
+          // stopPropagation so this doesn't also fire the row's tap-
+          // to-complete / double-tap-to-edit handlers.
+          (() => {
+            const audio = firstLinkedAudioFor("habit", habit.id);
+            if (!audio) return null;
+            return /*#__PURE__*/React.createElement("button", {
+              type: "button",
+              "aria-label": "Play linked audio (auto-completes habit when done)",
+              title: "Play " + (audio.title || audio.fileName || "linked audio"),
+              onClick: (e) => { e.stopPropagation(); setLinkedMediaPlayer({ kind: "habit", entityId: habit.id, item: audio }); },
+              onPointerDown: (e) => e.stopPropagation(),
+              style: {
+                marginRight: 6, display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 18, height: 18, borderRadius: "50%",
+                background: "#2d5a2d", color: "#fff",
+                border: "none", cursor: "pointer",
+                fontSize: 9, lineHeight: 1, paddingLeft: 2,
+                verticalAlign: "middle", flexShrink: 0
+              }
+            }, "▶");
+          })(),
           // Compact: every word becomes its own flex-item span. Flex
           // wrap will move a word to the next line when it doesn't
           // fit — independent of any white-space / min-content /
@@ -16433,7 +16550,30 @@ function App() {
       }, isGoalIncomplete(goal) && /*#__PURE__*/React.createElement("span", {
         title: "Incomplete — open the goal to fill in area, SMART details, or target date.",
         style: { marginRight: 4, display: "inline-flex", alignItems: "center", verticalAlign: "middle" }
-      }, Glyph("🚨", { size: 12, color: "#b91c1c" })), goal.text)),
+      }, Glyph("🚨", { size: 12, color: "#b91c1c" })),
+      // Linked-audio play chip (goal flavor — no auto-action on end).
+      // Same affordance as habits but goals don't have a "complete"
+      // toggle, so onEnded just leaves the player open for replay.
+      (() => {
+        const audio = firstLinkedAudioFor("goal", goal.id);
+        if (!audio) return null;
+        return /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          "aria-label": "Play linked audio",
+          title: "Play " + (audio.title || audio.fileName || "linked audio"),
+          onClick: (e) => { e.stopPropagation(); setLinkedMediaPlayer({ kind: "goal", entityId: goal.id, item: audio }); },
+          onPointerDown: (e) => e.stopPropagation(),
+          style: {
+            marginRight: 6, display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 18, height: 18, borderRadius: "50%",
+            background: "#7c3aed", color: "#fff",
+            border: "none", cursor: "pointer",
+            fontSize: 9, lineHeight: 1, paddingLeft: 2,
+            verticalAlign: "middle", flexShrink: 0
+          }
+        }, "▶");
+      })(),
+      goal.text)),
       // Days-to-deadline chip. Top line is the prominent "# Days"
       // count (the most useful at-a-glance number); bottom line is
       // the target date formatted as M/D/YY in a smaller, italic,
@@ -19914,187 +20054,263 @@ function App() {
           style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }
         }, "Up to 100 MB per file. Files sync across all your devices — sign in on a laptop or tablet to upload there too.")
       ),
-      // List of saved items — preceded by a sort toolbar.
+      // ── Spotify-like library ──
+      // Empty state if there's literally nothing yet, otherwise a search
+      // + type-chip toolbar + grid of thumbnail cards. Selecting a card
+      // reveals a full edit/preview panel ABOVE the grid (so the grid
+      // layout stays uniform and the user sees both selection context
+      // and library at once).
       ((data.userContent || []).length === 0)
         ? /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "24px 0" }
+            style: { fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "32px 0" }
           }, "Nothing saved yet — add a link or a file above.")
-        : /*#__PURE__*/React.createElement(React.Fragment, null,
-          // Sort toolbar — small select + label. Stays above the list,
-          // never overflows. Persists choice to localStorage.
-          /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, marginBottom: 8 }
-          },
-            /*#__PURE__*/React.createElement("label", {
-              htmlFor: "mycontent-sort-select",
-              style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }
-            }, "Sort"),
-            /*#__PURE__*/React.createElement("select", {
-              id: "mycontent-sort-select",
-              "aria-label": "Sort My Content",
-              value: myContentSort,
-              onChange: e => updateMyContentSort(e.target.value),
-              style: { fontSize: 12, padding: "4px 8px", borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", cursor: "pointer" }
-            },
-              /*#__PURE__*/React.createElement("option", { value: "recent" }, "Most recent"),
-              /*#__PURE__*/React.createElement("option", { value: "title" }, "Title (A–Z)"),
-              /*#__PURE__*/React.createElement("option", { value: "type" }, "File type"),
-              /*#__PURE__*/React.createElement("option", { value: "goal" }, "Linked goal"),
-              /*#__PURE__*/React.createElement("option", { value: "habit" }, "Linked habit")
-            )
-          ),
-        /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", flexDirection: "column", gap: 10 }
-          }, (() => {
-            // Build the sorted list once per render. Each mode produces
-            // a stable order so React keys (item.id) stay correct on
-            // re-renders. Goal/habit modes flatten linked groups in
-            // alphabetical group order with the "unlinked" bucket at
-            // the bottom; this matches how the user thinks about
-            // navigating a content library by relationship.
-            const all = (data.userContent || []).slice();
-            const titleOf = it => (it.title || it.fileName || "").toLowerCase();
-            const kindRank = it => {
-              const ft = (it.fileType || "");
-              if (it.kind === "link") return "1-link";
-              if (ft.startsWith("audio/")) return "2-audio";
-              if (ft.startsWith("image/")) return "3-image";
-              if (ft.startsWith("video/")) return "4-video";
-              return "5-file";
-            };
-            const groupByEntity = (entityKey, dataKey) => {
-              // Map entity-id → name for stable group ordering.
-              const items = (data[dataKey] || []);
-              const nameById = new Map(items.map(x => [String(x.id), (x.text || x.title || "").toLowerCase()]));
-              const grouped = [];
-              const seen = new Set();
-              // Sort entities by name; for each, list its linked content
-              // newest-first. Then append unlinked at the bottom.
-              const sortedEntityIds = items
-                .slice()
-                .sort((a, b) => (nameById.get(String(a.id)) || "").localeCompare(nameById.get(String(b.id)) || ""))
-                .map(x => String(x.id));
-              for (const eid of sortedEntityIds) {
-                const matches = all
-                  .filter(c => (c[entityKey] || []).some(x => String(x) === eid) && !seen.has(c.id))
-                  .sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
-                for (const m of matches) { grouped.push(m); seen.add(m.id); }
-              }
-              const unlinked = all
-                .filter(c => !(c[entityKey] || []).length && !seen.has(c.id))
+        : (() => {
+          // Classify each item for the type-chip filter.
+          const kindOf = it => {
+            if (!it) return "other";
+            if (it.kind === "link") return "link";
+            const ft = (it.fileType || "");
+            if (ft.startsWith("audio/")) return "audio";
+            if (ft.startsWith("image/")) return "image";
+            if (ft.startsWith("video/")) return "video";
+            if (ft === "application/pdf" || /\.pdf$/i.test(it.fileName || "")) return "pdf";
+            return "file";
+          };
+          const titleOf = it => (it.title || it.fileName || "").toLowerCase();
+          const all = (data.userContent || []).slice();
+          // Apply type filter first, then text search.
+          const typeFiltered = myContentTypeFilter === "all"
+            ? all
+            : all.filter(c => kindOf(c) === myContentTypeFilter);
+          const q = (myContentSearch || "").trim().toLowerCase();
+          const searched = q
+            ? typeFiltered.filter(c =>
+                titleOf(c).includes(q) ||
+                (c.url || "").toLowerCase().includes(q) ||
+                (c.fileName || "").toLowerCase().includes(q))
+            : typeFiltered;
+          // Sort. Same modes as before, applied AFTER filter+search so
+          // counts on the type chips reflect the unfiltered library.
+          const kindRank = it => {
+            const k = kindOf(it);
+            if (k === "link")  return "1-link";
+            if (k === "audio") return "2-audio";
+            if (k === "image") return "3-image";
+            if (k === "video") return "4-video";
+            if (k === "pdf")   return "5-pdf";
+            return "6-file";
+          };
+          const groupByEntity = (entityKey, dataKey) => {
+            const items = (data[dataKey] || []);
+            const nameById = new Map(items.map(x => [String(x.id), (x.text || x.title || "").toLowerCase()]));
+            const grouped = [];
+            const seen = new Set();
+            const sortedEntityIds = items
+              .slice()
+              .sort((a, b) => (nameById.get(String(a.id)) || "").localeCompare(nameById.get(String(b.id)) || ""))
+              .map(x => String(x.id));
+            for (const eid of sortedEntityIds) {
+              const matches = searched
+                .filter(c => (c[entityKey] || []).some(x => String(x) === eid) && !seen.has(c.id))
                 .sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
-              return grouped.concat(unlinked);
-            };
-            let sorted;
-            if (myContentSort === "title") {
-              sorted = all.sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
-            } else if (myContentSort === "type") {
-              sorted = all.sort((a, b) => {
-                const r = kindRank(a).localeCompare(kindRank(b));
-                return r !== 0 ? r : titleOf(a).localeCompare(titleOf(b));
-              });
-            } else if (myContentSort === "goal") {
-              sorted = groupByEntity("linkedGoalIds", "goals");
-            } else if (myContentSort === "habit") {
-              sorted = groupByEntity("linkedHabitIds", "habits");
-            } else {
-              sorted = all.sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
+              for (const m of matches) { grouped.push(m); seen.add(m.id); }
             }
-            return sorted.map(item => {
+            const unlinked = searched
+              .filter(c => !(c[entityKey] || []).length && !seen.has(c.id))
+              .sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
+            return grouped.concat(unlinked);
+          };
+          let sorted;
+          if (myContentSort === "title") {
+            sorted = searched.slice().sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
+          } else if (myContentSort === "type") {
+            sorted = searched.slice().sort((a, b) => {
+              const r = kindRank(a).localeCompare(kindRank(b));
+              return r !== 0 ? r : titleOf(a).localeCompare(titleOf(b));
+            });
+          } else if (myContentSort === "goal") {
+            sorted = groupByEntity("linkedGoalIds", "goals");
+          } else if (myContentSort === "habit") {
+            sorted = groupByEntity("linkedHabitIds", "habits");
+          } else {
+            sorted = searched.slice().sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
+          }
+          // Type-chip definitions. Counts come from the UNFILTERED list
+          // so the user can always see "there are 3 audios" even when
+          // the current chip is "Image".
+          const allKinds = all.map(kindOf);
+          const countOf = k => allKinds.filter(x => x === k).length;
+          const typeChips = [
+            { val: "all",   label: "All",   count: all.length },
+            { val: "audio", label: "Audio", count: countOf("audio") },
+            { val: "image", label: "Image", count: countOf("image") },
+            { val: "video", label: "Video", count: countOf("video") },
+            { val: "pdf",   label: "PDF",   count: countOf("pdf") },
+            { val: "file",  label: "File",  count: countOf("file") },
+            { val: "link",  label: "Link",  count: countOf("link") }
+          ].filter(c => c.val === "all" || c.count > 0);
+          // Thumbnail builder. Each kind gets a distinct visual so the
+          // grid scans like a library — image/video show actual content,
+          // audio/pdf/link/file get tinted icon tiles in their semantic
+          // color so a glance tells you what's there.
+          const thumbStyle = (extra) => Object.assign({
+            position: "relative",
+            width: "100%",
+            aspectRatio: "1 / 1",
+            borderRadius: 10,
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--c-surface-muted)"
+          }, extra || {});
+          const iconBadge = (emoji) => /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 36, opacity: 0.92, filter: "drop-shadow(0 1px 2px rgba(0,0,0,.15))" }
+          }, emoji);
+          const cardThumbnail = (item) => {
+            const kind = kindOf(item);
+            const src = item.downloadURL || item.fileData || "";
+            if (kind === "image" && src) {
+              return /*#__PURE__*/React.createElement("div", {
+                style: thumbStyle({ backgroundImage: "url(" + src + ")", backgroundSize: "cover", backgroundPosition: "center" })
+              });
+            }
+            if (kind === "video" && src) {
+              // <video> autoplay+muted on first frame gives a "moving
+              // poster" feel; if autoplay is blocked it stays on frame 0
+              // which still looks like a thumbnail.
+              return /*#__PURE__*/React.createElement("div", { style: thumbStyle({ background: "#000" }) },
+                /*#__PURE__*/React.createElement("video", {
+                  src, muted: true, playsInline: true, preload: "metadata",
+                  style: { width: "100%", height: "100%", objectFit: "cover" }
+                }),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.18)" }
+                }, /*#__PURE__*/React.createElement("div", {
+                  style: { width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,.92)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#111", paddingLeft: 3 }
+                }, "▶"))
+              );
+            }
+            if (kind === "audio") {
+              // Simulated waveform — five tinted bars in a soft-purple
+              // gradient. Pure CSS, zero asset cost.
+              return /*#__PURE__*/React.createElement("div", {
+                style: thumbStyle({ background: "linear-gradient(135deg,#7c3aed,#db2777)" })
+              },
+                /*#__PURE__*/React.createElement("div", {
+                  style: { display: "flex", alignItems: "center", gap: 4, height: "44%" }
+                },
+                  [38, 72, 56, 88, 50].map((h, i) => /*#__PURE__*/React.createElement("div", {
+                    key: i,
+                    style: { width: 5, height: h + "%", background: "rgba(255,255,255,.92)", borderRadius: 3 }
+                  }))
+                ),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { position: "absolute", bottom: 8, right: 10, fontSize: 16, color: "rgba(255,255,255,.92)" }
+                }, "♪")
+              );
+            }
+            if (kind === "pdf") {
+              return /*#__PURE__*/React.createElement("div", {
+                style: thumbStyle({ background: "linear-gradient(160deg,#fee2e2,#fca5a5)" })
+              }, iconBadge("📄"));
+            }
+            if (kind === "link") {
+              return /*#__PURE__*/React.createElement("div", {
+                style: thumbStyle({ background: "linear-gradient(160deg,#cffafe,#06b6d4)" })
+              }, iconBadge("🔗"));
+            }
+            return /*#__PURE__*/React.createElement("div", {
+              style: thumbStyle({ background: "linear-gradient(160deg,#e5e7eb,#9ca3af)" })
+            }, iconBadge("📎"));
+          };
+          // Render the full edit/preview panel for the currently-selected
+          // item. Reused identically by the inline detail panel above
+          // the grid. Returns null if nothing is selected.
+          const detailPanel = (() => {
+            if (myContentExpanded == null) return null;
+            const item = (data.userContent || []).find(c => c.id === myContentExpanded);
+            if (!item) return null;
+            const kind = kindOf(item);
+            const src = item.downloadURL || item.fileData;
             const linkedHabitNames = (item.linkedHabitIds || []).map(id => (data.habits || []).find(h => String(h.id) === String(id))).filter(Boolean);
             const linkedTodoNames = (item.linkedTodoIds || []).map(id => (data.todos || []).find(t => String(t.id) === String(id))).filter(Boolean);
             const linkedGoalNames = (item.linkedGoalIds || []).map(id => (data.goals || []).find(g => String(g.id) === String(id))).filter(Boolean);
-            const isAudio = item.kind === "file" && (item.fileType || "").startsWith("audio/");
-            const isImage = item.kind === "file" && (item.fileType || "").startsWith("image/");
-            const isVideo = item.kind === "file" && (item.fileType || "").startsWith("video/");
             const updateItem = (patch) => {
               save({
                 ...data,
                 userContent: (data.userContent || []).map(c => c.id === item.id ? { ...c, ...patch } : c)
               });
             };
-            const toggleLink = (kind, id) => {
-              const key = kind === "habit" ? "linkedHabitIds" : kind === "todo" ? "linkedTodoIds" : "linkedGoalIds";
+            const toggleLink = (k, id) => {
+              const key = k === "habit" ? "linkedHabitIds" : k === "todo" ? "linkedTodoIds" : "linkedGoalIds";
               const cur = item[key] || [];
               const has = cur.some(x => String(x) === String(id));
               updateItem({ [key]: has ? cur.filter(x => String(x) !== String(id)) : [...cur, id] });
             };
             const removeItem = () => {
-              if (!confirm("Remove '" + item.title + "' from My Content?")) return;
-              // Best-effort Storage cleanup so deleted files don't keep
-              // burning quota. Local removal happens regardless — if the
-              // Storage delete 404s (already gone) or 403s (rules echo
-              // a sign-in race), the user's view is still consistent.
+              if (!confirm("Remove '" + (item.title || item.fileName || "this item") + "' from My Content?")) return;
               if (item.storagePath) {
-                try {
-                  storage.ref(item.storagePath).delete().catch(err => {
-                    try { console.warn("[verrocchio mycontent delete] storage delete failed:", err && err.code); } catch (_) {}
-                  });
-                } catch (_) {}
+                try { storage.ref(item.storagePath).delete().catch(err => { try { console.warn("[verrocchio mycontent delete] storage delete failed:", err && err.code); } catch (_) {} }); } catch (_) {}
               }
-              save({
-                ...data,
-                userContent: (data.userContent || []).filter(c => c.id !== item.id)
-              });
+              save({ ...data, userContent: (data.userContent || []).filter(c => c.id !== item.id) });
+              setMyContentExpanded(null);
             };
             return /*#__PURE__*/React.createElement("div", {
-              key: item.id,
-              style: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", boxShadow: "0 1px 2px rgba(0,0,0,.04)" }
+              style: { background: "#fff", border: "1px solid #2d5a2d", borderRadius: 12, padding: 14, marginBottom: 14, boxShadow: "0 4px 16px rgba(45,90,45,.12)" }
             },
               /*#__PURE__*/React.createElement("div", {
-                style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }
+                style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }
               },
                 /*#__PURE__*/React.createElement("span", {
-                  style: { fontSize: 9, fontWeight: 700, color: item.kind === "link" ? "#0891b2" : "#7c3aed", background: item.kind === "link" ? "#f0f9ff" : "#f5f3ff", border: "1px solid " + (item.kind === "link" ? "#bae6fd" : "#ddd6fe"), borderRadius: 4, padding: "2px 6px", textTransform: "uppercase", letterSpacing: 0.4 }
-                }, item.kind === "link" ? "Link" : (isAudio ? "Audio" : isImage ? "Image" : isVideo ? "Video" : "File")),
+                  style: { fontSize: 9, fontWeight: 700, color: "#2d5a2d", background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 4, padding: "2px 6px", textTransform: "uppercase", letterSpacing: 0.4 }
+                }, kind),
                 /*#__PURE__*/React.createElement("input", {
                   type: "text",
+                  "aria-label": "Title",
                   value: item.title || "",
-                  onChange: e => updateItem({ title: e.target.value.slice(0, 60) }),
-                  style: { flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, fontWeight: 600, color: "var(--c-text)" }
+                  onChange: e => updateItem({ title: e.target.value.slice(0, 80) }),
+                  style: { flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 14, fontWeight: 700, color: "var(--c-text)" }
                 }),
                 /*#__PURE__*/React.createElement("button", {
+                  "aria-label": "Remove",
                   onClick: removeItem,
                   title: "Remove",
-                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 8px", color: "#9ca3af", fontSize: 14, cursor: "pointer", lineHeight: 1 }
-                }, "×")
+                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 10px", color: "#b91c1c", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+                }, "Delete"),
+                /*#__PURE__*/React.createElement("button", {
+                  "aria-label": "Close",
+                  onClick: () => setMyContentExpanded(null),
+                  title: "Close",
+                  style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 6, padding: "4px 10px", color: "#6b7280", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+                }, "Close")
               ),
-              // Preview block — audio uses BgAudio so OS lock-screen
-              // controls (play/pause/seek + title + artwork) appear when
-              // playback is active. Background playback otherwise works
-              // out of the box (HTMLAudioElement doesn't pause on tab
-              // hide); MediaSession is what makes the OS show a now-
-              // playing card when the device is locked.
-              // Prefer Storage downloadURL; fall back to legacy base64
-              // fileData on items that haven't been migrated yet.
-              isAudio && /*#__PURE__*/React.createElement("div", {
-                style: { marginBottom: 8 }
+              // Preview block
+              kind === "audio" && src && /*#__PURE__*/React.createElement("div", {
+                style: { marginBottom: 10 }
               }, /*#__PURE__*/React.createElement(BgAudio, {
-                src: item.downloadURL || item.fileData,
-                title: item.title || item.fileName || "Audio",
-                artist: "Verrocchio"
+                src, title: item.title || item.fileName || "Audio", artist: "Verrocchio"
               })),
-              isImage && /*#__PURE__*/React.createElement("img", {
-                src: item.downloadURL || item.fileData, alt: item.title,
-                style: { maxWidth: "100%", maxHeight: 180, borderRadius: 6, marginBottom: 8 }
+              kind === "image" && src && /*#__PURE__*/React.createElement("img", {
+                src, alt: item.title || "",
+                style: { maxWidth: "100%", maxHeight: 280, borderRadius: 8, marginBottom: 10, display: "block" }
               }),
-              isVideo && /*#__PURE__*/React.createElement("video", {
-                controls: true, src: item.downloadURL || item.fileData,
-                style: { width: "100%", maxHeight: 240, borderRadius: 6, marginBottom: 8 }
+              kind === "video" && src && /*#__PURE__*/React.createElement("video", {
+                controls: true, src, playsInline: true, preload: "metadata",
+                style: { width: "100%", maxHeight: 320, borderRadius: 8, marginBottom: 10 }
               }),
-              item.kind === "link" && /*#__PURE__*/React.createElement("a", {
+              kind === "link" && /*#__PURE__*/React.createElement("a", {
                 href: item.url, target: "_blank", rel: "noopener noreferrer",
-                style: { display: "block", fontSize: 11, color: "#0891b2", marginBottom: 8, wordBreak: "break-all" }
+                style: { display: "block", fontSize: 12, color: "#0891b2", marginBottom: 10, wordBreak: "break-all", textDecoration: "underline" }
               }, item.url),
-              item.kind === "file" && !isAudio && !isImage && !isVideo && /*#__PURE__*/React.createElement("a", {
-                href: item.downloadURL || item.fileData,
-                download: item.fileName,
+              (kind === "pdf" || kind === "file") && src && /*#__PURE__*/React.createElement("a", {
+                href: src, download: item.fileName,
                 target: "_blank", rel: "noopener noreferrer",
-                style: { display: "inline-block", fontSize: 12, color: "#2d5a2d", fontWeight: 600, marginBottom: 8 }
-              }, "⬇ " + item.fileName + (item.fileSize ? " (" + Math.round(item.fileSize / 1024) + " KB)" : "")),
+                style: { display: "inline-block", fontSize: 13, color: "#2d5a2d", fontWeight: 700, marginBottom: 10, textDecoration: "underline" }
+              }, "⬇ Open " + (item.fileName || "file") + (item.fileSize ? " (" + Math.round(item.fileSize / 1024) + " KB)" : "")),
               // Linked-to picker
               /*#__PURE__*/React.createElement("div", {
-                style: { borderTop: "1px dashed #e5e7eb", paddingTop: 8, marginTop: 4 }
+                style: { borderTop: "1px dashed #e5e7eb", paddingTop: 10, marginTop: 4 }
               },
                 /*#__PURE__*/React.createElement("div", {
                   style: { fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }
@@ -20126,6 +20342,7 @@ function App() {
                   style: { display: "flex", gap: 6, flexWrap: "wrap" }
                 },
                   /*#__PURE__*/React.createElement("select", {
+                    "aria-label": "Link a habit",
                     value: "",
                     onChange: e => { if (e.target.value) toggleLink("habit", Number(e.target.value) || e.target.value); },
                     style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
@@ -20134,6 +20351,7 @@ function App() {
                     (data.habits || []).filter(h => !(item.linkedHabitIds || []).some(id => String(id) === String(h.id))).map(h => /*#__PURE__*/React.createElement("option", { key: h.id, value: h.id }, h.text.slice(0, 36)))
                   ),
                   /*#__PURE__*/React.createElement("select", {
+                    "aria-label": "Link a to-do",
                     value: "",
                     onChange: e => { if (e.target.value) toggleLink("todo", Number(e.target.value) || e.target.value); },
                     style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
@@ -20142,6 +20360,7 @@ function App() {
                     (data.todos || []).filter(t => !(item.linkedTodoIds || []).some(id => String(id) === String(t.id))).map(t => /*#__PURE__*/React.createElement("option", { key: t.id, value: t.id }, (t.text || "").slice(0, 36)))
                   ),
                   /*#__PURE__*/React.createElement("select", {
+                    "aria-label": "Link a goal",
                     value: "",
                     onChange: e => { if (e.target.value) toggleLink("goal", Number(e.target.value) || e.target.value); },
                     style: { ...inputS, flex: 1, minWidth: 120, fontSize: 11, padding: "6px 8px" }
@@ -20152,9 +20371,125 @@ function App() {
                 )
               )
             );
-          });
-        })())
-      )
+          })();
+          return /*#__PURE__*/React.createElement(React.Fragment, null,
+            // Toolbar — search left, sort right.
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }
+            },
+              /*#__PURE__*/React.createElement("input", {
+                type: "search",
+                "aria-label": "Search My Content",
+                value: myContentSearch,
+                onChange: e => setMyContentSearch(e.target.value),
+                placeholder: "Search title, file, or URL…",
+                style: { flex: 1, fontSize: 13, padding: "8px 12px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", outline: "none" }
+              }),
+              /*#__PURE__*/React.createElement("select", {
+                "aria-label": "Sort My Content",
+                value: myContentSort,
+                onChange: e => updateMyContentSort(e.target.value),
+                style: { fontSize: 12, padding: "8px 10px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", cursor: "pointer" }
+              },
+                /*#__PURE__*/React.createElement("option", { value: "recent" }, "Recent"),
+                /*#__PURE__*/React.createElement("option", { value: "title" }, "A–Z"),
+                /*#__PURE__*/React.createElement("option", { value: "type" }, "Type"),
+                /*#__PURE__*/React.createElement("option", { value: "goal" }, "Goal"),
+                /*#__PURE__*/React.createElement("option", { value: "habit" }, "Habit")
+              )
+            ),
+            // Type-filter chips. Horizontal scroll on narrow screens.
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "thin" }
+            }, typeChips.map(c => {
+              const active = myContentTypeFilter === c.val;
+              return /*#__PURE__*/React.createElement("button", {
+                key: c.val,
+                type: "button",
+                onClick: () => updateMyContentTypeFilter(c.val),
+                style: {
+                  flexShrink: 0,
+                  fontSize: 12, fontWeight: 600,
+                  padding: "6px 14px", borderRadius: 999,
+                  border: "1px solid " + (active ? "#2d5a2d" : "var(--c-border)"),
+                  background: active ? "#2d5a2d" : "var(--c-surface-raised)",
+                  color: active ? "#fff" : "var(--c-text-soft)",
+                  cursor: "pointer",
+                  WebkitTapHighlightColor: "transparent"
+                }
+              }, c.label, /*#__PURE__*/React.createElement("span", {
+                style: { marginLeft: 6, opacity: 0.7, fontWeight: 500 }
+              }, c.count));
+            })),
+            // Selected-item detail panel (above the grid so the user
+            // sees both the selection and the rest of the library).
+            detailPanel,
+            // Empty filter state.
+            sorted.length === 0 && /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "24px 0" }
+            }, q ? "No matches for “" + q + "”." : "Nothing in this filter — try All."),
+            // Card grid. Tight density so 50+ items fit a couple of
+            // screens, not 50. minmax(96px, 1fr) gives ~4 cols on a
+            // 360px-wide phone and 7-8 cols on a tablet — plenty for a
+            // library you scan, not scroll endlessly.
+            /*#__PURE__*/React.createElement("div", {
+              style: {
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+                gap: 8
+              }
+            }, sorted.map(item => {
+              const kind = kindOf(item);
+              const linkedCount =
+                (item.linkedHabitIds || []).length +
+                (item.linkedTodoIds || []).length +
+                (item.linkedGoalIds || []).length;
+              const subtitle = item.kind === "link"
+                ? (() => { try { return new URL(item.url).hostname.replace(/^www\./, ""); } catch (e) { return item.url || ""; } })()
+                : kind.toUpperCase() + (item.fileSize ? " · " + (item.fileSize >= 1024 * 1024
+                    ? (item.fileSize / 1024 / 1024).toFixed(1) + " MB"
+                    : Math.round(item.fileSize / 1024) + " KB") : "");
+              const isSelected = myContentExpanded === item.id;
+              return /*#__PURE__*/React.createElement("button", {
+                key: item.id,
+                type: "button",
+                onClick: () => setMyContentExpanded(isSelected ? null : item.id),
+                "aria-pressed": isSelected,
+                "aria-label": (item.title || item.fileName || "Untitled") + " — " + kind,
+                title: item.title || item.fileName || "Untitled",
+                style: {
+                  display: "flex", flexDirection: "column", gap: 4,
+                  padding: 6,
+                  background: isSelected ? "var(--c-tint-success-bg)" : "var(--c-surface-raised)",
+                  border: "1px solid " + (isSelected ? "#2d5a2d" : "var(--c-border)"),
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  WebkitTapHighlightColor: "transparent",
+                  transition: "transform 120ms ease, box-shadow 120ms ease",
+                  boxShadow: isSelected ? "0 4px 14px rgba(45,90,45,.18)" : "0 1px 2px rgba(0,0,0,.04)",
+                  // Cap the whole card height so a packed library scans
+                  // as a uniform mosaic rather than a scroll-out trap.
+                  minHeight: 0
+                }
+              },
+                /*#__PURE__*/React.createElement("div", { style: { position: "relative" } },
+                  cardThumbnail(item),
+                  linkedCount > 0 && /*#__PURE__*/React.createElement("div", {
+                    "aria-label": linkedCount + " linked",
+                    style: { position: "absolute", top: 4, right: 4, background: "rgba(17,24,39,.85)", color: "#fff", fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 999, lineHeight: 1.4 }
+                  }, "🔗 " + linkedCount)
+                ),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-strong)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1, lineHeight: 1.25 }
+                }, item.title || item.fileName || "Untitled"),
+                /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 9, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+                }, subtitle)
+              );
+            }))
+          );
+        })()
     );
 
     const historyPanel = /*#__PURE__*/React.createElement("div", null,
@@ -21814,6 +22149,89 @@ function App() {
   //    edited; the draft id list is shuffled by up/down arrows and
   //    committed by saveReorder (which also flips that page's sort
   //    pref to "custom" so the edit is immediately visible).
+  // Linked-media floating player. Opened from the ▶ chip on a habit
+  // or goal row. For habit context, onEnded auto-completes the habit
+  // (the breathwork-mp3-finishes-and-checks-off flow). For goal
+  // context, the player just stays open for replay.
+  linkedMediaPlayer && (() => {
+    const { kind, entityId, item } = linkedMediaPlayer;
+    if (!item) return null;
+    const close = () => setLinkedMediaPlayer(null);
+    const ft = (item.fileType || "");
+    const isAudio = ft.startsWith("audio/");
+    const isVideo = ft.startsWith("video/");
+    const src = item.downloadURL || item.fileData;
+    const onEnded = () => {
+      // Habit auto-complete on audio finish. togHabit defaults to
+      // toggling — passing the today key + no mode mirrors a normal
+      // tap on the habit's checkbox. If already done, this is a no-op
+      // because togHabit toggles, but we guard with isDone first to
+      // avoid accidentally un-checking a habit the user already did.
+      if (kind === "habit" && isAudio) {
+        const cur = latestData.current || data;
+        const habit = (cur.habits || []).find(h => h.id === entityId);
+        if (habit && !isDone(habit, tk())) {
+          togHabit(entityId);
+        }
+      }
+      // Auto-close after a short pause so the user sees the
+      // completion settle before the overlay disappears.
+      setTimeout(close, 800);
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": (kind === "habit" ? "Habit linked audio" : "Goal linked audio"),
+      onClick: close,
+      style: {
+        position: "fixed", inset: 0,
+        background: "rgba(0,0,0,.55)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        zIndex: 9999, padding: 16
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        onClick: (e) => e.stopPropagation(),
+        style: {
+          background: "#fff", borderRadius: 16, padding: 18,
+          maxWidth: 420, width: "100%",
+          boxShadow: "0 24px 60px rgba(0,0,0,.35)"
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }
+          }, kind === "habit" ? "Linked to habit" : "Linked to goal"),
+          /*#__PURE__*/React.createElement("button", {
+            "aria-label": "Close",
+            onClick: close,
+            style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", color: "#6b7280", fontSize: 16 }
+          }, "×")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12, wordBreak: "break-word" }
+        }, item.title || item.fileName || "Linked media"),
+        // Custom audio with onEnded — can't use BgAudio here because
+        // it doesn't expose the ended event. Inline <audio> still
+        // wires MediaSession via the OS for free.
+        isAudio && /*#__PURE__*/React.createElement("audio", {
+          src, controls: true, autoPlay: true, preload: "metadata", playsInline: true,
+          onEnded,
+          style: { width: "100%" }
+        }),
+        isVideo && /*#__PURE__*/React.createElement("video", {
+          src, controls: true, autoPlay: true, playsInline: true, preload: "metadata",
+          onEnded,
+          style: { width: "100%", maxHeight: 320, borderRadius: 8 }
+        }),
+        kind === "habit" && isAudio && /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, color: "#6b7280", marginTop: 10, lineHeight: 1.45 }
+        }, "Habit auto-completes when this audio finishes.")
+      )
+    );
+  })(),
   // Voice-capture modal. Opened from the header mic. Listens via
   // the Web Speech API, shows the live transcript building, and
   // routes the captured text into a goal / habit / to-do / journal
@@ -21841,22 +22259,28 @@ function App() {
       if (voiceSessionRef.current) return;
       voiceActiveRef.current = true;
       voiceStartedAtRef.current = Date.now();
+      // Cross-session dedupe — same logic the VoiceMicButton uses.
+      // Drops exact-duplicate / strict-suffix repeats that happen when
+      // iOS Safari relaunches the recognizer after a silence pause.
+      const dedupedAppend = dedupeAppender(text => {
+        setVoiceTranscript(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + text);
+        setVoiceInterim("");
+      });
       const launch = () => {
         const session = startSpeechSession({
           onChunk: ({ text, isFinal }) => {
             if (!text) return;
-            if (isFinal) {
-              setVoiceTranscript(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + text);
-              setVoiceInterim("");
-            } else {
-              setVoiceInterim(text);
-            }
+            if (isFinal) { dedupedAppend(text); }
+            else { setVoiceInterim(text); }
           },
           onError: (err) => {
             voiceSessionRef.current = null;
             const recoverable = (err === "no-speech" || err === "aborted");
             if (voiceActiveRef.current && recoverable && (Date.now() - voiceStartedAtRef.current) < VOICE_MAX_MS) {
-              setTimeout(() => { if (voiceActiveRef.current) launch(); }, 250);
+              // 600 ms gives the user breathing room without the
+              // recognizer popping back on mid-pause and dropping the
+              // first word of the next utterance.
+              setTimeout(() => { if (voiceActiveRef.current) launch(); }, 600);
             } else {
               voiceActiveRef.current = false;
               setVoiceListening(false);
@@ -21865,7 +22289,10 @@ function App() {
           onEnd: () => {
             voiceSessionRef.current = null;
             if (voiceActiveRef.current && (Date.now() - voiceStartedAtRef.current) < VOICE_MAX_MS) {
-              setTimeout(() => { if (voiceActiveRef.current) launch(); }, 100);
+              // 300 ms — long enough for the previous session to fully
+              // tear down, short enough that the user doesn't perceive
+              // a gap on the next utterance.
+              setTimeout(() => { if (voiceActiveRef.current) launch(); }, 300);
             } else {
               voiceActiveRef.current = false;
               setVoiceListening(false);
