@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Verrocchio Firebase Storage security rules.
+//
+// Threat model: same as firestore.rules — the browser holds the user's
+// auth token, so these rules ARE the enforcement, not just a backstop.
+// Users can technically issue Storage API calls with their own creds, so
+// only owner-scoped paths may be readable/writable.
+//
+// Path layout used by the app:
+//   users/<uid>/content/<itemId>-<fileName>   ← My Content uploads
+//
+// Invariants enforced:
+//   1. Only the signed-in owner can read/write under users/<uid>/...
+//   2. Per-file size cap of 10 MB (defense in depth — the client also
+//      enforces this, but a malicious client could bypass that).
+//   3. Anything outside users/<uid>/... is denied by default.
+//
+// Deploy: paste into Firebase Console → Storage → Rules and click
+// Publish. Or run `firebase deploy --only storage` if the Firebase CLI
+// is set up locally.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // My Content uploads. Owner-scoped read/write with a 10 MB cap.
+    match /users/{userId}/content/{fileName} {
+      allow read: if request.auth != null
+                  && request.auth.uid == userId;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 10 * 1024 * 1024;
+      allow delete: if request.auth != null
+                    && request.auth.uid == userId;
+    }
+
+    // Default-deny everything else.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

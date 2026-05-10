@@ -29,6 +29,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<!-- Storage SDK powers cross-device file sync for My Content. Files
+     above ~800 KB don't fit in a Firestore doc (1 MB hard limit), so
+     we upload to Storage and store the download URL in Firestore. -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="utils.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -719,6 +723,14 @@ const db=firebase.firestore();
 // so swallow.
 db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
 const auth=firebase.auth();
+/* Firebase Storage — backs My Content's file uploads. Files live at
+   users/<uid>/content/<itemId>-<fileName> so the storage.rules can
+   scope read/write to the owning user via request.auth.uid. The
+   Firestore userContent entry stores the storagePath + downloadURL
+   only — never the raw bytes — so it stays well under the 1 MB
+   doc-size limit and cross-device sync is just a Firestore listener
+   away. */
+const storage = firebase.storage();
 // Register the service worker for offline app-shell caching. Guarded on
 // HTTPS / localhost because browsers only allow SW registration in
 // secure contexts — no-op on file:// or plain-http test servers.
@@ -2937,11 +2949,22 @@ function renderLinkedUserContent(item, opts) {
       style: { display: "inline-block", fontSize: 12, color: "#0891b2", wordBreak: "break-all", textDecoration: "underline" }
     }, item.title || item.url);
   }
+  // Prefer the Firebase Storage downloadURL (cross-device) over the
+  // legacy in-doc base64 fileData. Items uploaded before Storage sync
+  // landed only have fileData; new uploads only have downloadURL; the
+  // auto-migration effect promotes the former into the latter.
+  const src = item.downloadURL || item.fileData;
+  if (!src) {
+    return React.createElement("div", {
+      key: "missing-" + item.id,
+      style: { fontSize: 11, color: "#9ca3af", fontStyle: "italic" }
+    }, "(file not yet synced — open this device's My Content to re-upload)");
+  }
   const ft = item.fileType || "";
   if (ft.startsWith("audio/")) {
     return React.createElement(BgAudio, {
       key: "au-" + item.id,
-      src: item.fileData,
+      src,
       title: item.title || item.fileName || "Audio",
       artist: "Verrocchio",
       style: compact ? { maxWidth: "100%" } : null
@@ -2950,21 +2973,26 @@ function renderLinkedUserContent(item, opts) {
   if (ft.startsWith("image/")) {
     return React.createElement("img", {
       key: "im-" + item.id,
-      src: item.fileData, alt: item.title || "",
+      src, alt: item.title || "",
       style: { maxWidth: "100%", maxHeight: compact ? 120 : 180, borderRadius: 6, display: "block" }
     });
   }
   if (ft.startsWith("video/")) {
     return React.createElement("video", {
       key: "vd-" + item.id,
-      controls: true, src: item.fileData, playsInline: true, preload: "metadata",
+      controls: true, src, playsInline: true, preload: "metadata",
       style: { width: "100%", maxHeight: compact ? 160 : 240, borderRadius: 6, display: "block" }
     });
   }
-  // Generic file (PDF, anything else) — download link.
+  // Generic file (PDF, anything else) — download link. Storage URLs
+  // are cross-origin, so the `download` attribute is advisory; the
+  // browser may still open inline (PDFs typically do, which is what
+  // users want anyway).
   return React.createElement("a", {
     key: "fi-" + item.id,
-    href: item.fileData, download: item.fileName || (item.title || "file"),
+    href: src,
+    download: item.fileName || (item.title || "file"),
+    target: "_blank", rel: "noopener noreferrer",
     style: { display: "inline-block", fontSize: 12, color: "#2d5a2d", fontWeight: 600, textDecoration: "underline" }
   }, "⬇ " + (item.fileName || item.title || "Open file") + (item.fileSize ? " (" + Math.round(item.fileSize / 1024) + " KB)" : ""));
 }
@@ -4409,6 +4437,15 @@ function App() {
   // to data.userContent without a draft.
   const [ucDraftTitle, sUcDraftTitle] = useState("");
   const [ucDraftUrl, sUcDraftUrl] = useState("");
+  // Upload progress for the My Content file picker. Null when idle, or
+  // { name, percent } during an active Firebase Storage upload. Drives a
+  // small progress bar under the picker so the user knows a multi-MB
+  // PDF/audio is making progress and didn't silently fail.
+  const [ucUploadProgress, setUcUploadProgress] = useState(null);
+  // Auto-migration progress for legacy base64 entries → Firebase Storage.
+  // null when nothing to migrate or migration finished; otherwise
+  // { done, total } so we can render a banner ("Migrating 3/12…").
+  const [ucMigrating, setUcMigrating] = useState(null);
   // My Content sort mode. Persisted to localStorage so the user's
   // chosen view sticks across sessions. Modes:
   //   "recent"   — newest first (default, matches old behavior)
@@ -5052,6 +5089,75 @@ function App() {
       save({ ...base, celebratedFirstHabit: true });
     }
   }, [data && data.habits && data.habits.length]);
+  // ── My Content auto-migration: legacy base64 → Firebase Storage ──
+  // Pre-Storage uploads stored the file's bytes inline in
+  // userContent[].fileData (base64 data URL). That data lives only in
+  // localStorage on the device that uploaded — sanitizeForFirestore
+  // strips it from cloud writes. Migrating each such entry once into
+  // Storage gives the user cross-device sync transparently.
+  // Runs at most once per session, gated on:
+  //   * a real (non-demo) signed-in user
+  //   * at least one entry that has fileData but no downloadURL
+  //   * not already migrating (the ucMigrating ref guards re-entry)
+  // Each upload is sequential (not parallel) to avoid blasting the
+  // Storage rate limit on a user with many legacy items.
+  const ucMigratingRef = useRef(false);
+  useEffect(() => {
+    if (ucMigratingRef.current) return;
+    if (demoMode) return;
+    const u = auth && auth.currentUser;
+    if (!u) return;
+    const uid = u.uid;
+    const items = (data && data.userContent) || [];
+    const stale = items.filter(c => c && c.kind === "file" && c.fileData && !c.downloadURL);
+    if (stale.length === 0) return;
+    ucMigratingRef.current = true;
+    setUcMigrating({ done: 0, total: stale.length });
+    (async () => {
+      let done = 0;
+      for (const item of stale) {
+        try {
+          // Convert the base64 data URL back to a Blob so put() can
+          // stream it. Native fetch handles the base64 decode for us.
+          const resp = await fetch(item.fileData);
+          const blob = await resp.blob();
+          const safeName = String(item.fileName || "file")
+            .replace(/[^A-Za-z0-9._-]+/g, "_")
+            .slice(0, 80);
+          const path = "users/" + uid + "/content/" + item.id + "-" + safeName;
+          const ref = storage.ref(path);
+          await ref.put(blob, { contentType: item.fileType || "application/octet-stream" });
+          const downloadURL = await ref.getDownloadURL();
+          // Read freshest snapshot every iteration so we don't clobber
+          // unrelated saves the user made while migration was running.
+          const cur = latestData.current || data;
+          const next = (cur.userContent || []).map(c => {
+            if (c.id !== item.id) return c;
+            // Drop fileData here so subsequent renders read from
+            // downloadURL (and so localStorage shrinks alongside).
+            const { fileData: _drop, ...rest } = c;
+            return { ...rest, storagePath: path, downloadURL };
+          });
+          save({ ...cur, userContent: next });
+          done++;
+          setUcMigrating({ done, total: stale.length });
+        } catch (err) {
+          try { console.warn("[verrocchio mycontent migrate] failed for item", item.id, err && err.message); } catch (_) {}
+          // Don't abort the whole batch on a single failure — move on.
+          done++;
+          setUcMigrating({ done, total: stale.length });
+        }
+      }
+      // Brief delay so the user sees "done/total" land on completion
+      // before the banner disappears.
+      setTimeout(() => setUcMigrating(null), 600);
+      ucMigratingRef.current = false;
+    })();
+    // Run once per "stale-item count change" — if a NEW legacy item
+    // arrives via Firestore sync (rare; another device with fileData
+    // shouldn't sync it because sanitizeForFirestore strips it, but
+    // belt-and-braces) the effect re-evaluates on next data tick.
+  }, [demoMode, data && data.userContent && data.userContent.filter(c => c && c.kind === "file" && c.fileData && !c.downloadURL).length]);
   // Seed the tour's form state from whatever is already saved on the
   // user's data doc when the tour first fires. Matters for the Replay
   // Tour flow (user ran the tour before, edited home/weekly review,
@@ -19614,6 +19720,14 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 12, color: "#9ca3af", marginBottom: 14, lineHeight: 1.45 }
       }, "Upload audio, video, PDFs, or paste a URL — link each item to the habits, to-dos, or goals it belongs to. Audio + image previews play right here; everything else opens in your default app."),
+      // One-time migration banner — promotes legacy base64 entries to
+      // Firebase Storage so they cross-device sync. Hidden when nothing
+      // is migrating.
+      ucMigrating && /*#__PURE__*/React.createElement("div", {
+        role: "status",
+        "aria-live": "polite",
+        style: { background: "var(--c-tint-info-bg)", border: "1px solid var(--c-tint-info-border)", color: "var(--c-tint-info-fg)", borderRadius: 8, padding: "8px 12px", fontSize: 12, marginBottom: 10 }
+      }, "Syncing files to cloud storage… " + ucMigrating.done + " / " + ucMigrating.total),
       // Add via URL row
       /*#__PURE__*/React.createElement("div", {
         style: { background: "var(--c-surface-raised)", borderRadius: 10, padding: "12px", marginBottom: 10 }
@@ -19684,42 +19798,106 @@ function App() {
         /*#__PURE__*/React.createElement("input", {
           type: "file",
           accept: "audio/*,video/*,application/pdf,image/*",
+          disabled: !!ucUploadProgress,
           onChange: (e) => {
             const file = e.target.files && e.target.files[0];
             if (!file) return;
-            const MAX = 800 * 1024; // 800 KB soft cap (Firestore doc-size headroom)
+            // 10 MB cap — matches storage.rules. Defense in depth: rules
+            // reject larger writes too, but checking here gives an
+            // immediate, friendly error instead of a Firebase exception
+            // halfway through a long upload.
+            const MAX = 10 * 1024 * 1024;
             if (file.size > MAX) {
-              alert("File is " + Math.round(file.size / 1024) + " KB — that's larger than the 800 KB limit. Pick a smaller file or paste a URL instead.");
+              alert("File is " + Math.round(file.size / 1024 / 1024) + " MB — that's larger than the 10 MB limit. Pick a smaller file or paste a URL instead.");
               e.target.value = "";
               return;
             }
-            const reader = new FileReader();
-            reader.onload = () => {
-              save({
-                ...data,
-                userContent: [...(data.userContent || []), {
-                  id: Date.now(),
-                  kind: "file",
-                  title: file.name.replace(/\.[^.]+$/, ""),
-                  fileName: file.name,
-                  fileType: file.type || "application/octet-stream",
-                  fileSize: file.size,
-                  fileData: reader.result,
-                  linkedHabitIds: [],
-                  linkedTodoIds: [],
-                  linkedGoalIds: [],
-                  createdAt: Date.now()
-                }]
-              });
-            };
-            reader.readAsDataURL(file);
-            e.target.value = "";
+            // Sign-in required: Storage rules reject anonymous writes,
+            // and we need an owner uid to namespace the path.
+            const uid = (auth && auth.currentUser && auth.currentUser.uid) || null;
+            if (!uid) {
+              alert("Sign in to upload files. (Demo mode keeps everything in memory.)");
+              e.target.value = "";
+              return;
+            }
+            const id = Date.now();
+            // Sanitize filename for the Storage key — strip path-like
+            // characters and limit length. The original file.name still
+            // lives on the userContent entry for display/download.
+            const safeName = String(file.name || "file")
+              .replace(/[^A-Za-z0-9._-]+/g, "_")
+              .slice(0, 80);
+            const path = "users/" + uid + "/content/" + id + "-" + safeName;
+            setUcUploadProgress({ name: file.name, percent: 0 });
+            const ref = storage.ref(path);
+            const task = ref.put(file, { contentType: file.type || "application/octet-stream" });
+            task.on("state_changed",
+              (snap) => {
+                if (!snap.totalBytes) return;
+                setUcUploadProgress({ name: file.name, percent: Math.round((snap.bytesTransferred / snap.totalBytes) * 100) });
+              },
+              (err) => {
+                try { console.warn("[verrocchio mycontent upload] failed:", err && err.code, err && err.message); } catch (_) {}
+                setUcUploadProgress(null);
+                alert("Upload failed: " + (err && err.message ? err.message : "unknown error"));
+                e.target.value = "";
+              },
+              async () => {
+                try {
+                  const downloadURL = await task.snapshot.ref.getDownloadURL();
+                  // Use latestData.current so a concurrent save (e.g. a
+                  // habit toggle on another tab) isn't clobbered by the
+                  // closure-captured `data`.
+                  const cur = latestData.current || data;
+                  save({
+                    ...cur,
+                    userContent: [...(cur.userContent || []), {
+                      id,
+                      kind: "file",
+                      title: file.name.replace(/\.[^.]+$/, ""),
+                      fileName: file.name,
+                      fileType: file.type || "application/octet-stream",
+                      fileSize: file.size,
+                      // Storage-backed: cross-device. Renderers prefer
+                      // downloadURL when present; fileData is only kept
+                      // for legacy entries that pre-date Storage.
+                      storagePath: path,
+                      downloadURL,
+                      linkedHabitIds: [],
+                      linkedTodoIds: [],
+                      linkedGoalIds: [],
+                      createdAt: Date.now()
+                    }]
+                  });
+                } catch (err2) {
+                  try { console.warn("[verrocchio mycontent upload] downloadURL failed:", err2); } catch (_) {}
+                  alert("Upload finished but the file URL couldn't be retrieved. Try refreshing.");
+                } finally {
+                  setUcUploadProgress(null);
+                  e.target.value = "";
+                }
+              }
+            );
           },
           style: { fontSize: 12, color: "var(--c-text-soft)" }
         }),
+        ucUploadProgress && /*#__PURE__*/React.createElement("div", {
+          style: { marginTop: 8 }
+        },
+          /*#__PURE__*/React.createElement("div", {
+            style: { height: 4, background: "#e5e7eb", borderRadius: 2, overflow: "hidden" }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { height: "100%", width: ucUploadProgress.percent + "%", background: "#2d5a2d", transition: "width 120ms linear" }
+            })
+          ),
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 10, color: "#6b7280", marginTop: 4 }
+          }, "Uploading " + ucUploadProgress.name + "… " + ucUploadProgress.percent + "%")
+        ),
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }
-        }, "Up to 800 KB per file (≈ 30 sec of MP3 at 128 kbps). For longer audio or video, paste a URL above instead.")
+        }, "Up to 10 MB per file. Files sync across all your devices — sign in on a laptop or tablet to upload there too.")
       ),
       // List of saved items — preceded by a sort toolbar.
       ((data.userContent || []).length === 0)
@@ -19828,6 +20006,17 @@ function App() {
             };
             const removeItem = () => {
               if (!confirm("Remove '" + item.title + "' from My Content?")) return;
+              // Best-effort Storage cleanup so deleted files don't keep
+              // burning quota. Local removal happens regardless — if the
+              // Storage delete 404s (already gone) or 403s (rules echo
+              // a sign-in race), the user's view is still consistent.
+              if (item.storagePath) {
+                try {
+                  storage.ref(item.storagePath).delete().catch(err => {
+                    try { console.warn("[verrocchio mycontent delete] storage delete failed:", err && err.code); } catch (_) {}
+                  });
+                } catch (_) {}
+              }
               save({
                 ...data,
                 userContent: (data.userContent || []).filter(c => c.id !== item.id)
@@ -19861,19 +20050,21 @@ function App() {
               // out of the box (HTMLAudioElement doesn't pause on tab
               // hide); MediaSession is what makes the OS show a now-
               // playing card when the device is locked.
+              // Prefer Storage downloadURL; fall back to legacy base64
+              // fileData on items that haven't been migrated yet.
               isAudio && /*#__PURE__*/React.createElement("div", {
                 style: { marginBottom: 8 }
               }, /*#__PURE__*/React.createElement(BgAudio, {
-                src: item.fileData,
+                src: item.downloadURL || item.fileData,
                 title: item.title || item.fileName || "Audio",
                 artist: "Verrocchio"
               })),
               isImage && /*#__PURE__*/React.createElement("img", {
-                src: item.fileData, alt: item.title,
+                src: item.downloadURL || item.fileData, alt: item.title,
                 style: { maxWidth: "100%", maxHeight: 180, borderRadius: 6, marginBottom: 8 }
               }),
               isVideo && /*#__PURE__*/React.createElement("video", {
-                controls: true, src: item.fileData,
+                controls: true, src: item.downloadURL || item.fileData,
                 style: { width: "100%", maxHeight: 240, borderRadius: 6, marginBottom: 8 }
               }),
               item.kind === "link" && /*#__PURE__*/React.createElement("a", {
@@ -19881,7 +20072,9 @@ function App() {
                 style: { display: "block", fontSize: 11, color: "#0891b2", marginBottom: 8, wordBreak: "break-all" }
               }, item.url),
               item.kind === "file" && !isAudio && !isImage && !isVideo && /*#__PURE__*/React.createElement("a", {
-                href: item.fileData, download: item.fileName,
+                href: item.downloadURL || item.fileData,
+                download: item.fileName,
+                target: "_blank", rel: "noopener noreferrer",
                 style: { display: "inline-block", fontSize: 12, color: "#2d5a2d", fontWeight: 600, marginBottom: 8 }
               }, "⬇ " + item.fileName + (item.fileSize ? " (" + Math.round(item.fileSize / 1024) + " KB)" : "")),
               // Linked-to picker
