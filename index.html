@@ -766,6 +766,16 @@ const APP_VERSION = "0.1.0";
 // Replace with your real support alias when you have one; gmail
 // placeholder is OK for dev but will route to nowhere in production.
 const SUPPORT_EMAIL = "support@verrocchio.app";
+// Owner allowlist for the My Content file-upload UI. Firebase Storage
+// writes carry storage cost; right now only the owner's account uploads
+// files. Everyone else sees the "Add a link" row but the file picker
+// is hidden, so they can still attach YouTube / Drive / Dropbox URLs
+// to habits and goals without burning the bucket. To add an account,
+// drop the user's Firebase Auth email (case-insensitive match) here.
+const FILE_UPLOAD_ALLOWLIST = new Set([
+  "zgthomas@yahoo.com"
+]);
+const canUploadFiles = (email) => !!email && FILE_UPLOAD_ALLOWLIST.has(String(email).toLowerCase());
 // Store review URLs. Placeholders until the app has an App Store /
 // Play Store listing. When running inside Capacitor, the review
 // button can swap these for the native in-app-review flow (see
@@ -19719,7 +19729,9 @@ function App() {
       sectionTitle("My Content"),
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 12, color: "#9ca3af", marginBottom: 14, lineHeight: 1.45 }
-      }, "Upload audio, video, PDFs, or paste a URL — link each item to the habits, to-dos, or goals it belongs to. Audio + image previews play right here; everything else opens in your default app."),
+      }, canUploadFiles(authUser && authUser.email)
+          ? "Upload audio, video, PDFs, or paste a URL — link each item to the habits, to-dos, or goals it belongs to. Audio + image previews play right here; everything else opens in your default app."
+          : "Paste a URL to any audio, video, PDF, or page — then link it to the habits, to-dos, or goals it supports. (File uploads are owner-only right now.)"),
       // One-time migration banner — promotes legacy base64 entries to
       // Firebase Storage so they cross-device sync. Hidden when nothing
       // is migrating.
@@ -19790,8 +19802,11 @@ function App() {
           }, "Save")
         )
       ),
-      // Add via file upload
-      /*#__PURE__*/React.createElement("div", {
+      // Add via file upload — gated on the FILE_UPLOAD_ALLOWLIST so
+      // non-owner accounts can't burn the bucket. They still get the
+      // "Add a link" row above, which covers YouTube / Drive / Dropbox /
+      // any hosted PDF without any storage cost on our side.
+      canUploadFiles(authUser && authUser.email) && /*#__PURE__*/React.createElement("div", {
         style: { background: "var(--c-surface-raised)", borderRadius: 10, padding: "12px", marginBottom: 16 }
       },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Upload a file"),
