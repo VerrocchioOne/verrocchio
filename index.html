@@ -1700,493 +1700,13 @@ const PRESET_QUOTES = [{
 }];
 
 /* ── GOALS & HABITS SEED DATA ── */
-const SEED_GOALS = [{
-  id: "sg1",
-  text: "Improve cardio & run 2 marathons",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg2",
-  text: "Improve strength & lifts",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg3",
-  text: "Improve hair",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg4",
-  text: "Improve skin",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg5",
-  text: "Improve digestion",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg6",
-  text: "Strengthen back & develop abs",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg7",
-  text: "Reach 175 lbs",
-  type: "Physical",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg8",
-  text: "Minimize screen time",
-  type: "Mental",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg9",
-  text: "Improve calmness & mental clarity",
-  type: "Mental",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg10",
-  text: "Read daily",
-  type: "Mental",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg11",
-  text: "Find new employment",
-  type: "Career",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg12",
-  text: "Take public speaking classes",
-  type: "Career",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg13",
-  text: "Pass CFA Level 3 — August 2026",
-  type: "Career",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: "August 2026"
-  }
-}, {
-  id: "sg14",
-  text: "Read the Bible daily",
-  type: "Spiritual",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg15",
-  text: "Abstain from substances & dopamine shortcuts",
-  type: "Spiritual",
-  smart: {
-    specific: "Alcohol, sugar, drugs, pornography, video games",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg16",
-  text: "Build a long-term romantic relationship",
-  type: "Social",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg17",
-  text: "Take dance lessons",
-  type: "Social",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg18",
-  text: "Develop secondary & tertiary income streams",
-  type: "Wealth",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg19",
-  text: "Reduce overhead — categorize & review spending weekly",
-  type: "Wealth",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg20",
-  text: "Learn Spanish",
-  type: "Creative",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg21",
-  text: "Develop ability to lucid dream",
-  type: "Creative",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg22",
-  text: "Improve learning protocol",
-  type: "Creative",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}, {
-  id: "sg23",
-  text: "Learn piano",
-  type: "Creative",
-  smart: {
-    specific: "",
-    measurable: "",
-    achievable: "",
-    relevant: "",
-    timebound: ""
-  }
-}];
-const SEED_HABITS = [{
-  id: "sh1",
-  text: "Morning Run",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Physical",
-  duration: "60",
-  completions: {}
-}, {
-  id: "sh2",
-  text: "Lift (Gym)",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Physical",
-  duration: "60",
-  completions: {}
-}, {
-  id: "sh3",
-  text: "Daily Gym Warm-Up",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Physical",
-  duration: "10",
-  completions: {}
-}, {
-  id: "sh4",
-  text: "Watch Sunrise / Be Outside",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Mental",
-  duration: "10",
-  completions: {}
-}, {
-  id: "sh5",
-  text: "Meditate",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Mental",
-  duration: "15",
-  completions: {}
-}, {
-  id: "sh6",
-  text: "Daily Hair Routine",
-  section: "morning",
-  importance: "Important",
-  type: "Physical",
-  duration: "10",
-  completions: {}
-}, {
-  id: "sh7",
-  text: "Daily Skin Routine",
-  section: "morning",
-  importance: "Important",
-  type: "Physical",
-  duration: "5",
-  completions: {}
-}, {
-  id: "sh8",
-  text: "Take Colostrum & Prebiotics",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Physical",
-  duration: "5",
-  completions: {}
-}, {
-  id: "sh9",
-  text: "Spanish Practice",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Creative",
-  duration: "15",
-  completions: {}
-}, {
-  id: "sh10",
-  text: "Read the Bible",
-  section: "morning",
-  importance: "Non-Negotiable",
-  type: "Spiritual",
-  duration: "15",
-  completions: {}
-}, {
-  id: "sh11",
-  text: "Record Food & Eat Caloric Surplus",
-  section: "afternoon",
-  importance: "Important",
-  type: "Physical",
-  duration: "5",
-  completions: {}
-}, {
-  id: "sh12",
-  text: "Piano Practice",
-  section: "afternoon",
-  importance: "Non-Negotiable",
-  type: "Creative",
-  duration: "20",
-  completions: {}
-}, {
-  id: "sh13",
-  text: "CFA Level 3 Study",
-  section: "afternoon",
-  importance: "Non-Negotiable",
-  type: "Career",
-  duration: "90",
-  completions: {}
-}, {
-  id: "sh14",
-  text: "Phone Check: Be Intentional",
-  section: "afternoon",
-  importance: "Important",
-  type: "Mental",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh15",
-  text: "Review Weekly Spending",
-  section: "afternoon",
-  importance: "Additive",
-  type: "Wealth",
-  duration: "15",
-  completions: {}
-}, {
-  id: "sh16",
-  text: "Dance Lesson / Social",
-  section: "afternoon",
-  importance: "Additive",
-  type: "Social",
-  duration: "60",
-  completions: {}
-}, {
-  id: "sh17",
-  text: "Read",
-  section: "evening",
-  importance: "Non-Negotiable",
-  type: "Mental",
-  duration: "20",
-  completions: {}
-}, {
-  id: "sh18",
-  text: "Pray",
-  section: "evening",
-  importance: "Non-Negotiable",
-  type: "Spiritual",
-  duration: "10",
-  completions: {}
-}, {
-  id: "sh19",
-  text: "Stretch / PT",
-  section: "evening",
-  importance: "Non-Negotiable",
-  type: "Physical",
-  duration: "10",
-  completions: {}
-}, {
-  id: "sh20",
-  text: "Skin Routine (Evening)",
-  section: "evening",
-  importance: "Important",
-  type: "Physical",
-  duration: "5",
-  completions: {}
-}, {
-  id: "sh21",
-  text: "Bed Before 11:00 PM",
-  section: "evening",
-  importance: "Important",
-  type: "Physical",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh22",
-  text: "Post-Run Core Workout",
-  section: "morning",
-  importance: "Important",
-  type: "Physical",
-  duration: "15",
-  completions: {}
-}, {
-  id: "sh23",
-  text: "Lay Out Clothes for Tomorrow",
-  section: "evening",
-  importance: "Additive",
-  type: "Physical",
-  duration: "5",
-  completions: {}
-}, {
-  id: "sh24",
-  text: "Alcohol / Drugs",
-  section: "avoid",
-  importance: "Non-Negotiable",
-  type: "Spiritual",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh25",
-  text: "Solo TV / Passive Video",
-  section: "avoid",
-  importance: "Important",
-  type: "Mental",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh26",
-  text: "Pornography",
-  section: "avoid",
-  importance: "Non-Negotiable",
-  type: "Spiritual",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh27",
-  text: "Video Games",
-  section: "avoid",
-  importance: "Non-Negotiable",
-  type: "Mental",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh28",
-  text: ">2 Hours Screen Time",
-  section: "avoid",
-  importance: "Important",
-  type: "Mental",
-  duration: "",
-  completions: {}
-}, {
-  id: "sh29",
-  text: "Sugar / Processed Food",
-  section: "avoid",
-  importance: "Important",
-  type: "Physical",
-  duration: "",
-  completions: {}
-}];
+// SEED_GOALS / SEED_HABITS were the example workspace shown to brand-new
+// users on first sign-in. Removed per product decision: new accounts now
+// land in an empty workspace and the onboarding flow walks the user
+// through adding their own first habit + goal. Empty arrays kept here
+// so any straggler reference still resolves cleanly.
+const SEED_GOALS = [];
+const SEED_HABITS = [];
 
 /* ── UTILS ── */
 // dk, tk, pastDays, getStreak, daysSinceLast, getCR, getLast14 are
@@ -5997,13 +5517,11 @@ function App() {
   // device — re-writing this device's stale snapshot would clobber
   // the cloud. Less code, fewer cross-device hiccups.
 
-  // Wipe-all-data action. Truly empties every content array — does
-  // NOT clone DD because DD's defaults include SEED_GOALS and
-  // SEED_HABITS (the example "Run a half-marathon" / "Morning run"
-  // entries). Cloning DD would leave the user staring at seed
-  // examples instead of an empty workspace, which they read as
-  // "delete didn't work". Build the blank doc from scratch with
-  // empty arrays for every collection.
+  // Wipe-all-data action. Empties every content array. (Historical
+  // note: DD used to inject SEED_GOALS / SEED_HABITS as the default,
+  // so cloning DD would leave wiped users staring at example habits.
+  // SEED constants are now empty by design, but we still build the
+  // blank doc from scratch — explicit beats clever.)
   //
   // Writes directly to localStorage + Firestore rather than going
   // through save() so a broken save path can't silently swallow the
@@ -19200,6 +18718,55 @@ function App() {
       // standard Firebase reset-email flow, and the in-app duplicate made
       // Profile busier without adding anything that isn't already
       // available before sign-in.
+      // ── Sync recovery ──
+      // Two manual recovery actions for the rare case where a user's
+      // local data and their Firestore doc have drifted apart (a
+      // device that's been offline for weeks, a write that silently
+      // failed mid-save, etc.). Both bypass the normal debounced save
+      // path and write/read straight against Firestore so a broken
+      // save can't swallow the operation.
+      authUser ? /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+        /*#__PURE__*/React.createElement("div", { style: labelS }, "Sync"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "Push this device's data up, or pull what's in the cloud down. Only use these if your devices are showing different data."),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: async () => {
+              if (!auth.currentUser) return;
+              try {
+                const cur = latestData.current || data;
+                if (!cur) return;
+                await userDoc(auth.currentUser.uid).set({ ...cur, _updatedAt: Date.now() });
+                setAcctFeedback({ kind: "ok", msg: "Pushed to cloud." });
+              } catch (e) {
+                setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
+              }
+            },
+            style: { flex: 1, minHeight: 44, padding: "11px 12px", borderRadius: 10, border: "1px solid #2d5a2d", background: "var(--c-tint-green)", color: "#2d5a2d", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+          }, "Push to cloud"),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: async () => {
+              if (!auth.currentUser) return;
+              try {
+                const snap = await userDoc(auth.currentUser.uid).get();
+                if (!snap.exists) {
+                  setAcctFeedback({ kind: "err", msg: "No cloud data yet." });
+                  return;
+                }
+                const remote = hydrateCloudDoc(snap.data());
+                setData(remote);
+                latestData.current = remote;
+                try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
+                setAcctFeedback({ kind: "ok", msg: "Pulled from cloud." });
+              } catch (e) {
+                setAcctFeedback({ kind: "err", msg: firebaseErrMsg(e) });
+              }
+            },
+            style: { flex: 1, minHeight: 44, padding: "11px 12px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+          }, "Pull from cloud")
+        )
+      ) : null,
       // ── Summary export ──
       /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Export summary"),
