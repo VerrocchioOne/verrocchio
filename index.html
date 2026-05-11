@@ -102,21 +102,22 @@
 html{height:100%;-webkit-text-size-adjust:100%}
 /* ── Desktop layout (min-width 900px) ──
    The app is phone-first, so on a 1440-wide laptop the content
-   stretches edge-to-edge and reads as enormous-line-length text.
-   Constrain the scrolling content to a comfortable reading width
-   and center it; leave the sticky header + fixed bottom nav
-   spanning the full viewport but center their INNER content too
-   so the nav buttons don't drift to the far corners. No JSX
-   changes — phone view stays 100% intact since these rules only
-   apply above the 900px breakpoint. */
+   would stretch edge-to-edge as a tall narrow column. The rules
+   below center the scrolling content AND let multi-card surfaces
+   (Home daily ritual) flow into 2-3 columns side-by-side. Phone
+   view is 100% intact since these rules only apply above the
+   breakpoints. */
+.home-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+  align-items: start; /* don't stretch shorter cards to tallest */
+}
 @media (min-width: 900px) {
   /* Tab content (every tab wrapper uses className "fade-in"). */
   .fade-in,
-  /* Auth/welcome onboarding shell uses className "lg" with maxWidth
-     440 inline; the rule below is harmless because the inline
-     constraint already wins, but it future-proofs the auth surface. */
   body > div > .lg.fade-in {
-    max-width: 760px;
+    max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
     /* Side gutter so wide screens still have breathing room around the
@@ -127,29 +128,47 @@ html{height:100%;-webkit-text-size-adjust:100%}
   }
   /* Header inner row (the .lg sticky bar): center its content too. */
   body > div > .lg[style*="sticky"] > div {
-    max-width: 760px;
+    max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
   }
   /* Bottom-nav inner row (.lg fixed bar): center its buttons. */
   body > div > .lg[style*="fixed"] > div {
-    max-width: 760px;
+    max-width: 1100px;
     margin-left: auto;
     margin-right: auto;
   }
+  /* Home daily-ritual cards flow into 2 columns. */
+  .home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Habits + Goals tab: switch to a 2-column grid for the section
+     habit-rows on wide screens. .hrow is the habit-card class
+     (already exists). The parent of the .hrow rows isn't classed
+     uniformly, so we use direct-child selection within a known
+     container. The section wrapper has its own grid; add a
+     responsive override so direct children grid into 2 columns. */
+  .habit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
 }
-@media (min-width: 1200px) {
-  /* On really wide screens, give the column a bit more room so cards
-     read as cards and not as a thin slab. Still narrower than full
-     width — a max line length around 70-80 chars is the readability
-     sweet spot for body text. */
+@media (min-width: 1300px) {
+  /* On really wide screens, allow a 3rd column for Home cards. */
   .fade-in,
   body > div > .lg.fade-in {
-    max-width: 920px;
+    max-width: 1320px;
   }
   body > div > .lg[style*="sticky"] > div,
   body > div > .lg[style*="fixed"] > div {
-    max-width: 920px;
+    max-width: 1320px;
+  }
+  .home-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .habit-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 /* iOS-26 chrome stack: SF Pro Text on Apple platforms, Segoe UI Variable
@@ -12932,14 +12951,21 @@ function App() {
       //   6. Urgent to-dos      — triage today's pressure list
       //   7. Weekly Review      — only on the user's review day
       //   8. Today's intention  — set the tone for today
-      tipsCard,
-      dashboardCard,
-      yesterdayCard,
-      yestJournalCard,
-      briefingCard,
-      todoUrgentCard,
-      weeklyReviewCard,
-      intentionInput,
+      // Daily-ritual cards live inside .home-grid so on wide screens
+      // they can flow into 2 columns (>=900px) or 3 columns (>=1300px)
+      // instead of stacking edge-to-edge as a tall narrow column.
+      // Phone view stays single-column because the grid defaults to
+      // grid-template-columns: 1fr.
+      /*#__PURE__*/React.createElement("div", { className: "home-grid", key: "home-grid" },
+        tipsCard,
+        dashboardCard,
+        yesterdayCard,
+        yestJournalCard,
+        briefingCard,
+        todoUrgentCard,
+        weeklyReviewCard,
+        intentionInput
+      ),
       // (Goals review card removed per user request — the goals
       // are visible on the Goals tab and the daily ritual reads
       // tighter without an extra step.)
