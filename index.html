@@ -12053,12 +12053,12 @@ function App() {
               // "X/Y confirmed" + verbose inline hint pair.
               (() => {
                 // Pill turns green once every habit has a decision
-                // (done or missed). Y/Y in green = "fully recorded".
-                // Otherwise amber X/Y where X = decisions so far.
+                // (done or missed). "Y/Y Recorded" in green = fully
+                // resolved; "X/Y Recorded" in amber while in progress.
                 const resolved = yestDueCount === 0 || yestResolvedCount === yestDueCount;
                 return /*#__PURE__*/React.createElement("span", {
                   style: { fontSize: 11, fontWeight: 700, color: resolved ? "#15803d" : "#b45309", flexShrink: 0, marginLeft: 8, background: resolved ? "var(--c-tint-success-bg)" : "#fef3c7", padding: "3px 8px", borderRadius: 12 }
-                }, yestDueCount === 0 ? "None due" : (resolved ? (yestResolvedCount + "/" + yestDueCount + " ✓") : (yestResolvedCount + "/" + yestDueCount)));
+                }, yestDueCount === 0 ? "None due" : (yestResolvedCount + "/" + yestDueCount + " Recorded"));
               })()
             ),
             /*#__PURE__*/React.createElement("div", {
