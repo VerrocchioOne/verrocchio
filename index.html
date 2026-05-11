@@ -164,25 +164,12 @@ html{height:100%;-webkit-text-size-adjust:100%}
     align-items: start;
   }
 }
-@media (min-width: 1300px) {
-  /* On really wide screens, allow a 3rd column for Home cards. */
-  .fade-in,
-  body > div > .lg.fade-in {
-    max-width: 1320px;
-  }
-  body > div > .lg[style*="sticky"] > div,
-  body > div > .lg[style*="fixed"] > div {
-    max-width: 1320px;
-  }
-  .home-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@media (min-width: 1300px) and (hover: hover) {
-  .habit-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
+/* No 3-column promotion at any width — three floating cards on a wide
+   screen looked sparse with the Home tab's variable card heights, and
+   the layout read as "sea of whitespace" rather than a real dashboard.
+   Two columns at all desktop widths keeps cards filled and within a
+   comfortable tab-content max-width. The habits/goals grid stays at
+   2 cols too. */
 /* iOS-26 chrome stack: SF Pro Text on Apple platforms, Segoe UI Variable
    on Windows, Inter as a download-free Linux/Android fallback. Editorial
    display fonts (Playfair, Lora) stay opt-in via inline style + the
@@ -12324,7 +12311,7 @@ function App() {
       /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Today's Progress"),
       /*#__PURE__*/React.createElement("div", { style: subTitleStyle }, "Tap any tile to see how it's calculated."),
       /*#__PURE__*/React.createElement("div", {
-        style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }
+        style: { display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 8, marginBottom: 10 }
       },
         /*#__PURE__*/React.createElement("button", {
           type: "button",
@@ -12354,7 +12341,7 @@ function App() {
         )
       ),
       /*#__PURE__*/React.createElement("div", {
-        style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }
+        style: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }
       },
         // Each stat tile routes to where the metric is calculated.
         [
