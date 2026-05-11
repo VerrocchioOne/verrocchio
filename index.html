@@ -1982,6 +1982,40 @@ function dedupeAppender(append) {
     append(t);
   };
 }
+// Screen Wake Lock helper. Keeps the phone awake while a long voice
+// recording is in progress so iOS / Android don't dim and suspend the
+// app mid-sentence (which silently truncates the recognizer's session
+// and drops the rest of the transcript). Returns an object with a
+// release() method, or null if the API isn't supported.
+//
+// iOS Safari 16.4+ and Chrome / Edge / Firefox all support
+// navigator.wakeLock.request("screen"). On older iOS the helper returns
+// null and the caller proceeds without a lock — the dedupeAppender +
+// relaunch loop already handle the most common silence-cap case.
+//
+// The lock auto-releases when the page becomes hidden (OS rule we
+// can't override). To survive an app-switch, we re-acquire on
+// visibilitychange whenever the lock is meant to be active.
+async function acquireWakeLock() {
+  if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return null;
+  let lock = null;
+  let released = false;
+  const reacquire = async () => {
+    if (released || document.visibilityState !== "visible") return;
+    try { lock = await navigator.wakeLock.request("screen"); }
+    catch (e) { try { console.warn("[verrocchio wake-lock] re-acquire failed:", e && e.message); } catch (_) {} }
+  };
+  try { lock = await navigator.wakeLock.request("screen"); }
+  catch (e) { try { console.warn("[verrocchio wake-lock] initial acquire failed:", e && e.message); } catch (_) {} return null; }
+  document.addEventListener("visibilitychange", reacquire);
+  return {
+    release: async () => {
+      released = true;
+      document.removeEventListener("visibilitychange", reacquire);
+      if (lock) { try { await lock.release(); } catch (_) {} lock = null; }
+    }
+  };
+}
 
 // React component: little microphone button that toggles a dictation
 // session. While listening, the button pulses red. Each final chunk
@@ -1995,6 +2029,9 @@ function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
   // useState's value is stale by the time the recognizer's onend
   // fires, so we keep a ref that callbacks read instead.
   const activeRef = React.useRef(false);
+  // Wake-lock sentinel held while recording. Released on stop / unmount
+  // so we don't keep the screen awake after the user finishes.
+  const wakeLockRef = React.useRef(null);
   // Hard cap so a forgotten-on mic doesn't loop forever. 30 min
   // covers a long journal/reflection or a full meditation while still
   // bounding battery/network if the user walks away from the device.
@@ -2004,12 +2041,21 @@ function VoiceMicButton({ onTranscript, onInterim, label, size, style }) {
   const stop = () => {
     activeRef.current = false;
     if (sessionRef.current) { sessionRef.current.stop(); sessionRef.current = null; }
+    if (wakeLockRef.current) { wakeLockRef.current.release(); wakeLockRef.current = null; }
     setActive(false);
   };
   const start = () => {
     if (sessionRef.current) return;
     activeRef.current = true;
     startedAtRef.current = Date.now();
+    // Fire-and-forget the screen wake-lock acquisition so iOS / Android
+    // don't dim and suspend the page mid-recording (which silently
+    // truncates the transcript). Returns null on browsers without the
+    // API; recording still works without the lock.
+    acquireWakeLock().then(lock => {
+      if (activeRef.current) wakeLockRef.current = lock;
+      else if (lock) lock.release();
+    });
     // Cross-session dedupe wrapper. iOS Safari sometimes re-fires the
     // last final from session N at the start of session N+1 after a
     // silence-triggered relaunch — the wrapper drops exact duplicates
@@ -4702,6 +4748,11 @@ function App() {
   // mic from looping forever. Same pattern VoiceMicButton uses.
   const voiceActiveRef = useRef(false);
   const voiceStartedAtRef = useRef(0);
+  // Wake-lock sentinel held while the modal is recording. Without it
+  // iOS Safari dims and suspends the page after ~30s, which silently
+  // truncates the recognizer mid-sentence — the symptom users report
+  // as "screen went dark and only half the recording made it."
+  const voiceWakeLockRef = useRef(null);
   // Resistance-flow UI state. After the user confirms yesterday's
   // habits, if any were missed we route into a 2-step follow-up:
   //   "rank" — tap the habits you're most resisting
@@ -6531,15 +6582,19 @@ function App() {
   };
 
   /* TODOS */
+  // All to-do writers read latestData.current so a sync echo / habit
+  // toggle landing during a tap doesn't get clobbered. The audit-fix
+  // pass migrated other writers but skipped these — symptom users
+  // reported as "to-dos don't save properly" / disappear after sync.
+  // ID comparisons normalized to String(x)===String(y) so an
+  // import/export round-trip that flips a Number id to a String can't
+  // silently drop the find/filter match.
   const addTodo = () => {
     if (!nTodo.trim()) return;
+    const cur = latestData.current || data;
     save({
-      ...data,
-      // Guard against `data.todos` missing on imported / partially
-      // migrated docs — addGoal/addHabit already do this; addTodo
-      // didn't and would throw "undefined is not iterable" on the
-      // first task add for those users.
-      todos: [...(data.todos || []), {
+      ...cur,
+      todos: [...(cur.todos || []), {
         id: Date.now(),
         text: nTodo.trim(),
         done: false,
@@ -6562,9 +6617,10 @@ function App() {
   };
   const svETodo = id => {
     if (!eTodoTxt.trim()) return;
+    const cur = latestData.current || data;
     save({
-      ...data,
-      todos: data.todos.map(t => t.id === id ? {
+      ...cur,
+      todos: (cur.todos || []).map(t => String(t.id) === String(id) ? {
         ...t,
         text: eTodoTxt.trim(),
         dueDate: eTodoDue || null
@@ -6573,12 +6629,17 @@ function App() {
     sETodoId(null);
   };
   const chkTodo = id => {
-    const t = data.todos.find(x => x.id === id);
+    const cur = latestData.current || data;
+    const t = (cur.todos || []).find(x => String(x.id) === String(id));
     if (!t) return;
+    // Push undo BEFORE the destructive move so a mis-tap can be
+    // reversed (chkTodo previously skipped this — felt like the to-do
+    // had silently disappeared).
+    pushUndo(`Completed task: ${t.text.slice(0, 30)}`, JSON.parse(JSON.stringify(cur)));
     save({
-      ...data,
-      todos: data.todos.filter(x => x.id !== id),
-      archive: [...(data.archive || []), {
+      ...cur,
+      todos: (cur.todos || []).filter(x => String(x.id) !== String(id)),
+      archive: [...(cur.archive || []), {
         ...t,
         done: true,
         archivedAt: new Date().toISOString()
@@ -6586,22 +6647,23 @@ function App() {
     });
   };
   const delTodo = id => {
-    const t = data.todos.find(x => x.id === id);
+    const cur = latestData.current || data;
+    const t = (cur.todos || []).find(x => String(x.id) === String(id));
     if (!t) return;
-    pushUndo(`Deleted task: ${t.text.slice(0, 30)}`, JSON.parse(JSON.stringify(data)));
+    pushUndo(`Deleted task: ${t.text.slice(0, 30)}`, JSON.parse(JSON.stringify(cur)));
     save({
-      ...data,
-      todos: data.todos.filter(x => x.id !== id),
-      archive: [...(data.archive || []), {
+      ...cur,
+      todos: (cur.todos || []).filter(x => String(x.id) !== String(id)),
+      archive: [...(cur.archive || []), {
         ...t,
         archivedAt: new Date().toISOString()
       }]
     });
   };
-  const reordTodos = l => save({
-    ...data,
-    todos: l
-  });
+  const reordTodos = l => {
+    const cur = latestData.current || data;
+    save({ ...cur, todos: l });
+  };
   const dueStatus = d => {
     if (!d) return null;
     const td = new Date();
@@ -7446,9 +7508,10 @@ function App() {
   const addGoalTodo = (goalId) => {
     const draft = (goalTodoDraft[goalId] || "").trim();
     if (!draft) return;
+    const cur = latestData.current || data;
     save({
-      ...data,
-      todos: [...(data.todos || []), {
+      ...cur,
+      todos: [...(cur.todos || []), {
         id: Date.now(),
         text: draft,
         done: false,
@@ -11927,21 +11990,30 @@ function App() {
               ? "No habits were scheduled for yesterday."
               : "Tap to open yesterday's habits and mark each one done or missed."
             ),
-            /*#__PURE__*/React.createElement("button", {
-              onClick: () => {
-                updateRitual({ yesterdayReviewed: true });
-                // If anything was missed yesterday, route into the
-                // resistance flow instead of just collapsing the
-                // card to a pill. Reset the local rank/plan drafts
-                // first so a re-entry doesn't carry stale state.
-                if (yMissedHabits.length > 0 && !resistanceAlreadyDone) {
-                  setResistanceFlagged([]);
-                  setResistancePlanText("");
-                  setResistanceStep("rank");
-                }
-              },
-              style: { ...AB, width: "100%", padding: "9px" }
-            }, "Mark Reviewed \u2713")
+            // Mark Reviewed button is gated on yesterday being fully
+            // confirmed: every due habit must be either done or missed.
+            // Until then, show a hint pointing the user back into the
+            // Habits tab to finish the confirmation. This is the
+            // x-of-y feedback users actually need on the home card.
+            (yestDueCount === 0 || yestDone === yestDueCount)
+              ? /*#__PURE__*/React.createElement("button", {
+                  onClick: () => {
+                    updateRitual({ yesterdayReviewed: true });
+                    // If anything was missed yesterday, route into the
+                    // resistance flow instead of just collapsing the
+                    // card to a pill. Reset the local rank/plan drafts
+                    // first so a re-entry doesn't carry stale state.
+                    if (yMissedHabits.length > 0 && !resistanceAlreadyDone) {
+                      setResistanceFlagged([]);
+                      setResistancePlanText("");
+                      setResistanceStep("rank");
+                    }
+                  },
+                  style: { ...AB, width: "100%", padding: "9px" }
+                }, "Mark Reviewed \u2713")
+              : /*#__PURE__*/React.createElement("div", {
+                  style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "9px", lineHeight: 1.5 }
+                }, "Confirm every habit on the Habits tab (" + yestDone + "/" + yestDueCount + " done) to enable Mark Reviewed.")
           );
         })());
 
@@ -12581,7 +12653,13 @@ function App() {
     const yestJournalReviewed = !!rit.yestJournalReviewed;
     const yestJournalCard = (() => {
       if (yestJournalReviewed) return null;
-      const yestEntries = (data.journal || []).filter(e => e && e.dateKey === yest && e.tag !== "goals" && !e.goalId);
+      // Only the daily-recap tag counts as "the daily journal entry"
+      // for the day. Five gratitude / wins / ideas entries written
+      // yesterday should NOT mark the daily slot as filled — the user
+      // hasn't actually written the daily reflection yet. tag value
+      // mapping: jKind === "daily" saves with tag "daily-recap"
+      // (see the journal save logic).
+      const yestEntries = (data.journal || []).filter(e => e && e.dateKey === yest && e.tag === "daily-recap");
       const wroteCount = yestEntries.length;
       // Selecting yesterday's date in the header turns the date pill
       // red (the same affordance used by the Yesterday Habits flow),
@@ -12611,10 +12689,19 @@ function App() {
           ? "You wrote " + wroteCount + " entry" + (wroteCount === 1 ? "" : "ies") + " for yesterday. Tap to revisit or add more."
           : "Tap to capture how yesterday actually went — the reflection feeds your weekly insights."
         ),
-        /*#__PURE__*/React.createElement("button", {
-          onClick: () => updateRitual({ yestJournalReviewed: true }),
-          style: { ...AB, width: "100%", padding: "9px" }
-        }, "Mark Reviewed ✓")
+        // Same gating as the habit-review card: Mark Reviewed only
+        // appears once the user has actually written yesterday's daily
+        // journal entry. Until then, point them into the Reflect tab
+        // to write it. Other journal kinds (gratitude, wins, etc.) for
+        // yesterday don't count — wroteCount only counts daily-recap.
+        wroteCount > 0
+          ? /*#__PURE__*/React.createElement("button", {
+              onClick: () => updateRitual({ yestJournalReviewed: true }),
+              style: { ...AB, width: "100%", padding: "9px" }
+            }, "Mark Reviewed ✓")
+          : /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "9px", lineHeight: 1.5 }
+            }, "Tap above to open Reflect and write yesterday's daily entry to enable Mark Reviewed.")
       );
     })();
     // Bottom-pill mirror for the daily journal once reviewed,
@@ -14085,32 +14172,36 @@ function App() {
             fontStyle: "italic",
             // Two-line clamp so user-authored notes (a recipe like
             // "Sit-ups · Planks · Leg raises") aren't truncated to the
-            // first ~25 chars. Hidden in compact mode where the column
-            // is too narrow for prose anyway.
+            // first ~25 chars. maxHeight defensive against Safari iOS
+            // clipping descenders ("g/p/y") on the 2nd line — the
+            // -webkit-box clamp computes from box not line-box height.
             display: "-webkit-box",
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
-            lineHeight: 1.4
+            lineHeight: 1.45,
+            maxHeight: "2.9em"
           }
         }, habit.notes), expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
           style: {
             display: "flex",
             alignItems: "center",
-            gap: 3,
+            gap: 4,
             // Compact mode: pills wrap to a new line instead of being
             // clipped, since the column is only ~120px wide at iPhone
-            // 17 Pro width with 3 simultaneous habits.
+            // 17 Pro width with 3 simultaneous habits. overflow:visible
+            // so the wrapped 2nd row of chips isn't clipped by the
+            // parent's grid track sizing.
             flexWrap: compact ? "wrap" : "nowrap",
-            rowGap: compact ? 3 : 0,
-            overflow: "hidden",
-            marginTop: 2
+            rowGap: compact ? 4 : 0,
+            overflow: "visible",
+            marginTop: 4
           }
         }, fmtDur(habit.duration) && /*#__PURE__*/React.createElement("div", {
           style: {
-            height: 16,
-            paddingLeft: 5,
-            paddingRight: 5,
+            height: 20,
+            paddingLeft: 7,
+            paddingRight: 7,
             background: "#f0f9ff",
             border: "1px solid #bae6fd",
             borderRadius: 4,
@@ -14128,9 +14219,9 @@ function App() {
           }
         }, "\u23F1", fmtDur(habit.duration))), imp && /*#__PURE__*/React.createElement("div", {
           style: {
-            height: 16,
-            paddingLeft: 5,
-            paddingRight: 5,
+            height: 20,
+            paddingLeft: 7,
+            paddingRight: 7,
             background: imp.bg,
             border: `1px solid ${imp.border}`,
             borderRadius: 4,
@@ -14151,17 +14242,17 @@ function App() {
         // Frequency pill — replaces the streak graphic (dots + % + day
         // count). Just the cadence bucket name, uppercase.
         (() => { const fqRow = FREQ.find(f => f.value === getFreq(habit).type); return fqRow ? /*#__PURE__*/React.createElement("div", {
-          style: {height: 16, paddingLeft: 5, paddingRight: 5, background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
+          style: {height: 20, paddingLeft: 7, paddingRight: 7, background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0}
         }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", whiteSpace: "nowrap"}}, fqRow.label)) : null; })(),
         // Fire/ice streak indicator: 🔥N for an active streak, 🧊N
         // for days since the habit went cold; nothing for brand-new.
         (() => {
           if (streak > 0) return /*#__PURE__*/React.createElement("div", {
-            style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
+            style: {height: 20, paddingLeft: 6, paddingRight: 7, background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
           }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83D\uDD25"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, fontWeight: 700, color: "#c2410c"}}, streak));
           const cold = daysSinceLast(habit);
           if (cold != null) return /*#__PURE__*/React.createElement("div", {
-            style: {height: 16, paddingLeft: 4, paddingRight: 5, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
+            style: {height: 20, paddingLeft: 6, paddingRight: 7, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 4, display: "flex", alignItems: "center", gap: 2, flexShrink: 0}
           }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, lineHeight: 1}}, "\uD83E\uDDCA"), /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, fontWeight: 700, color: "#1d4ed8"}}, cold));
           return null;
         })()), habit.goalId && expHabitGoals[habit.id] && /*#__PURE__*/React.createElement("div", {
@@ -14173,10 +14264,10 @@ function App() {
           style: { display: "block", marginTop: 5, paddingTop: 5, borderTop: "1px dashed #e5e7eb", minWidth: 0 }
         },
           /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 11, color: "var(--c-text-faint)", fontWeight: 700, textTransform: "uppercase", lineHeight: 1.4, marginBottom: 2 }
+            style: { fontSize: 10, color: "var(--c-text-faint)", fontWeight: 700, textTransform: "uppercase", lineHeight: 1.4, marginBottom: 2, letterSpacing: 0.4 }
           }, "Goal:"),
           /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 12, fontWeight: 600, color: "#2d5a2d", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.4 }
+            style: { fontSize: 13, fontWeight: 600, color: "#2d5a2d", whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.4 }
           }, data.goals.find(g => String(g.id) === String(habit.goalId))?.text || "")
         ),
         // Linked content surfaced when the habit row is expanded. As
@@ -16689,13 +16780,18 @@ function App() {
       )) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
         style: {flex: 1, minWidth: 0}
       }, /*#__PURE__*/React.createElement("div", {
+        // Wrap goal title so the 24x24 play chip + 🚨 incomplete flag
+        // don't eat the first half of long titles ("Become consistent
+        // with daily journal entries"). The flex parent already has
+        // minWidth:0 — wrap is safe and the goal name reads in full.
         style: {
           fontSize: 13,
           color: "var(--c-text)",
           fontWeight: 500,
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis"
+          whiteSpace: "normal",
+          wordBreak: "break-word",
+          overflowWrap: "anywhere",
+          lineHeight: 1.35
         }
       }, isGoalIncomplete(goal) && /*#__PURE__*/React.createElement("span", {
         title: "Incomplete — open the goal to fill in area, SMART details, or target date.",
@@ -22454,6 +22550,7 @@ function App() {
     const closeModal = () => {
       voiceActiveRef.current = false;
       if (voiceSessionRef.current) { voiceSessionRef.current.stop(); voiceSessionRef.current = null; }
+      if (voiceWakeLockRef.current) { voiceWakeLockRef.current.release(); voiceWakeLockRef.current = null; }
       setVoiceListening(false);
       setVoiceCaptureOpen(false);
       setVoiceTranscript("");
@@ -22469,6 +22566,12 @@ function App() {
       if (voiceSessionRef.current) return;
       voiceActiveRef.current = true;
       voiceStartedAtRef.current = Date.now();
+      // Hold the screen awake for the duration of the recording so iOS
+      // doesn't dim → suspend → silently truncate the session.
+      acquireWakeLock().then(lock => {
+        if (voiceActiveRef.current) voiceWakeLockRef.current = lock;
+        else if (lock) lock.release();
+      });
       // Cross-session dedupe — same logic the VoiceMicButton uses.
       // Drops exact-duplicate / strict-suffix repeats that happen when
       // iOS Safari relaunches the recognizer after a silence pause.
@@ -22517,6 +22620,7 @@ function App() {
     const stopListening = () => {
       voiceActiveRef.current = false;
       if (voiceSessionRef.current) { voiceSessionRef.current.stop(); voiceSessionRef.current = null; }
+      if (voiceWakeLockRef.current) { voiceWakeLockRef.current.release(); voiceWakeLockRef.current = null; }
       setVoiceListening(false);
     };
     const finalText = (voiceTranscript || "").trim();
@@ -22580,9 +22684,14 @@ function App() {
       const cur = latestData.current || data;
       save({
         ...cur,
+        // Match the addTodo shape — done + date were missing, which
+        // made these voice-captured to-dos invisible to surfaces that
+        // filter on `t.done` or read `t.date`.
         todos: [...(cur.todos || []), {
           id: Date.now(),
           text: finalText,
+          done: false,
+          date: new Date().toDateString(),
           dueDate: null,
           goalId: null
         }]
