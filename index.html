@@ -4821,6 +4821,11 @@ function App() {
   const [eHType, sEHType] = useState("");
   const [eHImp, sEHImp] = useState("Important");
   const [eHSec, sEHSec] = useState("morning");
+  // Multi-slot sections — when non-empty, the habit appears as one
+  // row per listed section each day with its own done/missed toggle.
+  // Empty array = single-slot habit (uses eHSec for its primary
+  // section). The schema field is habit.slotSections.
+  const [eHSlotSections, sEHSlotSections] = useState([]);
   const [eHNotes, sEHNotes] = useState("");
   // Edit-habit goal links. Stored as array of id strings — a habit
   // can belong to multiple goals (e.g. "sleep 8 hours" underlying
@@ -6990,7 +6995,7 @@ function App() {
     setShowAddHabit(false);
   };
   ;
-  const togHabit = (id, fd, mode, atTime) => {
+  const togHabit = (id, fd, mode, atTime, slot) => {
     // Read from latestData.current (always the freshest state) rather
     // than `data` (captured via the outer closure at render time). This
     // lets the habit card be memoized — even when a handler fires from
@@ -6998,30 +7003,37 @@ function App() {
     // on habit A never clobbers a concurrent save on habit B.
     const cur = latestData.current || data;
     const key = fd || tk();
-    const targetH = (cur.habits || []).find(h => h.id === id);
+    const targetH = (cur.habits || []).find(h => String(h.id) === String(id));
     if (!targetH) return;
     const prev = targetH.completions?.[key];
     const prevState = (prev === "done" || prev === true) ? "done" : (prev === "missed" ? "missed" : "none");
 
-    // "increment" mode drives the sub-unit feature (e.g. 4/8 cups, or
-    // ≤ 0 drinks for an avoid habit). The atTime parameter doubles
-    // as a sentinel here:
-    //   atTime = "reset" → wipe the day's count to 0 (used by the
-    //                       swipe-left clear gesture)
-    //   atTime = "fill"  → jump straight to target — Math.max so we
-    //                       don't decrement a count that's already
-    //                       past target (used by swipe-right on
-    //                       sub-unit habits: "I did the whole 60
-    //                       minutes; mark me done in one gesture")
-    //   otherwise        → +habit.increment per call (default 1)
-    //
-    // Newstate then follows the habit's comparison op:
-    //   ≥ N: done once units >= N
-    //   ≤ N: done while units <= N, missed once units > N
-    // typeof check lets target = 0 count as a real target.
+    // Multi-slot habits: a single habit can be due in multiple sections
+    // each day (e.g. "Take meds" at morning + evening). Each slot has
+    // its own done/missed toggle stored in slotCompletions[key][slot].
+    // The day-level completions[key] is the rollup ("done" iff every
+    // slot is "done") so streak / sparkline / correlations keep working
+    // unchanged — they read the rollup.
+    const slots = Array.isArray(targetH.slotSections) ? targetH.slotSections : null;
+    const isMultiSlot = !!(slots && slots.length > 0 && slot && slots.includes(slot));
+
     let newState;
     let nextUnits = null;
-    if (mode === "increment" && typeof targetH.target === "number") {
+    let nextSlotComp = null;
+    if (isMultiSlot) {
+      const sc = { ...((targetH.slotCompletions || {})[key] || {}) };
+      const newSlotState = mode === "done" ? "done" : (mode === "missed" ? "missed" : "none");
+      if (newSlotState === "none") delete sc[slot];
+      else sc[slot] = newSlotState;
+      nextSlotComp = sc;
+      // Day-level rollup: ALL slots done → "done", ALL slots missed →
+      // "missed", anything in between → "none" (mixed). The "none"
+      // mixed case keeps streaks honest — you don't get streak credit
+      // for half-finishing a multi-slot habit.
+      const allDone = slots.every(s => sc[s] === "done" || sc[s] === true);
+      const allMissed = slots.every(s => sc[s] === "missed");
+      newState = allDone ? "done" : (allMissed ? "missed" : "none");
+    } else if (mode === "increment" && typeof targetH.target === "number") {
       const curUnits = Number(targetH.completionUnits && targetH.completionUnits[key]) || 0;
       if (atTime === "reset") {
         // Hard clear: drop count to 0 AND force state back to
@@ -7060,17 +7072,22 @@ function App() {
       ? (typeof atTime === "string" && /^\d{2}:\d{2}$/.test(atTime) ? atTime : tkTime())
       : null;
     const habits = (cur.habits || []).map(h => {
-      if (h.id !== id) return h;
+      if (String(h.id) !== String(id)) return h;
       const c = { ...h.completions };
       const ct = { ...(h.completionTimes || {}) };
       const cu = { ...(h.completionUnits || {}) };
+      const slc = { ...(h.slotCompletions || {}) };
       if (nextUnits != null) {
         if (nextUnits > 0) cu[key] = nextUnits; else delete cu[key];
+      }
+      if (nextSlotComp != null) {
+        if (Object.keys(nextSlotComp).length === 0) delete slc[key];
+        else slc[key] = nextSlotComp;
       }
       if (newState === "done") { c[key] = "done"; ct[key] = resolvedTime; }
       else if (newState === "missed") { c[key] = "missed"; ct[key] = resolvedTime; }
       else { delete c[key]; delete ct[key]; }
-      return { ...h, completions: c, completionTimes: ct, completionUnits: cu };
+      return { ...h, completions: c, completionTimes: ct, completionUnits: cu, slotCompletions: slc };
     });
     // XP rules: done = +imp, missed = -imp, none = 0. Delta = new - prev.
     const imp = targetH.importance;
@@ -7170,20 +7187,42 @@ function App() {
     if (cohortStarted) total += cohortMax;
     return total;
   };
-  const isDone = (h, fd) => {
+  // Multi-slot habits: a habit can declare slotSections: ["morning",
+  // "evening", ...] meaning it's due in EACH of those sections every
+  // day. Per-slot status lives in habit.slotCompletions[date][section].
+  // The day-level habit.completions[date] rollup is "done" iff every
+  // slot is "done", so getStreak / getCR / sparkline keep working
+  // without changes — they read the rollup.
+  //
+  // isDone with optional slot: if the habit is multi-slot AND a slot is
+  // passed, check that slot's status. Without a slot, check whether
+  // every slot is done (the day-level definition of done).
+  const isDone = (h, fd, slot) => {
     if (!h) return false;
-    // Parent habits auto-derive: done iff every child is done for
-    // the same date. A parent with NO children falls through to its
-    // own completion record (acts like a normal habit until the
-    // user adds children).
+    const k = fd || tk();
+    // Parent habits auto-derive: done iff every child is done for the
+    // same date. A parent with NO children falls through to its own
+    // completion record.
     const kids = habitChildren(h);
     if (kids.length > 0) {
       return kids.every(c => {
-        const v = c.completions?.[fd || tk()];
+        const v = c.completions?.[k];
         return v === "done" || v === true;
       });
     }
-    const v = h.completions?.[fd || tk()];
+    const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
+    if (slots && slots.length > 0) {
+      const sc = (h.slotCompletions || {})[k] || {};
+      if (slot) {
+        const v = sc[slot];
+        return v === "done" || v === true;
+      }
+      return slots.every(s => {
+        const v = sc[s];
+        return v === "done" || v === true;
+      });
+    }
+    const v = h.completions?.[k];
     return v === "done" || v === true;
   };
   const isMissed = (h, fd) => {
@@ -7230,6 +7269,7 @@ function App() {
     sEHType("");
     sEHImp("Important");
     sEHSec("morning");
+    sEHSlotSections([]);
     sEHNotes("");
     sEHGoalIds([]);
     sEHLoc("both");
@@ -7296,9 +7336,14 @@ function App() {
       // sibling via the section-level Organize modal.
       parentId: null,
       concurrent: false,
+      // Multi-slot: when slotSections has 2+ entries, the habit shows
+      // up as one row per listed section each day with its own toggle.
+      // Stored even when single-section so the schema is uniform.
+      slotSections: (eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [],
       completions: {},
       completionTimes: {},
-      completionUnits: {}
+      completionUnits: {},
+      slotCompletions: {}
     };
     // Append to the section: the new habit gets the next available
     // _order slot. Repositioning happens in the Organize modal.
@@ -7322,6 +7367,7 @@ function App() {
     sEHType(h.type || "");
     sEHImp(h.importance || "Important");
     sEHSec(h.section || "morning");
+    sEHSlotSections(Array.isArray(h.slotSections) ? h.slotSections.slice() : []);
     sEHNotes(h.notes || "");
     sEHGoalIds(habitGoalIds(h).map(String));
     sEHLoc(h.location || "both");
@@ -7398,13 +7444,16 @@ function App() {
     } : null;
     save({
       ...data,
-      habits: (data.habits || []).map(h => h.id === id ? {
+      habits: (data.habits || []).map(h => String(h.id) === String(id) ? {
         ...h,
         text: nextText,
         duration: nextDur,
         type: nextType,
         importance: nextImp,
         section: nextSec,
+        // 2+ slots → multi-slot habit, otherwise clear back to []
+        // (single-slot uses `section`).
+        slotSections: (eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [],
         notes: nextNotes,
         // Write both the new array form (goalIds) and the legacy
         // scalar (goalId = first link) so a downgrade to an older
@@ -8981,9 +9030,22 @@ function App() {
   // card when the parent is expanded. The parent + all of its
   // children stay in the same section, so the count chip on the
   // section header reflects only top-level habits.
+  // Multi-slot habits are pushed into EACH of their slotSections in
+  // addition to (or instead of) their primary section. Each occurrence
+  // is rendered with a `_renderSlot` marker so the row can pass that
+  // slot to togHabit / isDone for per-slot toggling.
   const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => ({
     ...sec,
-    habits: sortItems(filtH.filter(h => h.section === sec.value && !h.parentId), habitSortMode, "habit")
+    habits: sortItems(filtH.filter(h => {
+      if (h.parentId) return false;
+      const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
+      if (slots && slots.length > 0) return slots.includes(sec.value);
+      return h.section === sec.value;
+    }).map(h => {
+      const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
+      if (slots && slots.length > 0) return { ...h, _renderSlot: sec.value };
+      return h;
+    }), habitSortMode, "habit")
   })).filter(g => g.habits.length > 0), [filtH, secFilter, habitSortMode]);
 
   /* ── ONBOARDING: AUTH + WELCOME GATES ── */
@@ -11438,6 +11500,12 @@ function App() {
     const dueYesterday = activeH.filter(h => isHabitDueOn(h, yest));
     const todayDone = dueToday.filter(h => isDone(h, tk())).length;
     const yestDone = dueYesterday.filter(h => isDone(h, yest)).length;
+    // "Resolved" = each habit has an explicit decision for yesterday
+    // (done OR missed). The Mark Reviewed button gates on this rather
+    // than on yestDone alone — the user wants to be able to close out
+    // yesterday even when some habits were genuinely missed.
+    const yestMissedCount = dueYesterday.filter(h => isMissed(h, yest)).length;
+    const yestResolvedCount = yestDone + yestMissedCount;
     const todayDueCount = dueToday.length;
     const yestDueCount = dueYesterday.length;
     const pct7 = activeH.length ? Math.round(today7.reduce((s, d) => s + activeH.filter(h => isDone(h, d)).length, 0) / (activeH.length * 7) * 100) : 0;
@@ -11984,10 +12052,13 @@ function App() {
               // when still pending. Replaces the previous bare-text
               // "X/Y confirmed" + verbose inline hint pair.
               (() => {
-                const complete = yestDueCount === 0 || yestDone === yestDueCount;
+                // Pill turns green once every habit has a decision
+                // (done or missed). Y/Y in green = "fully recorded".
+                // Otherwise amber X/Y where X = decisions so far.
+                const resolved = yestDueCount === 0 || yestResolvedCount === yestDueCount;
                 return /*#__PURE__*/React.createElement("span", {
-                  style: { fontSize: 11, fontWeight: 700, color: complete ? "#15803d" : "#b45309", flexShrink: 0, marginLeft: 8, background: complete ? "var(--c-tint-success-bg)" : "#fef3c7", padding: "3px 8px", borderRadius: 12 }
-                }, yestDueCount === 0 ? "None due" : (complete ? (yestDone + "/" + yestDueCount + " ✓") : (yestDone + "/" + yestDueCount)));
+                  style: { fontSize: 11, fontWeight: 700, color: resolved ? "#15803d" : "#b45309", flexShrink: 0, marginLeft: 8, background: resolved ? "var(--c-tint-success-bg)" : "#fef3c7", padding: "3px 8px", borderRadius: 12 }
+                }, yestDueCount === 0 ? "None due" : (resolved ? (yestResolvedCount + "/" + yestDueCount + " ✓") : (yestResolvedCount + "/" + yestDueCount)));
               })()
             ),
             /*#__PURE__*/React.createElement("div", {
@@ -12002,7 +12073,12 @@ function App() {
             // Until then, show a hint pointing the user back into the
             // Habits tab to finish the confirmation. This is the
             // x-of-y feedback users actually need on the home card.
-            (yestDueCount === 0 || yestDone === yestDueCount)
+            // Mark Reviewed unlocks once every habit has been DECIDED —
+            // done OR missed both count. Was previously gated on
+            // yestDone === yestDueCount (only "all done" qualified)
+            // which made it impossible to close out a day with any
+            // missed habits.
+            (yestDueCount === 0 || yestResolvedCount === yestDueCount)
               ? /*#__PURE__*/React.createElement("button", {
                   onClick: () => {
                     updateRitual({ yesterdayReviewed: true });
@@ -13685,7 +13761,15 @@ function App() {
         // target chip share the top row; habit name + meta sit
         // below. Wider readable text on a narrow column.
         const compact = !!(opts && opts.compact);
-        const d = isDone(habit, selDate);
+        // Multi-slot rendering: the habit was pushed into this section
+        // by groupedH because its slotSections includes the section.
+        // Wrap togHabit/isDone so they target this slot's state, not
+        // the day-level rollup.
+        const renderSlot = habit._renderSlot || null;
+        const togHabitForRow = renderSlot
+          ? (id, fd, mode, atTime) => togHabit(id, fd, mode, atTime, renderSlot)
+          : togHabit;
+        const d = isDone(habit, selDate, renderSlot);
         const missed = isMissed(habit, selDate);
         const resistedCount = resistanceCountFor[habit.id] || 0;
         const isPersistentlyResisted = resistedCount >= 2;
@@ -13767,9 +13851,9 @@ function App() {
                 setTimeout(() => setSwipeFeedback(null), 2500);
                 setTimeout(() => {
                   if (typeof habit.target === "number") {
-                    togHabit(habit.id, selDate, "increment", "fill");
+                    togHabitForRow(habit.id, selDate, "increment", "fill");
                   } else {
-                    togHabit(habit.id, selDate, "done");
+                    togHabitForRow(habit.id, selDate, "done");
                   }
                   setSwipeAnim(p => {
                     const n = {
@@ -13800,12 +13884,12 @@ function App() {
                 setTimeout(() => {
                   if (wasMissed) {
                     if (typeof habit.target === "number") {
-                      togHabit(habit.id, selDate, "increment", "reset");
+                      togHabitForRow(habit.id, selDate, "increment", "reset");
                     } else {
-                      togHabit(habit.id, selDate, "none");
+                      togHabitForRow(habit.id, selDate, "none");
                     }
                   } else {
-                    togHabit(habit.id, selDate, "missed");
+                    togHabitForRow(habit.id, selDate, "missed");
                   }
                   setSwipeAnim(p => {
                     const n = { ...p };
@@ -13978,9 +14062,9 @@ function App() {
             // is still done via swipe-left ("Cleared for today");
             // tap on the action circle just flips the binary.
             if (hasTarget) {
-              togHabit(habit.id, selDate, "increment");
+              togHabitForRow(habit.id, selDate, "increment");
             } else if (!d) {
-              togHabit(habit.id, selDate, "done");
+              togHabitForRow(habit.id, selDate, "done");
             }
           },
           style: {
@@ -23764,10 +23848,13 @@ function App() {
   }, /*#__PURE__*/React.createElement("select", {
     value: eHSec,
     onChange: e => sEHSec(e.target.value),
+    "aria-label": "Time of Day",
+    disabled: (eHSlotSections && eHSlotSections.length >= 2),
     style: {
       ...S,
       flex: 1,
-      color: SECTIONS.find(s => s.value === eHSec)?.color || "var(--c-text-soft)"
+      color: SECTIONS.find(s => s.value === eHSec)?.color || "var(--c-text-soft)",
+      opacity: (eHSlotSections && eHSlotSections.length >= 2) ? 0.55 : 1
     }
   }, /*#__PURE__*/React.createElement("option", {
     value: ""
@@ -23786,7 +23873,37 @@ function App() {
   }, "\u23F1 Duration"), DURS.map(d => /*#__PURE__*/React.createElement("option", {
     key: d.value,
     value: d.value
-  }, d.label)))), /*#__PURE__*/React.createElement("div", {
+  }, d.label)))),
+  // Multi-slot toggle. Pick 2+ sections to make this a habit you do
+  // multiple times a day (e.g. take meds at morning + evening). Each
+  // section will get its own row + done/missed toggle on the habit
+  // tab. Picking 0 or 1 falls back to the single-section dropdown
+  // above.
+  /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, alignItems: "center" }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginRight: 4, width: "100%", marginBottom: 4 }
+    }, "Multiple slots per day (optional)"),
+    SECTIONS.filter(s => s.value !== "avoid" && s.value !== "all-day").map(s => {
+      const active = (eHSlotSections || []).includes(s.value);
+      return /*#__PURE__*/React.createElement("button", {
+        key: s.value,
+        type: "button",
+        onClick: () => sEHSlotSections(prev => active ? (prev || []).filter(x => x !== s.value) : [...(prev || []), s.value]),
+        style: {
+          fontSize: 12, fontWeight: 600,
+          padding: "6px 12px", borderRadius: 999,
+          border: "1px solid " + (active ? "var(--c-tint-brand-fg)" : "var(--c-border)"),
+          background: active ? "var(--c-tint-success-bg)" : "var(--c-surface-raised)",
+          color: active ? "var(--c-tint-brand-fg)" : "var(--c-text-soft)",
+          cursor: "pointer",
+          WebkitTapHighlightColor: "transparent"
+        }
+      }, s.icon, " ", s.label);
+    })
+  ),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
