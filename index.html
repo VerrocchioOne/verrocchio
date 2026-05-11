@@ -541,7 +541,7 @@ textarea{resize:vertical}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
 @keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.55)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
-.fade-in{animation:fadeIn .2s ease forwards;max-width:640px;margin:0 auto}
+.fade-in{animation:fadeIn .2s ease forwards;max-width:640px;margin:0 auto;padding:16px 16px 110px;box-sizing:border-box}
 .pulsing{animation:pulse 1.5s ease infinite}
 /* ── Verrocchio welcome splash ("Ink V") ──────────────────────────────
    Full-bleed brand animation on the welcome screen while
@@ -11771,21 +11771,18 @@ function App() {
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:"rgba(255,255,255,.8)"}}, "Level ", Math.max(1, Math.floor(Math.max(0,(data.xp||0)+xpToast.amount)/500)+1))
     );
   })(), /*#__PURE__*/React.createElement("div", {
-    // SMOKING GUN: this wrapper had inline maxWidth: 640 + margin: 0
-    // auto, which clamped EVERY tab's content to a 640px column on
-    // desktop regardless of the .fade-in CSS centering rules. The
-    // .fade-in classes on inner tab divs (goals, reflection) were
-    // releasing themselves to "max-width: none" via @media but still
-    // sitting INSIDE this 640px parent — so they had nothing to
-    // expand into. className "fade-in" + dropping the inline cap
-    // lets the desktop CSS at lines ~117-180 actually take effect:
-    // max-width: none, padding 32px, auto-fit grids spread across
-    // the full viewport.
-    className: "fade-in",
-    style: {
-      padding: "16px 16px 110px",
-      margin: "0 auto"
-    }
+    // SMOKING GUN: this wrapper used to have inline maxWidth: 640 +
+    // margin: 0 auto, clamping every tab to 640px regardless of the
+    // .fade-in CSS rules. className "fade-in" + dropping every inline
+    // dimension/spacing prop lets the CSS fully control layout:
+    //   • Phone (.fade-in base): max-width 640px, margin 0 auto, 16px
+    //     side padding (set in CSS so external rules can override).
+    //   • Desktop (@media min-width: 900px): max-width none, margin 0,
+    //     32px side padding, auto-fit grids spread to viewport.
+    // The 110px bottom padding is preserved via CSS so it can vary by
+    // breakpoint too. Inline padding/margin shorthand would defeat the
+    // longhand desktop overrides — that's why this is now bare.
+    className: "fade-in tab-content"
   }, tab === "brief" && (() => {
     /* ── DAILY RITUAL — morning flow on the Home tab.
        Canonical card order: briefing → yesterday review → goals review →
