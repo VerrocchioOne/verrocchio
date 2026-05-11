@@ -541,7 +541,7 @@ textarea{resize:vertical}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
 @keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.55)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
-.fade-in{animation:fadeIn .2s ease forwards}
+.fade-in{animation:fadeIn .2s ease forwards;max-width:640px;margin:0 auto}
 .pulsing{animation:pulse 1.5s ease infinite}
 /* ── Verrocchio welcome splash ("Ink V") ──────────────────────────────
    Full-bleed brand animation on the welcome screen while
@@ -896,11 +896,23 @@ const auth=firebase.auth();
 // `window.__deviceProfile` or matching the body data attribute.
 function classifyDevice() {
   const w = (typeof window !== "undefined" && window.innerWidth) || 0;
-  const hover = typeof window !== "undefined"
+  // (hover: hover) is FALSE on any device whose primary input is touch
+  // — including Windows touchscreen laptops (Surface, ThinkPad Yoga,
+  // etc.) even when a mouse is connected. Loosen the test to also
+  // accept (any-hover: hover) and (pointer: fine) so the desktop
+  // profile fires whenever ANY connected pointer is precise. This
+  // catches: real desktops, plain laptops, touch-laptops with mouse,
+  // and desktops with a touch monitor. iPads in portrait still
+  // classify as "tablet" (no hover-capable pointer ever).
+  const mm = (q) => typeof window !== "undefined"
     && window.matchMedia
-    && window.matchMedia("(hover: hover)").matches;
-  if (w >= 1300 && hover) return "desktop-wide";
-  if (w >= 900  && hover) return "desktop";
+    && window.matchMedia(q).matches;
+  const hoverCapable = mm("(hover: hover)")
+    || mm("(any-hover: hover)")
+    || mm("(pointer: fine)")
+    || mm("(any-pointer: fine)");
+  if (w >= 1300 && hoverCapable) return "desktop-wide";
+  if (w >= 900  && hoverCapable) return "desktop";
   if (w >= 900) return "tablet";
   return "phone";
 }
@@ -934,7 +946,28 @@ const storage = firebase.storage();
 //   SW updates by up to 10 minutes after a deploy. With "none" the
 //   check is fresh on every navigation.
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-  navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" }).catch(()=>{});
+  navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" }).then(reg => {
+    // Force an update check on every page load. register() alone won't
+    // re-fetch service-worker.js; the browser self-schedules update
+    // checks (typically every 24h, throttled), which means installed
+    // PWAs can serve stale shells for a long time after a deploy.
+    if (reg && reg.update) reg.update().catch(() => {});
+    // Re-poll every 60s while the tab/PWA stays open so a deploy that
+    // lands mid-session is picked up within a minute.
+    if (reg && reg.update) {
+      setInterval(() => { try { reg.update(); } catch (e) {} }, 60000);
+    }
+    // When a NEW service worker takes over (skipWaiting + clients.claim
+    // in the SW push it through), reload ONCE so the fresh HTML/JS is
+    // actually used. Without this, the page keeps running the old
+    // bundle until the user navigates manually.
+    let _swReloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (_swReloaded) return;
+      _swReloaded = true;
+      try { location.reload(); } catch (e) {}
+    });
+  }).catch(() => {});
 }
 /* Multi-user scoping: each signed-in Firebase user gets their own
    Firestore document at users/<uid>. `userDoc(uid)` is a helper so
@@ -11738,9 +11771,19 @@ function App() {
       /*#__PURE__*/React.createElement("span", {style:{fontSize:11,color:"rgba(255,255,255,.8)"}}, "Level ", Math.max(1, Math.floor(Math.max(0,(data.xp||0)+xpToast.amount)/500)+1))
     );
   })(), /*#__PURE__*/React.createElement("div", {
+    // SMOKING GUN: this wrapper had inline maxWidth: 640 + margin: 0
+    // auto, which clamped EVERY tab's content to a 640px column on
+    // desktop regardless of the .fade-in CSS centering rules. The
+    // .fade-in classes on inner tab divs (goals, reflection) were
+    // releasing themselves to "max-width: none" via @media but still
+    // sitting INSIDE this 640px parent — so they had nothing to
+    // expand into. className "fade-in" + dropping the inline cap
+    // lets the desktop CSS at lines ~117-180 actually take effect:
+    // max-width: none, padding 32px, auto-fit grids spread across
+    // the full viewport.
+    className: "fade-in",
     style: {
       padding: "16px 16px 110px",
-      maxWidth: 640,
       margin: "0 auto"
     }
   }, tab === "brief" && (() => {
