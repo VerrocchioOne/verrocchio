@@ -4799,6 +4799,10 @@ function App() {
   const [newGoalFromHabit, setNewGoalFromHabit] = useState(false);
   const [newGoalText, setNewGoalText] = useState("");
   const swipeRef = useRef({});
+  // Holds the pending single-click expand timer for habit rows so a
+  // follow-up double-click can cancel it (avoids the row growing
+  // mid-double-click and shifting the second tap target).
+  const habitClickTimerRef = useRef(null);
   const shakeRef = useRef({
     lastShake: 0
   });
@@ -7004,7 +7008,13 @@ function App() {
     const cur = latestData.current || data;
     const key = fd || tk();
     const targetH = (cur.habits || []).find(h => String(h.id) === String(id));
-    if (!targetH) return;
+    if (!targetH) {
+      // Defensive log — if toggles ever silently no-op (the user reports
+      // "habits not saving"), this will catch the case where the id
+      // passed in doesn't exist in the freshest data snapshot.
+      try { console.warn("[verrocchio togHabit] habit not found in latestData", { id, mode, slot, habitsCount: (cur.habits || []).length }); } catch (_) {}
+      return;
+    }
     const prev = targetH.completions?.[key];
     const prevState = (prev === "done" || prev === true) ? "done" : (prev === "missed" ? "missed" : "none");
 
@@ -13802,10 +13812,31 @@ function App() {
           // accidental-drag mishaps with mobile scroll. Hence no
           // pointer-down hold timer here anymore.
           onClick: e => {
-            setExpHabitGoals(p => ({ ...p, [habit.id]: !p[habit.id] }));
+            // Defer the expand-toggle by ~250ms so a follow-up second
+            // click cancels it and goes straight to the edit modal.
+            // Without the delay, the row grew on click 1, shifted
+            // every subsequent row down, and made click 2 land on the
+            // wrong target — the user reports "it becomes hard to
+            // double-click because it moves." Delay is short enough
+            // that single-tap-to-expand still feels instantaneous.
+            if (habitClickTimerRef.current) {
+              clearTimeout(habitClickTimerRef.current);
+              habitClickTimerRef.current = null;
+            }
+            const id = habit.id;
+            habitClickTimerRef.current = setTimeout(() => {
+              habitClickTimerRef.current = null;
+              setExpHabitGoals(p => ({ ...p, [id]: !p[id] }));
+            }, 250);
           },
           onDoubleClick: e => {
             e.stopPropagation();
+            // Cancel any pending single-click expand so the row stays
+            // put while the edit modal opens.
+            if (habitClickTimerRef.current) {
+              clearTimeout(habitClickTimerRef.current);
+              habitClickTimerRef.current = null;
+            }
             sEHabit(habit);
           },
           onTouchStart: e => {
