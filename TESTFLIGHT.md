@@ -41,59 +41,44 @@ While waiting, do Stage 2.
 
 ---
 
-## Stage 3 — Wrap the PWA with Capacitor — 1 hour
+## Stage 3 — Wrap the PWA with Capacitor — 30 min on Mac
 
-This produces a native iOS Xcode project that hosts the existing `index.html` as the app's main view.
+**Already done on Windows (committed to the repo):**
+- `npm install --save-dev @capacitor/cli @capacitor/core @capacitor/ios`
+- `npx cap init Verrocchio com.verrocchio.app --web-dir=.`
+- `capacitor.config.json` configured with `appId`, `appName`, `webDir`, `iosScheme: "capacitor"`, and iOS-specific defaults
+- `package.json` has helper scripts: `cap:add:ios`, `cap:sync`, `cap:open`
+- `.gitignore` excludes `node_modules/`, `ios/App/Pods/`, `ios/App/build/`, etc.
 
-### 3.1 Initialize the Capacitor project
+**You do this on the Mac (after `git pull` + Stage 2):**
 
-In your repo root (the folder with `index.html`):
-
-```bash
-git status   # commit anything pending — Capacitor adds a lot of files
-npx cap init Verrocchio com.verrocchio.app --web-dir=.
-```
-
-### 3.2 Add the iOS platform
+### 3.1 Install dependencies
 
 ```bash
-npm install @capacitor/core @capacitor/ios
-npx cap add ios
+cd verrocchio
+npm install   # picks up @capacitor/* devDependencies from package.json
 ```
 
-This creates an `ios/` directory with an Xcode project at `ios/App/App.xcworkspace`.
-
-### 3.3 Tell Capacitor what to bundle
-
-Edit `capacitor.config.ts` (auto-created above):
-
-```typescript
-import { CapacitorConfig } from '@capacitor/cli';
-
-const config: CapacitorConfig = {
-  appId: 'com.verrocchio.app',
-  appName: 'Verrocchio',
-  webDir: '.',  // bundles the entire repo root
-  server: {
-    iosScheme: 'capacitor'
-  }
-};
-
-export default config;
-```
-
-### 3.4 Sync your web assets into the iOS project
+### 3.2 Add the iOS platform (Mac-only — runs `pod install`)
 
 ```bash
-npx cap sync ios
+npm run cap:add:ios
 ```
 
-This copies `index.html`, `manifest.json`, `service-worker.js`, `utils.js`, `apple-touch-icon-1024.png` (and currently every other file in the repo root) into `ios/App/App/public/`. The .mp3 / .pdf / .md files being copied is harmless inside the bundle. You can clean this up later by setting `webDir` to a build subdir.
+This is the step that REQUIRES macOS — it runs `pod install` to fetch the iOS-side CocoaPods. Creates an `ios/` directory with an Xcode project at `ios/App/App.xcworkspace`.
 
-### 3.5 Open the iOS project in Xcode
+### 3.3 Sync your web assets into the iOS project
 
 ```bash
-npx cap open ios
+npm run cap:sync
+```
+
+Copies `index.html`, `manifest.json`, `service-worker.js`, `utils.js`, `apple-touch-icon-1024.png` (and currently every other file in the repo root) into `ios/App/App/public/`. The .mp3 / .pdf / .md files being copied is harmless inside the bundle. You can clean this up later by setting `webDir` to a build subdir.
+
+### 3.4 Open the iOS project in Xcode
+
+```bash
+npm run cap:open
 ```
 
 Xcode opens `App.xcworkspace`. **Always open the .xcworkspace, not the .xcodeproj** — the workspace knows about CocoaPods dependencies.

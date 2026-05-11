@@ -1,1 +1,25 @@
 .claude/
+
+# npm
+node_modules/
+npm-debug.log*
+
+# Capacitor (iOS build artifacts — only generated on Mac via `npx cap add ios` + `npx cap sync ios`).
+ios/App/Pods/
+ios/App/build/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/DerivedData/
+
+# Capacitor Android (when added later)
+android/app/build/
+android/build/
+android/.gradle/
+android/captures/
+android/local.properties
+
+# IDEs
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

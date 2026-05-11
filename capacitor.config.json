@@ -1,0 +1,12 @@
+{
+  "appId": "com.verrocchio.app",
+  "appName": "Verrocchio",
+  "webDir": ".",
+  "server": {
+    "iosScheme": "capacitor"
+  },
+  "ios": {
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  }
+}
