@@ -292,6 +292,56 @@ What's NOT desktop-optimized yet (deferred follow-ups):
 - My Content grid: already responsive (`auto-fill, minmax(96px, 1fr)`)
   so it gracefully expands on wide screens.
 
+## My Content storage — three viable backends
+
+The current shipped behavior in v0.2.0 is **Firebase Storage** for the
+owner account (`FILE_UPLOAD_ALLOWLIST`) and **URL-only** for everyone
+else. Two other backends are worth tracking for the iOS native build:
+
+### A. URL-only (already shipped, zero infra)
+
+Non-owner accounts can paste a URL to YouTube / Drive / Dropbox / any
+hosted PDF and link it to a habit / goal / to-do. No upload, no
+storage cost, no rules to publish. If you want to drop file uploads
+entirely, removing the `FILE_UPLOAD_ALLOWLIST` gate (or shipping with
+the allowlist empty) flips every account into URL-only mode.
+
+### B. Firebase Storage (current owner path)
+
+Cross-device sync via `users/{uid}/content/{itemId}-{fileName}` with
+the storage.rules already published. 100 MB per file, free tier covers
+~50 max-size files. Wired to the auto-migration loop so legacy base64
+entries promote on first load.
+
+### C. Apple Files / iCloud Drive (deferred - needs Capacitor)
+
+For the iOS native build via Capacitor, files could live in the
+user's own Files app (iCloud Drive or local) instead of Firebase.
+The user picks a file via the iOS Document Picker, the app stores a
+reference (file path / iCloud document URL) in the userContent entry,
+and playback / display happens by opening that reference.
+
+Pros: zero storage cost on our side, the user owns the bytes, file
+survives app deletion if it's in iCloud Drive. Cons: only works on
+iOS native (no web fallback), the reference can break if the user
+moves / deletes the file outside the app, and cross-device sync is
+bound to whatever the user has iCloud set up to sync.
+
+Implementation sketch (Capacitor):
+1. Install @capacitor/filesystem + @capacitor-community/file-picker.
+2. Add a "Pick from Files" button in My Content, only visible when
+   running in the Capacitor wrapper (Capacitor.isNativePlatform()).
+3. On pick, store { kind: "file-ref", iosPath, fileName, fileType,
+   pickedAt } in data.userContent.
+4. On render, use Filesystem.readFile() for inline display OR
+   App.openUrl() to hand off to the system handler (Files / Quick
+   Look).
+5. Keep the Firebase Storage path as the alternative for users who
+   want cross-device sync. The two are complementary.
+
+Native-only feature; not in scope for the PWA. ~1-2 days after the
+Capacitor wrapper lands.
+
 ## Out of scope for App Store readiness (defer)
 
 - File split into `theme.css` / `firebase-init.js` / `app.js`. Helps maintenance, doesn't help submission.
