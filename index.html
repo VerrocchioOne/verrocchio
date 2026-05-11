@@ -166,11 +166,19 @@ body[data-device="desktop-wide"] .device-indicator {
      a wide laptop / 4K display. */
   .fade-in,
   body > div > .lg.fade-in {
-    max-width: none;
-    margin-left: 0;
-    margin-right: 0;
-    padding-left: 32px;
-    padding-right: 32px;
+    /* !important is load-bearing here. The base .fade-in rule
+       (max-width:640px; margin:0 auto; padding:16px 16px 110px) is
+       declared LATER in the stylesheet, so without !important the
+       later rule wins the cascade at every viewport — content stayed
+       clamped to 640px on desktop and this @media override was
+       effectively dead. Without it the user sees the home, habits and
+       goals tabs centered in a narrow column on a wide laptop. */
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+    padding-bottom: 110px !important;
     box-sizing: border-box;
   }
   /* Header inner row: chrome (brand + streak + profile) doesn't need
@@ -219,11 +227,12 @@ body[data-device="desktop-wide"] .device-indicator {
 @media (min-width: 1400px) {
   /* On wide screens, give cards a touch more gap and breathe a bit
      more on the gutters. Replicates the dense-but-not-cramped feel
-     of WSJ's wide layout. */
+     of WSJ's wide layout. !important for the same cascade-order
+     reason as the 900px block above. */
   .fade-in,
   body > div > .lg.fade-in {
-    padding-left: 48px;
-    padding-right: 48px;
+    padding-left: 48px !important;
+    padding-right: 48px !important;
   }
   .home-grid { gap: 20px; }
 }
@@ -247,6 +256,106 @@ body[data-device="desktop-wide"] .device-indicator {
     gap: 10px;
     align-items: start;
   }
+}
+/* Habits tab — section-level layout. The five sections (Morning,
+   Afternoon, Evening, Daily Completion, Avoid) are routinely walked
+   sequentially in a day, so on desktop we put the three time-of-day
+   sections side-by-side as columns (left → right matches the
+   morning → evening reading order), with Avoid + Daily Completion
+   below as a second flex row. Within each section the habits stay
+   SINGLE column — sequential checklists, not parallel options.
+   Implemented as flex (not grid) so collapsed sections can shrink
+   horizontally to a thin header strip and the still-expanded
+   sections grow to fill the freed width. */
+@media (min-width: 900px) {
+  .habit-sections-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .habit-sections-grid::before,
+  .habit-sections-grid::after {
+    /* Reserved for future use; explicit pseudo-element resets stop
+       sibling :nth-child counts from drifting. */
+    content: none;
+  }
+  /* Two flex rows: time-of-day on top, all-day + avoid on bottom.
+     We pin section order with flex-order so source-order changes
+     (sortable headers, etc.) don't reflow into the wrong row. */
+  .habit-sections-grid > [data-sec="morning"],
+  .habit-sections-grid > [data-sec="afternoon"],
+  .habit-sections-grid > [data-sec="evening"] { order: 1; }
+  .habit-sections-grid > [data-sec="all-day"],
+  .habit-sections-grid > [data-sec="avoid"]   { order: 2; }
+  /* Pseudo-row trick — wrap children into rows by toggling
+     flex-wrap and sizing each row's items to share width via
+     flex-basis. Easier: replace the single flex with explicit
+     row containers using display: contents on .habit-sections-grid
+     and pseudo-rows via [data-sec] grouping. */
+  .habit-sections-grid {
+    /* Single 5-column row, fixed left-to-right reading order:
+       Morning · Afternoon · Evening · Daily Completion · Avoid.
+       Each section gets equal width via 1fr; minmax(0, 1fr)
+       prevents long card titles from inflating their column. */
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 16px 14px;
+    align-items: start;
+  }
+  .habit-sections-grid > [data-sec="morning"]   { grid-column: 1; }
+  .habit-sections-grid > [data-sec="afternoon"] { grid-column: 2; }
+  .habit-sections-grid > [data-sec="evening"]   { grid-column: 3; }
+  .habit-sections-grid > [data-sec="all-day"]   { grid-column: 4; }
+  .habit-sections-grid > [data-sec="avoid"]     { grid-column: 5; }
+  .habit-sections-grid > [data-sec] {
+    margin-bottom: 0 !important;
+    min-width: 0;
+    transition: opacity .2s ease;
+  }
+  /* Collapse animation — when a section is collapsed on desktop
+     it gets data-collapsed="1" (set in JSX), which shrinks its
+     habit-grid container's max-width to 0 with overflow hidden
+     so the cards slide out leftward into the header strip. The
+     header itself stays visible so the user can re-tap to expand. */
+  .habit-sections-grid > [data-sec][data-collapsed="1"] .habit-grid {
+    max-width: 0 !important;
+    max-height: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transition: max-width .25s ease, max-height .25s ease, opacity .15s ease;
+  }
+  .habit-sections-grid > [data-sec] .habit-grid {
+    /* No overflow:hidden in the expanded state — that was clipping
+       card box-shadows and producing the faint width inconsistency
+       the user noticed. Hidden returns only during the collapse
+       animation above. */
+    transition: max-width .25s ease, opacity .15s ease;
+  }
+  /* Override the generic .habit-grid 2-col rule above — habits inside
+     a section are sequential, not parallel. Single column wins. */
+  .habit-sections-grid .habit-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 7px !important;
+    align-items: stretch !important;
+  }
+  /* Force every direct child of .habit-grid to fill the section
+     column. Sequential habits → one full-width card. Concurrent
+     cohort wrappers (`.cohort-row`) → full-width row that the
+     inner towers split via flex:1. Without the explicit width
+     stretch some children rendered at intrinsic content width and
+     looked narrower than their neighbors. */
+  .habit-sections-grid .habit-grid > * {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* Concurrent-cohort rows (h.concurrent === true) keep their
+     side-by-side layout on desktop — a 2-cohort renders as two
+     half-width cards in the column slot, a 3-cohort as three
+     third-width cards. The inline `display: flex` + tower
+     `flex: 1, minWidth: 0` already give that behavior. */
 }
 /* No 3-column promotion at any width — three floating cards on a wide
    screen looked sparse with the Home tab's variable card heights, and
@@ -541,7 +650,19 @@ textarea{resize:vertical}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
 @keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.55)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
-.fade-in{animation:fadeIn .2s ease forwards;max-width:640px;margin:0 auto;padding:16px 16px 110px;box-sizing:border-box}
+/* .fade-in base — mobile / small tablet defaults. The previous
+   max-width:640px clamp made portrait tablets and landscape phones
+   render as a narrow centered column with dead margins on each side;
+   tighter padding (12px vs 16px) gives phone cards a touch more room
+   too. Desktop (≥900px) blows the cap away with !important overrides
+   in the @media block above. */
+.fade-in{animation:fadeIn .2s ease forwards;max-width:none;margin:0;padding:14px 12px 110px;box-sizing:border-box}
+@media (min-width:601px) and (max-width:899px){
+  /* Tablet portrait / landscape phone middle ground — let cards
+     breathe a bit more than phone, but don't go all-the-way to the
+     full-bleed desktop layout (no auto-fit grids yet). */
+  .fade-in{padding-left:18px;padding-right:18px}
+}
 .pulsing{animation:pulse 1.5s ease infinite}
 /* ── Verrocchio welcome splash ("Ink V") ──────────────────────────────
    Full-bleed brand animation on the welcome screen while
@@ -6156,6 +6277,11 @@ function App() {
   // the session only so the next sign-in opens with everything
   // visible — same as how the habits tab defaults all-open.
   const [collapsedGoalAreas, setCollapsedGoalAreas] = useState({});
+  // "Future Goals" drawer in the Goals tab. Future = a goal with no
+  // habits currently linked to it. Collapsed by default so the active
+  // workload reads first; tap the divider to expand and review the
+  // parked / not-yet-pursued goals.
+  const [showFutureGoals, setShowFutureGoals] = useState(false);
   // Re-evaluate the "which section is current" default once per session,
   // after data (and therefore the user's custom timeRanges, if any) has
   // loaded. Guarded by a ref so we don't clobber manual toggles afterward.
@@ -14103,7 +14229,9 @@ function App() {
         padding: "8px 18px",
         fontSize: 12
       }
-    }, "Add")))), groupedH.map(group => {
+    }, "Add")))), /*#__PURE__*/React.createElement("div", {
+      className: "habit-sections-grid"
+    }, groupedH.map(group => {
       const isAvoid = group.value === "avoid";
       const doneCount = group.habits.filter(h => isDone(h, selDate)).length;
       // Layered habits collapse to MAX, sub-habits roll up under their
@@ -14898,6 +15026,14 @@ function App() {
       const collapsed = !!collapsedSections[group.value];
       return /*#__PURE__*/React.createElement("div", {
         key: group.value,
+        "data-sec": group.value,
+        // data-collapsed drives the desktop right-to-left collapse
+        // animation (see .habit-sections-grid CSS). The body is
+        // always rendered now so CSS has a target to animate; on
+        // phone we still hide the body via the !collapsed gate
+        // below, where the section is stacked vertically and a
+        // horizontal slide makes no sense.
+        "data-collapsed": collapsed ? "1" : "0",
         style: {
           marginBottom: 22
         }
@@ -15118,7 +15254,10 @@ function App() {
       // Consecutive habits flagged `concurrent` are grouped into a
       // flex-row so simultaneous habits sit side-by-side instead
       // of stacking vertically (mirrors the calendar day view).
-      !collapsed && /*#__PURE__*/React.createElement("div", { className: "habit-grid" }, (() => {
+      // Always render the body on desktop so CSS can animate the
+      // right-to-left collapse via [data-collapsed="1"]. On phone,
+      // gate on !collapsed (vertical stack — no horizontal slide).
+      (devProfile === "phone" ? !collapsed : true) && /*#__PURE__*/React.createElement("div", { className: "habit-grid" }, (() => {
         // Walk the (already _order-sorted) section list and
         // bucket consecutive items where current.concurrent ===
         // true into one cohort. The first habit in a section
@@ -15157,6 +15296,12 @@ function App() {
         // sig so toggling a sub-habit (or expanding the group) bumps
         // the memo and re-renders the parent's "3/5" chip.
         const childSig = kids.length > 0 ? (kids.length + "|" + kidsDone + "|" + (expChildren[h.id] ? 1 : 0)) : "";
+        // Concurrent cohorts (h.concurrent === true) share one slot
+        // and split it evenly: a cohort of 2 renders as two
+        // half-width cards side-by-side, a cohort of 3 as three
+        // third-width cards. Compact styling tightens the inner
+        // chrome (donut size, padding, chip layout) so the smaller
+        // cards still read cleanly.
         const isCompact = cohort.length > 1;
         const resistSig = (resistanceCountFor[h.id] || 0);
         const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig;
@@ -15262,14 +15407,16 @@ function App() {
           // longer card's height instead of looking ragged.
           return [/*#__PURE__*/React.createElement("div", {
             key: "rg-" + ci,
+            className: "cohort-row",
             style: { display: "flex", gap: 6, marginBottom: 0, alignItems: "stretch" }
           }, towers.map((tower, ti) => /*#__PURE__*/React.createElement("div", {
             key: "rg-" + ci + "-" + ti,
+            className: "cohort-tower",
             style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }
           }, tower)))];
         });
       })()));
-    }), filtH.length === 0 && /*#__PURE__*/React.createElement("div", {
+    })), filtH.length === 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         textAlign: "center",
         color: "#d1d5db",
@@ -16881,7 +17028,9 @@ function App() {
       fontSize: 13,
       padding: "40px 0"
     }
-  }, "No goals yet \u2014 tap + to add one"), (() => {
+  }, "No goals yet \u2014 tap + to add one"), /*#__PURE__*/React.createElement("div", {
+    className: "goals-areas-grid"
+  }, (() => {
     // When the user picks "Earliest" or "Latest" (date-based sort),
     // the per-Area section dividers fragment the chronological order
     // across multiple lists \u2014 a goal due next week could end up below
@@ -16933,9 +17082,14 @@ function App() {
     const isDateSort = goalSortMode === "date-asc" || goalSortMode === "date-desc";
     // Merged path: ignore ht.value, just respect the user's area
     // chip filter. Per-area path keeps the original gating.
-    const filtered = ht.merged
+    // Active-only: each per-area card list only shows goals that
+    // have at least one linked habit. Goals with no linked habits
+    // are "future" and surface in the Future Goals drawer below.
+    const isActiveGoal = g => (data.habits || []).some(h => habitLinkedToGoal(h, g.id));
+    const filtered = (ht.merged
       ? data.goals.filter(g => goalTypeFilter.length === 0 || goalTypeFilter.includes(g.type))
-      : data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value)));
+      : data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value))))
+      .filter(isActiveGoal);
     const typeGoals = sortItems(filtered, goalSortMode, "goal");
     if (!typeGoals.length) return null;
     if (!ht.merged && goalTypeFilter.length > 0 && !goalTypeFilter.includes(ht.value)) return null;
@@ -16944,6 +17098,7 @@ function App() {
     const areaCollapsed = !ht.merged && !!collapsedGoalAreas[ht.value];
     return /*#__PURE__*/React.createElement("div", {
       key: ht.value,
+      "data-area": ht.value,
       style: {
         marginBottom: 16
       }
@@ -17805,7 +17960,8 @@ function App() {
       )
       );
     })));
-  }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type).length > 0 && /*#__PURE__*/React.createElement("div", {
+  }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type && (data.habits || []).some(h => habitLinkedToGoal(h, g.id))).length > 0 && /*#__PURE__*/React.createElement("div", {
+    "data-area": "general",
     style: {
       marginBottom: 16
     }
@@ -17831,7 +17987,7 @@ function App() {
     }
   })), /*#__PURE__*/React.createElement("div", {
     className: "habit-grid"
-  }, sortItems(data.goals.filter(g => !g.type), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal").map(goal => {
+  }, sortItems(data.goals.filter(g => !g.type && (data.habits || []).some(h => habitLinkedToGoal(h, g.id))), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal").map(goal => {
     const isE = eGId === goal.id;
     const hasSm = goal.smart && Object.values(goal.smart).some(v => v && v.trim());
     return /*#__PURE__*/React.createElement("div", {
@@ -17896,7 +18052,51 @@ function App() {
         opacity: 0
       }
     }, "\xD7")));
-  })))), calendarModalOpen && (() => {
+  }))))), (() => {
+    // Future Goals drawer — anything in data.goals with NO linked
+    // habit. These are parked / aspirational goals that the user
+    // hasn't started actively pursuing. Collapsed by default so the
+    // active workload reads first; tap the row to expand.
+    const futureGoals = (data.goals || []).filter(g => !(data.habits || []).some(h => habitLinkedToGoal(h, g.id)));
+    if (futureGoals.length === 0) return null;
+    const sortedFuture = sortItems(futureGoals, (data.sortPrefs && data.sortPrefs.goals) || "default", "goal");
+    return /*#__PURE__*/React.createElement("div", {
+      className: "future-goals-drawer",
+      style: { marginTop: 18, marginBottom: 18 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        onClick: () => setShowFutureGoals(p => !p),
+        title: showFutureGoals ? "Hide future goals" : "Show future goals",
+        style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: showFutureGoals ? 8 : 0, userSelect: "none", WebkitTapHighlightColor: "transparent" }
+      },
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, color: "#6b7280", transform: showFutureGoals ? "rotate(90deg)" : "none", transition: "transform .15s", display: "inline-block", width: 10 }
+        }, "▶"),
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: .5 }
+        }, "Future Goals"),
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 11, fontWeight: 600, color: "#9ca3af" }
+        }, "(" + futureGoals.length + ")"),
+        /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 1, background: "var(--c-border)" } })
+      ),
+      showFutureGoals && /*#__PURE__*/React.createElement("div", {
+        className: "habit-grid"
+      }, sortedFuture.map(goal => {
+        const gt = HT.find(t => t.value === goal.type);
+        return /*#__PURE__*/React.createElement("div", {
+          key: goal.id,
+          style: { background: "#fff", border: "1px solid " + (gt ? gt.border : "var(--c-border)"), borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,.04)" },
+          onClick: () => sEGoal(goal),
+          title: "Edit goal — link a habit to make it active"
+        },
+          gt && /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: gt.color, flexShrink: 0 } }),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, color: "var(--c-text)", fontWeight: 500, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } }, goal.text),
+          gt && /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: gt.color, padding: "2px 7px", borderRadius: 6, background: gt.bg, border: "1px solid " + gt.border, letterSpacing: .4, whiteSpace: "nowrap" } }, goal.type)
+        );
+      }))
+    );
+  })(), calendarModalOpen && (() => {
     // Calendar module — day / week / month views over the user's habits.
     // Lives in a full-screen modal opened from the header calendar
     // icon. Used to render at the bottom of the Home tab; moved here

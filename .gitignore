@@ -23,3 +23,6 @@ android/local.properties
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Local design scratch — exported mockups, exploration assets.
+open-design/
