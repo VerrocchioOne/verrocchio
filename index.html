@@ -4980,25 +4980,45 @@ function App() {
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const sync = () => {
-      const next = (typeof window.__deviceProfile === "string" && window.__deviceProfile)
-        || (document.body && document.body.dataset && document.body.dataset.device)
-        || "phone";
-      setDevProfile(prev => prev === next ? prev : next);
+    // Source-of-truth classifier — same logic the boot script uses,
+    // duplicated here so React can recompute on every change WITHOUT
+    // depending on window.__deviceProfile being kept in sync. Writes
+    // to body.dataset.device + window.__deviceProfile + React state
+    // so all three views always agree (CSS, DOM, React render).
+    const classifyAndApply = () => {
+      const w = window.innerWidth || 0;
+      const mm = (q) => window.matchMedia && window.matchMedia(q).matches;
+      const hoverCapable = mm("(hover: hover)") || mm("(any-hover: hover)") || mm("(pointer: fine)") || mm("(any-pointer: fine)");
+      let profile;
+      if (w >= 1300 && hoverCapable) profile = "desktop-wide";
+      else if (w >= 900 && hoverCapable) profile = "desktop";
+      else if (w >= 900) profile = "tablet";
+      else profile = "phone";
+      try { document.body.dataset.device = profile; } catch (e) {}
+      try { window.__deviceProfile = profile; } catch (e) {}
+      setDevProfile(prev => prev === profile ? prev : profile);
     };
-    sync();
-    window.addEventListener("resize", sync);
-    let hoverMql = null;
-    try {
-      hoverMql = window.matchMedia("(hover: hover)");
-      if (hoverMql.addEventListener) hoverMql.addEventListener("change", sync);
-      else if (hoverMql.addListener) hoverMql.addListener(sync);
-    } catch (e) {}
+    classifyAndApply();
+    window.addEventListener("resize", classifyAndApply);
+    // Subscribe to multiple media queries so plugging in a mouse on a
+    // touchscreen device or rotating an iPad re-triggers classification.
+    const mqls = [];
+    const queries = ["(hover: hover)", "(any-hover: hover)", "(pointer: fine)", "(any-pointer: fine)"];
+    for (const q of queries) {
+      try {
+        const mql = window.matchMedia(q);
+        if (mql.addEventListener) mql.addEventListener("change", classifyAndApply);
+        else if (mql.addListener) mql.addListener(classifyAndApply);
+        mqls.push(mql);
+      } catch (e) {}
+    }
     return () => {
-      window.removeEventListener("resize", sync);
-      if (hoverMql) {
-        if (hoverMql.removeEventListener) hoverMql.removeEventListener("change", sync);
-        else if (hoverMql.removeListener) hoverMql.removeListener(sync);
+      window.removeEventListener("resize", classifyAndApply);
+      for (const mql of mqls) {
+        try {
+          if (mql.removeEventListener) mql.removeEventListener("change", classifyAndApply);
+          else if (mql.removeListener) mql.removeListener(classifyAndApply);
+        } catch (e) {}
       }
     };
   }, []);
