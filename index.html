@@ -159,6 +159,17 @@ html{height:100%;-webkit-text-size-adjust:100%}
     max-width: 720px;
   }
 }
+/* Desktop indicator chip in the header. Always rendered in JSX with
+   display:none (inline style); these rules promote it to inline-flex
+   when the device-profile JS classifies the runtime as anything other
+   than "phone". Driven by body.dataset.device which the JS at the
+   top of the inline script keeps in sync with viewport + hover
+   capability changes. */
+body[data-device="tablet"] .device-indicator,
+body[data-device="desktop"] .device-indicator,
+body[data-device="desktop-wide"] .device-indicator {
+  display: inline-flex !important;
+}
 @media (min-width: 900px) {
   /* Tab content (every tab wrapper uses className "fade-in"). */
   .fade-in,
@@ -10925,7 +10936,26 @@ function App() {
       /*#__PURE__*/React.createElement("span", { style: { fontSize: 14, lineHeight: 1, filter: active ? "none" : "grayscale(1) opacity(0.6)" } }, "\uD83D\uDD25"),
       /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: active ? "#c2410c" : "#9ca3af" } }, appStreak)
     );
-  })(), /*#__PURE__*/React.createElement("button", {
+  })(),
+  // Desktop indicator chip - always rendered in JSX, but the CSS rule
+  // `body[data-device="..."] .device-indicator { display: inline-flex }`
+  // only shows it on tablet/desktop/desktop-wide. Subtle visual cue
+  // that the wider layouts are active. Tooltip explains what the app
+  // detected.
+  /*#__PURE__*/React.createElement("span", {
+    className: "device-indicator",
+    "aria-label": "Desktop layout active",
+    title: "Desktop layout active. Wider columns and centered content. Resize the window below 900px to switch back to phone layout.",
+    style: {
+      display: "none",
+      alignItems: "center", justifyContent: "center",
+      width: 30, height: 30, borderRadius: 14,
+      background: "var(--c-surface-muted)",
+      border: "1px solid var(--c-border)",
+      fontSize: 14, lineHeight: 1, marginRight: 4
+    }
+  }, "\uD83D\uDDA5"),
+  /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowProfile(true),
     "aria-label": "Profile",
     "data-tour": "profile",
