@@ -113,6 +113,52 @@ html{height:100%;-webkit-text-size-adjust:100%}
   grid-template-columns: 1fr;
   align-items: start; /* don't stretch shorter cards to tallest */
 }
+/* Smart layout adaptation: when fewer than 4 cards render (the
+   common "Tips + Dashboard + Journal" 3-card scenario the user
+   reported), drop back to a single centered column at a comfortable
+   reading width. Avoids the "orphan empty slot in row 2" look. */
+@media (min-width: 900px) {
+  .home-grid:not(:has(> :nth-child(4))) {
+    grid-template-columns: minmax(0, 720px);
+    justify-content: center;
+  }
+}
+/* Variable-height card packing: dense auto-flow lets shorter cards
+   fill below taller ones in the same column instead of leaving
+   gaps. min-content rows so each card sizes to its own height. */
+.home-grid {
+  grid-auto-flow: dense;
+  grid-auto-rows: min-content;
+}
+/* Hover + focus affordances for clickable cards on hover-pointer
+   devices. The inline-style heavy codebase can't express :hover, so
+   these global rules give desktop users the visual feedback they
+   expect (cursor + lift + focus ring). Touch-only devices skip this
+   via the (hover: hover) media query. */
+@media (hover: hover) {
+  .home-grid button:hover,
+  .hrow:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,.07) !important;
+    transform: translateY(-1px);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .home-grid button:focus-visible,
+  .hrow:focus-visible {
+    outline: 2px solid #2d5a2d;
+    outline-offset: 2px;
+  }
+}
+/* Cap intrinsically-wide form surfaces so prose textareas don't
+   stretch ~1000px on a laptop. Reading targets are 65-80 characters;
+   constraint the textareas without affecting layout chrome around
+   them. */
+@media (min-width: 900px) {
+  .fade-in textarea,
+  .fade-in input[type="text"],
+  .fade-in input[type="url"] {
+    max-width: 720px;
+  }
+}
 @media (min-width: 900px) {
   /* Tab content (every tab wrapper uses className "fade-in"). */
   .fade-in,
@@ -126,21 +172,37 @@ html{height:100%;-webkit-text-size-adjust:100%}
     padding-right: 24px;
     box-sizing: border-box;
   }
-  /* Header inner row (the .lg sticky bar): center its content too. */
+  /* Header inner row: tighten max-width to 880px so the brand "Verrocchio"
+     on the left and the streak / profile cluster on the right don't drift
+     to the far corners with a giant lake between them and the centered
+     Today pill. */
   body > div > .lg[style*="sticky"] > div {
-    max-width: 1100px;
+    max-width: 880px;
     margin-left: auto;
     margin-right: auto;
   }
   /* Bottom-nav inner row (.lg fixed bar): center its buttons. */
   body > div > .lg[style*="fixed"] > div {
-    max-width: 1100px;
+    max-width: 1100px !important;
     margin-left: auto;
     margin-right: auto;
   }
   /* Home daily-ritual cards flow into 2 columns. */
   .home-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Modal centering: every full-screen modal overlay glues its inner
+     card to the BOTTOM of the viewport on phone (sheet UX). On desktop
+     that leaves a giant dim backdrop above a small floating card. Center
+     the inner card and flatten the bottom-sheet rounding to a uniform
+     dialog radius. role="dialog" tagging is consistent enough across
+     the codebase to use as the target selector. */
+  div[role="dialog"][aria-modal="true"] {
+    align-items: center !important;
+  }
+  div[role="dialog"][aria-modal="true"] > div[style*="20px 20px 0 0"],
+  div[role="dialog"][aria-modal="true"] > div[style*="20px 20px 0px 0px"] {
+    border-radius: 16px !important;
   }
 }
 /* Habits + Goals tab list container.
@@ -793,6 +855,46 @@ const db=firebase.firestore();
 // so swallow.
 db.enablePersistence({ synchronizeTabs: true }).catch(()=>{});
 const auth=firebase.auth();
+// ── Device-profile detection (Phase 1 of "hardware check first") ──
+// Runs ONCE at boot and on viewport / hover-capability changes. Writes
+// the active profile to body.dataset.device so CSS can target it via
+// body[data-device="..."] selectors, AND exposes a window-level
+// getter so React effects / render branches can read it without
+// reaching into the DOM. Four canonical profiles:
+//
+//   phone           — narrow viewport, touch-only (default phone UX)
+//   tablet          — wide viewport, touch-only (iPad landscape)
+//   desktop         — wide viewport with hover-capable pointer
+//                     (1100-1299px, single-window laptop layout)
+//   desktop-wide    — really wide hover-pointer (>= 1300px, allows
+//                     more aggressive multi-column / sidebar layouts)
+//
+// Future passes can switch big tree decisions (sidebar vs bottom nav,
+// detail-panel-as-sidebar in My Content, etc.) by reading
+// `window.__deviceProfile` or matching the body data attribute.
+function classifyDevice() {
+  const w = (typeof window !== "undefined" && window.innerWidth) || 0;
+  const hover = typeof window !== "undefined"
+    && window.matchMedia
+    && window.matchMedia("(hover: hover)").matches;
+  if (w >= 1300 && hover) return "desktop-wide";
+  if (w >= 900  && hover) return "desktop";
+  if (w >= 900) return "tablet";
+  return "phone";
+}
+function applyDeviceProfile() {
+  const profile = classifyDevice();
+  try { document.body.dataset.device = profile; } catch (e) {}
+  try { window.__deviceProfile = profile; } catch (e) {}
+}
+applyDeviceProfile();
+window.addEventListener("resize", applyDeviceProfile);
+try {
+  const hoverMql = window.matchMedia("(hover: hover)");
+  // Older Safari uses .addListener; modern browsers use addEventListener.
+  if (hoverMql.addEventListener) hoverMql.addEventListener("change", applyDeviceProfile);
+  else if (hoverMql.addListener) hoverMql.addListener(applyDeviceProfile);
+} catch (e) {}
 /* Firebase Storage — backs My Content's file uploads. Files live at
    users/<uid>/content/<itemId>-<fileName> so the storage.rules can
    scope read/write to the owning user via request.auth.uid. The
@@ -15070,7 +15172,7 @@ function App() {
           style: {
             width: 16, height: 16, borderRadius: 4,
             border: "1.5px solid #d1d5db",
-            background: "white", cursor: "pointer", flexShrink: 0
+            background: "#fff", cursor: "pointer", flexShrink: 0
           }
         }),
         isE ? /*#__PURE__*/React.createElement("div", {
@@ -24143,13 +24245,18 @@ function App() {
       paddingBottom: "env(safe-area-inset-bottom,0px)"
     }
   }, /*#__PURE__*/React.createElement("div", {
+    // maxWidth: 640 was a phone-era constraint that defeated the
+    // desktop CSS centering pass. Letting this inner row run wider
+    // means the 5 nav buttons spread across the desktop content area
+    // instead of clustering in a 640px island. Phone view is unaffected
+    // since the viewport is already <640px.
     style: {
       display: "flex",
       justifyContent: "space-around",
       alignItems: "center",
       paddingTop: 8,
       paddingBottom: 8,
-      maxWidth: 640,
+      maxWidth: 1100,
       margin: "0 auto"
     }
   }, [{
