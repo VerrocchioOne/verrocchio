@@ -257,6 +257,41 @@ Key features as of v0.2.0:
 - Achievements (XP, tiers, categories), demo mode with seeded personas, account management (sign out / delete account / wipe data), iCalendar export of habits, plain-text summary export.
 - PWA install + service worker + offline-capable read.
 
+## Desktop browser (URL-based laptop version) — current state
+
+The PWA is the same URL on phone and desktop — there's no separate
+build. As of v0.2.0 (SW v18) the layout constraints are:
+
+- Phone (default): single column, full viewport width.
+- Tablet / small laptop (`min-width: 900px`): scrolling content
+  centered with `max-width: 760px`, side gutters of 24px so the
+  column doesn't hug the screen edge. Header + bottom nav inner
+  rows centered to match.
+- Wide desktop (`min-width: 1200px`): same shape, `max-width: 920px`
+  for slightly more breathing room.
+
+This is intentionally a CSS-only pass — the same `index.html` ships
+to phone and laptop, the React tree is identical, and the layout
+adapts via media queries on existing class names (`.fade-in` for tab
+content, `.lg[style*="sticky|fixed"]` for header/nav). No JSX changes,
+no Capacitor concerns, no new build target.
+
+What's NOT desktop-optimized yet (deferred follow-ups):
+- Habits tab: still single-column even on a 1440 screen. A 2-column
+  grid for habit cards on `min-width: 1100px` would let users see
+  ~30 habits without scrolling. Would need to disable the swipe
+  gesture on hover-pointer devices (`@media (hover: hover)`) since
+  side-by-side cards make horizontal swipe ambiguous.
+- Goals tab: same. Goals are taller than habits so 2-up needs more
+  thought (gap, alignment, expanded-card behavior).
+- Sidebar nav option: bottom-fixed nav still works on laptop, but a
+  left sidebar would feel more native. Would replace the bottom nav
+  via `@media (min-width: 1100px)`.
+- Calendar modal: already full-screen overlay; reads fine on
+  desktop without changes.
+- My Content grid: already responsive (`auto-fill, minmax(96px, 1fr)`)
+  so it gracefully expands on wide screens.
+
 ## Out of scope for App Store readiness (defer)
 
 - File split into `theme.css` / `firebase-init.js` / `app.js`. Helps maintenance, doesn't help submission.

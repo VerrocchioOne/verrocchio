@@ -100,6 +100,58 @@
   --c-tint-yellow-fg:#ca8a04;
 }
 html{height:100%;-webkit-text-size-adjust:100%}
+/* ── Desktop layout (min-width 900px) ──
+   The app is phone-first, so on a 1440-wide laptop the content
+   stretches edge-to-edge and reads as enormous-line-length text.
+   Constrain the scrolling content to a comfortable reading width
+   and center it; leave the sticky header + fixed bottom nav
+   spanning the full viewport but center their INNER content too
+   so the nav buttons don't drift to the far corners. No JSX
+   changes — phone view stays 100% intact since these rules only
+   apply above the 900px breakpoint. */
+@media (min-width: 900px) {
+  /* Tab content (every tab wrapper uses className "fade-in"). */
+  .fade-in,
+  /* Auth/welcome onboarding shell uses className "lg" with maxWidth
+     440 inline; the rule below is harmless because the inline
+     constraint already wins, but it future-proofs the auth surface. */
+  body > div > .lg.fade-in {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    /* Side gutter so wide screens still have breathing room around the
+       narrowed column instead of the column hugging a hard edge. */
+    padding-left: 24px;
+    padding-right: 24px;
+    box-sizing: border-box;
+  }
+  /* Header inner row (the .lg sticky bar): center its content too. */
+  body > div > .lg[style*="sticky"] > div {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* Bottom-nav inner row (.lg fixed bar): center its buttons. */
+  body > div > .lg[style*="fixed"] > div {
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+@media (min-width: 1200px) {
+  /* On really wide screens, give the column a bit more room so cards
+     read as cards and not as a thin slab. Still narrower than full
+     width — a max line length around 70-80 chars is the readability
+     sweet spot for body text. */
+  .fade-in,
+  body > div > .lg.fade-in {
+    max-width: 920px;
+  }
+  body > div > .lg[style*="sticky"] > div,
+  body > div > .lg[style*="fixed"] > div {
+    max-width: 920px;
+  }
+}
 /* iOS-26 chrome stack: SF Pro Text on Apple platforms, Segoe UI Variable
    on Windows, Inter as a download-free Linux/Android fallback. Editorial
    display fonts (Playfair, Lora) stay opt-in via inline style + the
