@@ -11979,9 +11979,16 @@ function App() {
               style: { display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", marginBottom: 10 }
             },
               /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Review Yesterday's Habits"),
-              /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 11, fontWeight: 700, color: "#6b7280", flexShrink: 0, marginLeft: 8 }
-              }, yestDone + "/" + yestDueCount + " confirmed")
+              // Same pill treatment as the Write Yesterday's Daily
+              // Journal card: green tint when complete, amber/orange
+              // when still pending. Replaces the previous bare-text
+              // "X/Y confirmed" + verbose inline hint pair.
+              (() => {
+                const complete = yestDueCount === 0 || yestDone === yestDueCount;
+                return /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 11, fontWeight: 700, color: complete ? "#15803d" : "#b45309", flexShrink: 0, marginLeft: 8, background: complete ? "var(--c-tint-success-bg)" : "#fef3c7", padding: "3px 8px", borderRadius: 12 }
+                }, yestDueCount === 0 ? "None due" : (complete ? (yestDone + "/" + yestDueCount + " ✓") : (yestDone + "/" + yestDueCount)));
+              })()
             ),
             /*#__PURE__*/React.createElement("div", {
               onClick: openYesterdayInHabits,
@@ -12011,9 +12018,10 @@ function App() {
                   },
                   style: { ...AB, width: "100%", padding: "9px" }
                 }, "Mark Reviewed \u2713")
-              : /*#__PURE__*/React.createElement("div", {
-                  style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "9px", lineHeight: 1.5 }
-                }, "Confirm every habit on the Habits tab (" + yestDone + "/" + yestDueCount + " done) to enable Mark Reviewed.")
+              // No inline hint — the pill in the header already shows
+              // "22/29" so the user knows what's left. Saves a row of
+              // verbose copy on the Home card.
+              : null
           );
         })());
 
@@ -12699,9 +12707,9 @@ function App() {
               onClick: () => updateRitual({ yestJournalReviewed: true }),
               style: { ...AB, width: "100%", padding: "9px" }
             }, "Mark Reviewed ✓")
-          : /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "9px", lineHeight: 1.5 }
-            }, "Tap above to open Reflect and write yesterday's daily entry to enable Mark Reviewed.")
+          // The "Pending" pill in the header conveys the same state;
+          // no separate hint paragraph needed.
+          : null
       );
     })();
     // Bottom-pill mirror for the daily journal once reviewed,
@@ -12845,10 +12853,11 @@ function App() {
           style: { fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 }
         }, bannerBody)
       ),
+      // Single left arrow only — Home is the leftmost destination,
+      // a trailing "Return →" felt like a second nav target.
       /*#__PURE__*/React.createElement("span", {
-        "aria-hidden": true,
         style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", flexShrink: 0 }
-      }, "Return →")
+      }, "Home")
     ) : null;
     return /*#__PURE__*/React.createElement("div", {
       className: "fade-in"
@@ -14992,10 +15001,10 @@ function App() {
               style: { fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 }
             }, "Triage anything overdue or due soon, then tap here to return to the home page review.")
           ),
+          // Single left arrow only — Home is the leftmost destination.
           /*#__PURE__*/React.createElement("span", {
-            "aria-hidden": true,
             style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", flexShrink: 0 }
-          }, "Return →")
+          }, "Home")
         )
       : null;
     return /*#__PURE__*/React.createElement("div", {
@@ -15297,7 +15306,8 @@ function App() {
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", textTransform: "uppercase", letterSpacing: 0.4 } }, "Writing yesterday's journal"),
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 } }, "Capture how yesterday actually went, then tap here to return to the home page review.")
         ),
-        /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", flexShrink: 0 } }, "Return →")
+        // Single left arrow only — Home is the leftmost destination.
+        /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", flexShrink: 0 } }, "Home")
       );
     })(),
     // Single consolidated Journal entry form. The user picks a
