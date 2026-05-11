@@ -112,23 +112,11 @@ html{height:100%;-webkit-text-size-adjust:100%}
   gap: 14px;
   grid-template-columns: 1fr;
   align-items: start; /* don't stretch shorter cards to tallest */
-}
-/* Smart layout adaptation: when fewer than 4 cards render (the
-   common "Tips + Dashboard + Journal" 3-card scenario the user
-   reported), drop back to a single centered column at a comfortable
-   reading width. Avoids the "orphan empty slot in row 2" look. */
-@media (min-width: 900px) {
-  .home-grid:not(:has(> :nth-child(4))) {
-    grid-template-columns: minmax(0, 720px);
-    justify-content: center;
-  }
-}
-/* Variable-height card packing: dense auto-flow lets shorter cards
-   fill below taller ones in the same column instead of leaving
-   gaps. min-content rows so each card sizes to its own height. */
-.home-grid {
-  grid-auto-flow: dense;
   grid-auto-rows: min-content;
+  /* grid-auto-flow stays as default "row" (NOT dense) so cards keep
+     their declared order left-to-right, matching the mobile top-to-
+     bottom reading sequence. dense would jump shorter cards into
+     earlier gaps and break that order. */
 }
 /* Hover + focus affordances for clickable cards on hover-pointer
    devices. The inline-style heavy codebase can't express :hover, so
@@ -171,43 +159,55 @@ body[data-device="desktop-wide"] .device-indicator {
   display: inline-flex !important;
 }
 @media (min-width: 900px) {
-  /* Tab content (every tab wrapper uses className "fade-in"). */
+  /* Tab content uses the FULL viewport width (no narrow centered
+     column). Side gutters keep cards off the screen edges. The
+     auto-fit grids below let cards reflow into more columns as the
+     viewport widens — like WSJ's homepage that uses every pixel of
+     a wide laptop / 4K display. */
   .fade-in,
   body > div > .lg.fade-in {
-    max-width: 1100px;
-    margin-left: auto;
-    margin-right: auto;
-    /* Side gutter so wide screens still have breathing room around the
-       narrowed column instead of the column hugging a hard edge. */
-    padding-left: 24px;
-    padding-right: 24px;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 32px;
+    padding-right: 32px;
     box-sizing: border-box;
   }
-  /* Header inner row: tighten max-width to 880px so the brand "Verrocchio"
-     on the left and the streak / profile cluster on the right don't drift
-     to the far corners with a giant lake between them and the centered
-     Today pill. */
+  /* Header inner row: chrome (brand + streak + profile) doesn't need
+     to span the full width. Cap so they cluster comfortably without
+     drifting to corners on ultrawide screens. */
   body > div > .lg[style*="sticky"] > div {
-    max-width: 880px;
+    max-width: 1280px;
     margin-left: auto;
     margin-right: auto;
   }
-  /* Bottom-nav inner row (.lg fixed bar): center its buttons. */
+  /* Bottom-nav inner row: nav buttons stay clustered too. */
   body > div > .lg[style*="fixed"] > div {
-    max-width: 1100px !important;
+    max-width: 1280px !important;
     margin-left: auto;
     margin-right: auto;
   }
-  /* Home daily-ritual cards flow into 2 columns. */
+  /* Home daily-ritual cards use auto-fit so column count scales with
+     viewport width. minmax(540px, 1fr) gives wider modules — ~2 cols
+     at 1100px, 3 cols at 1700px, 4 cols at 2300px. Cards stay
+     comfortably wide and chunky rather than postcard-thin. */
   .home-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+    gap: 16px;
+  }
+  /* Goals tab: each Area-of-Life section sits in its own column so
+     multiple areas (Physical, Mental, Career) can be browsed side
+     by side instead of stacked. The section wrapper class is
+     "goals-areas-grid" and gets applied via JSX. */
+  .goals-areas-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 16px;
+    align-items: start;
   }
   /* Modal centering: every full-screen modal overlay glues its inner
      card to the BOTTOM of the viewport on phone (sheet UX). On desktop
-     that leaves a giant dim backdrop above a small floating card. Center
-     the inner card and flatten the bottom-sheet rounding to a uniform
-     dialog radius. role="dialog" tagging is consistent enough across
-     the codebase to use as the target selector. */
+     that leaves a giant dim backdrop above a small floating card. */
   div[role="dialog"][aria-modal="true"] {
     align-items: center !important;
   }
@@ -215,6 +215,17 @@ body[data-device="desktop-wide"] .device-indicator {
   div[role="dialog"][aria-modal="true"] > div[style*="20px 20px 0px 0px"] {
     border-radius: 16px !important;
   }
+}
+@media (min-width: 1400px) {
+  /* On wide screens, give cards a touch more gap and breathe a bit
+     more on the gutters. Replicates the dense-but-not-cramped feel
+     of WSJ's wide layout. */
+  .fade-in,
+  body > div > .lg.fade-in {
+    padding-left: 48px;
+    padding-right: 48px;
+  }
+  .home-grid { gap: 20px; }
 }
 /* Habits + Goals tab list container.
    Phone default: single-column flex (matches the prior inline style).
@@ -4913,6 +4924,14 @@ function App() {
   // For habit context, onEnded auto-completes the habit. Shape:
   //   { kind: "habit"|"goal", entityId: <id>, item: <userContent> }
   const [linkedMediaPlayer, setLinkedMediaPlayer] = useState(null);
+  // My Coach modal state. Shape options:
+  //   { kind: "habit",       habit: <h>, reason?: string }
+  //   { kind: "goal",        goal: <g>,  reason?: string }
+  //   { kind: "habit-batch", habits: <h[]>, reason: string }
+  // Triggered from smartTip clicks (Tips & Reminders) and surfaces
+  // context: streak, completion rate, recent pattern, linked items,
+  // and quick actions (mark done now, open habit, edit, archive).
+  const [coachContext, setCoachContext] = useState(null);
   // Holds the auto-close setTimeout handle so manual close can cancel
   // it — otherwise a user-dismiss inside the 800 ms window leaves a
   // pending setLinkedMediaPlayer(null) that fires after unmount.
@@ -11741,7 +11760,10 @@ function App() {
         icon: "🕘",
         title: `"${o.habitText.slice(0, 30)}" keeps landing later`,
         body: `${o.lateCount}/${o.loggedCount} of the last logged ${secLabel} sessions were after the cutoff. Consider moving it to ${suggestSec}.`,
-        action: () => { setEditHabitModal((data.habits || []).find(x => x.id === o.habitId) || null); }
+        action: () => {
+          const h = (data.habits || []).find(x => String(x.id) === String(o.habitId));
+          if (h) setCoachContext({ kind: "habit", habit: h, reason: "off-schedule", suggestedSection: suggestSec });
+        }
       });
     }
     // Observed correlations: top 1 pair by lift. Only surfaced once
@@ -11772,7 +11794,7 @@ function App() {
         body: incompleteHabits.length === 1
           ? `"${sample.text.slice(0, 40)}" is missing area, section, or frequency. Tap to finish it.`
           : `${incompleteHabits.length} habits (starting with "${sample.text.slice(0, 30)}") are missing area / section / freq. Tap to finish them.`,
-        action: () => setTab("habits")
+        action: () => setCoachContext({ kind: "habit", habit: sample, reason: "incomplete-details" })
       });
     }
     const incompleteGoals = (data.goals || []).filter(g => isGoalIncomplete(g));
@@ -11784,7 +11806,7 @@ function App() {
         body: incompleteGoals.length === 1
           ? `"${sample.text.slice(0, 40)}" is missing area, SMART, or target date.`
           : `${incompleteGoals.length} goals (starting with "${sample.text.slice(0, 30)}") need area / SMART / target date.`,
-        action: () => setTab("goals")
+        action: () => setCoachContext({ kind: "goal", goal: sample, reason: "incomplete-details" })
       });
     }
     const incompleteTodos = (data.todos || []).filter(t => isTodoIncomplete(t));
@@ -11800,9 +11822,26 @@ function App() {
       });
     }
     const lowHabit = activeH.find(h => getCR(h).pct < 30);
-    if (lowHabit) smartTips.push({ icon: "📉", title: "Habit needs attention", body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`, action: () => setTab("habits") });
-    const yestIncomplete = activeH.filter(h => !isDone(h, yest) && !isMissed(h, yest));
-    if (yestIncomplete.length > 0) smartTips.push({ icon: "📋", title: "Review yesterday", body: `${yestIncomplete.length} habit${yestIncomplete.length > 1 ? "s" : ""} from yesterday not marked. Still time to record.`, action: () => { setSelDate(yest); setTab("habits"); } });
+    if (lowHabit) smartTips.push({
+      icon: "📉",
+      title: "Habit needs attention",
+      body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`,
+      action: () => setCoachContext({ kind: "habit", habit: lowHabit, reason: "low-completion" })
+    });
+    // Bug fix: only count habits actually DUE yesterday. Previously
+    // every non-daily habit (weekly Tuesday on Wednesday, monthly on
+    // the wrong date) showed up as "not marked" even though it was
+    // never due — confusing the user with phantom unfinished work.
+    const yestIncomplete = activeH.filter(h => isHabitDueOn(h, yest) && !isDone(h, yest) && !isMissed(h, yest));
+    if (yestIncomplete.length > 0) smartTips.push({
+      icon: "📋",
+      title: "Review yesterday",
+      body: `${yestIncomplete.length} due habit${yestIncomplete.length > 1 ? "s" : ""} from yesterday not marked. Still time to record.`,
+      // Click → open My Coach for the first one. Clicking through the
+      // coach lets the user reach the actual Habits tab via "Open
+      // habits" action there, OR mark the habit done/missed inline.
+      action: () => setCoachContext({ kind: "habit-batch", reason: "yesterday-incomplete", habits: yestIncomplete })
+    });
     // Unused-feature nudges — sampled from FEATURES where
     // tipWhenMissing is true and the user has no timestamp. Only fires
     // after 3+ days of use so brand-new users aren't drowned in "try
@@ -22794,6 +22833,135 @@ function App() {
   // or goal row. For habit context, onEnded auto-completes the habit
   // (the breathwork-mp3-finishes-and-checks-off flow). For goal
   // context, the player just stays open for replay.
+  // ── My Coach modal ──
+  // Triggered from any smart-tip click that references a specific
+  // habit, goal, or batch. Shows context the user needs to understand
+  // WHY the tip fired and what to do about it: streak, completion
+  // rate, recent 14-day pattern, linked items, and quick actions.
+  // The phone "Open habits" / "Open goals" actions also drop the
+  // standard return-to-home banner because setSelDate/setTab takes
+  // them off the home tab — same banner shipped earlier on the
+  // habit-review flow handles this for free.
+  coachContext && (() => {
+    const ctx = coachContext;
+    const close = () => setCoachContext(null);
+    const REASON_BLURB = {
+      "low-completion": "This habit's completion rate is below 30%. Common reasons: too ambitious for your current week (try a smaller version), wrong time of day (the body's energy doesn't match the task), or a missing dependency (e.g. 'meditate' needs a quiet room you don't have until later).",
+      "off-schedule":   "You keep logging this habit AFTER its scheduled section's cutoff. Your behavior has voted with its feet — moving the habit to the section where you actually do it usually fixes the streak overnight.",
+      "incomplete-details": "This item is missing area / SMART / target details. Filling them in unlocks the tracker math (streak math, momentum, correlation detection) and makes the AI briefing more useful.",
+      "yesterday-incomplete": "These habits were due yesterday but you haven't marked them done OR missed. Marking honestly (even 'missed') keeps the dataset clean — undecided habits weaken every other insight."
+    };
+    const reasonText = REASON_BLURB[ctx.reason] || "Verrocchio noticed something worth your attention.";
+    const renderHabitDetail = (h) => {
+      const cr = getCR(h);
+      const streak = getStreak(h);
+      const days = daysSinceLast(h);
+      const last14 = getLast14(h);
+      const linkedGoals = (h.goalIds || []).map(gid => (data.goals || []).find(g => String(g.id) === String(gid))).filter(Boolean);
+      const ht = HT.find(t => t.value === h.type);
+      const sec = SECTIONS.find(s => s.value === h.section);
+      return /*#__PURE__*/React.createElement("div", { key: h.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3 }
+        }, h.text),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }
+        },
+          ht && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: ht.color, background: ht.bg, border: "1px solid " + ht.border, borderRadius: 4, padding: "2px 7px" } }, ht.value),
+          sec && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-soft)", background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 4, padding: "2px 7px" } }, sec.label || h.section),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#c2410c", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, padding: "2px 7px" } }, "🔥 " + streak + "-day streak"),
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: cr.pct >= 70 ? "#15803d" : cr.pct >= 40 ? "#b45309" : "#b91c1c", background: cr.pct >= 70 ? "var(--c-tint-success-bg)" : cr.pct >= 40 ? "#fef3c7" : "#fef2f2", border: "1px solid " + (cr.pct >= 70 ? "var(--c-tint-success-border)" : cr.pct >= 40 ? "#fde68a" : "#fecaca"), borderRadius: 4, padding: "2px 7px" } }, cr.pct + "% (30d)"),
+          days != null && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 4, padding: "2px 7px" } }, "Last: " + days + "d ago")
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 } }, "Last 14 days"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 3, marginBottom: 12 } },
+          last14.map((d, i) => /*#__PURE__*/React.createElement("div", {
+            key: i,
+            title: d.k + (d.done ? " — done" : " — not done"),
+            style: { width: 16, height: 16, borderRadius: 3, background: d.done ? "#2d5a2d" : "var(--c-border)" }
+          }))
+        ),
+        linkedGoals.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 } }, "Linked goals"),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
+            linkedGoals.map(g => /*#__PURE__*/React.createElement("span", { key: g.id, style: { fontSize: 11, color: "#2d5a2d", background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 12, padding: "3px 9px" } }, "🎯 " + g.text.slice(0, 40)))
+          )
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 } },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { close(); setSelDate(tk()); setTab("habits"); },
+            style: { ...AB, padding: "8px 12px", fontSize: 12 }
+          }, "Open in Habits"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { close(); sEHabit(h); },
+            style: { background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
+          }, "Edit habit"),
+          !isDone(h, tk()) && /*#__PURE__*/React.createElement("button", {
+            onClick: () => { togHabit(h.id, tk(), "done"); close(); },
+            style: { background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#2d5a2d", cursor: "pointer" }
+          }, "Mark done now")
+        )
+      );
+    };
+    const renderGoalDetail = (g) => {
+      const sm = g.smart || {};
+      const linkedHabits = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id));
+      const linkedDone = linkedHabits.filter(h => isDone(h, tk())).length;
+      return /*#__PURE__*/React.createElement("div", { key: g.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3 } }, g.text),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 10 } },
+          linkedHabits.length === 0 ? "No habits linked yet." : ("Today: " + linkedDone + "/" + linkedHabits.length + " linked habits done.")
+        ),
+        sm.specific && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "var(--c-text-soft)", marginBottom: 8, lineHeight: 1.5 } }, "S: " + sm.specific),
+        sm.timebound && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 10 } }, "Target date: " + sm.timebound),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 } },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { close(); setTab("goals"); },
+            style: { ...AB, padding: "8px 12px", fontSize: 12 }
+          }, "Open in Goals"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => { close(); sEGoal(g); },
+            style: { background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
+          }, "Edit goal")
+        )
+      );
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-label": "My Coach",
+      onClick: close,
+      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 9999, padding: 16 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        onClick: (e) => e.stopPropagation(),
+        style: { background: "var(--c-surface)", borderRadius: "20px 20px 0 0", padding: 20, maxWidth: 560, width: "100%", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(0,0,0,.35)" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }
+        },
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 } }, "My Coach"),
+            /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "var(--c-text-strong)" } }, "Why this surfaced")
+          ),
+          /*#__PURE__*/React.createElement("button", {
+            "aria-label": "Close",
+            onClick: close,
+            style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", color: "var(--c-text-faint)", fontSize: 16 }
+          }, "×")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 14, padding: 12, background: "var(--c-tint-info-bg)", border: "1px solid var(--c-tint-info-border)", borderRadius: 8 }
+        }, reasonText),
+        ctx.kind === "habit"        && ctx.habit && renderHabitDetail(ctx.habit),
+        ctx.kind === "goal"         && ctx.goal  && renderGoalDetail(ctx.goal),
+        ctx.kind === "habit-batch"  && (ctx.habits || []).slice(0, 5).map(h => renderHabitDetail(h)),
+        ctx.kind === "habit-batch"  && (ctx.habits || []).length > 5 && /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "8px 0" }
+        }, "+ " + ((ctx.habits || []).length - 5) + " more — open Habits to see all.")
+      )
+    );
+  })(),
   linkedMediaPlayer && (() => {
     const { kind, entityId, item } = linkedMediaPlayer;
     if (!item) return null;
