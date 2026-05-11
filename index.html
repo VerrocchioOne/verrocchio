@@ -142,16 +142,26 @@ html{height:100%;-webkit-text-size-adjust:100%}
   .home-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  /* Habits + Goals tab: switch to a 2-column grid for the section
-     habit-rows on wide screens. .hrow is the habit-card class
-     (already exists). The parent of the .hrow rows isn't classed
-     uniformly, so we use direct-child selection within a known
-     container. The section wrapper has its own grid; add a
-     responsive override so direct children grid into 2 columns. */
+}
+/* Habits + Goals tab list container.
+   Phone default: single-column flex (matches the prior inline style).
+   On hover-pointer devices >= 900px wide: multi-column grid so the
+   user sees more cards at once. Hover-gate is critical — side-by-side
+   habit cards make horizontal swipe ambiguous (a swipe-left on the
+   right column would visually overlap the left card), and on touch
+   devices users complete habits via swipe; on mouse/trackpad they
+   click. So the grid only kicks in where swipe isn't expected. */
+.habit-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+@media (min-width: 900px) and (hover: hover) {
   .habit-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
+    align-items: start;
   }
 }
 @media (min-width: 1300px) {
@@ -167,6 +177,8 @@ html{height:100%;-webkit-text-size-adjust:100%}
   .home-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+@media (min-width: 1300px) and (hover: hover) {
   .habit-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -14847,7 +14859,7 @@ function App() {
       // Consecutive habits flagged `concurrent` are grouped into a
       // flex-row so simultaneous habits sit side-by-side instead
       // of stacking vertically (mirrors the calendar day view).
-      !collapsed && /*#__PURE__*/React.createElement("div", null, (() => {
+      !collapsed && /*#__PURE__*/React.createElement("div", { className: "habit-grid" }, (() => {
         // Walk the (already _order-sorted) section list and
         // bucket consecutive items where current.concurrent ===
         // true into one cohort. The first habit in a section
@@ -16730,11 +16742,7 @@ function App() {
         lineHeight: 1
       }
     }, "▾")), !areaCollapsed && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        gap: 7
-      }
+      className: "habit-grid"
     }, typeGoals.map((goal, idx) => {
       const isE = eGId === goal.id;
       const isExp = expGoals[goal.id];
@@ -17563,11 +17571,7 @@ function App() {
       background: "var(--c-border)"
     }
   })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 7
-    }
+    className: "habit-grid"
   }, sortItems(data.goals.filter(g => !g.type), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal").map(goal => {
     const isE = eGId === goal.id;
     const hasSm = goal.smart && Object.values(goal.smart).some(v => v && v.trim());
