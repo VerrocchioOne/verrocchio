@@ -5719,6 +5719,17 @@ function App() {
   // when AI_ENABLED is true and data.aiConsentAt is 0.
   const [showAiConsent, setShowAiConsent] = useState(false);
 
+  // ── R-2: Morning Debrief flow (4 steps) — full-screen modal driven by
+  //    `debriefStep` (null = closed, 1..4 = current step). Entry button
+  //    on the Brief tab opens to step 1. Each step body has deterministic
+  //    content only in R-2; AI suggestions land in R-3. Per-step input
+  //    state lives at App scope so advancing/retreating doesn't wipe it.
+  const [debriefStep, setDebriefStep] = useState(null);
+  const [debriefJournalText, setDebriefJournalText] = useState("");
+  const [debriefIntention, setDebriefIntention] = useState("");
+  const [debriefIdentity, setDebriefIdentity] = useState("");
+  const [debriefObstacle, setDebriefObstacle] = useState("");
+
   // ── Feature-access tracking effects ──
   // Positioned AFTER `tab`, `showProfile`, `profileSection` are declared
   // to avoid the TDZ error that fires when these effects' dependency
@@ -13803,7 +13814,57 @@ function App() {
         )
       );
     }
+    // R-2: Morning Debrief entry button — appears at the very top of the
+    // Brief tab when the user hasn't completed today's debrief yet. Sets
+    // `debriefStartedAt` and opens the modal flow at step 1.
+    const debriefEntry = (function () {
+      const todayDk = dk(new Date());
+      const ritD = (data.dailyRitual && data.dailyRitual[todayDk]) || {};
+      if (ritD.debriefCompletedAt) return null;
+      return /*#__PURE__*/React.createElement("div", {
+        key: "debrief-entry",
+        style: {
+          background: "var(--c-tint-info-bg, #eff6ff)",
+          border: "1px solid var(--c-tint-info-border, #bfdbfe)",
+          borderRadius: 12,
+          padding: "14px 16px",
+          marginBottom: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12
+        }
+      },
+        /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 600, marginBottom: 4 }
+          }, "Morning ritual"),
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 14, color: "var(--c-text-strong)" }
+          }, "Run today's debrief — 4 quick steps")
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => {
+            setDebriefStep(1);
+            updateRitual({ debriefStartedAt: Date.now() });
+          },
+          style: {
+            padding: "8px 14px",
+            background: "var(--accent, #2d5a2d)",
+            color: "#fff",
+            border: "none",
+            borderRadius: 8,
+            fontWeight: 600,
+            fontSize: 13,
+            cursor: "pointer",
+            whiteSpace: "nowrap"
+          }
+        }, "Start")
+      );
+    })();
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
+      debriefEntry,
       intentionPinned,
       reviewBanner,
       // Home order (rev. May 2026):
@@ -24077,6 +24138,296 @@ function App() {
       )
     )
   ),
+  // ── R-2: Morning Debrief 4-step modal flow.
+  //    Driven by `debriefStep`. Each step renders a different body; the
+  //    footer adapts (Next on 1–3, Done on 4, Skip always). The step-aware
+  //    `advance()` handler commits per-step side effects (e.g. journal
+  //    entry on step 2→3, ritual fields on step 4 → done). Deterministic
+  //    content only — no AI calls in R-2.
+  debriefStep && (() => {
+    const tDk = dk(new Date());
+    const ritD = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+
+    // Step 1 — Recall yesterday's habit activity.
+    const renderDebriefStep1 = () => {
+      const yest = new Date();
+      yest.setDate(yest.getDate() - 1);
+      const yestDk = dk(yest);
+      const habits = data.habits || [];
+      const completed = habits.filter(h => h.completions && (h.completions[yestDk] === "done" || h.completions[yestDk] === true));
+      const missed = habits.filter(h => h.completions && h.completions[yestDk] === "missed");
+      // Scheduled-but-unmarked daily habits: candidates to carry forward.
+      const blank = habits.filter(h => h.completions && !h.completions[yestDk] && h.frequency && h.frequency.type === "daily");
+      return /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("h2", { style: { fontFamily: "'Playfair Display', Georgia, serif", color: "var(--c-text-strong)", marginBottom: 4 } }, "Yesterday"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: "var(--c-text-faint)", marginBottom: 16 } },
+          yest.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })),
+        completed.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 11, color: "var(--c-tint-success-fg)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }
+          }, "What went well"),
+          completed.map(h => /*#__PURE__*/React.createElement("div", {
+            key: "c-" + h.id,
+            style: { padding: "6px 10px", marginBottom: 4, background: "var(--c-tint-success-bg)", borderRadius: 6, fontSize: 13, color: "var(--c-text-strong)" }
+          }, "✓ " + h.text))
+        ),
+        (missed.length > 0 || blank.length > 0) && /*#__PURE__*/React.createElement("div", null,
+          /*#__PURE__*/React.createElement("div", {
+            style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 }
+          }, "Carry forward"),
+          [...missed, ...blank].map(h => /*#__PURE__*/React.createElement("div", {
+            key: "m-" + h.id,
+            style: { padding: "6px 10px", marginBottom: 4, background: "var(--c-surface-muted)", borderRadius: 6, fontSize: 13, color: "var(--c-text-soft)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }
+          },
+            /*#__PURE__*/React.createElement("span", null, h.text),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => {
+                // Mark this habit done for yesterday — uses the same shape
+                // as live completions (string "done").
+                const next = { ...h, completions: { ...h.completions, [yestDk]: "done" } };
+                save({ ...data, habits: data.habits.map(x => x.id === h.id ? next : x) });
+              },
+              style: { background: "transparent", border: "1px solid var(--c-border)", color: "var(--c-text-soft)", padding: "2px 8px", borderRadius: 6, fontSize: 11, cursor: "pointer" }
+            }, "Mark done")
+          ))
+        ),
+        completed.length === 0 && missed.length === 0 && blank.length === 0 && /*#__PURE__*/React.createElement("p", {
+          style: { fontStyle: "italic", color: "var(--c-text-faint)", fontSize: 13, padding: 12 }
+        }, "No habit activity recorded yesterday.")
+      );
+    };
+
+    // Step 2 — Reflect. Deterministic prompt rotates by day-of-year.
+    const renderDebriefStep2 = () => {
+      const STATIC_PROMPTS = [
+        "What's one thing you noticed about yesterday that you want to carry into today?",
+        "One thing I'd do differently:",
+        "One thing I'm grateful for:",
+        "What's been on your mind that you haven't written down?",
+        "How are you, really?",
+        "What's something small that surprised you?",
+        "What's been quietly working?",
+        "What pattern have you noticed recently?",
+        "What would today look like if you let it be simple?",
+        "What's one thing worth remembering?",
+        "What's been heavier than you've admitted?",
+        "What's one thing that's been waiting for attention?"
+      ];
+      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+      const prompt = STATIC_PROMPTS[dayOfYear % STATIC_PROMPTS.length];
+      return /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("h2", { style: { fontFamily: "'Playfair Display', Georgia, serif", color: "var(--c-text-strong)", marginBottom: 4 } }, "Reflect"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 14, color: "var(--c-text-soft)", marginBottom: 10, fontStyle: "italic" } }, prompt),
+        /*#__PURE__*/React.createElement("textarea", {
+          value: debriefJournalText,
+          onChange: (e) => setDebriefJournalText(e.target.value),
+          placeholder: "Write something or nothing.",
+          rows: 6,
+          style: { width: "100%", padding: 10, fontSize: 14, lineHeight: 1.4, borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-muted)", color: "var(--c-text-strong)", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }
+        })
+      );
+    };
+
+    // Step 3 — Release. Show open todos; each row offers Done/Today/Drop.
+    const renderDebriefStep3 = () => {
+      const open = (data.todos || []).filter(t => !t.done && !t.archived);
+      // Sort ascending by id so the oldest 8 surface first.
+      const oldest = [...open].sort((a, b) => (a.id || 0) - (b.id || 0)).slice(0, 8);
+      return /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("h2", { style: { fontFamily: "'Playfair Display', Georgia, serif", color: "var(--c-text-strong)", marginBottom: 4 } }, "Release"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: "var(--c-text-faint)", marginBottom: 12 } },
+          "Close, carry, or drop. " + (open.length > 8 ? "Showing 8 oldest of " + open.length : "")),
+        oldest.length === 0 && /*#__PURE__*/React.createElement("p", {
+          style: { fontStyle: "italic", color: "var(--c-text-faint)", fontSize: 13, padding: 12 }
+        }, "Inbox is clear."),
+        oldest.map(t => /*#__PURE__*/React.createElement("div", {
+          key: t.id,
+          style: { padding: "10px 12px", marginBottom: 6, background: "var(--c-surface-muted)", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 13 }
+        },
+          /*#__PURE__*/React.createElement("span", { style: { flex: 1, color: "var(--c-text-strong)", overflowWrap: "anywhere" } }, t.text || "(empty)"),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 4 } },
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => {
+                save({ ...data, todos: data.todos.map(x => x.id === t.id ? { ...x, done: true, completedAt: Date.now() } : x) });
+                const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+                const touched = Array.isArray(cur.debriefTodosActioned) ? cur.debriefTodosActioned : [];
+                if (!touched.includes(t.id)) updateRitual({ debriefTodosActioned: [...touched, t.id] });
+              },
+              title: "Done",
+              style: { background: "var(--c-tint-success-bg)", color: "var(--c-tint-success-fg)", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+            }, "✓ Done"),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => {
+                save({ ...data, todos: data.todos.map(x => x.id === t.id ? { ...x, carriedForwardAt: Date.now() } : x) });
+                const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+                const touched = Array.isArray(cur.debriefTodosActioned) ? cur.debriefTodosActioned : [];
+                if (!touched.includes(t.id)) updateRitual({ debriefTodosActioned: [...touched, t.id] });
+              },
+              title: "Carry to today",
+              style: { background: "var(--c-tint-info-bg)", color: "var(--c-tint-info-fg)", border: "none", padding: "4px 8px", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+            }, "→ Today"),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => {
+                save({ ...data, todos: data.todos.map(x => x.id === t.id ? { ...x, archived: true, archivedAt: Date.now() } : x) });
+                const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+                const touched = Array.isArray(cur.debriefTodosActioned) ? cur.debriefTodosActioned : [];
+                if (!touched.includes(t.id)) updateRitual({ debriefTodosActioned: [...touched, t.id] });
+              },
+              title: "Drop",
+              style: { background: "transparent", color: "var(--c-text-faint)", border: "1px solid var(--c-border)", padding: "4px 8px", borderRadius: 6, fontSize: 12, cursor: "pointer" }
+            }, "✕ Drop")
+          )
+        ))
+      );
+    };
+
+    // Step 4 — Plan / Commit. Intention (Gollwitzer If-Then), identity, obstacle.
+    const renderDebriefStep4 = () => {
+      return /*#__PURE__*/React.createElement("div", null,
+        /*#__PURE__*/React.createElement("h2", { style: { fontFamily: "'Playfair Display', Georgia, serif", color: "var(--c-text-strong)", marginBottom: 4 } }, "Today's intention"),
+        /*#__PURE__*/React.createElement("p", { style: { fontSize: 13, color: "var(--c-text-faint)", marginBottom: 12 } }, "Phrase it as a trigger-behavior pair."),
+        /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block", fontWeight: 600 }
+        }, "Intention"),
+        /*#__PURE__*/React.createElement("textarea", {
+          value: debriefIntention,
+          onChange: (e) => setDebriefIntention(e.target.value),
+          placeholder: "When [trigger], I will [behavior]…",
+          rows: 2,
+          style: { width: "100%", padding: 10, fontSize: 14, lineHeight: 1.4, borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-muted)", color: "var(--c-text-strong)", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 12 }
+        }),
+        /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block", fontWeight: 600 }
+        }, "Identity (optional)"),
+        /*#__PURE__*/React.createElement("input", {
+          type: "text",
+          value: debriefIdentity,
+          onChange: (e) => setDebriefIdentity(e.target.value),
+          placeholder: "Today I want to be the kind of person who…",
+          style: { width: "100%", padding: 10, fontSize: 14, borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-muted)", color: "var(--c-text-strong)", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 12 }
+        }),
+        /*#__PURE__*/React.createElement("label", {
+          style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block", fontWeight: 600 }
+        }, "Obstacle (optional)"),
+        /*#__PURE__*/React.createElement("input", {
+          type: "text",
+          value: debriefObstacle,
+          onChange: (e) => setDebriefObstacle(e.target.value),
+          placeholder: "What might get in the way?",
+          style: { width: "100%", padding: 10, fontSize: 14, borderRadius: 8, border: "1px solid var(--c-border)", background: "var(--c-surface-muted)", color: "var(--c-text-strong)", fontFamily: "inherit", boxSizing: "border-box" }
+        })
+      );
+    };
+
+    // Step-aware Next handler — runs side effects before advancing.
+    const advanceDebrief = () => {
+      // Step 1 → 2: stamp recall completion timestamp.
+      if (debriefStep === 1) {
+        updateRitual({ debriefStep1RecalledAt: Date.now() });
+      }
+      // Step 2 → 3: commit the journal entry if the user wrote anything.
+      if (debriefStep === 2 && debriefJournalText.trim()) {
+        const id = Date.now();
+        const entry = {
+          id,
+          text: debriefJournalText.trim(),
+          mood: "",
+          tag: "debrief",
+          timestamp: new Date().toISOString(),
+          dateKey: tDk,
+          source: "debrief"
+        };
+        const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+        save({
+          ...data,
+          journal: [...(data.journal || []), entry],
+          dailyRitual: {
+            ...(data.dailyRitual || {}),
+            [tDk]: { ...cur, debriefJournalEntryId: id }
+          }
+        });
+        setDebriefJournalText("");
+      }
+      // Step 3 → 4: pre-fill the intention/identity/obstacle inputs from
+      // any prior values stored on today's ritual so re-opening the flow
+      // doesn't blank them out.
+      if (debriefStep === 3) {
+        const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+        if (cur.intention && !debriefIntention) setDebriefIntention(cur.intention);
+        if (cur.identity && !debriefIdentity) setDebriefIdentity(cur.identity);
+        if (cur.obstacle && !debriefObstacle) setDebriefObstacle(cur.obstacle);
+      }
+      setDebriefStep(debriefStep + 1);
+    };
+
+    const completeDebrief = () => {
+      const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+      save({
+        ...data,
+        dailyRitual: {
+          ...(data.dailyRitual || {}),
+          [tDk]: {
+            ...cur,
+            intention: debriefIntention.trim() || cur.intention || "",
+            identity: debriefIdentity.trim() || cur.identity || "",
+            obstacle: debriefObstacle.trim() || cur.obstacle || "",
+            debriefCompletedAt: Date.now()
+          }
+        }
+      });
+      setDebriefStep(null);
+      setDebriefJournalText("");
+      setDebriefIntention("");
+      setDebriefIdentity("");
+      setDebriefObstacle("");
+    };
+
+    return /*#__PURE__*/React.createElement("div", {
+      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1200 },
+      onClick: (e) => {
+        if (e.target === e.currentTarget) {
+          if (debriefStep < 4 && !window.confirm("Close the debrief? You can resume by tapping Start again.")) return;
+          setDebriefStep(null);
+        }
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { background: "var(--c-surface-raised)", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", maxHeight: "92vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 },
+        onClick: (e) => e.stopPropagation()
+      },
+        // Step indicator — 4 segmented bars filling left-to-right.
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 6, marginBottom: 8 }
+        }, [1, 2, 3, 4].map(n => /*#__PURE__*/React.createElement("div", {
+          key: n,
+          style: {
+            flex: 1, height: 4, borderRadius: 2,
+            background: n <= debriefStep ? "var(--accent, #2d5a2d)" : "var(--c-border, #e5e7eb)"
+          }
+        }))),
+        debriefStep === 1 && renderDebriefStep1(),
+        debriefStep === 2 && renderDebriefStep2(),
+        debriefStep === 3 && renderDebriefStep3(),
+        debriefStep === 4 && renderDebriefStep4(),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", gap: 8, marginTop: 8 }
+        },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => setDebriefStep(null),
+            style: { flex: 1, padding: "10px 14px", background: "transparent", color: "var(--c-text-faint)", border: "1px solid var(--c-border)", borderRadius: 8, cursor: "pointer", fontSize: 13 }
+          }, "Skip remaining"),
+          debriefStep < 4 && /*#__PURE__*/React.createElement("button", {
+            onClick: advanceDebrief,
+            style: { flex: 1, padding: "10px 14px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }
+          }, "Next"),
+          debriefStep === 4 && /*#__PURE__*/React.createElement("button", {
+            onClick: completeDebrief,
+            style: { flex: 1, padding: "10px 14px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600 }
+          }, "Done")
+        )
+      )
+    );
+  })(),
   // ── Sort bottom-sheet — opened by the per-page ⇅ Sort button.
   //    Lists the allowed modes for that page; picking one sets the
   //    pref and closes the sheet. "Edit custom order…" (goals / todos
