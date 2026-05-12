@@ -6,6 +6,7 @@ const SRC = process.cwd();
 const DIST = path.join(SRC, 'dist');
 const FILES = [
   'index.html',
+  'home.html',
   'utils.js',
   'manifest.json',
   'service-worker.js',
