@@ -1,28 +1,50 @@
-.claude/
+# gitignore policy: secrets, machine-specific, and reproducible build output.
 
-# npm
+# ── Secrets ────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# Keys, certs, signing material
+*.pem
+*.key
+*.p8
+*.p12
+*.crt
+*.mobileprovision
+
+# Service-account credentials
+firebase-adminsdk-*.json
+serviceAccountKey.json
+secrets.json
+
+# Cloudflare Wrangler local auth + dev vars
+.wrangler/
+ai-proxy/.dev.vars
+
+# ── Reproducible build artifacts ──────────────────────────────────────────
 node_modules/
-npm-debug.log*
+dist/
+ai-proxy/node_modules/
 
-# Capacitor (iOS build artifacts — only generated on Mac via `npx cap add ios` + `npx cap sync ios`).
+# iOS build output (keep ios/App/ source, ignore generated)
+ios/build/
 ios/App/Pods/
-ios/App/build/
-ios/App/App.xcworkspace/xcuserdata/
-ios/App/App.xcodeproj/xcuserdata/
+ios/App/Podfile.lock
 ios/DerivedData/
 
-# Capacitor Android (when added later)
-android/app/build/
-android/build/
-android/.gradle/
-android/captures/
-android/local.properties
+# Archives + installers
+*.ipa
+*.xcarchive
+*.dSYM.zip
 
-# IDEs
+# ── Private / machine-specific ─────────────────────────────────────────────
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+android/local.properties
 .idea/
 .vscode/
+
+# ── OS metadata ────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-
-# Local design scratch — exported mockups, exploration assets.
-open-design/

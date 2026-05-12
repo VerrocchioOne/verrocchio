@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "description": "Verrocchio habit tracker — static single-file SPA. package.json is here only to run the tiny Node test suite over utils.js.",
   "scripts": {
-    "test": "node --test 'tests/*.test.mjs'",
+    "test": "node --test",
     "cap:add:ios": "cap add ios",
     "cap:sync": "cap sync ios",
     "cap:open": "cap open ios"
