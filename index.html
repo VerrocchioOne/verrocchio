@@ -16140,7 +16140,7 @@ function App() {
         ) : /*#__PURE__*/React.createElement(React.Fragment, { key: "view" },
           /*#__PURE__*/React.createElement("div", {
             onClick: () => setExpTodoIds(p => ({ ...p, [todo.id]: !p[todo.id] })),
-            style: { flex: 1, fontSize: 13, color: "var(--c-text-soft)", wordBreak: "break-word", cursor: linkedGoal ? "pointer" : "default" }
+            style: { flex: 1, fontSize: 13, color: "var(--c-text-soft)", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.3, cursor: linkedGoal ? "pointer" : "default" }
           }, isTodoIncomplete(todo) && /*#__PURE__*/React.createElement("span", {
             title: "Incomplete — pick a due date for this to-do.",
             style: { marginRight: 4, display: "inline-flex", alignItems: "center", verticalAlign: "middle" }
@@ -16369,7 +16369,7 @@ function App() {
         className: "fade-in",
         style: {
           background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10,
-          padding: 10, marginBottom: 12,
+          padding: 10, marginBottom: 8,
           display: "flex", flexDirection: "column", gap: 8
         }
       },
@@ -16441,14 +16441,14 @@ function App() {
       return /*#__PURE__*/React.createElement("div", {
         key: sec.key,
         style: {
-          marginBottom: 14
+          marginBottom: 10
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
           display: "flex",
           alignItems: "center",
           gap: 8,
-          marginBottom: 5
+          marginBottom: 4
         }
       }, /*#__PURE__*/React.createElement("span", {
         style: {
@@ -16539,7 +16539,7 @@ function App() {
     })(),
     (data.archive || []).length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
-        marginTop: 16
+        marginTop: 10
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
@@ -16548,7 +16548,7 @@ function App() {
         color: "#9ca3af",
         textTransform: "uppercase",
         letterSpacing: .5,
-        marginBottom: 6
+        marginBottom: 4
       }
     }, "Completed (", (data.archive || []).length, ")"), /*#__PURE__*/React.createElement("div", {
       style: {
@@ -18776,7 +18776,10 @@ function App() {
         flex: 1,
         fontSize: 14,
         color: "var(--c-text)",
-        fontWeight: 500
+        fontWeight: 500,
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+        lineHeight: 1.3
       }
     }, isGoalIncomplete(goal) && /*#__PURE__*/React.createElement("span", {
       title: "Incomplete — open the goal to fill in area, SMART details, or target date.",
@@ -21166,12 +21169,12 @@ function App() {
     const inputS = { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", color: "var(--c-text)", borderRadius: 8, padding: "10px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
     const sectionTitle = t => /*#__PURE__*/React.createElement("div", {
       className: "card-title",
-      style: { fontSize: 18, color: "var(--c-text-strong)", marginBottom: 14 }
+      style: { fontSize: 18, color: "var(--c-text-strong)", marginBottom: 10 }
     }, t);
     const accountPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("My Account"),
       /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 18 }
+        style: { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 12 }
       }, /*#__PURE__*/React.createElement("div", {
         "data-brand": demoMode ? "1" : null,
         style: { width: 64, height: 64, borderRadius: "50%", background: "#2d5a2d", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }
@@ -21213,7 +21216,7 @@ function App() {
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, label)
         );
         return /*#__PURE__*/React.createElement("div", {
-          style: { padding: "14px", background: "var(--c-tint-success-bg)", borderRadius: 10, marginBottom: 18 }
+          style: { padding: "12px", background: "var(--c-tint-success-bg)", borderRadius: 10, marginBottom: 12 }
         },
           /*#__PURE__*/React.createElement("div", {
             style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 10 }
@@ -21252,7 +21255,7 @@ function App() {
       // and easy to misuse (a Pull on a stale tab could silently
       // overwrite local edits).
       // ── Summary export ──
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Export summary"),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "A plain-text victory-lap summary — aggregate counts only, no habit titles, journal entries, or daily completion logs."),
         /*#__PURE__*/React.createElement("button", {
@@ -21267,7 +21270,7 @@ function App() {
       // etc. Times are inferred from section (morning/afternoon/evening
       // anchors); cadence comes from each habit's frequency. Avoid-list
       // habits are excluded.
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Export to calendar"),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8, lineHeight: 1.5 } }, "Download an iCalendar (.ics) file you can open in Apple Calendar, Mail, Google Calendar, or Outlook. Each habit becomes a recurring event — morning at 6 AM, afternoon at 12 PM, evening at 6 PM, stacked by duration. Daily Completion habits become all-day events. Avoid habits are skipped."),
         /*#__PURE__*/React.createElement("button", {
@@ -21280,7 +21283,7 @@ function App() {
       // Always available in settings so the user can rate whenever —
       // separate from the time-gated Home banner which only fires at
       // the 1w / 2w / 1mo milestones.
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
+      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
         /*#__PURE__*/React.createElement("div", { style: labelS }, "Leave a review"),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "If Verrocchio's been useful, a rating helps other people find it."),
         /*#__PURE__*/React.createElement("button", {
@@ -22295,7 +22298,7 @@ function App() {
             }, ht.value),
             /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", marginLeft: "auto" } }, g.completedDate || g.archivedAt?.split("T")[0])),
           /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", marginBottom: nextGoal ? 8 : 0 }
+            style: { fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", marginBottom: nextGoal ? 8 : 0, wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.3 }
           }, g.text),
           nextGoal && /*#__PURE__*/React.createElement("div", {
             style: { display: "flex", alignItems: "center", gap: 6, background: "var(--c-tint-success-bg)", borderRadius: 8, padding: "8px 10px" }
@@ -23095,7 +23098,7 @@ function App() {
           // the My Account panel now per product decision.
         ),
         /*#__PURE__*/React.createElement("div", {
-          style: { flex: 1, minWidth: 0, padding: "16px 20px 24px", overflowY: "auto" }
+          style: { flex: 1, minWidth: 0, padding: "12px 14px 18px", overflowY: "auto" }
         }, panels[profileSection] || panels.account))
     ));
   })(), goalMoreMenu && (() => {
@@ -24190,7 +24193,7 @@ function App() {
       const sec = SECTIONS.find(s => s.value === h.section);
       return /*#__PURE__*/React.createElement("div", { key: h.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
         /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3 }
+          style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3, wordBreak: "break-word", overflowWrap: "anywhere" }
         }, h.text),
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }
@@ -24236,7 +24239,7 @@ function App() {
       const linkedHabits = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id));
       const linkedDone = linkedHabits.filter(h => isDone(h, tk())).length;
       return /*#__PURE__*/React.createElement("div", { key: g.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3 } }, g.text),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3, wordBreak: "break-word", overflowWrap: "anywhere" } }, g.text),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 10 } },
           linkedHabits.length === 0 ? "No habits linked yet." : ("Today: " + linkedDone + "/" + linkedHabits.length + " linked habits done.")
         ),
