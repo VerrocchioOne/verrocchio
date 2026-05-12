@@ -1233,7 +1233,8 @@ const FEATURES = [
   { id: "settings.view",          label: "Visit App Settings",      cat: "Settings", tipWhenMissing: false },
   { id: "settings.tone",          label: "Pick a briefing tone",    cat: "Settings", tipWhenMissing: true,  tipDesc: "Warm / Neutral / Tough love — make the briefing sound right." },
   { id: "settings.location",      label: "Set home location",       cat: "Settings", tipWhenMissing: true,  tipDesc: "Unlocks the when-you-leave-home notification." },
-  { id: "settings.notifications", label: "Enable notifications",    cat: "Settings", tipWhenMissing: true,  tipDesc: "Get pinged when you're out with habits to log." }
+  { id: "settings.notifications", label: "Enable notifications",    cat: "Settings", tipWhenMissing: true,  tipDesc: "Get pinged when you're out with habits to log." },
+  { id: "ai.crowdingReorder",     label: "Re-prioritize a habit",   cat: "Review",   tipWhenMissing: false }
 ];
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const {
@@ -9387,6 +9388,113 @@ function App() {
     return `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`;
   };
 
+  /* §14.3 — Detect "additive habits crowding out non-negotiables".
+     Pure, deterministic — no AI. Returns null when the pattern doesn't
+     fit so the Brief-tab card can render conditionally. Window = 14
+     days. Thresholds: non-negotiable < 50% complete, additive > 80%
+     complete. Also requires the user is actively logging (>=3 done
+     completions in the last 7 days) to avoid firing on dormant users.
+     Picks the worst-missed non-negotiable + the most-reliable additive
+     when multiple candidates exist. */
+  const detectAdditiveCrowding = (habits, todayDate) => {
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(todayDate);
+      d.setDate(d.getDate() - i);
+      days.push(dk(d));
+    }
+    const stats = (habits || []).map(h => {
+      let done = 0;
+      days.forEach(k => {
+        const v = h.completions && h.completions[k];
+        if (v === "done" || v === true) done++;
+      });
+      return { h, done, rate: done / 14 };
+    }).filter(s => s.h && s.h.text);
+    const missedNonNeg = stats.filter(s => s.h.importance === "Non-Negotiable" && s.rate < 0.5);
+    const reliableAdd = stats.filter(s => s.h.importance === "Additive" && s.rate > 0.8);
+    if (!missedNonNeg.length || !reliableAdd.length) return null;
+    const lastWeekKeys = days.slice(0, 7);
+    const isActive = stats.some(s => lastWeekKeys.filter(k => {
+      const v = s.h.completions && s.h.completions[k];
+      return v === "done" || v === true;
+    }).length >= 3);
+    if (!isActive) return null;
+    missedNonNeg.sort((a, b) => a.rate - b.rate);
+    reliableAdd.sort((a, b) => b.rate - a.rate);
+    const target = missedNonNeg[0];
+    const culprit = reliableAdd[0];
+    return {
+      nonNeg: target.h,
+      nonNegDone: target.done,
+      additive: culprit.h,
+      additiveDone: culprit.done
+    };
+  };
+
+  /* §14.3 — Action handlers for the crowding card. Reorder only fires
+     when both habits live in the same `section` (cross-section reorder
+     is intentionally out of scope for v1.0). Both handlers record the
+     pair into `dailyRitual[today].crowdingPromptsShown` so the 7-day
+     throttle (computed in the useMemo below) hides the same pair after
+     the user has either acted on it or dismissed it. */
+  const dismissCrowdingPair = (additiveId, nonNegId) => {
+    const todayDk = dk(new Date());
+    const rit = (data.dailyRitual && data.dailyRitual[todayDk]) || {};
+    const shown = rit.crowdingPromptsShown || [];
+    const key = additiveId + "-" + nonNegId;
+    if (shown.includes(key)) return;
+    updateRitual({
+      crowdingPromptsShown: [...shown, key],
+      lastCrowdingCheckAt: Date.now()
+    });
+  };
+
+  const reorderCrowdingPair = (nonNegId, additiveId) => {
+    const habits = (data.habits || []).slice();
+    const nonNegIdx = habits.findIndex(h => h.id === nonNegId);
+    const additiveIdx = habits.findIndex(h => h.id === additiveId);
+    if (nonNegIdx < 0 || additiveIdx < 0) {
+      dismissCrowdingPair(additiveId, nonNegId);
+      return;
+    }
+    const nonNeg = habits[nonNegIdx];
+    const additive = habits[additiveIdx];
+    // Cross-section is out of scope — just dismiss so the user has been
+    // informed and we don't re-pester them about the same pair.
+    if (nonNeg.section !== additive.section) {
+      dismissCrowdingPair(additiveId, nonNegId);
+      return;
+    }
+    let nextHabits = habits;
+    if ((nonNeg._order || 0) > (additive._order || 0)) {
+      const sectionHabits = habits.filter(h => h.section === nonNeg.section);
+      sectionHabits.sort((a, b) => (a._order || 0) - (b._order || 0));
+      const nonNegPos = sectionHabits.findIndex(h => h.id === nonNegId);
+      const additivePos = sectionHabits.findIndex(h => h.id === additiveId);
+      const [moved] = sectionHabits.splice(nonNegPos, 1);
+      sectionHabits.splice(additivePos > nonNegPos ? additivePos - 1 : additivePos, 0, moved);
+      const orderMap = new Map();
+      sectionHabits.forEach((h, i) => orderMap.set(h.id, i));
+      nextHabits = habits.map(h => orderMap.has(h.id) ? { ...h, _order: orderMap.get(h.id) } : h);
+    }
+    // Single save: combine the reordered habits with the throttle record
+    // so we don't race two saves against the persistence layer.
+    const todayDk = dk(new Date());
+    const rit = (data.dailyRitual && data.dailyRitual[todayDk]) || {};
+    const shown = rit.crowdingPromptsShown || [];
+    const key = additiveId + "-" + nonNegId;
+    const nextRit = shown.includes(key)
+      ? rit
+      : { ...rit, crowdingPromptsShown: [...shown, key], lastCrowdingCheckAt: Date.now() };
+    save({
+      ...data,
+      habits: nextHabits,
+      dailyRitual: { ...(data.dailyRitual || {}), [todayDk]: nextRit }
+    });
+    if (typeof touchFeature === "function") touchFeature("ai.crowdingReorder");
+  };
+
   /* R-3: Shared helper for the three Morning-Debrief AI surfaces (pattern
      note in Step 1, journal prompt in Step 2, intention suggestion in
      Step 4). Mirrors the genBrief auth + fetch pattern but is cheap
@@ -14010,9 +14118,60 @@ function App() {
       );
     })();
 
+    // §14.3 — additive-crowding card. Detection is deterministic
+    // (no AI). Throttle: same pair must not re-render within 7 days,
+    // tracked via `dailyRitual[d].crowdingPromptsShown` rolled up
+    // across the last 7 daily-ritual records.
+    const crowdingPair = (function () {
+      const recentShown = new Set();
+      for (let i = 0; i < 7; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const r = (data.dailyRitual && data.dailyRitual[dk(d)]) || {};
+        (r.crowdingPromptsShown || []).forEach(p => recentShown.add(p));
+      }
+      const det = detectAdditiveCrowding(data.habits, new Date());
+      if (!det) return null;
+      const key = det.additive.id + "-" + det.nonNeg.id;
+      if (recentShown.has(key)) return null;
+      return det;
+    })();
+    const crowdingCard = crowdingPair && /*#__PURE__*/React.createElement("div", {
+      key: "crowding-card",
+      style: {
+        background: "var(--c-tint-warn-bg, #fffbeb)",
+        border: "1px solid var(--c-tint-warn-border, #fde68a)",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        color: "var(--c-text-strong)"
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "var(--c-tint-warn-fg, #b45309)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 }
+      }, "Habit pattern"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 14, lineHeight: 1.5, marginBottom: 8 }
+      }, "Are any of the habits you're nailing distracting you from the ones that matter most?"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, color: "var(--c-text-soft)", marginBottom: 12, fontStyle: "italic" }
+      }, "You've done “" + crowdingPair.additive.text + "” " + crowdingPair.additiveDone + "/14 days, but “" + crowdingPair.nonNeg.text + "” only " + crowdingPair.nonNegDone + "/14."),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+        crowdingPair.nonNeg.section === crowdingPair.additive.section && /*#__PURE__*/React.createElement("button", {
+          onClick: () => reorderCrowdingPair(crowdingPair.nonNeg.id, crowdingPair.additive.id),
+          style: { padding: "8px 14px", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }
+        }, "Move “" + crowdingPair.nonNeg.text + "” above “" + crowdingPair.additive.text + "”"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => dismissCrowdingPair(crowdingPair.additive.id, crowdingPair.nonNeg.id),
+          style: { padding: "8px 14px", background: "transparent", color: "var(--c-text-soft)", border: "1px solid var(--c-border)", borderRadius: 8, fontSize: 13, cursor: "pointer" }
+        }, "Dismiss")
+      )
+    );
+
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       debriefEntry,
       eveningDebriefEntry,
+      crowdingCard,
       intentionPinned,
       reviewBanner,
       // Home order (rev. May 2026):
