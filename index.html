@@ -5657,6 +5657,27 @@ function App() {
   /* PROFILE */
   const [showProfile, setShowProfile] = useState(false);
   const [profileSection, setProfileSection] = useState("account"); // account | inspiration | history | reports | settings
+
+  // Path-aware entry: marketing pages can deep-link to /login, /signup, /account.
+  // Runs once on mount; safely no-ops if the path is anything else.
+  useEffect(() => {
+    try {
+      const p = (location.pathname || "/").replace(/\/+$/, "").toLowerCase();
+      if (p === "/signup") {
+        setAuthMode("signup");
+      } else if (p === "/account") {
+        // Only meaningful if already signed in; if not, the auth screen renders by default.
+        if (authUser) setShowProfile(true);
+      }
+      // /login and /signin are no-ops (default auth screen already renders for null user).
+      // Strip the path back to "/" after handling so a back-button reload doesn't re-trigger.
+      if (p === "/signup" || p === "/login" || p === "/signin" || p === "/account") {
+        try { window.history.replaceState({}, "", "/"); } catch (_) {}
+      }
+    } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // intentional empty deps — runs once on first mount
+
   // Range filter for the Habit Reports heatmaps. "year" shows the
   // familiar ~26-week grid; "month" and "week" drop the window so
   // recent trends read without horizontal scrolling.
