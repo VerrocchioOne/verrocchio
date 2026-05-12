@@ -165,6 +165,29 @@ body[data-device="desktop"] .device-indicator,
 body[data-device="desktop-wide"] .device-indicator {
   display: inline-flex !important;
 }
+/* §13.1 Desktop mark-missed affordance.
+   Touch devices already have swipe-left + long-press menu to mark
+   missed; desktop has neither (swipe-left is gestural-only on touch,
+   long-press doesn't translate to a trackpad). The .habit-miss-x
+   button is rendered into every .hrow with opacity:0 and
+   pointer-events:none by default, and only fades in on hover when
+   the runtime is a desktop-class device. Phones/tablets never see
+   it, preserving the existing touch flows untouched. */
+body[data-device="desktop"] .hrow:hover .habit-miss-x,
+body[data-device="desktop-wide"] .hrow:hover .habit-miss-x {
+  opacity: 1;
+  pointer-events: auto;
+}
+body[data-device="desktop"] .habit-miss-x:hover,
+body[data-device="desktop-wide"] .habit-miss-x:hover {
+  background: rgba(220, 38, 38, 0.18) !important;
+  color: #991b1b !important;
+}
+body.dark[data-device="desktop"] .habit-miss-x:hover,
+body.dark[data-device="desktop-wide"] .habit-miss-x:hover {
+  background: rgba(220, 38, 38, 0.28) !important;
+  color: #fca5a5 !important;
+}
 @media (min-width: 900px) {
   /* Tab content uses the FULL viewport width (no narrow centered
      column). Side gutters keep cards off the screen edges. The
@@ -14852,6 +14875,61 @@ function App() {
             WebkitTapHighlightColor: "transparent"
           }
         },
+        // §13.1 Desktop hover-reveal mark-missed X. Invisible by
+        // default (opacity:0, pointer-events:none); a CSS rule scoped
+        // to body[data-device="desktop"/"desktop-wide"] .hrow:hover
+        // fades it in on hover. Touch devices never see it because
+        // the hover state never triggers and the data-device attr is
+        // "phone"/"tablet" — preserving the existing swipe-left and
+        // long-press flows verbatim. The button is rendered for
+        // every habit row so the CSS doesn't need a device-profile
+        // gate in JS; the gate is purely the CSS selector.
+        /*#__PURE__*/React.createElement("button", {
+          className: "habit-miss-x",
+          // Toggle: if already missed today, clicking clears the
+          // mark (symmetric with how the swipe-left two-stage
+          // toggle works on touch — first swipe marks missed, second
+          // clears). Use togHabitForRow so multi-slot habits still
+          // target the correct slot.
+          onClick: e => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (missed) {
+              if (typeof habit.target === "number") {
+                togHabitForRow(habit.id, selDate, "increment", "reset");
+              } else {
+                togHabitForRow(habit.id, selDate, "none");
+              }
+            } else {
+              togHabitForRow(habit.id, selDate, "missed");
+            }
+          },
+          onDoubleClick: e => e.stopPropagation(),
+          title: missed ? "Un-mark missed" : "Mark missed today",
+          "aria-label": missed ? "Un-mark missed today" : "Mark missed today",
+          style: {
+            position: "absolute",
+            top: 4,
+            right: 6,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            border: "none",
+            background: "rgba(0,0,0,0.06)",
+            color: "var(--c-text-faint)",
+            fontSize: 11,
+            fontWeight: 700,
+            lineHeight: 1,
+            cursor: "pointer",
+            opacity: 0,
+            transition: "opacity 0.15s, background 0.15s, color 0.15s",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            zIndex: 2
+          }
+        }, "✕"),
         (() => {
           // Sub-unit habits (target > 0, e.g. "8 cups of water"): the
           // button becomes an increment tap — each tap adds `increment`
