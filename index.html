@@ -1224,7 +1224,11 @@ const FEATURES = [
   { id: "todo.create",            label: "Add a task",              cat: "Create", tipWhenMissing: true,  tipDesc: "Quick one-off reminders pinned to a goal." },
   { id: "journal.create",         label: "Write a journal entry",   cat: "Create", tipWhenMissing: true,  tipDesc: "Reflection drives the AI insights." },
   { id: "calendar.view",          label: "Browse the calendar",     cat: "Review", tipWhenMissing: true,  tipDesc: "Day-by-day history with color-coded completion." },
+  { id: "calendar.daySnapshot",   label: "Open a day snapshot",     cat: "Review", tipWhenMissing: true,  tipDesc: "Tap any day in the calendar to see that day's habits, goals, tasks, and journal entries." },
   { id: "travel.mark",            label: "Mark a travel day",       cat: "Review", tipWhenMissing: true,  tipDesc: "Different habit routine when you're on the road." },
+  { id: "home.intention",         label: "Set today's intention",   cat: "Daily",  tipWhenMissing: true,  tipDesc: "A one-line focus that sits at the top of the day's ritual." },
+  { id: "todo.archive",           label: "Archive a task",          cat: "Create", tipWhenMissing: true,  tipDesc: "Send completed or no-longer-relevant tasks out of the active list without deleting them." },
+  { id: "brand.pronounce",        label: "Hear “Verrocchio”", cat: "Settings", tipWhenMissing: true,  tipDesc: "Tap the speaker icon next to the brand name to hear how it's pronounced." },
   { id: "profile.view",           label: "Open your Profile",       cat: "Settings", tipWhenMissing: false },
   { id: "settings.view",          label: "Visit App Settings",      cat: "Settings", tipWhenMissing: false },
   { id: "settings.tone",          label: "Pick a briefing tone",    cat: "Settings", tipWhenMissing: true,  tipDesc: "Warm / Neutral / Tough love — make the briefing sound right." },
@@ -4322,6 +4326,25 @@ function App() {
   // the same minute don't spam save(); the Firestore write debounce
   // in save() gives us a second layer of protection.
   const featureTouchRef = useRef({});
+  // §3.3: Pronunciation helper for the brand name. Uses the browser's
+  // Web Speech API. Italian voice if available; falls back to whatever
+  // the browser ships. Wrapped in try/catch — older browsers / locked-
+  // down iOS WebViews silently no-op. Tagged for App Progress so the
+  // user gets credit for exploring it.
+  const speakVerrocchio = () => {
+    try {
+      if (!window.speechSynthesis) return;
+      const utter = new SpeechSynthesisUtterance("Verrocchio");
+      utter.lang = "it-IT";
+      utter.rate = 0.85;
+      utter.pitch = 1.0;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utter);
+      touchFeature("brand.pronounce");
+    } catch (e) {
+      try { console.warn("[verrocchio:tts] failed:", e && e.message); } catch (_) {}
+    }
+  };
   const touchFeature = (id) => {
     if (demoMode) return;
     const now = Date.now();
@@ -5242,6 +5265,14 @@ function App() {
   // (where it used to live at the bottom) so Home stays focused on
   // the daily ritual and the calendar gets its own destination.
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  // §9.1: Day-detail snapshot modal opened from the calendar month grid.
+  // Holds a dk("YYYY-MM-DD") string for the focused day, or null when
+  // closed. The user opens this by tapping a day cell; it shows that
+  // day's habit completions/misses, active goals, due/done todos, and
+  // journal entries — all read from existing data shapes (no schema
+  // changes). The Profile's App Progress also tracks this as
+  // calendar.daySnapshot via touchFeature.
+  const [calendarDetailDate, setCalendarDetailDate] = useState(null);
   // Per-section total-time breakdown popover. Tapping the green
   // total-time chip on a Habits-page section header opens an
   // inline panel below the header that walks through the cohort
@@ -7365,6 +7396,7 @@ function App() {
           : x
       )
     });
+    touchFeature("todo.archive");
   };
   const restoreTodo = id => {
     const cur = latestData.current || data;
@@ -13043,6 +13075,7 @@ function App() {
             journal: [...(data.journal || []), { id: Date.now(), text: txt, mood: jMood, tag: "goals", timestamp: new Date().toISOString(), dateKey: k }],
             dailyRitual: { ...(data.dailyRitual || {}), [k]: { ...(data.dailyRitual && data.dailyRitual[k] || {}), intention: txt } }
           });
+          touchFeature("home.intention");
           sJTxt("");
         },
         style: { ...AB, width: "100%", padding: "9px" }
@@ -19060,7 +19093,17 @@ function App() {
           : /*#__PURE__*/React.createElement("button", {
               key: c.key,
               type: "button",
-              onClick: () => setCalendarFocus(c.k),
+              onClick: () => {
+                setCalendarFocus(c.k);
+                // §9.1: opening the day-detail snapshot. If the cell
+                // was already focused, treat the tap as a "show me
+                // more about this day" gesture; if it wasn't, the
+                // first tap focuses (existing behavior) and the
+                // snapshot also opens so the user gets the daily
+                // rollup in one tap.
+                setCalendarDetailDate(c.k);
+                touchFeature("calendar.daySnapshot");
+              },
               style: {
                 aspectRatio: "1 / 1.15",
                 display: "flex", flexDirection: "column", alignItems: "stretch",
@@ -23789,6 +23832,98 @@ function App() {
       )
     )
   ),
+  // ── §9.1: Calendar day-detail snapshot — opened when the user taps
+  //    a day cell in the Calendar modal's month grid. Shows that day's
+  //    habit hits + misses, active goals (live + within their
+  //    timebound window), due/done todos, and journal entries. Read-
+  //    only summary; tapping the backdrop closes the modal. Sits at
+  //    zIndex 1100 so it stacks over the Calendar modal (zIndex 300).
+  calendarDetailDate && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1100 },
+    onClick: () => setCalendarDetailDate(null)
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 20, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" },
+      onClick: e => e.stopPropagation()
+    },
+      /*#__PURE__*/React.createElement("h2", {
+        style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 16, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
+      }, "Snapshot — " + new Date(calendarDetailDate + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })),
+      // ── Habits ────────────────────────────────────────────────
+      (function () {
+        const dk2 = calendarDetailDate;
+        const completed = (data.habits || []).filter(h => {
+          if (!h.completions) return false;
+          const v = h.completions[dk2];
+          return v === "done" || v === true || (v && typeof v === "object");
+        });
+        const missed = (data.habits || []).filter(h => h.completions && h.completions[dk2] === "missed");
+        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 } }, "Habits"),
+          completed.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 6 } },
+            completed.map(h => /*#__PURE__*/React.createElement("div", { key: "c-" + h.id, style: { padding: "4px 0", fontSize: 14, color: "var(--c-text-strong, var(--c-text))" } }, "✓ " + h.text))
+          ),
+          missed.length > 0 && /*#__PURE__*/React.createElement("div", null,
+            missed.map(h => /*#__PURE__*/React.createElement("div", { key: "m-" + h.id, style: { padding: "4px 0", fontSize: 14, color: "var(--c-text-faint)" } }, "○ " + h.text + " (missed)"))
+          ),
+          completed.length === 0 && missed.length === 0 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: "var(--c-text-faint)", fontStyle: "italic" } }, "No habit activity")
+        );
+      })(),
+      // ── Active goals on that day (not completed, within timebound) ──
+      (function () {
+        const dk2 = calendarDetailDate;
+        const active = (data.goals || []).filter(g => {
+          if (!g) return false;
+          const tb = g.smart && g.smart.timebound;
+          return !g.completed && (!tb || dk2 <= tb);
+        });
+        if (!active.length) return null;
+        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 } }, "Active goals"),
+          active.map(g => /*#__PURE__*/React.createElement("div", { key: "g-" + g.id, style: { padding: "4px 0", fontSize: 14, color: "var(--c-text-strong, var(--c-text))" } }, "• " + g.text))
+        );
+      })(),
+      // ── To-dos due or completed that day ──────────────────────
+      (function () {
+        const dk2 = calendarDetailDate;
+        const dueOrDone = (data.todos || []).filter(t => {
+          if (!t || t.archived) return false;
+          const dueOnDay = t.dueDate === dk2;
+          const doneOnDay = t.done && t.completedDate === dk2;
+          return dueOnDay || doneOnDay;
+        });
+        if (!dueOrDone.length) return null;
+        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 } }, "To-dos"),
+          dueOrDone.map(t => /*#__PURE__*/React.createElement("div", { key: "t-" + t.id, style: { padding: "4px 0", fontSize: 14, color: t.done ? "var(--c-text-faint)" : "var(--c-text-strong, var(--c-text))" } }, (t.done ? "✓ " : "○ ") + t.text))
+        );
+      })(),
+      // ── Journal entries from that day ─────────────────────────
+      (function () {
+        const dk2 = calendarDetailDate;
+        const entries = (data.journal || []).filter(e => e && e.dateKey === dk2);
+        if (!entries.length) return null;
+        return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 16 } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, fontWeight: 600 } }, "Journal"),
+          entries.map(e => /*#__PURE__*/React.createElement("div", {
+            key: "j-" + e.id,
+            style: { padding: "8px 10px", marginBottom: 6, background: "var(--c-surface-muted)", borderRadius: 8, fontSize: 13, color: "var(--c-text-soft)" }
+          },
+            e.tag && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "var(--c-text-faint)", marginRight: 6 } }, "[" + e.tag + "] "),
+            e.text || "(empty)"
+          ))
+        );
+      })(),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => setCalendarDetailDate(null),
+        style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--c-surface-muted)", color: "var(--c-text-soft)", fontWeight: 500, cursor: "pointer", marginTop: 8, fontSize: 14 }
+      }, "Close")
+    )
+  ),
   // ── W3-T9: Welcome modal — first-time signed-in render only.
   //    Gated on welcomeModalSeen=false AND no habits yet, so any user
   //    who's already added a habit (or whose hydrateCloudDoc marked
@@ -23806,7 +23941,16 @@ function App() {
       /*#__PURE__*/React.createElement("h2", {
         id: "welcome-title",
         style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 22 }
-      }, "Welcome to Verrocchio"),
+      },
+        "Welcome to Verrocchio",
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: speakVerrocchio,
+          title: "Hear how it's pronounced",
+          "aria-label": "Pronounce Verrocchio",
+          style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "2px 6px", marginLeft: 6, fontSize: 14, lineHeight: 1, verticalAlign: "middle" }
+        }, "🔊")
+      ),
       /*#__PURE__*/React.createElement("p", {
         style: { color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 20, fontSize: 14 }
       }, "A calm place for the habits, goals, and reflections that compound into who you become."),
