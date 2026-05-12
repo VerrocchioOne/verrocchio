@@ -45,6 +45,10 @@ android/local.properties
 .idea/
 .vscode/
 
+# Claude Code: per-user settings + runtime state (committed: CLAUDE.md, skills/, memory/)
+.claude/settings.local.json
+.claude/state/
+
 # Private business / legal / formation docs. NEVER commit these.
 private/
 
