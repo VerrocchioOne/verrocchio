@@ -26,7 +26,8 @@
 
 const FIREBASE_API_KEY    = "AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k";
 const FIREBASE_PROJECT_ID = "verrocchio-1b116";
-const DEMO_PASSWORD       = "verrocchio-demo-1";
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+if (!DEMO_PASSWORD) throw new Error("DEMO_PASSWORD env var required to seed demo users");
 
 const PERSONAS = [
   { email: "alex.morning@demo.verrocchio.app", name: "Alex (Morning Runner)",   recipe: "morning-consistent" },

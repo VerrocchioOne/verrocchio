@@ -1,7 +1,7 @@
 {
   "appId": "com.verrocchio.app",
   "appName": "Verrocchio",
-  "webDir": ".",
+  "webDir": "dist",
   "server": {
     "iosScheme": "capacitor"
   },

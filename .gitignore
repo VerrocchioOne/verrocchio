@@ -45,6 +45,9 @@ android/local.properties
 .idea/
 .vscode/
 
+# Private business / legal / formation docs. NEVER commit these.
+private/
+
 # ── OS metadata ────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

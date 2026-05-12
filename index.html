@@ -985,6 +985,19 @@ body.dark [style*="background: rgba(255, 255, 255, 0.5)"]{
 <body>
 <div id="root"></div>
 <script>
+(function () {
+  function record(kind, payload) {
+    try {
+      localStorage.setItem("v-last-error", JSON.stringify({
+        kind: kind, msg: String(payload && (payload.message || payload.reason || payload)),
+        at: Date.now()
+      }));
+    } catch (_) {}
+    try { console.error("[verrocchio:" + kind + "]", payload); } catch (_) {}
+  }
+  window.addEventListener("error", function (e) { record("error", e.error || e.message); });
+  window.addEventListener("unhandledrejection", function (e) { record("unhandledrejection", e.reason); });
+})();
 document.addEventListener("DOMContentLoaded", function() {
 const firebaseConfig={apiKey:"AIzaSyDqweiDzza1Jkk-Amppy9ZfMvhc8AHHC_k",authDomain:"verrocchio-1b116.firebaseapp.com",projectId:"verrocchio-1b116",storageBucket:"verrocchio-1b116.firebasestorage.app",messagingSenderId:"436952410262",appId:"1:436952410262:web:dcbd72e6eedddc3622fab7"};
 firebase.initializeApp(firebaseConfig);
@@ -1066,7 +1079,10 @@ const storage = firebase.storage();
 //   file with Cache-Control: max-age=600, which would otherwise delay
 //   SW updates by up to 10 minutes after a deploy. With "none" the
 //   check is fresh on every navigation.
-if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+if ("serviceWorker" in navigator
+    && location.protocol !== "capacitor:"
+    && location.protocol !== "file:"
+    && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
   navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" }).then(reg => {
     // Force an update check on every page load. register() alone won't
     // re-fetch service-worker.js; the browser self-schedules update
@@ -1106,6 +1122,7 @@ const userDoc = uid => db.collection("users").doc(uid);
    data-driven briefing and a clear "not configured" message for
    insights — no failed network calls. */
 const AI_BACKEND_URL = null;
+const AI_ENABLED = !!AI_BACKEND_URL;
 // App version — shown in the Profile footer. Bump on every deploy.
 // Keep it semver-ish so the user can tell at a glance if the version
 // they're on matches the one support is asking about.
@@ -3453,6 +3470,38 @@ function renderLinkedUserContent(item, opts) {
   }, "⬇ " + (item.fileName || item.title || "Open file") + (item.fileSize ? " (" + Math.round(item.fileSize / 1024) + " KB)" : ""));
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) {
+    try { console.error("[verrocchio:boundary]", err, info && info.componentStack); } catch (_) {}
+    try { localStorage.setItem("v-last-error", JSON.stringify({ msg: String(err && err.message || err), at: Date.now() })); } catch (_) {}
+  }
+  reset = () => { this.setState({ err: null }); };
+  render() {
+    if (!this.state.err) return this.props.children;
+    return React.createElement("div", {
+      style: { padding: 24, textAlign: "center", color: "var(--c-text, #222)",
+               paddingTop: "calc(env(safe-area-inset-top) + 24px)" }
+    },
+      React.createElement("div", { style: { fontSize: 48, marginBottom: 12 } }, "⚠️"),
+      React.createElement("h2", null, "Something went wrong"),
+      React.createElement("p", { style: { opacity: 0.7, marginBottom: 16 } },
+        "Your data is safe. Tap retry to continue."),
+      React.createElement("button", {
+        onClick: this.reset,
+        style: { padding: "10px 20px", borderRadius: 10, border: "none",
+                 background: "var(--accent, #2d5a2d)", color: "#fff", fontWeight: 600 }
+      }, "Retry"),
+      React.createElement("button", {
+        onClick: () => location.reload(),
+        style: { padding: "10px 20px", marginLeft: 8, borderRadius: 10,
+                 border: "1px solid var(--c-border, #ccc)", background: "transparent" }
+      }, "Reload app")
+    );
+  }
+}
+
 /* ── MAIN APP ── */
 function App() {
   /* AUTH */
@@ -3545,7 +3594,8 @@ function App() {
     "casey.steady@demo.verrocchio.app":   { recipe: "steady-average"     },
     "dani.new@demo.verrocchio.app":       { recipe: "brand-new"          }
   };
-  const DEMO_PASSWORD = "verrocchio-demo-1";
+  // Replaced at build time by scripts/build-dist.mjs from env var DEMO_PASSWORD.
+  const DEMO_PASSWORD = "%%DEMO_PASSWORD%%";
 
   // Content pools the randomizer picks from. Grouped by section for
   // habits so each persona's time-of-day mix stays realistic.
@@ -3968,7 +4018,7 @@ function App() {
     // detection has a real baseline (without it, localTs=0 and the
     // listener would treat any cached snapshot as newer).
     seeded._updatedAt = Date.now();
-    await userDoc(auth.currentUser.uid).set(seeded);
+    await userDoc(auth.currentUser.uid).set(sanitizeForFirestore(seeded));
   };
   const signInAsDemoUser = async (email) => {
     setAuthErr("");
@@ -4015,10 +4065,14 @@ function App() {
     }
     setAuthBusy(false);
   };
-  const doSignOut = () => {
+  const doSignOut = async () => {
     if (demoMode) { exitDemo(); return; }
-    auth.signOut();
-    setHasSeenWelcome(false);
+    try {
+      await auth.signOut();
+      await db.terminate();
+      await db.clearPersistence();
+    } catch (e) { /* non-fatal */ }
+    finally { window.location.reload(); }
   };
   // ── Account management ──
   // Each sensitive action (email change, password change, delete)
@@ -4079,6 +4133,13 @@ function App() {
     try {
       await reauthenticate(acctCurrentPw);
       const uidToNuke = auth.currentUser.uid;
+      // Storage cleanup — runs while user is still authenticated
+      try {
+        const listResult = await storage.ref("users/" + uidToNuke + "/content").listAll();
+        await Promise.all(listResult.items.map(r => r.delete().catch(() => {})));
+      } catch (e) {
+        try { console.warn("[verrocchio delete] storage cleanup failed:", e && e.code); } catch (_) {}
+      }
       // Best-effort Firestore doc delete BEFORE the auth user is
       // nuked — once the user is deleted, the security rules will
       // reject any further writes to their doc.
@@ -6784,7 +6845,6 @@ function App() {
   // through save() so a broken save path can't silently swallow the
   // wipe. Each step logs to [verrocchio wipe] for debug.
   const wipeAllData = async () => {
-    try { console.log("[verrocchio wipe] start"); } catch (e) {}
     const blank = {
       goals: [],
       habits: [],
@@ -6814,7 +6874,6 @@ function App() {
     // 2. Per-user localStorage.
     try {
       localStorage.setItem(lsKey, JSON.stringify(blank));
-      try { console.log("[verrocchio wipe] localStorage cleared"); } catch (_) {}
     } catch (e) {
       try { console.warn("[verrocchio wipe] localStorage write failed", e); } catch (_) {}
     }
@@ -6822,7 +6881,6 @@ function App() {
     if (!demoMode && uid) {
       try {
         await userDoc(uid).set(sanitizeForFirestore(blank));
-        try { console.log("[verrocchio wipe] Firestore set succeeded"); } catch (_) {}
       } catch (e) {
         try { console.warn("[verrocchio wipe] Firestore set failed:", e && e.code, e && e.message, e); } catch (_) {}
       }
@@ -16117,7 +16175,7 @@ function App() {
       fontWeight: jFil === f.k ? 600 : 400,
       cursor: "pointer"
     }
-  }, f.l)), (data.journal || []).filter(e => e.tag === "general" || !e.tag).length >= 5 && /*#__PURE__*/React.createElement("button", {
+  }, f.l)), AI_ENABLED && (data.journal || []).filter(e => e.tag === "general" || !e.tag).length >= 5 && /*#__PURE__*/React.createElement("button", {
     onClick: genIns,
     style: {
       marginLeft: "auto",
@@ -16131,7 +16189,7 @@ function App() {
       cursor: "pointer"
     }
   }, "\u2728 Insights"));
-  })(), insV && /*#__PURE__*/React.createElement("div", {
+  })(), AI_ENABLED && insV && /*#__PURE__*/React.createElement("div", {
     style: {
       background: "linear-gradient(135deg,#f0f7f0,#f5faf5)",
       border: "1px solid var(--c-tint-success-border)",
@@ -24924,7 +24982,7 @@ function App() {
     }, t.label));
   }))), renderTour());
 }
-ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(App, null));
+ReactDOM.createRoot(document.getElementById("root")).render(/*#__PURE__*/React.createElement(ErrorBoundary, null, /*#__PURE__*/React.createElement(App, null)));
 
 });
 </script>

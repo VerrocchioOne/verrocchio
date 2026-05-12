@@ -16,7 +16,7 @@
 // Bump CACHE_NAME whenever the precache list meaningfully changes so
 // old caches get purged on next activation.
 
-const CACHE_NAME = "verrocchio-shell-v34";
+const CACHE_NAME = "verrocchio-shell-v35";
 
 const APP_SHELL = [
   "./",
