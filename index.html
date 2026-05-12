@@ -7782,6 +7782,25 @@ function App() {
     if (!sm.timebound) return true;      // no target date
     return false;
   };
+  // Stricter variant used only by the habit-card ⚠️ surfacing (§5.6).
+  // A linked goal is treated as "incomplete" for the purpose of
+  // warning the user on a habit card when ANY required SMART slot
+  // (specific, measurable, achievable, relevant, timebound) or the
+  // goal text itself is empty. This is intentionally stricter than
+  // isGoalIncomplete (which allows partial SMART fills elsewhere) —
+  // habits linked to half-defined goals are the case we want to
+  // flag, so the user finishes the goal before grinding the habit.
+  const isLinkedGoalIncomplete = (goal) => {
+    if (!goal) return false;
+    if (!goal.text || !String(goal.text).trim()) return true;
+    const s = goal.smart || {};
+    if (!s.specific || !String(s.specific).trim()) return true;
+    if (!s.measurable || !String(s.measurable).trim()) return true;
+    if (!s.achievable || !String(s.achievable).trim()) return true;
+    if (!s.relevant || !String(s.relevant).trim()) return true;
+    if (!s.timebound || !String(s.timebound).trim()) return true;
+    return false;
+  };
   const isTodoIncomplete = (t) => {
     if (!t) return false;
     if (!t.dueDate) return true;         // no due date
@@ -15033,6 +15052,40 @@ function App() {
             title: "Incomplete — double-tap to fill in area, section, or frequency.",
             style: { marginRight: 4, display: "inline-flex", alignItems: "center", verticalAlign: "middle" }
           }, Glyph("🚨", { size: 12, color: "#b91c1c" })),
+          // Linked-goal-incomplete warning (§5.6). When the habit
+          // points at one or more goals (canonical goalIds array, or
+          // legacy goalId scalar) whose SMART set or text is not
+          // fully populated, surface a ⚠️ with a tooltip listing
+          // exactly which fields are missing on each linked goal.
+          // Hidden when there are no linked goals or all linked
+          // goals are complete.
+          (function () {
+            const linkedGoalIds = (habit.goalIds && habit.goalIds.length)
+              ? habit.goalIds
+              : (habit.goalId != null ? [habit.goalId] : []);
+            if (!linkedGoalIds.length) return null;
+            const incomplete = linkedGoalIds
+              .map(gid => (data.goals || []).find(g => String(g.id) === String(gid)))
+              .filter(g => g && isLinkedGoalIncomplete(g));
+            if (!incomplete.length) return null;
+            const missingByGoal = incomplete.map(g => {
+              const s = g.smart || {};
+              const miss = [];
+              if (!g.text || !String(g.text).trim()) miss.push("Goal text");
+              if (!s.specific || !String(s.specific).trim()) miss.push("Specific");
+              if (!s.measurable || !String(s.measurable).trim()) miss.push("Measurable");
+              if (!s.achievable || !String(s.achievable).trim()) miss.push("Achievable");
+              if (!s.relevant || !String(s.relevant).trim()) miss.push("Relevant");
+              if (!s.timebound || !String(s.timebound).trim()) miss.push("Time-bound");
+              return (g.text || "(untitled)") + ": " + miss.join(", ");
+            }).join(" | ");
+            const tip = "Linked goal incomplete — " + missingByGoal;
+            return /*#__PURE__*/React.createElement("span", {
+              title: tip,
+              "aria-label": tip,
+              style: { fontSize: 14, marginRight: 4, marginLeft: 2, cursor: "help", display: "inline-flex", alignItems: "center", verticalAlign: "middle" }
+            }, "⚠️");
+          })(),
           // Linked-audio play chip. If the habit has at least one
           // linked audio in My Content, surface a tiny ▶ button right
           // next to the habit name. Tapping opens the floating player
@@ -15256,7 +15309,14 @@ function App() {
         // to avoid overlap with the metadata pill row; instead we
         // raise the chip via z-index so it sits above any pill that
         // would crowd the right edge — see §5.1 in docs/TODO.md.)
-        (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
+        //
+        // EXCEPTION: when the card is in edit mode (isE), the inline
+        // edit form overlays the right edge with its own controls
+        // (name field, frequency picker, target inputs), which can
+        // visually cover this badge even with z-index. Hiding the
+        // badge while editing is the cleanest fix — the user already
+        // sees the target value inside the edit form itself.
+        !isE && (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
             display: "flex",
@@ -15284,7 +15344,7 @@ function App() {
             zIndex: 2
           }
         }, habit.section === "avoid" ? "No" : "Yes"),
-        (typeof habit.target === "number") && (() => {
+        !isE && (typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const shown = op === "≤" ? units : Math.min(habit.target, units);
@@ -18018,10 +18078,16 @@ function App() {
             marginBottom: 2
           }
         }, f.label), /*#__PURE__*/React.createElement("div", {
+          // Indent the value beneath its uppercase label so each
+          // SMART row reads as label-then-indented-body (§5.5).
+          // Slightly heavier text weight + stronger color so the
+          // value is the focal element of each block.
           style: {
             fontSize: 13,
-            color: "var(--c-text-soft)",
-            lineHeight: 1.6
+            fontWeight: 500,
+            color: "var(--c-text-strong)",
+            lineHeight: 1.6,
+            paddingLeft: 8
           }
         }, shown));
       })));
