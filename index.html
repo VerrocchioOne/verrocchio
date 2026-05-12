@@ -5093,6 +5093,10 @@ function App() {
   // goal-link + due-date fields only appear once the user commits to
   // adding a task, keeping the default view clean.
   const [expTodoForm, setExpTodoForm] = useState(false);
+  // §8.1: toggle visibility of the archived-todos list (rendered below the
+  // active sections on the To-do tab). Closed by default to keep the page
+  // clean; opens on click of the "View archive (N)" link.
+  const [showArchivedTodos, setShowArchivedTodos] = useState(false);
   // Section filter pills (All / Today / Week / Month / Later / No Due).
   // Empty = show all sections. Selecting one pill narrows to that bucket;
   // tapping "All" restores the full list.
@@ -5505,7 +5509,11 @@ function App() {
   const [jTxt, sJTxt] = useState("");
   const [jMood, sJMood] = useState("");
   const [jTag, sJTag] = useState("reflection");
-  const [jFil, sJFil] = useState("today");
+  // §7.1: default to "all" so users see their historical journal entries when
+  // landing on the Reflect tab, not just today's (which is empty most of the
+  // day before they write). They can still narrow to Today / This Week via
+  // the filter pills.
+  const [jFil, sJFil] = useState("all");
   // Journal entry-form 'kind' picker. 'daily' is the default and
   // saves with tag 'daily-recap'; 'goal' surfaces the goal selector
   // and saves with tag 'goals' + goalId; 'other' surfaces a
@@ -7304,6 +7312,34 @@ function App() {
         ...t,
         archivedAt: new Date().toISOString()
       }]
+    });
+  };
+  // §8.1: Archive a todo (non-destructive — flips an `archived` flag on the
+  // todo in-place so it can be restored later). Distinct from delTodo (which
+  // moves the item to data.archive as a tombstone) and chkTodo (completion).
+  const archiveTodo = id => {
+    const cur = latestData.current || data;
+    const t = (cur.todos || []).find(x => String(x.id) === String(id));
+    if (!t) return;
+    pushUndo(`Archived task: ${(t.text || "").slice(0, 30)}`, JSON.parse(JSON.stringify(cur)));
+    save({
+      ...cur,
+      todos: (cur.todos || []).map(x =>
+        String(x.id) === String(id)
+          ? { ...x, archived: true, archivedAt: Date.now() }
+          : x
+      )
+    });
+  };
+  const restoreTodo = id => {
+    const cur = latestData.current || data;
+    save({
+      ...cur,
+      todos: (cur.todos || []).map(x =>
+        String(x.id) === String(id)
+          ? { ...x, archived: false, archivedAt: null }
+          : x
+      )
     });
   };
   const reordTodos = l => {
@@ -9448,7 +9484,9 @@ function App() {
   const habits = data.habits || [];
   const journal = data.journal || [];
   const quotes = data.quotes || [];
-  const pending = data.todos.filter(t => !t.done);
+  // §8.1: archived todos are hidden from the main render. They're surfaced
+  // via the "View archive" toggle below the active list, and can be restored.
+  const pending = data.todos.filter(t => !t.done && !t.archived);
   const dH = habits.filter(h => h.section !== "avoid");
   const doneHCt = dH.filter(h => isDone(h, selDate)).length;
   const isToday = selDate === tk();
@@ -15901,6 +15939,14 @@ function App() {
             onClick: () => sETodo(todo),
             style: { background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 12, opacity: 0, padding: "4px" }
           }, "✎"),
+          // §8.1: Archive — hide the task without deleting or completing it.
+          // Restorable via the "View archive" affordance below the active list.
+          /*#__PURE__*/React.createElement("button", { "aria-label": "Archive",
+            className: "edit-btn",
+            title: "Archive",
+            onClick: () => archiveTodo(todo.id),
+            style: { background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 13, opacity: 0, padding: "4px" }
+          }, "📦"),
           /*#__PURE__*/React.createElement("button", { "aria-label": "Close",
             className: "del-btn",
             onClick: () => delTodo(todo.id),
@@ -16220,7 +16266,64 @@ function App() {
         todo: t,
         idx: pending.indexOf(t)
       }))));
-    }), (data.archive || []).length > 0 && /*#__PURE__*/React.createElement("div", {
+    }),
+    // §8.1: View archive — surfaces todos that were archived (not deleted,
+    // not completed) so the user can browse or restore them. Hidden when
+    // there are no archived todos.
+    (() => {
+      const archivedTodos = (data.todos || []).filter(t => t && t.archived);
+      if (archivedTodos.length === 0) return null;
+      return /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 16 }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => setShowArchivedTodos(s => !s),
+          style: {
+            background: "transparent", border: "none",
+            color: "var(--c-text-faint)", cursor: "pointer",
+            fontSize: 12, padding: 4
+          }
+        }, (showArchivedTodos ? "Hide" : "View") + " archive (" + archivedTodos.length + ")"),
+        showArchivedTodos && /*#__PURE__*/React.createElement("div", {
+          className: "fade-in",
+          style: { marginTop: 8 }
+        },
+          archivedTodos.map(t => /*#__PURE__*/React.createElement("div", {
+            key: t.id,
+            style: {
+              padding: 10,
+              background: "var(--c-surface-muted)",
+              borderRadius: 8,
+              marginBottom: 6,
+              fontSize: 13,
+              color: "var(--c-text-soft)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8
+            }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
+            }, t.text || "(no text)"),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => restoreTodo(t.id),
+              style: {
+                background: "transparent",
+                border: "1px solid var(--c-border)",
+                color: "var(--c-text-soft)",
+                cursor: "pointer",
+                fontSize: 12,
+                padding: "4px 8px",
+                borderRadius: 6,
+                flexShrink: 0
+              }
+            }, "Restore")
+          ))
+        )
+      );
+    })(),
+    (data.archive || []).length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         marginTop: 16
       }
