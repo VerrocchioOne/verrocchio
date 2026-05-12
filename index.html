@@ -1138,7 +1138,7 @@ const userDoc = uid => db.collection("users").doc(uid);
    a private key. When null, the app falls back to a deterministic,
    data-driven briefing and a clear "not configured" message for
    insights — no failed network calls. */
-const AI_BACKEND_URL = null;
+const AI_BACKEND_URL = "https://ai.verrocchio.app";
 const AI_ENABLED = !!AI_BACKEND_URL;
 // App version — shown in the Profile footer. Bump on every deploy.
 // Keep it semver-ish so the user can tell at a glance if the version

@@ -28,11 +28,12 @@ const MAX_TOKENS_CAP = 2000;
 
 export default {
   async fetch(request, env) {
+    const reqOrigin = request.headers.get("Origin");
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: cors(env) });
+      return new Response(null, { headers: cors(env, reqOrigin) });
     }
     if (request.method !== "POST") {
-      return json({ error: "method_not_allowed" }, 405, env);
+      return json({ error: "method_not_allowed" }, 405, env, reqOrigin);
     }
 
     // Require a Firebase ID token. Without this check the Worker URL

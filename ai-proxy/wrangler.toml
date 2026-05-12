@@ -13,6 +13,10 @@ compatibility_date = "2024-09-01"
 # ALLOWED_ORIGIN optionally restricts CORS to a single origin. Leave
 # unset (defaults to "*") during local testing; tighten to your app's
 # hosted URL (e.g. https://verrocchio-1b116.web.app) for production.
+routes = [
+  { pattern = "ai.verrocchio.app", custom_domain = true }
+]
+
 [vars]
 FIREBASE_PROJECT_ID = "verrocchio-1b116"
 ALLOWED_ORIGIN = "https://verrocchio.app"
