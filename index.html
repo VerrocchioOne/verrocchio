@@ -20,19 +20,26 @@
      browsers downscale it for tab favicons. -->
 <link rel="icon" type="image/png" sizes="1024x1024" href="apple-touch-icon-1024.png">
 <link rel="apple-touch-icon" sizes="1024x1024" href="apple-touch-icon-1024.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<!-- SRI hashes pin CDN payloads to the exact bytes verified at commit
+     time. If unpkg/gstatic ever serve different content (compromise or
+     accidental version drift), the browser refuses to execute the
+     script. crossorigin="anonymous" is required for SRI checking on
+     cross-origin <script> tags. -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
 <!-- Chart.js is lazy-loaded by ensureChartJs() the first time the Habit
      Stats radar opens. Home uses a hand-rolled SVG sparkline instead, so
      a cold boot ships ~190 KB lighter. See ensureChartJs in app code. -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js" integrity="sha384-yuGdyIzzYtOBlBG6JOWn+Ey9kpq7HocusNuxEGyyohr1eEyXpeEyehIIXC/hznw4" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js" integrity="sha384-nwX2Qpkhc2sv6L0ZPkLefLGguao67toSowvePuQvGF6cG+8MUphGI2uI94Ls3JF7" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js" integrity="sha384-lI+CxEx/bCvWP1b0OK13j5HTrTZP7yf1xle8TVOFq2smz6KC1RChTarRV/RHP5PP" crossorigin="anonymous"></script>
 <!-- Storage SDK powers cross-device file sync for My Content. Files
      don't fit in a Firestore doc (1 MB hard limit), so we upload up
-     to 100 MB to Storage and store the download URL in Firestore. -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+     to 10 MB to Storage and store the download URL in Firestore. -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js" integrity="sha384-oze9siCpFoiDBZ37lLp99ZmOMO+je1s/xtvwtbNv3NXQXLpbpfPSzZSpbT3xV9da" crossorigin="anonymous"></script>
 <script src="utils.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1102,7 +1109,17 @@ if ("serviceWorker" in navigator
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       if (_swReloaded) return;
       _swReloaded = true;
-      try { location.reload(); } catch (e) {}
+      // Surface a brief toast so the user understands why the page is
+      // about to reload — otherwise it looks like an unexpected flash.
+      // Wrapped in try/catch because document.body may not be ready in
+      // edge cases (very fast SW handoff during initial load).
+      try {
+        const div = document.createElement("div");
+        div.textContent = "New version available — reloading…";
+        div.style.cssText = "position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:50%;transform:translateX(-50%);background:#2d5a2d;color:#fff;padding:10px 16px;border-radius:8px;z-index:99999;font-family:system-ui,-apple-system,sans-serif;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:90vw";
+        document.body.appendChild(div);
+      } catch (e) {}
+      setTimeout(() => { try { location.reload(); } catch (e) {} }, 1200);
     });
   }).catch(() => {});
 }
@@ -3012,7 +3029,21 @@ const DD = {
   // hydrateCloudDoc so users mid-onboarding from before this change
   // still see what their doc says.
   onboardingComplete: true,
-  tourDone: true
+  tourDone: true,
+  // W3-T9: one-time welcome modal on first signed-in render for brand
+  // new accounts. Separate from `tourDone` so flipping this default
+  // doesn't disturb the existing onboarding-carousel skip semantics.
+  // hydrateCloudDoc sets this true for any returning doc that already
+  // has habits or completed the tour, so only true first-timers see it.
+  welcomeModalSeen: false,
+  // W3-T11: one-time health / privacy disclaimer shown after the user
+  // creates their first journal entry. Persisted so the modal never
+  // re-appears once acknowledged.
+  journalDisclaimerAcked: false,
+  // W3-T12: AI features consent timestamp (epoch ms). 0 means the user
+  // has never consented. AI call sites must gate on this when AI_ENABLED
+  // is true. Wired now so v1.1's AI_ENABLED flip is one constant change.
+  aiConsentAt: 0
 };
 // Single source of truth for "did this doc come from an older schema".
 // Called from BOTH the localStorage load and the Firestore read/listener
@@ -3045,9 +3076,53 @@ function hydrateCloudDoc(p) {
   // downstream. Require a plain object.
   if (!p.bestStreaks || typeof p.bestStreaks !== "object" || Array.isArray(p.bestStreaks)) p.bestStreaks = {};
   if (!p.achievementsUnlocked || typeof p.achievementsUnlocked !== "object" || Array.isArray(p.achievementsUnlocked)) p.achievementsUnlocked = {};
+  // W3-T23: legacy docs stored achievement unlock times and archived
+  // entry timestamps as ISO strings via toISOString(). Newer code writes
+  // epoch ms (Date.now() / Date.prototype.getTime()) for cheaper compare
+  // and JSON stability. Convert any string survivors on hydrate so all
+  // downstream consumers see a uniform number type.
+  if (p.achievementsUnlocked && typeof p.achievementsUnlocked === "object" && !Array.isArray(p.achievementsUnlocked)) {
+    for (const k of Object.keys(p.achievementsUnlocked)) {
+      const v = p.achievementsUnlocked[k];
+      if (typeof v === "string") {
+        const ms = new Date(v).getTime();
+        p.achievementsUnlocked[k] = isNaN(ms) ? Date.now() : ms;
+      }
+    }
+  }
+  if (Array.isArray(p.archive)) {
+    p.archive = p.archive.map(a => {
+      if (a && typeof a.archivedAt === "string") {
+        const ms = new Date(a.archivedAt).getTime();
+        return { ...a, archivedAt: isNaN(ms) ? Date.now() : ms };
+      }
+      return a;
+    });
+  }
+  if (Array.isArray(p.goalArchive)) {
+    p.goalArchive = p.goalArchive.map(a => {
+      if (a && typeof a.archivedAt === "string") {
+        const ms = new Date(a.archivedAt).getTime();
+        return { ...a, archivedAt: isNaN(ms) ? Date.now() : ms };
+      }
+      return a;
+    });
+  }
   if (typeof p.xp !== "number") p.xp = 0;
   if (!p.dailyRitual) p.dailyRitual = {};
   if (typeof p.homeLocation !== "string") p.homeLocation = "";
+  // W3-T9: returning users (anyone who already has habits OR completed
+  // the tour) skip the welcome modal — they're not first-timers.
+  if (typeof p.welcomeModalSeen !== "boolean") {
+    p.welcomeModalSeen = (Array.isArray(p.habits) && p.habits.length > 0) || p.tourDone === true;
+  }
+  // W3-T11: existing users with any journal entries pre-date the
+  // disclaimer requirement and shouldn't be re-prompted.
+  if (typeof p.journalDisclaimerAcked !== "boolean") {
+    p.journalDisclaimerAcked = Array.isArray(p.journal) && p.journal.length > 0;
+  }
+  // W3-T12: AI consent timestamp. 0 means never consented.
+  if (typeof p.aiConsentAt !== "number") p.aiConsentAt = 0;
   if (!Array.isArray(p.travelDays)) p.travelDays = [];
   p.travelDays = p.travelDays.map(t => {
     if (typeof t === "string") return { date: t, location: "", tripId: "t-" + t };
@@ -3595,6 +3670,10 @@ function App() {
       setAuthPass("");
     } catch (e) {
       setAuthErr(publicAuthErr(e));
+      // Clear password on failure so the user re-enters it rather than
+      // re-submitting the same wrong value (also reduces shoulder-surf
+      // window if they walk away mid-error).
+      setAuthPass("");
     }
     setAuthBusy(false);
   };
@@ -3626,6 +3705,12 @@ function App() {
   const SHOW_DEMO_UI = location.hostname === "localhost"
                     || location.hostname === "127.0.0.1"
                     || new URLSearchParams(location.search).get("demo") === "1";
+  // W3-T27: gate diagnostic UI (device-profile chip, etc.) the same way
+  // — visible on localhost or when explicitly opted-in via ?debug=1.
+  // Keeps the production header clean while preserving the chip for QA.
+  const SHOW_DEBUG_UI = location.hostname === "localhost"
+                    || location.hostname === "127.0.0.1"
+                    || new URLSearchParams(location.search).get("debug") === "1";
   // Replaced at build time by scripts/build-dist.mjs from env var DEMO_PASSWORD.
   const DEMO_PASSWORD = "%%DEMO_PASSWORD%%";
 
@@ -3907,8 +3992,7 @@ function App() {
         else if (h.section === "afternoon") hr = 12 + demoRandInt(0, 5);
         else if (h.section === "evening") hr = 18 + demoRandInt(0, 4);
         else hr = 20 + demoRandInt(0, 3); // avoid — bedtime-ish
-        h.completions[k] = "done";
-        h.completionTimes[k] = demoPad(hr) + ":" + demoPad(demoRandInt(0, 55));
+        h = { ...h, completions: { ...h.completions, [k]: "done" }, completionTimes: { ...h.completionTimes, [k]: demoPad(hr) + ":" + demoPad(demoRandInt(0, 55)) } };
         if (h.target) {
           // Hit target ±1 increment most days, occasionally under.
           const jitter = (h.increment || 1);
@@ -3944,7 +4028,7 @@ function App() {
         id: habitId + 300 + i,
         text: g.text, type: g.type, smart: g.smart,
         completed: true,
-        archivedAt: completedAt.toISOString(),
+        archivedAt: completedAt.getTime(),
         completedDate: dk(completedAt),
         _order: i
       };
@@ -3961,7 +4045,7 @@ function App() {
         dueDate: "",
         goalId: null,
         notes: "",
-        archivedAt: archivedAt.toISOString(),
+        archivedAt: archivedAt.getTime(),
         _order: i
       };
     });
@@ -4795,6 +4879,24 @@ function App() {
     return () => window.removeEventListener("devicemotion", onMotion);
   }, [demoMode, tourStep]);
 
+  // W3-T19: refresh Firebase ID token when the native shell brings the
+  // app back to the foreground after a long backgrounding. Capacitor's
+  // App plugin fires `appStateChange` with `{ isActive: true }` on
+  // resume; calling getIdToken(true) forces a refresh so long-idle
+  // sessions don't hit Firestore with an expired token. No-op on web,
+  // where window.Capacitor.Plugins is undefined.
+  useEffect(() => {
+    if (!window.Capacitor || !window.Capacitor.Plugins || !window.Capacitor.Plugins.App) return;
+    const listener = window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+      if (state.isActive) {
+        try { auth.currentUser && auth.currentUser.getIdToken(true); } catch (_) {}
+      }
+    });
+    return () => {
+      try { listener && listener.remove && listener.remove(); } catch (_) {}
+    };
+  }, []);
+
   const [data, setData] = useState(() => loadData());
   // Pre-indexed linked-content lookups. Without this, every habit/goal
   // row called `firstLinkedAudioFor` which did a linear scan of
@@ -5517,6 +5619,13 @@ function App() {
   const [acctFeedback, setAcctFeedback] = useState(null); // {kind:"ok"|"err", msg}
   const [confirmDeleteAcct, setConfirmDeleteAcct] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  // W3-T11: surfaces the journal/health disclaimer after the user's first
+  // journal save. Non-blocking — the entry is committed regardless; this
+  // just informs.
+  const [showJournalDisclaimer, setShowJournalDisclaimer] = useState(false);
+  // W3-T12: surfaces the AI consent gate. Set true by the AI call sites
+  // when AI_ENABLED is true and data.aiConsentAt is 0.
+  const [showAiConsent, setShowAiConsent] = useState(false);
 
   // ── Feature-access tracking effects ──
   // Positioned AFTER `tab`, `showProfile`, `profileSection` are declared
@@ -6596,6 +6705,11 @@ function App() {
   // so its dependency array can read it without a TDZ.
   const saveTimerRef = useRef(null);
   const latestData = useRef(null);
+  // W3-T21: surface failed Firestore writes via a retry banner. The
+  // last failed payload is parked on lastSaveRef so the user can
+  // re-attempt without losing the in-flight change.
+  const [lastSyncError, setLastSyncError] = useState(null);
+  const lastSaveRef = useRef(null);
 
   // Per-user localStorage key: prevents one device from leaking account
   // A's data into account B's session. Anonymous/legacy sessions (no uid)
@@ -6865,8 +6979,16 @@ function App() {
     // least one signal something is wrong.
     if (localOk) setSyncState("synced");
     if (!uid) return;
-    userDoc(uid).set(sanitizeForFirestore(stamped)).catch(err => {
+    userDoc(uid).set(sanitizeForFirestore(stamped)).then(() => {
+      // Clear any prior failure banner once a write lands successfully.
+      setLastSyncError(null);
+      lastSaveRef.current = null;
+    }).catch(err => {
       try { console.warn("[verrocchio save] cloud write rejected:", err && err.code, err && err.message); } catch (e) {}
+      // W3-T21: surface failure so the user can retry. Local copy is
+      // already safe at this point (localOk === true above).
+      setLastSyncError((err && (err.code || err.message)) || "save-failed");
+      lastSaveRef.current = stamped;
     });
   }, [demoMode, uid, lsKey]);
 
@@ -7053,7 +7175,7 @@ function App() {
     ACHIEVEMENTS.forEach(a => {
       if (already[a.id]) return;
       if ((achievementStats[a.stat] || 0) >= a.threshold) {
-        newly[a.id] = new Date().toISOString();
+        newly[a.id] = Date.now();
       }
     });
     if (Object.keys(newly).length === 0) return;
@@ -8879,6 +9001,11 @@ function App() {
     touchFeature("journal.create");
     sJTxt("");
     sJMood("");
+    // W3-T11: first-time non-blocking disclaimer. The entry is already
+    // committed above; this just informs the user once.
+    if (!data.journalDisclaimerAcked) {
+      setShowJournalDisclaimer(true);
+    }
   };
   const delJ = id => {
     const e = (data.journal || []).find(x => x.id === id);
@@ -8925,6 +9052,14 @@ function App() {
     setInsV(true);
     setIns("");
     const prompt = `Analyze these journal entries and generate insights.\n\nENTRIES:\n${entries.slice(-30).map(e => `[${fmtD(e.timestamp)}] [${(e.tag || "reflection").toUpperCase()}]${e.mood ? ` [${e.mood}]` : ""}\n"${e.text}"`).join("\n\n")}\n\nGenerate:\n1. **Recurring Themes**\n2. **Emotional Patterns**\n3. **Key Wins & Growth**\n4. **Challenges to Watch**\n5. **Actionable Insights** (3 suggestions)\n6. **A Personal Note**\n\nUnder 400 words.`;
+    // W3-T12: consent gate. AI_ENABLED is currently false so this branch
+    // is unreachable in v1.0, but wired so v1.1 only flips the constant.
+    if (AI_ENABLED && (!data.aiConsentAt || data.aiConsentAt === 0)) {
+      setInsL(false);
+      setInsV(false);
+      setShowAiConsent(true);
+      return;
+    }
     if (!AI_BACKEND_URL) {
       setIns("AI insights require a server-side proxy. Set AI_BACKEND_URL in index.html to a backend that forwards requests to the Anthropic API with a private key.");
       setInsL(false);
@@ -9112,6 +9247,11 @@ function App() {
         : (data.aiTone === "encouraging")
           ? "You are a warm personal coach. Lead with positive framing and celebrate progress."
           : "You are a neutral analyst. Summarize the user's day factually without cheerleading or criticism. Plain language, no emotional framing.";
+    // W3-T12: consent gate. See genIns above — same v1.0 inert / v1.1 live semantics.
+    if (AI_ENABLED && (!data.aiConsentAt || data.aiConsentAt === 0)) {
+      setShowAiConsent(true);
+      return;
+    }
     const prompt = `${toneLine} Generate a brief, data-driven morning briefing. Do NOT include any quotations, author attributions, or motivational aphorisms — that content lives elsewhere in the app.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (${dataDays}d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (${dataDays}d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}${corrHints.length ? `\nPATTERNS DETECTED: ${corrHints.join(" | ")}` : ""}\n\n3 short paragraphs: 1) greeting referencing today's tasks/goals, 2) life-balance insight — weave in any PATTERNS DETECTED naturally if present, 3) brief closing. Match the tone above exactly. No quotes.`;
     if (!AI_BACKEND_URL) {
       // No backend proxy configured — produce a richer deterministic
@@ -9651,7 +9791,11 @@ function App() {
           type: "button",
           onClick: () => setShowAuthPass(s => !s),
           "aria-label": showAuthPass ? "Hide password" : "Show password",
-          style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, padding: 4, color: "var(--c-text-faint)" }
+          // 44×44 hit area meets iOS HIG minimum touch-target; the icon
+          // stays visually 16px but the button extends invisibly to a
+          // proper tap zone. Centered via flexbox so emoji glyph sits in
+          // the middle regardless of platform-specific glyph metrics.
+          style: { position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, padding: 0, color: "var(--c-text-faint)" }
         }, showAuthPass ? "🙈" : "👁")
       ),
       isSignup ? React.createElement("p", { key: "passhelp", style: { fontSize: 11, color: "var(--c-text-faint)", marginTop: -4, marginBottom: 8 } }, "At least 8 characters.") : null,
@@ -11081,7 +11225,9 @@ function App() {
     }
   }, "\u2715 Exit walkthrough"),
   demoMode && /*#__PURE__*/React.createElement("div", {
-    style: { background: "linear-gradient(90deg,#fef3c7,#fde68a)", borderBottom: "1px solid #fcd34d", padding: "6px 14px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 60 }
+    // W3-T8: demo banner renders before the sticky header, so in demo
+    // mode it owns the top edge of the viewport. Pad under the notch.
+    style: { background: "linear-gradient(90deg,#fef3c7,#fde68a)", borderBottom: "1px solid #fcd34d", padding: "max(6px, calc(env(safe-area-inset-top, 0px) + 4px)) 14px 6px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 60 }
   },
     /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700 } }, "\u2728 Demo Mode \u2014 nothing is saved"),
     // Compact desktop-fallback exit button. On mobile, the shake
@@ -11136,7 +11282,10 @@ function App() {
       display: "grid",
       gridTemplateColumns: "1fr auto 1fr",
       alignItems: "center",
-      padding: "10px 16px 8px",
+      // W3-T8: safe-area-inset-top pads the header under the iPhone
+      // notch / Dynamic Island when the PWA runs full-screen. Base
+      // 10px stays as the minimum for browser tabs / Android.
+      padding: "max(10px, calc(env(safe-area-inset-top, 0px) + 6px)) 16px 8px",
       gap: 8
     }
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
@@ -11310,7 +11459,9 @@ function App() {
   // Renders the actual profile name so the user can SEE what was
   // detected (helps debug "the app doesn't think I'm on desktop"
   // reports). Hidden entirely on phone.
-  devProfile && devProfile !== "phone" && /*#__PURE__*/React.createElement("span", {
+  // W3-T27: gated on SHOW_DEBUG_UI so production users never see the
+  // diagnostic chip — only localhost / ?debug=1 sessions render it.
+  SHOW_DEBUG_UI && devProfile && devProfile !== "phone" && /*#__PURE__*/React.createElement("span", {
     className: "device-indicator",
     "aria-label": "Layout: " + devProfile,
     title: "Detected layout: " + devProfile + " (viewport " + (typeof window !== "undefined" ? window.innerWidth : "?") + "px). Wider columns active.",
@@ -11995,7 +12146,11 @@ function App() {
   }, swipeFeedback.msg)), undoToast && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
-      bottom: 90,
+      // W3-T8: lift above the bottom nav AND respect the home-indicator
+      // safe-area on iOS. Original 90px was tuned to the 64px nav + 26px
+      // gap; max() keeps that floor and adds the home-indicator inset
+      // when present.
+      bottom: "max(90px, calc(env(safe-area-inset-bottom, 0px) + 80px))",
       left: "50%",
       transform: "translateX(-50%)",
       zIndex: 200,
@@ -13465,6 +13620,25 @@ function App() {
       );
     })();
 
+    // W3-T10: empty-state for brand-new users — when there are no habits
+    // at all, replace the entire daily ritual flow with a single framing
+    // sentence + CTA to the Habits tab. The ritual cards don't make
+    // sense before there's anything to track.
+    if ((data.habits || []).length === 0) {
+      return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
+        /*#__PURE__*/React.createElement("div", {
+          style: { padding: "40px 20px", textAlign: "center", maxWidth: 480, margin: "0 auto" }
+        },
+          /*#__PURE__*/React.createElement("p", {
+            style: { fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, color: "var(--c-text-strong)", marginBottom: 12, lineHeight: 1.4 }
+          }, "Good morning. Let's set up your day — add your first habit to begin."),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: () => setTab("habits"),
+            style: { padding: "12px 20px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, cursor: "pointer", marginTop: 8 }
+          }, "Add a habit")
+        )
+      );
+    }
     return /*#__PURE__*/React.createElement("div", { className: "fade-in" },
       intentionPinned,
       reviewBanner,
@@ -13572,6 +13746,17 @@ function App() {
       className: "fade-in"
     },
       returnBanner,
+      // W3-T10: framing sentence for new users. The add-habit affordance
+      // (the [+] button + the inline "No habits yet — add one above"
+      // empty state below) is already prominent on this tab, so we just
+      // add a single line of context above it rather than a second CTA.
+      (data.habits || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+        style: { padding: "32px 20px 20px", textAlign: "center", maxWidth: 480, margin: "0 auto" }
+      },
+        /*#__PURE__*/React.createElement("p", {
+          style: { fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, color: "var(--c-text-strong)", marginBottom: 0, lineHeight: 1.4 }
+        }, "Habits are the small daily actions that compound into who you become.")
+      ),
       /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
@@ -15770,6 +15955,16 @@ function App() {
       className: "fade-in"
     },
       todoReturnBanner,
+      // W3-T10: framing sentence for new users. The [+] button + add-task
+      // form are already the primary affordance on this tab, so we only
+      // add a single line of context above the header row.
+      (data.todos || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+        style: { padding: "32px 20px 20px", textAlign: "center", maxWidth: 480, margin: "0 auto" }
+      },
+        /*#__PURE__*/React.createElement("p", {
+          style: { fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, color: "var(--c-text-strong)", marginBottom: 0, lineHeight: 1.4 }
+        }, "A clean inbox starts here. Capture anything you don't want to forget.")
+      ),
       // Header row: + button + filter pills.
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 5, marginBottom: 8 }
@@ -16069,6 +16264,16 @@ function App() {
         /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#1d4ed8", flexShrink: 0 } }, "Home")
       );
     })(),
+    // W3-T10: framing sentence for new users. The Journal entry form
+    // below is already the primary entry point on this tab, so we only
+    // add a single line of context above "My Journal".
+    (data.journal || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: { padding: "32px 20px 20px", textAlign: "center", maxWidth: 480, margin: "0 auto" }
+    },
+      /*#__PURE__*/React.createElement("p", {
+        style: { fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, color: "var(--c-text-strong)", marginBottom: 0, lineHeight: 1.4 }
+      }, "How are you today? Even one sentence counts.")
+    ),
     // Single consolidated Journal entry form. The user picks a
     // kind (Daily / Goal-Specific / Other) and the form adapts:
     // Goal-Specific surfaces a goal selector, Other reveals a
@@ -16663,7 +16868,21 @@ function App() {
     }));
   })()), tab === "goals" && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
-  }, /*#__PURE__*/React.createElement("div", {
+  },
+    // W3-T10: framing sentence + CTA for new users. Opens the new-goal
+    // form directly via setExpGForm (same setter the [+] button uses).
+    (data.goals || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: { padding: "32px 20px 20px", textAlign: "center", maxWidth: 480, margin: "0 auto" }
+    },
+      /*#__PURE__*/React.createElement("p", {
+        style: { fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, color: "var(--c-text-strong)", marginBottom: 12, lineHeight: 1.4 }
+      }, "A goal is a future you. Where do you want to be in six months? Twelve?"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => { setGoalFormStep(0); setExpGForm(true); },
+        style: { padding: "12px 20px", borderRadius: 10, border: "none", background: "var(--accent)", color: "#fff", fontWeight: 600, cursor: "pointer", marginTop: 8 }
+      }, "Add your first goal")
+    ),
+    /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexWrap: "wrap",
@@ -20463,7 +20682,48 @@ function App() {
         fontWeight: 500
       }
     }, "Next: ", nextGoal.text)));
-  })))), showProfile && (() => {
+  })))),
+  // W3-T21: persistent banner when a Firestore write has failed.
+  // Local copy is always safe; the banner just lets the user nudge
+  // the cloud retry. Cleared automatically by save() on success.
+  lastSyncError && React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: "calc(env(safe-area-inset-bottom) + 80px)",
+      left: 12, right: 12,
+      background: "var(--c-tint-warn-bg)",
+      border: "1px solid var(--c-tint-warn-border)",
+      borderRadius: 10,
+      padding: "10px 14px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      zIndex: 90,
+      boxShadow: "0 2px 8px rgba(0,0,0,0.08)"
+    }
+  },
+    React.createElement("span", {
+      style: { fontSize: 13, color: "var(--c-tint-warn-fg)" }
+    }, "Couldn't save. Changes are kept locally."),
+    React.createElement("button", {
+      onClick: () => {
+        if (!lastSaveRef.current) { setLastSyncError(null); return; }
+        save(lastSaveRef.current);
+      },
+      style: {
+        padding: "6px 12px",
+        borderRadius: 8,
+        border: "none",
+        background: "var(--c-tint-warn-fg)",
+        color: "#fff",
+        fontWeight: 600,
+        fontSize: 13,
+        cursor: "pointer"
+      }
+    }, "Retry")
+  ),
+  showProfile && (() => {
     // Profile nav \u2014 emoji icons removed per user request, the
     // typeface-only labels read cleaner. My Routines is gone since
     // the Calendar modal already shows the unique-cadence habits
@@ -21003,13 +21263,13 @@ function App() {
           onChange: (e) => {
             const file = e.target.files && e.target.files[0];
             if (!file) return;
-            // 100 MB cap — matches storage.rules. Defense in depth: rules
+            // 10 MB cap — matches storage.rules. Defense in depth: rules
             // reject larger writes too, but checking here gives an
             // immediate, friendly error instead of a Firebase exception
             // halfway through a long upload.
-            const MAX = 100 * 1024 * 1024;
+            const MAX = 10 * 1024 * 1024;
             if (file.size > MAX) {
-              alert("File is " + Math.round(file.size / 1024 / 1024) + " MB — that's larger than the 100 MB limit. Pick a smaller file or paste a URL instead.");
+              alert("File is " + Math.round(file.size / 1024 / 1024) + " MB — that's larger than the 10 MB limit. Pick a smaller file or paste a URL instead.");
               e.target.value = "";
               return;
             }
@@ -23187,6 +23447,112 @@ function App() {
           disabled: acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account",
           style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "none", background: "#991b1b", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? "default" : "pointer", opacity: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? 0.5 : 1 }
         }, acctBusy ? "Deleting…" : "Delete forever")
+      )
+    )
+  ),
+  // ── W3-T9: Welcome modal — first-time signed-in render only.
+  //    Gated on welcomeModalSeen=false AND no habits yet, so any user
+  //    who's already added a habit (or whose hydrateCloudDoc marked
+  //    them as returning) never sees it.
+  data && !data.welcomeModalSeen && !(data.habits || []).length && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "welcome-title",
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
+    },
+      /*#__PURE__*/React.createElement("h2", {
+        id: "welcome-title",
+        style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 22 }
+      }, "Welcome to Verrocchio"),
+      /*#__PURE__*/React.createElement("p", {
+        style: { color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 20, fontSize: 14 }
+      }, "A calm place for the habits, goals, and reflections that compound into who you become."),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => {
+          save({ ...data, welcomeModalSeen: true });
+          setTab("habits");
+        },
+        style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, marginBottom: 8, cursor: "pointer", fontSize: 14 }
+      }, "Add my first habit"),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => save({ ...data, welcomeModalSeen: true }),
+        style: { display: "block", width: "100%", padding: "8px 16px", borderRadius: 10, border: "none", background: "transparent", color: "var(--c-text-faint)", fontSize: 13, cursor: "pointer" }
+      }, "Skip for now")
+    )
+  ),
+  // ── W3-T11: Journal / health disclaimer — surfaces once after the
+  //    user's first journal save. Non-blocking; the entry was already
+  //    committed in addJ() above.
+  showJournalDisclaimer && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "journal-disclaimer-title",
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
+    },
+      /*#__PURE__*/React.createElement("h2", {
+        id: "journal-disclaimer-title",
+        style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
+      }, "A quick note"),
+      /*#__PURE__*/React.createElement("p", {
+        style: { color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 16, fontSize: 14 }
+      }, "Verrocchio is not a medical device. Your journal entries are stored in your private Firebase account and visible only to you. If you're in crisis, please contact a qualified professional or local emergency services."),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => { save({ ...data, journalDisclaimerAcked: true }); setShowJournalDisclaimer(false); },
+        style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14 }
+      }, "Got it")
+    )
+  ),
+  // ── W3-T12: AI consent gate — deferred activation. AI_ENABLED is
+  //    false in v1.0 so this modal is reachable only via the wired AI
+  //    call sites once the constant flips in v1.1.
+  showAiConsent && /*#__PURE__*/React.createElement("div", {
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "ai-consent-title",
+    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      className: "fade-in",
+      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
+    },
+      /*#__PURE__*/React.createElement("h2", {
+        id: "ai-consent-title",
+        style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
+      }, "Enable AI insights"),
+      /*#__PURE__*/React.createElement("p", {
+        style: { color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 16, fontSize: 14 }
+      },
+        "AI features send the text you generate (e.g. recent habit completions or a journal entry you choose to summarize) to Anthropic via our secure proxy. Anthropic does not train models on your content. See our ",
+        /*#__PURE__*/React.createElement("a", {
+          href: "/privacy",
+          target: "_blank",
+          rel: "noopener noreferrer",
+          style: { color: "var(--accent, #4f46e5)" }
+        }, "Privacy Policy"),
+        "."
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => setShowAiConsent(false),
+          style: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--c-border)", background: "transparent", color: "var(--c-text-soft)", cursor: "pointer", fontSize: 13 }
+        }, "Cancel"),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => { save({ ...data, aiConsentAt: Date.now() }); setShowAiConsent(false); },
+          style: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 13 }
+        }, "I agree")
       )
     )
   ),
