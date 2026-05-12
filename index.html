@@ -254,7 +254,7 @@ body[data-device="desktop-wide"] .device-indicator {
 .habit-grid {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
 }
 @media (min-width: 900px) and (hover: hover) {
   .habit-grid {
@@ -345,7 +345,7 @@ body[data-device="desktop-wide"] .device-indicator {
   .habit-sections-grid .habit-grid {
     display: flex !important;
     flex-direction: column !important;
-    gap: 7px !important;
+    gap: 6px !important;
     align-items: stretch !important;
   }
   /* Force every direct child of .habit-grid to fill the section
@@ -664,6 +664,18 @@ textarea{resize:vertical}
    too. Desktop (≥900px) blows the cap away with !important overrides
    in the @media block above. */
 .fade-in{animation:fadeIn .2s ease forwards;max-width:none;margin:0;padding:14px 12px 110px;box-sizing:border-box}
+/* Phone profile (<=600px or runtime-classified "phone") — tighten the
+   horizontal gutters and top padding so:
+   1) the habits action row ([+] + Today + Filter + Sort + duration pill)
+      fits on ONE line at 390px without wrapping, and
+   2) the gap between the sticky app header and the first action row
+      shrinks closer to Apple-native list density.
+   Top padding 10px (was 14px) shaves ~4px under the header; horizontal
+   10px (was 12px) gives the pills ~4px more usable width on each side. */
+@media (max-width:600px){
+  .fade-in{padding:10px 10px 110px}
+}
+body[data-device="phone"] .fade-in{padding:10px 10px 110px}
 @media (min-width:601px) and (max-width:899px){
   /* Tablet portrait / landscape phone middle ground — let cards
      breathe a bit more than phone, but don't go all-the-way to the
@@ -13809,9 +13821,9 @@ function App() {
         // the [+] button plus all five toggles (Time / Priority / Goal /
         // Freq / Duration) would otherwise overflow on narrow screens.
         flexWrap: "wrap",
-        gap: 5,
+        gap: 4,
         rowGap: 6,
-        marginBottom: 10
+        marginBottom: 6
       }
     }, /*#__PURE__*/React.createElement("button", {
       // Opens the same bottom-sheet form Edit Habit uses, in
@@ -16699,7 +16711,7 @@ function App() {
       style: {
         display: "flex",
         flexDirection: "column",
-        gap: 8,
+        gap: 6,
         marginBottom: 24
       }
     }, [...filtered].reverse().map(entry => {
@@ -17046,8 +17058,8 @@ function App() {
       display: "flex",
       flexWrap: "wrap",
       alignItems: "center",
-      gap: 5,
-      marginBottom: 8
+      gap: 4,
+      marginBottom: 6
     }
   },
     // Compact "+" button — opens the new-goal form directly. (Category
@@ -17610,7 +17622,7 @@ function App() {
       key: ht.value,
       "data-area": ht.value,
       style: {
-        marginBottom: 16
+        marginBottom: 10
       }
     }, !ht.merged && /*#__PURE__*/React.createElement("div", {
       // Tap the header bar (dot + label + divider) to toggle this
