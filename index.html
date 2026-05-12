@@ -5729,6 +5729,10 @@ function App() {
   const [debriefIntention, setDebriefIntention] = useState("");
   const [debriefIdentity, setDebriefIdentity] = useState("");
   const [debriefObstacle, setDebriefObstacle] = useState("");
+  // R-3: tracks an in-flight AI journal-prompt fetch. While true, Step 2
+  // shows the deterministic STATIC_PROMPTS fallback so the UI is never
+  // empty. The fetched prompt persists into data.dailyRitual once it lands.
+  const [aiJournalPromptLoading, setAiJournalPromptLoading] = useState(false);
 
   // ── Feature-access tracking effects ──
   // Positioned AFTER `tab`, `showProfile`, `profileSection` are declared
@@ -9364,6 +9368,44 @@ function App() {
       return "You've logged a full week \u2014 your personalized briefing unlocks next time you open the app.";
     }
     return `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`;
+  };
+
+  /* R-3: Shared helper for the three Morning-Debrief AI surfaces (pattern
+     note in Step 1, journal prompt in Step 2, intention suggestion in
+     Step 4). Mirrors the genBrief auth + fetch pattern but is cheap
+     (≤120 tokens) and returns null on ANY failure so callers can fall
+     back gracefully. Hard-gated on AI_ENABLED + signed-in user +
+     data.aiConsentAt — these are the three rails that keep us from
+     firing AI calls in the wrong contexts. Callers are responsible for
+     read-from-cache before invoking; this helper does not cache. */
+  const callAiForDebrief = async (systemPrompt, userPrompt, maxTokens = 120) => {
+    if (!AI_ENABLED) return null;
+    if (!auth.currentUser) return null;
+    if (!data.aiConsentAt) return null;
+    try {
+      const idToken = await auth.currentUser.getIdToken(false);
+      if (!idToken) return null;
+      const r = await fetch(AI_BACKEND_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + idToken
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: maxTokens,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }]
+        })
+      });
+      if (!r.ok) return null;
+      const j = await r.json();
+      const text = j && j.content && j.content[0] && j.content[0].text;
+      return text ? text.trim() : null;
+    } catch (e) {
+      try { console.warn("[verrocchio:ai-debrief] failed:", e && e.message); } catch (_) {}
+      return null;
+    }
   };
 
   const genBrief = async () => {
@@ -13847,6 +13889,39 @@ function App() {
           onClick: () => {
             setDebriefStep(1);
             updateRitual({ debriefStartedAt: Date.now() });
+            // R-3 / Surface C: fire pattern-note AI call on debrief open.
+            // Cached per-day at data.dailyRitual[tDk].aiPatternNote — if
+            // it exists we don't re-fire. Failures are silent (the card
+            // simply doesn't render in Step 1).
+            const tDk = dk(new Date());
+            const rit = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+            if (!rit.aiPatternNote && AI_ENABLED && data.aiConsentAt) {
+              (async () => {
+                const habits = data.habits || [];
+                const last14 = (() => {
+                  const out = [];
+                  for (let i = 0; i < 14; i++) {
+                    const d = new Date(); d.setDate(d.getDate() - i);
+                    const dDk = dk(d);
+                    habits.forEach(h => {
+                      const v = h.completions && h.completions[dDk];
+                      if (v === "done" || v === true) out.push({ h: h.text, day: i });
+                    });
+                  }
+                  return out;
+                })();
+                const habitCounts = {};
+                last14.forEach(c => { habitCounts[c.h] = (habitCounts[c.h] || 0) + 1; });
+                const topHabits = Object.entries(habitCounts)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 5)
+                  .map(([h, n]) => `${h} (${n}/14 days)`);
+                const userContext = `Top habits in the last 14 days:\n${topHabits.length ? topHabits.map(s => "- " + s).join("\n") : "(no completion data)"}\nTotal habits tracked: ${habits.length}`;
+                const sys = "You are an analytical coach for the Verrocchio habit-tracking app. The user just opened their morning debrief. Surface ONE specific observation about their last 14 days — a pattern, a streak, a correlation, a notable consistency. Max 2 sentences. Reference SPECIFIC habits and counts from the data. Don't moralize. Don't predict the future. Just point at what's there. If the data is too thin, output 'Not enough data yet — keep going.'";
+                const txt = await callAiForDebrief(sys, userContext, 120);
+                if (txt) updateRitual({ aiPatternNote: txt });
+              })();
+            }
           },
           style: {
             padding: "8px 14px",
@@ -24193,11 +24268,36 @@ function App() {
         ),
         completed.length === 0 && missed.length === 0 && blank.length === 0 && /*#__PURE__*/React.createElement("p", {
           style: { fontStyle: "italic", color: "var(--c-text-faint)", fontSize: 13, padding: 12 }
-        }, "No habit activity recorded yesterday.")
+        }, "No habit activity recorded yesterday."),
+        // R-3 / Surface C: Pattern-note card. Renders only when the
+        // cached AI note exists for today. Hidden silently on AI failure
+        // or when consent is missing.
+        (function () {
+          const note = ritD.aiPatternNote;
+          if (!note) return null;
+          return /*#__PURE__*/React.createElement("div", {
+            style: {
+              padding: "12px 14px",
+              marginTop: 12,
+              background: "var(--c-tint-purple-bg, #f5f3ff)",
+              border: "1px solid var(--c-tint-purple-border, #ddd6fe)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "var(--c-tint-purple-fg, #7c3aed)",
+              lineHeight: 1.5
+            }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 10, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4, fontWeight: 600 }
+            }, "Pattern note"),
+            /*#__PURE__*/React.createElement("div", null, note)
+          );
+        })()
       );
     };
 
-    // Step 2 — Reflect. Deterministic prompt rotates by day-of-year.
+    // Step 2 — Reflect. AI-generated prompt when cached + consent given,
+    // otherwise the deterministic day-of-year rotation from STATIC_PROMPTS.
     const renderDebriefStep2 = () => {
       const STATIC_PROMPTS = [
         "What's one thing you noticed about yesterday that you want to carry into today?",
@@ -24214,7 +24314,10 @@ function App() {
         "What's one thing that's been waiting for attention?"
       ];
       const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-      const prompt = STATIC_PROMPTS[dayOfYear % STATIC_PROMPTS.length];
+      const fallback = STATIC_PROMPTS[dayOfYear % STATIC_PROMPTS.length];
+      // Prefer the cached AI prompt when present; otherwise the rotation.
+      // While a fetch is in flight the rotation shows so the UI is never empty.
+      const prompt = ritD.aiJournalPrompt || fallback;
       return /*#__PURE__*/React.createElement("div", null,
         /*#__PURE__*/React.createElement("h2", { style: { fontFamily: "'Playfair Display', Georgia, serif", color: "var(--c-text-strong)", marginBottom: 4 } }, "Reflect"),
         /*#__PURE__*/React.createElement("p", { style: { fontSize: 14, color: "var(--c-text-soft)", marginBottom: 10, fontStyle: "italic" } }, prompt),
@@ -24289,6 +24392,34 @@ function App() {
         /*#__PURE__*/React.createElement("label", {
           style: { fontSize: 11, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4, display: "block", fontWeight: 600 }
         }, "Intention"),
+        // R-3 / Surface B: AI-suggested intention banner. Renders only when
+        // the cached suggestion exists for today. Tapping "Use" copies the
+        // text into the textarea — the user can still edit before saving.
+        (function () {
+          const sug = ritD.aiIntentionSuggestion;
+          if (!sug) return null;
+          return /*#__PURE__*/React.createElement("div", {
+            style: {
+              padding: "8px 12px",
+              background: "var(--c-tint-info-bg)",
+              border: "1px solid var(--c-tint-info-border)",
+              borderRadius: 8,
+              marginBottom: 8,
+              fontSize: 13,
+              color: "var(--c-tint-info-fg)",
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 8,
+              alignItems: "center"
+            }
+          },
+            /*#__PURE__*/React.createElement("span", { style: { flex: 1, fontStyle: "italic", lineHeight: 1.4 } }, "Suggested: " + sug),
+            /*#__PURE__*/React.createElement("button", {
+              onClick: () => setDebriefIntention(sug),
+              style: { background: "var(--c-tint-info-fg)", color: "#fff", border: "none", padding: "4px 10px", borderRadius: 6, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap", fontWeight: 600 }
+            }, "Use")
+          );
+        })(),
         /*#__PURE__*/React.createElement("textarea", {
           value: debriefIntention,
           onChange: (e) => setDebriefIntention(e.target.value),
@@ -24321,9 +24452,32 @@ function App() {
 
     // Step-aware Next handler — runs side effects before advancing.
     const advanceDebrief = () => {
-      // Step 1 → 2: stamp recall completion timestamp.
+      // Step 1 → 2: stamp recall completion timestamp + fire the journal
+      // prompt AI call lazily. We only pay tokens if the user actually
+      // advances to Step 2 (not on every debrief open). Cached per-day.
       if (debriefStep === 1) {
         updateRitual({ debriefStep1RecalledAt: Date.now() });
+        const ritCur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
+        if (!ritCur.aiJournalPrompt && AI_ENABLED && data.aiConsentAt) {
+          setAiJournalPromptLoading(true);
+          (async () => {
+            const yest = new Date(); yest.setDate(yest.getDate() - 1);
+            const yestDk = dk(yest);
+            const habits = data.habits || [];
+            const completed = habits
+              .filter(h => h.completions && (h.completions[yestDk] === "done" || h.completions[yestDk] === true))
+              .map(h => h.text);
+            const missed = habits
+              .filter(h => h.completions && h.completions[yestDk] === "missed")
+              .map(h => h.text);
+            const recentJournalSnips = (data.journal || []).slice(-3).map(e => (e.text || "").slice(0, 120));
+            const userContext = `Yesterday's completed habits: ${completed.length ? completed.join(", ") : "(none recorded)"}\nYesterday's missed habits: ${missed.length ? missed.join(", ") : "(none)"}\nRecent journal entries (last 3, truncated): ${recentJournalSnips.length ? recentJournalSnips.map(s => "- " + s).join("\n") : "(none)"}`;
+            const sys = "You are a thoughtful journaling coach for a habit-tracking app called Verrocchio. The user is doing a morning reflection. Generate ONE short, specific journal prompt (max 20 words) that references their actual recent data. Don't be generic. Don't be preachy. Don't use second-person platitudes. Ask one specific question or surface one specific observation. Output only the prompt — no preamble, no quotes, no formatting.";
+            const txt = await callAiForDebrief(sys, userContext, 80);
+            setAiJournalPromptLoading(false);
+            if (txt) updateRitual({ aiJournalPrompt: txt });
+          })();
+        }
       }
       // Step 2 → 3: commit the journal entry if the user wrote anything.
       if (debriefStep === 2 && debriefJournalText.trim()) {
@@ -24350,12 +24504,36 @@ function App() {
       }
       // Step 3 → 4: pre-fill the intention/identity/obstacle inputs from
       // any prior values stored on today's ritual so re-opening the flow
-      // doesn't blank them out.
+      // doesn't blank them out. Also lazily fire the intention-suggestion
+      // AI call here (only pay tokens if the user actually reaches step 4).
       if (debriefStep === 3) {
         const cur = (data.dailyRitual && data.dailyRitual[tDk]) || {};
         if (cur.intention && !debriefIntention) setDebriefIntention(cur.intention);
         if (cur.identity && !debriefIdentity) setDebriefIdentity(cur.identity);
         if (cur.obstacle && !debriefObstacle) setDebriefObstacle(cur.obstacle);
+        if (!cur.aiIntentionSuggestion && AI_ENABLED && data.aiConsentAt) {
+          (async () => {
+            const habits = data.habits || [];
+            const nonNeg = habits
+              .filter(h => h.importance === "Non-Negotiable")
+              .map(h => h.text);
+            const last3DaysMissed = (() => {
+              const out = [];
+              for (let i = 1; i <= 3; i++) {
+                const d = new Date(); d.setDate(d.getDate() - i);
+                const dDk = dk(d);
+                habits.forEach(h => {
+                  if (h.completions && h.completions[dDk] === "missed") out.push(h.text);
+                });
+              }
+              return [...new Set(out)];
+            })();
+            const userContext = `User's non-negotiable habits: ${nonNeg.length ? nonNeg.join(", ") : "(none defined)"}\nHabits missed in the last 3 days: ${last3DaysMissed.length ? last3DaysMissed.join(", ") : "(none)"}`;
+            const sys = "You are a behavioral-science coach for the Verrocchio habit-tracking app. The user is writing today's implementation intention in the Gollwitzer 'When [trigger], I will [behavior]' format. Suggest ONE concrete intention they could write, focused on a specific habit they've been missing OR their non-negotiable. Format: 'When [specific trigger], I will [specific behavior].' Keep it under 25 words. Be specific to their actual habits. Output only the intention — no preamble, no quotes.";
+            const txt = await callAiForDebrief(sys, userContext, 80);
+            if (txt) updateRitual({ aiIntentionSuggestion: txt });
+          })();
+        }
       }
       setDebriefStep(debriefStep + 1);
     };
