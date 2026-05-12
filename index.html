@@ -12340,20 +12340,9 @@ function App() {
       body: `"${lowHabit.text.slice(0, 40)}" has a ${getCR(lowHabit).pct}% completion rate. Check in and recommit.`,
       action: () => setCoachContext({ kind: "habit", habit: lowHabit, reason: "low-completion" })
     });
-    // Bug fix: only count habits actually DUE yesterday. Previously
-    // every non-daily habit (weekly Tuesday on Wednesday, monthly on
-    // the wrong date) showed up as "not marked" even though it was
-    // never due — confusing the user with phantom unfinished work.
-    const yestIncomplete = activeH.filter(h => isHabitDueOn(h, yest) && !isDone(h, yest) && !isMissed(h, yest));
-    if (yestIncomplete.length > 0) smartTips.push({
-      icon: "📋",
-      title: "Review yesterday",
-      body: `${yestIncomplete.length} due habit${yestIncomplete.length > 1 ? "s" : ""} from yesterday not marked. Still time to record.`,
-      // Click → open My Coach for the first one. Clicking through the
-      // coach lets the user reach the actual Habits tab via "Open
-      // habits" action there, OR mark the habit done/missed inline.
-      action: () => setCoachContext({ kind: "habit-batch", reason: "yesterday-incomplete", habits: yestIncomplete })
-    });
+    // "Review yesterday" tip removed: the dedicated Yesterday module
+    // on Home already surfaces unreviewed habits from the prior day,
+    // so this tip duplicated that affordance.
     // Unused-feature nudges — sampled from FEATURES where
     // tipWhenMissing is true and the user has no timestamp. Only fires
     // after 3+ days of use so brand-new users aren't drowned in "try
@@ -15260,13 +15249,14 @@ function App() {
         // every other section, completion is a positive "Yes I did
         // it." Both states are still visually identical green
         // pills — only the word changes.
-        // Hide both the Yes/No pill and the target chip whenever
-        // the card is expanded — the metadata pill row underneath
-        // already crowds the right edge, and the chip would
-        // visually overlap the duration / importance / freq pills.
-        // The chip reappears as soon as the user collapses the
-        // card.
-        (!expHabitGoals[habit.id] && typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
+        // Yes/No pill and target chip stay visible in both collapsed
+        // AND expanded states — users open the card to see details
+        // and the target progress is the most-glanced badge, so it
+        // can't disappear when they tap. (Previously hidden in expand
+        // to avoid overlap with the metadata pill row; instead we
+        // raise the chip via z-index so it sits above any pill that
+        // would crowd the right edge — see §5.1 in docs/TODO.md.)
+        (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
             display: "flex",
@@ -15287,10 +15277,14 @@ function App() {
             marginRight: ht ? 4 : 0,
             fontSize: 11,
             fontWeight: 700,
-            letterSpacing: 0.3
+            letterSpacing: 0.3,
+            // Keep the badge above any metadata-row pill that may
+            // share the right edge in expanded state (see §5.1).
+            position: "relative",
+            zIndex: 2
           }
         }, habit.section === "avoid" ? "No" : "Yes"),
-        (!expHabitGoals[habit.id] && typeof habit.target === "number") && (() => {
+        (typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const shown = op === "≤" ? units : Math.min(habit.target, units);
@@ -15322,7 +15316,11 @@ function App() {
               lineHeight: 1.1,
               whiteSpace: "nowrap",
               overflow: "hidden",
-              marginRight: ht ? 4 : 0
+              marginRight: ht ? 4 : 0,
+              // Keep the badge above any metadata-row pill that may
+              // share the right edge in expanded state (see §5.1).
+              position: "relative",
+              zIndex: 2
             }
           },
             /*#__PURE__*/React.createElement("span", {
@@ -20776,22 +20774,13 @@ function App() {
           placeholder: "Enter your name...",
           style: inputS
         })),
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
-        /*#__PURE__*/React.createElement("div", { style: labelS }, "Your Primary Goal"),
-        /*#__PURE__*/React.createElement("input", {
-          value: profileGoal,
-          onChange: e => {
-            const v = e.target.value;
-            setProfileGoal(v);
-            try { localStorage.setItem("v-profile-goal", v); } catch (err) {}
-            setData(d => ({ ...d, profileGoal: v }));
-          },
-          placeholder: "What are you working toward?",
-          style: inputS
-        })),
+      // "Your Primary Goal" section removed: not part of v1 profile
+      // design. The profileGoal state + Firestore field are retained
+      // as dead data (hydrate effect still mirrors them) to avoid
+      // touching unrelated state init; they're no longer user-editable.
       // Goal categories are managed in App Settings → Custom. See
       // appSettingsPanel below. My Account stays identity-only (name,
-      // email, primary goal, stats).
+      // email, stats).
       // Lifetime stats — extends the existing 3-stat card with best
       // streak, days using the app, goals completed. All aggregate —
       // no titles or content included.
