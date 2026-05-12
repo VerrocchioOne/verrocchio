@@ -95,6 +95,7 @@ com.verrocchio.app
 - For a populated demo, append `?demo=1` to the URL on the auth screen (or use these credentials in production builds where demo UI is hidden by default):
   - Email: alex.morning@demo.verrocchio.app
   - Password: (set via the build's DEMO_PASSWORD env at deploy time — provide the live value to App Review in the Notes field; rotate after the review is complete)
+- Demo persona pool was trimmed to a single account during v1.0 prep; only `alex.morning@demo.verrocchio.app` exists in Firebase Auth.
 
 ### Notes for Reviewer
 Verrocchio is a private habit / goal / journaling app. Sign-in is via Firebase Authentication (email + password). The app uses a deterministic non-AI "daily briefing" computed from the user's habit history — the AI insights feature flag is OFF in v1.0 and will ship in v1.1.

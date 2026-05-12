@@ -3695,10 +3695,7 @@ function App() {
   // rather than the same hardcoded set. Remove this block (and the
   // pools below) before shipping a public build.
   const DEMO_PERSONAS = {
-    "alex.morning@demo.verrocchio.app":   { recipe: "morning-consistent" },
-    "blair.slipping@demo.verrocchio.app": { recipe: "falling-off"        },
-    "casey.steady@demo.verrocchio.app":   { recipe: "steady-average"     },
-    "dani.new@demo.verrocchio.app":       { recipe: "brand-new"          }
+    "alex.morning@demo.verrocchio.app":   { recipe: "morning-consistent" }
   };
   // Demo personas are dev/QA affordances — only surface their UI on
   // localhost or when explicitly opted-in via ?demo=1.
@@ -9836,8 +9833,9 @@ function App() {
         }, isSignup ? "Log in" : "Create an account")
       ),
       // "or" divider + single demo-account shortcut. Signs in as the
-      // "steady middle" persona (Casey) — the most representative of
-      // the four seeded personas. signInAsDemoUser auto-creates the
+      // "morning consistent" persona (Alex) — the only seeded demo
+      // account in v1.0 (the original four-persona pool was trimmed
+      // during launch prep). signInAsDemoUser auto-creates the
       // account on first tap if it doesn't exist yet, so this works
       // out of the box without running scripts/seed-demo-users.mjs.
       // Gated by SHOW_DEMO_UI so production users never see this.
@@ -9851,7 +9849,7 @@ function App() {
       ),
       SHOW_DEMO_UI && React.createElement("button", {
         key: "demo-btn",
-        onClick: () => signInAsDemoUser("casey.steady@demo.verrocchio.app"),
+        onClick: () => signInAsDemoUser("alex.morning@demo.verrocchio.app"),
         disabled: authBusy,
         style: { width: "100%", padding: "10px 12px", fontSize: 13, fontWeight: 600, color: "#2d5a2d", background: "#fff", border: "1px solid #2d5a2d", borderRadius: 8, cursor: authBusy ? "default" : "pointer", opacity: authBusy ? 0.6 : 1 }
       }, "Try a demo account"),
