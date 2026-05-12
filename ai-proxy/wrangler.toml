@@ -15,4 +15,4 @@ compatibility_date = "2024-09-01"
 # hosted URL (e.g. https://verrocchio-1b116.web.app) for production.
 [vars]
 FIREBASE_PROJECT_ID = "verrocchio-1b116"
-# ALLOWED_ORIGIN = "https://verrocchio-1b116.web.app"
+ALLOWED_ORIGIN = "https://verrocchio.app"

@@ -271,3 +271,83 @@ test("getLast14 returns 14 day-keyed entries, oldest first, with done flags", ()
     assert.equal(cells[12].done, false);
   });
 });
+
+// ── Regression suite (W3-T32) ──────────────────────────────────────
+// Top test gaps from docs/research/2026-05-12-appstore-readiness/05-code-quality.md §10.
+//
+// DEFERRED from this batch (require functions still embedded in index.html):
+//   - sanitizeForFirestore round-trip — lives in index.html; can't unit-test
+//     without extracting it. Out of scope for v1.0.
+//   - hydrateCloudDoc legacy migration (scalar goalId → goalIds array) —
+//     lives in index.html. Same deferral.
+//
+// Tests below cover the date-math regressions that DO live in utils.js.
+
+test("dk handles US Spring Forward 2026-03-08 — no shifted day on either side", () => {
+  // DST starts 2026-03-08 02:00 → 03:00 local in US zones. dk uses local
+  // fields so both sides of the transition should produce the expected
+  // calendar key regardless of the runner's timezone.
+  assert.equal(dk(new Date(2026, 2, 7, 12, 0, 0)), "2026-03-07");
+  assert.equal(dk(new Date(2026, 2, 8, 12, 0, 0)), "2026-03-08");
+  assert.equal(dk(new Date(2026, 2, 9, 12, 0, 0)), "2026-03-09");
+  // Early-morning instants near the spring-forward gap.
+  assert.equal(dk(new Date(2026, 2, 8, 1, 30, 0)), "2026-03-08");
+  assert.equal(dk(new Date(2026, 2, 8, 3, 30, 0)), "2026-03-08");
+});
+
+test("dk handles US Fall Back 2026-11-01 — no shifted day on either side", () => {
+  // DST ends 2026-11-01 02:00 → 01:00 local. The "repeated" 01:00–02:00
+  // hour must still resolve to 2026-11-01.
+  assert.equal(dk(new Date(2026, 9, 31, 12, 0, 0)), "2026-10-31");
+  assert.equal(dk(new Date(2026, 10, 1, 12, 0, 0)), "2026-11-01");
+  assert.equal(dk(new Date(2026, 10, 2, 12, 0, 0)), "2026-11-02");
+  assert.equal(dk(new Date(2026, 10, 1, 1, 30, 0)), "2026-11-01");
+});
+
+test("getStreak walks correctly across the Spring Forward DST boundary", () => {
+  // Freeze "today" at 2026-03-10 noon, then mark 5 consecutive days
+  // INCLUDING the DST transition day (2026-03-08). A naïve
+  // `setDate(getDate()-i)` walk on a midnight anchor would skip or
+  // double-count the 23-hour day; utils.js uses local date fields, so
+  // the streak should still resolve to 5.
+  withFakeNow("2026-03-10T12:00:00", () => {
+    const comp = {};
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(2026, 2, 10);
+      d.setDate(d.getDate() - i);
+      comp[dk(d)] = true;
+    }
+    assert.equal(getStreak({ completions: comp }), 5);
+  });
+});
+
+test("getStreak walks correctly across the Fall Back DST boundary for a weekly habit", () => {
+  // Weekly-Sunday habit; "today" is Tuesday 2026-11-03. Should walk
+  // back, find Sunday 2026-11-01 (the fall-back day itself, a 25-hour
+  // day) and Sunday 2026-10-25 both completed → streak of 2.
+  withFakeNow("2026-11-03T12:00:00", () => {
+    const comp = {};
+    comp[dk(new Date(2026, 10, 1))] = true;  // Sun Nov 1 (DST end day)
+    comp[dk(new Date(2026, 9, 25))] = true;  // Sun Oct 25
+    const habit = {
+      completions: comp,
+      frequency: { type: "weekly", day: 0 } // Sunday
+    };
+    assert.equal(getStreak(habit), 2);
+  });
+});
+
+test("getStreak respects startDate so brand-new habits don't fake a streak", () => {
+  // Habit created today. Even if completions exist for prior days,
+  // the streak should not walk past startDate.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const comp = {};
+    comp[dk(new Date(2026, 3, 23))] = true;
+    comp[dk(new Date(2026, 3, 22))] = true; // before startDate, ignored
+    const habit = {
+      completions: comp,
+      startDate: dk(new Date(2026, 3, 23))
+    };
+    assert.equal(getStreak(habit), 1);
+  });
+});

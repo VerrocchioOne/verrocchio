@@ -3509,6 +3509,7 @@ function App() {
   const [authMode, setAuthMode] = useState("login"); // login | signup
   const [authEmail, setAuthEmail] = useState("");
   const [authPass, setAuthPass] = useState("");
+  const [showAuthPass, setShowAuthPass] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
@@ -3565,9 +3566,25 @@ function App() {
     });
     return unsub;
   }, []);
+  const publicAuthErr = (e) => {
+    const code = (e && e.code) || "";
+    if (code === "auth/weak-password") return "Password must be at least 8 characters.";
+    if (code === "auth/email-already-in-use") return "An account with that email already exists.";
+    if (code === "auth/invalid-email") return "Enter a valid email address.";
+    if (code === "auth/invalid-credential") return "Email or password is incorrect.";
+    if (code === "auth/wrong-password") return "Email or password is incorrect.";
+    if (code === "auth/user-not-found") return "Email or password is incorrect.";
+    if (code === "auth/too-many-requests") return "Too many attempts. Please wait a minute and try again.";
+    if (code === "auth/network-request-failed") return "Network error. Check your connection and try again.";
+    return "Authentication failed. Please try again.";
+  };
   const doAuth = async () => {
     setAuthErr("");
     if (!authEmail.trim() || !authPass) { setAuthErr("Email and password required."); return; }
+    if (authMode === "signup" && authPass.length < 8) {
+      setAuthErr("Password must be at least 8 characters.");
+      return;
+    }
     setAuthBusy(true);
     try {
       if (authMode === "signup") {
@@ -3577,8 +3594,18 @@ function App() {
       }
       setAuthPass("");
     } catch (e) {
-      setAuthErr(e?.message?.replace("Firebase: ", "") || "Authentication failed.");
+      setAuthErr(publicAuthErr(e));
     }
+    setAuthBusy(false);
+  };
+  const doForgotPassword = async () => {
+    const email = authEmail.trim();
+    if (!email) { setAuthErr("Enter your email address first."); return; }
+    setAuthErr("");
+    setAuthBusy(true);
+    try { await auth.sendPasswordResetEmail(email); }
+    catch (e) { /* swallow — anti-enumeration */ }
+    setAuthErr("If that email is registered, a reset link has been sent.");
     setAuthBusy(false);
   };
   // Temporary one-tap sign-in for the seeded demo personas. Tapping a
@@ -3594,6 +3621,11 @@ function App() {
     "casey.steady@demo.verrocchio.app":   { recipe: "steady-average"     },
     "dani.new@demo.verrocchio.app":       { recipe: "brand-new"          }
   };
+  // Demo personas are dev/QA affordances — only surface their UI on
+  // localhost or when explicitly opted-in via ?demo=1.
+  const SHOW_DEMO_UI = location.hostname === "localhost"
+                    || location.hostname === "127.0.0.1"
+                    || new URLSearchParams(location.search).get("demo") === "1";
   // Replaced at build time by scripts/build-dist.mjs from env var DEMO_PASSWORD.
   const DEMO_PASSWORD = "%%DEMO_PASSWORD%%";
 
@@ -4031,6 +4063,14 @@ function App() {
     // render the real-account experience. See the matching effect near
     // authUser wiring for the same invariant enforced on auth flips.
     if (demoMode) setDemoMode(false);
+    // Allowlist guard: reject any email that isn't one of our seeded
+    // demo personas. Prevents an attacker who finds DEMO_PASSWORD from
+    // pivoting to arbitrary accounts via this code path.
+    if (!Object.prototype.hasOwnProperty.call(DEMO_PERSONAS, email)) {
+      try { console.warn("[verrocchio demo] unknown persona email rejected:", email); } catch (_) {}
+      setAuthBusy(false);
+      return;
+    }
     try {
       await auth.signInWithEmailAndPassword(email, DEMO_PASSWORD);
       // Re-seed with fresh randomized data on every tap — the personas
@@ -4151,6 +4191,7 @@ function App() {
       try { localStorage.removeItem(`${SK}-${uidToNuke}`); } catch (e) {}
       setAcctCurrentPw("");
       setConfirmDeleteAcct(false);
+      setDeleteConfirmText("");
       // onAuthStateChanged fires and the app reroutes to the sign-in
       // gate on its own.
     } catch (e) {
@@ -5475,6 +5516,7 @@ function App() {
   const [acctBusy, setAcctBusy] = useState(false);
   const [acctFeedback, setAcctFeedback] = useState(null); // {kind:"ok"|"err", msg}
   const [confirmDeleteAcct, setConfirmDeleteAcct] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   // ── Feature-access tracking effects ──
   // Positioned AFTER `tab`, `showProfile`, `profileSection` are declared
@@ -9583,6 +9625,7 @@ function App() {
       React.createElement("div", { key: "icn", style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, React.createElement(VerrocchioIcon, { size: 96 })),
       React.createElement("div", { key: "lg", style: { fontFamily: "'Playfair Display',Georgia,'Times New Roman',serif", fontSize: 36, fontWeight: 700, letterSpacing: ".005em", color: "#2d5a2d", lineHeight: 1, marginBottom: 4 } }, "Verrocchio"),
       React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 24, fontStyle: "italic" } }, "Achieve Anything"),
+      React.createElement("p", { key: "pitch", style: { fontSize: 13, color: "var(--c-text-soft)", textAlign: "center", marginBottom: 16, lineHeight: 1.4 } }, "Daily habits, weekly reflection, lifetime goals — phone-first."),
       React.createElement("div", { key: "ttl", style: { fontSize: 18, fontWeight: 700, color: "var(--c-text)", marginBottom: 16 } }, isSignup ? "Create your account" : "Welcome Back"),
       React.createElement("input", {
         key: "email",
@@ -9594,16 +9637,24 @@ function App() {
         onKeyDown: e => { if (e.key === "Enter") doAuth(); },
         style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10, outline: "none", boxSizing: "border-box", background: "#fff", color: "var(--c-text)" }
       }),
-      React.createElement("input", {
-        key: "pass",
-        type: "password",
-        value: authPass,
-        onChange: e => setAuthPass(e.target.value),
-        placeholder: "Password",
-        autoComplete: isSignup ? "new-password" : "current-password",
-        onKeyDown: e => { if (e.key === "Enter") doAuth(); },
-        style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10, outline: "none", boxSizing: "border-box", background: "#fff", color: "var(--c-text)" }
-      }),
+      React.createElement("div", { key: "passwrap", style: { position: "relative", marginBottom: 10 } },
+        React.createElement("input", {
+          type: showAuthPass ? "text" : "password",
+          value: authPass,
+          onChange: e => setAuthPass(e.target.value),
+          placeholder: "Password",
+          autoComplete: isSignup ? "new-password" : "current-password",
+          onKeyDown: e => { if (e.key === "Enter") doAuth(); },
+          style: { width: "100%", padding: "10px 36px 10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "var(--c-text)" }
+        }),
+        React.createElement("button", {
+          type: "button",
+          onClick: () => setShowAuthPass(s => !s),
+          "aria-label": showAuthPass ? "Hide password" : "Show password",
+          style: { position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, padding: 4, color: "var(--c-text-faint)" }
+        }, showAuthPass ? "🙈" : "👁")
+      ),
+      isSignup ? React.createElement("p", { key: "passhelp", style: { fontSize: 11, color: "var(--c-text-faint)", marginTop: -4, marginBottom: 8 } }, "At least 8 characters.") : null,
       authErr ? React.createElement("div", { key: "err", style: { fontSize: 12, color: "var(--c-tint-danger-fg)", background: "var(--c-tint-danger-bg)", border: "1px solid var(--c-tint-danger-border)", borderRadius: 6, padding: "6px 10px", marginBottom: 10, textAlign: "left" } }, authErr) : null,
       React.createElement("button", {
         key: "sub",
@@ -9611,6 +9662,28 @@ function App() {
         disabled: authBusy,
         style: { width: "100%", padding: "10px 12px", fontSize: 14, fontWeight: 600, color: "#fff", background: authBusy ? "#6b7280" : "#2d5a2d", border: "none", borderRadius: 8, cursor: authBusy ? "default" : "pointer", marginBottom: 12 }
       }, authBusy ? "Please wait..." : (isSignup ? "Create account" : "Log in")),
+      !isSignup ? React.createElement("button", {
+        key: "forgot",
+        onClick: doForgotPassword,
+        disabled: authBusy,
+        style: { background: "transparent", border: "none", padding: 0, color: "var(--c-text-faint)", fontSize: 12, textDecoration: "underline", cursor: authBusy ? "default" : "pointer", marginTop: 0, marginBottom: 8, display: "block" }
+      }, "Forgot password?") : null,
+      isSignup ? React.createElement("p", {
+        key: "consent",
+        style: { fontSize: 11, color: "var(--c-text-faint)", marginTop: 8, marginBottom: 8, textAlign: "center", lineHeight: 1.5 }
+      },
+        "By signing up you agree to our ",
+        React.createElement("a", {
+          href: "/privacy", target: "_blank", rel: "noopener noreferrer",
+          style: { color: "var(--accent)", textDecoration: "underline" }
+        }, "Privacy Policy"),
+        " and ",
+        React.createElement("a", {
+          href: "/support", target: "_blank", rel: "noopener noreferrer",
+          style: { color: "var(--accent)", textDecoration: "underline" }
+        }, "Support"),
+        "."
+      ) : null,
       React.createElement("div", { key: "tog", style: { fontSize: 12, color: "#6b7280" } },
         isSignup ? "Already have an account? " : "New here? ",
         React.createElement("span", {
@@ -9623,7 +9696,8 @@ function App() {
       // the four seeded personas. signInAsDemoUser auto-creates the
       // account on first tap if it doesn't exist yet, so this works
       // out of the box without running scripts/seed-demo-users.mjs.
-      React.createElement("div", {
+      // Gated by SHOW_DEMO_UI so production users never see this.
+      SHOW_DEMO_UI && React.createElement("div", {
         key: "demo-divider",
         style: { display: "flex", alignItems: "center", gap: 8, margin: "18px 0 12px", color: "#9ca3af", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }
       },
@@ -9631,13 +9705,13 @@ function App() {
         "or",
         React.createElement("div", { style: { flex: 1, height: 1, background: "#e5e7eb" } })
       ),
-      React.createElement("button", {
+      SHOW_DEMO_UI && React.createElement("button", {
         key: "demo-btn",
         onClick: () => signInAsDemoUser("casey.steady@demo.verrocchio.app"),
         disabled: authBusy,
         style: { width: "100%", padding: "10px 12px", fontSize: 13, fontWeight: 600, color: "#2d5a2d", background: "#fff", border: "1px solid #2d5a2d", borderRadius: 8, cursor: authBusy ? "default" : "pointer", opacity: authBusy ? 0.6 : 1 }
       }, "Try a demo account"),
-      React.createElement("div", {
+      SHOW_DEMO_UI && React.createElement("div", {
         key: "demo-help",
         style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }
       }, "Loads a sample account with two weeks of habits, goals, and to-dos. Re-seeds fresh content on every tap.")
@@ -23056,7 +23130,7 @@ function App() {
     "aria-modal": "true",
     "aria-labelledby": "del-acct-title",
     style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
-    onClick: e => { if (e.target === e.currentTarget) setConfirmDeleteAcct(false); }
+    onClick: e => { if (e.target === e.currentTarget) { setConfirmDeleteAcct(false); setDeleteConfirmText(""); } }
   },
     /*#__PURE__*/React.createElement("div", {
       className: "fade-in",
@@ -23068,25 +23142,50 @@ function App() {
       }, "Delete account?"),
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.6, marginBottom: 14 }
-      }, "This permanently removes your account, all habits, goals, journal entries, and every other piece of data you've saved. This cannot be undone."),
+      }, "This permanently deletes your account, all habits, journal entries, goals, and uploaded files. This cannot be undone."),
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 11, color: "#6b7280", marginBottom: 14 }
       }, "Re-enter your current password in the Account section above, then confirm below."),
+      /*#__PURE__*/React.createElement("a", {
+        href: "#",
+        onClick: (e) => {
+          e.preventDefault();
+          if (!auth.currentUser || !auth.currentUser.email) return;
+          auth.sendPasswordResetEmail(auth.currentUser.email).catch(() => {});
+          setAcctFeedback({ kind: "info", msg: "Check your email for a reset link, then sign back in and return here to delete." });
+        },
+        style: { fontSize: 12, color: "var(--c-text-faint)", textDecoration: "underline", cursor: "pointer", marginTop: 4, marginBottom: 12, display: "inline-block" }
+      }, "I forgot my password"),
+      /*#__PURE__*/React.createElement("p", {
+        style: { fontSize: 13, color: "var(--c-text-soft)", marginTop: 8, marginBottom: 6 }
+      }, "Type \"delete my account\" to confirm:"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "text",
+        value: deleteConfirmText,
+        onChange: (e) => setDeleteConfirmText(e.target.value),
+        placeholder: "delete my account",
+        autoCapitalize: "none",
+        autoComplete: "off",
+        style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--c-border)", marginBottom: 10, fontSize: 14, boxSizing: "border-box" }
+      }),
       acctFeedback && acctFeedback.kind === "err" && /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 12, padding: "6px 10px", borderRadius: 6, color: "#991b1b", background: "#fef2f2", border: "1px solid #fca5a5", marginBottom: 12 }
+      }, acctFeedback.msg),
+      acctFeedback && acctFeedback.kind === "info" && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, padding: "6px 10px", borderRadius: 6, color: "var(--c-text-soft)", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", marginBottom: 12 }
       }, acctFeedback.msg),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
         /*#__PURE__*/React.createElement("button", {
           type: "button",
-          onClick: () => setConfirmDeleteAcct(false),
+          onClick: () => { setConfirmDeleteAcct(false); setDeleteConfirmText(""); },
           disabled: acctBusy,
           style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: acctBusy ? "default" : "pointer" }
         }, "Cancel"),
         /*#__PURE__*/React.createElement("button", {
           type: "button",
           onClick: doDeleteAccount,
-          disabled: acctBusy || !acctCurrentPw,
-          style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "none", background: "#991b1b", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (acctBusy || !acctCurrentPw) ? "default" : "pointer", opacity: (acctBusy || !acctCurrentPw) ? 0.5 : 1 }
+          disabled: acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account",
+          style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "none", background: "#991b1b", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? "default" : "pointer", opacity: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? 0.5 : 1 }
         }, acctBusy ? "Deleting…" : "Delete forever")
       )
     )

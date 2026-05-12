@@ -39,20 +39,20 @@ export default {
     // is a public Anthropic proxy — anyone with the URL burns our key.
     const auth = request.headers.get("Authorization") || "";
     const m = auth.match(/^Bearer (.+)$/);
-    if (!m) return json({ error: "missing_auth" }, 401, env);
+    if (!m) return json({ error: "missing_auth" }, 401, env, reqOrigin);
     try {
       await verifyFirebaseToken(m[1], env.FIREBASE_PROJECT_ID);
     } catch (e) {
-      return json({ error: "invalid_auth", detail: String(e.message || e) }, 401, env);
+      return json({ error: "invalid_auth", detail: String(e.message || e) }, 401, env, reqOrigin);
     }
 
     // Parse body. We don't trust the client to pass a sane model / token
     // count — validate both before forwarding.
     let body;
     try { body = await request.json(); }
-    catch { return json({ error: "bad_json" }, 400, env); }
+    catch { return json({ error: "bad_json" }, 400, env, reqOrigin); }
     if (!ALLOWED_MODELS.has(body.model)) {
-      return json({ error: "disallowed_model", model: body.model }, 400, env);
+      return json({ error: "disallowed_model", model: body.model }, 400, env, reqOrigin);
     }
     if (typeof body.max_tokens !== "number" || body.max_tokens > MAX_TOKENS_CAP) {
       body.max_tokens = Math.min(body.max_tokens || 1000, MAX_TOKENS_CAP);
@@ -73,30 +73,41 @@ export default {
     const text = await resp.text();
     return new Response(text, {
       status: resp.status,
-      headers: { "Content-Type": "application/json", ...cors(env) }
+      headers: { "Content-Type": "application/json", ...cors(env, reqOrigin) }
     });
   }
 };
 
 // ─── CORS ───────────────────────────────────────────────────────────
-function cors(env) {
-  // Default * so the proxy works the moment it's deployed; tighten to
-  // your app's origin (e.g. https://verrocchio.app) via wrangler.toml
-  // for production — CORS won't stop a curl attacker but does shut out
-  // drive-by browser abuse.
-  const origin = (env && env.ALLOWED_ORIGIN) || "*";
+// Allowlist of origins that may call the proxy from a browser. Web build,
+// Firebase Hosting fallback, and the Capacitor iOS shell all need entries.
+const ALLOWED_ORIGINS = new Set([
+  "https://verrocchio.app",
+  "https://verrocchio-1b116.web.app",
+  "https://verrocchio-1b116.firebaseapp.com",
+  "capacitor://localhost"
+]);
+
+function cors(env, requestOrigin) {
+  // If the caller's Origin is in our allowlist, echo it back so the
+  // browser accepts the response. Otherwise fall back to the configured
+  // primary origin (wrangler.toml ALLOWED_ORIGIN) or the production URL.
+  // Vary: Origin ensures CDNs don't cache one origin's headers for another.
+  const fallback = (env && env.ALLOWED_ORIGIN) || "https://verrocchio.app";
+  const allowed = (requestOrigin && ALLOWED_ORIGINS.has(requestOrigin)) ? requestOrigin : fallback;
   return {
-    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Origin": allowed,
+    "Vary": "Origin",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400"
   };
 }
 
-function json(obj, status, env) {
+function json(obj, status, env, requestOrigin) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { "Content-Type": "application/json", ...cors(env) }
+    headers: { "Content-Type": "application/json", ...cors(env, requestOrigin) }
   });
 }
 
