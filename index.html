@@ -8648,7 +8648,14 @@ function App() {
     // the user re-parent / unparent in one place. Children render
     // immediately after their parent in the list.
     const all = (data.habits || [])
-      .filter(h => h.section === sectionValue);
+      .filter(h => {
+        if (h.section !== sectionValue) return false;
+        // Multi-slot habits render into multiple sections via slotSections;
+        // they can't be reordered per-section without a per-section _order
+        // schema (deferred). Hidden from this modal; managed via Edit Habit.
+        if (Array.isArray(h.slotSections) && h.slotSections.length >= 2) return false;
+        return true;
+      });
     const tops = all
       .filter(h => !h.parentId)
       .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
@@ -8709,6 +8716,8 @@ function App() {
     if (reorderCtx.kind === "habitSection") {
       next.habits = (data.habits || []).map(h => {
         if (h.section !== reorderCtx.section) return h;
+        // Multi-slot habits are excluded from per-section reorder (see openSectionReorder).
+        if (Array.isArray(h.slotSections) && h.slotSections.length >= 2) return h;
         const idx = idOrder.get(String(h.id));
         const ov = organizeOverrides[h.id];
         const merged = { ...h };
@@ -25711,6 +25720,32 @@ function App() {
               disabled: !anyLinked,
               style: btnStyle(anyLinked, "#b45309")
             }, "Unlink")
+          );
+        })(),
+        // Disclaimer when multi-slot habits in this section are hidden
+        // from the Organize modal. They render into multiple sections
+        // via slotSections and are managed via the Edit habit modal.
+        ctx.kind === "habitSection" && (() => {
+          const excluded = (data.habits || []).filter(h =>
+            h.section === ctx.section &&
+            Array.isArray(h.slotSections) && h.slotSections.length >= 2
+          );
+          if (excluded.length === 0) return null;
+          return /*#__PURE__*/React.createElement("div", {
+            style: {
+              padding: "8px 12px",
+              marginBottom: 12,
+              background: "var(--c-tint-info-bg)",
+              border: "1px solid var(--c-tint-info-border)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "var(--c-tint-info-fg)",
+              lineHeight: 1.4
+            }
+          },
+            excluded.length === 1
+              ? "1 multi-slot habit isn't shown here — manage it via Edit habit."
+              : excluded.length + " multi-slot habits aren't shown here — manage them via Edit habit."
           );
         })(),
         reorderDraft.length === 0
