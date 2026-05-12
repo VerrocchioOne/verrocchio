@@ -9533,7 +9533,14 @@ function App() {
   };
 
   /* Auto-hydrate briefTxt from the persisted daily ritual + auto-generate
-     on the first Home-tab view of the day. */
+     on the first Home-tab view of the day. Per R-1 (HOMEPAGE_REDESIGN.md),
+     the cached daily briefing must NOT trigger an AI call (and must NOT
+     pop the consent modal) on a passive tab visit — the user has to have
+     explicitly consented first. If consent hasn't been given, we still
+     hydrate any previously cached text from `dailyRitual`, but skip the
+     generation step. `genBrief`'s pre-7-days welcome branch is also safe
+     to invoke without consent (no network call), so it runs unconditionally
+     for fresh users via the existing internal guard. */
   useEffect(() => {
     if (tab !== "brief") return;
     // Skip during onboarding or when the user has no habits/goals yet.
@@ -9545,9 +9552,16 @@ function App() {
     }
     if (!r.briefing && !briefTxt && !briefing) {
       const hasContent = (data.habits && data.habits.length > 0) || (data.goals && data.goals.length > 0);
-      if (hasContent) genBrief();
+      if (!hasContent) return;
+      // For users past the 7-day welcome threshold, only auto-fire when
+      // AI consent has been given. Without this guard, opening the Brief
+      // tab would pop the consent modal as a side-effect of navigation,
+      // which the design doc explicitly rules out (Surface A is passive).
+      const needsAi = completionDayCount() >= 7;
+      if (needsAi && AI_ENABLED && !data.aiConsentAt) return;
+      genBrief();
     }
-  }, [tab, data.dailyRitual, data.onboardingComplete]);
+  }, [tab, data.dailyRitual, data.onboardingComplete, data.aiConsentAt]);
 
   /* Splash loading -> quote transition for the welcome screen.
      Kept here (before any conditional returns) to respect React's
