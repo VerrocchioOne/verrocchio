@@ -8225,6 +8225,23 @@ function App() {
     ...data,
     habits: l
   });
+  // §13.2 — Desktop ↑/↓ reorder helper. Moves the item with `id`
+  // by `delta` positions inside `data[arrName]` and re-stamps
+  // `_order` so the new sequence survives the Firestore round-trip
+  // (sortItems / _order-aware comparators rely on this stamp).
+  // Touch drag-to-reorder paths are untouched — this helper is the
+  // additive desktop alternative invoked by ↑/↓ buttons in the row.
+  const moveItemByDelta = (arrName, id, delta) => {
+    const arr = (data[arrName] || []).slice();
+    const idx = arr.findIndex(x => String(x.id) === String(id));
+    if (idx < 0) return;
+    const target = idx + delta;
+    if (target < 0 || target >= arr.length) return;
+    const [moved] = arr.splice(idx, 1);
+    arr.splice(target, 0, moved);
+    const stamped = arr.map((x, i) => ({ ...x, _order: i }));
+    save({ ...data, [arrName]: stamped });
+  };
   /* Per-goal habit draft (mirrors goalTodoDraft). Empty string per
      goal id; populated as the user types into the inline habit
      quick-add row inside an expanded goal card. */
@@ -14875,6 +14892,31 @@ function App() {
             WebkitTapHighlightColor: "transparent"
           }
         },
+        // §5.4 — "Prioritize today" banner for persistently-resisted
+        // habits. The dotted-red border alone wasn't loud enough; this
+        // adds a small uppercase tag inside the top-left corner so the
+        // card reads as "this is the one you keep avoiding" at a glance.
+        // Uses position:absolute because the card itself is a horizontal
+        // flex row (would otherwise distort layout). z-index 1 keeps it
+        // above the card background but below the donut/chip controls,
+        // and pointer-events:none ensures the underlying tap/swipe
+        // gestures stay intact.
+        isPersistentlyResisted && /*#__PURE__*/React.createElement("div", {
+          "aria-label": "Prioritize today — persistently resisted",
+          style: {
+            position: "absolute",
+            top: 3,
+            left: 10,
+            fontSize: 9,
+            fontWeight: 800,
+            letterSpacing: "0.1em",
+            color: "var(--c-tint-danger-fg, #b91c1c)",
+            textTransform: "uppercase",
+            lineHeight: 1,
+            pointerEvents: "none",
+            zIndex: 1
+          }
+        }, "Prioritize today"),
         // §13.1 Desktop hover-reveal mark-missed X. Invisible by
         // default (opacity:0, pointer-events:none); a CSS rule scoped
         // to body[data-device="desktop"/"desktop-wide"] .hrow:hover
@@ -14930,6 +14972,34 @@ function App() {
             zIndex: 2
           }
         }, "✕"),
+        // §13.2 — Desktop ↑/↓ reorder buttons. Additive to the
+        // existing drag-to-reorder on touch (which is owned by the
+        // Organize modal for habits); these buttons give trackpad +
+        // keyboard users a discoverable way to nudge a habit up or
+        // down. Gated to desktop/desktop-wide via window.__deviceProfile
+        // — the value is kept in sync on resize by the same listener
+        // that sets body[data-device], so a window resize will hide
+        // the buttons on the next render. stopPropagation prevents the
+        // row's expand-on-click / edit-on-doubleclick handlers from
+        // firing.
+        (typeof window !== "undefined" && (window.__deviceProfile === "desktop" || window.__deviceProfile === "desktop-wide")) && /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 1, marginRight: 2, flexShrink: 0, alignSelf: "center" }
+        },
+          /*#__PURE__*/React.createElement("button", {
+            onClick: (e) => { e.stopPropagation(); moveItemByDelta("habits", habit.id, -1); },
+            onDoubleClick: (e) => e.stopPropagation(),
+            title: "Move up",
+            "aria-label": "Move habit up",
+            style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "0 4px", fontSize: 10, lineHeight: 1 }
+          }, "▲"),
+          /*#__PURE__*/React.createElement("button", {
+            onClick: (e) => { e.stopPropagation(); moveItemByDelta("habits", habit.id, 1); },
+            onDoubleClick: (e) => e.stopPropagation(),
+            title: "Move down",
+            "aria-label": "Move habit down",
+            style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "0 4px", fontSize: 10, lineHeight: 1 }
+          }, "▼")
+        ),
         (() => {
           // Sub-unit habits (target > 0, e.g. "8 cups of water"): the
           // button becomes an increment tap — each tap adds `increment`
@@ -17829,7 +17899,30 @@ function App() {
           paddingRight: gt ? "34px" : "14px",
           position: "relative"
         }
-      }), (() => {
+      }),
+      // §13.2 — Desktop ↑/↓ reorder buttons for goals. Mirrors the
+      // habit-row pair; touch users keep drag-to-reorder via the
+      // `dp(...)` spread above (preserved untouched). Inserted before
+      // the donut so the buttons live at the leading edge of the row.
+      (typeof window !== "undefined" && (window.__deviceProfile === "desktop" || window.__deviceProfile === "desktop-wide")) && !isE && /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", flexDirection: "column", gap: 1, marginRight: 2, flexShrink: 0, alignSelf: "center" }
+      },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: (e) => { e.stopPropagation(); moveItemByDelta("goals", goal.id, -1); },
+          onDoubleClick: (e) => e.stopPropagation(),
+          title: "Move up",
+          "aria-label": "Move goal up",
+          style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "0 4px", fontSize: 10, lineHeight: 1 }
+        }, "▲"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: (e) => { e.stopPropagation(); moveItemByDelta("goals", goal.id, 1); },
+          onDoubleClick: (e) => e.stopPropagation(),
+          title: "Move down",
+          "aria-label": "Move goal down",
+          style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "0 4px", fontSize: 10, lineHeight: 1 }
+        }, "▼")
+      ),
+      (() => {
         // Donut split into one arc per linked habit, with explicit
         // tick-mark separators painted in the card's background
         // color over the boundary between segments so the user can
