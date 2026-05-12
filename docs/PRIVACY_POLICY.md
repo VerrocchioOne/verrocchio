@@ -3,9 +3,7 @@
 **Effective date:** 2026-05-12
 **Last updated:** 2026-05-12
 
-> **Template note:** `{{ENTITY}}` is the only remaining placeholder. Founder fills it before hosting at `/privacy`. `support@verrocchio.app` has been replaced with the live `support@verrocchio.app` address. Once `{{ENTITY}}` is filled, this template note can be deleted.
-
-This Privacy Policy explains how {{ENTITY}} ("we," "us," "our") collects, uses, stores, and shares information in connection with the Verrocchio habit, goal, and journaling app (the "App"), available on the web at https://verrocchio.app and on iOS via the App Store.
+This Privacy Policy explains how Verrocchio LLC ("we," "us," "our") collects, uses, stores, and shares information in connection with the Verrocchio habit, goal, and journaling app (the "App"), available on the web at https://verrocchio.app and on iOS via the App Store.
 
 Questions or requests: **support@verrocchio.app**.
 
@@ -110,5 +108,5 @@ We will post any changes here and update the "Last updated" date above. Material
 
 ## 15. Contact
 
-{{ENTITY}}
+Verrocchio LLC
 Email: **support@verrocchio.app**
