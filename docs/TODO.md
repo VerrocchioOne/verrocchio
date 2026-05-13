@@ -869,7 +869,25 @@ That's a roughly 8–12 callsite change in `index.html` — well under the multi
 | No "is anything broken?" surface | A user opening this tab on a Sunday afternoon to do a weekly review wants the answer in 5 seconds, not 60. |
 | No grouping by section or importance | Can't ask "is my morning routine working?" without scrolling all habits. |
 
-#### Pass 2 — proposed reorg (three sub-views)
+#### Pass 2 — Overview tab shipped (2026-05-13)
+
+The Overview sub-tab (the highest-leverage of the three sub-views designed below) is live. New behavior on the Habit Reports panel inside My Profile:
+
+- Top of the panel: a sub-tab strip — **Overview** (default) · **Per-habit**.
+- **Overview** shows three at-a-glance buckets (only the non-empty ones render):
+  - **Attention needed** — habits whose 30-day rate is below 50%, sorted by importance (Non-Negotiable first), then lower-rate first within each tier.
+  - **Strongest performers** — top five habits by current streak.
+  - **Falling behind** — habits whose last-7-day completion rate dropped more than 20 percentage points vs. the prior 7-day rate, sorted by drop size.
+  - Each row: habit name · numeric badge (rate + streak, or streak + rate, or `−Npp · M% now` depending on bucket) · 7-cell monochrome sparkline (today on the right, filled = done).
+  - When all three buckets are empty: "Nothing flagged. Tap Per-habit for the full list."
+- **Per-habit** keeps the original heatmap-per-habit list with the Week / Month / Year range filter, unchanged. Moved into a tab so the Overview gets primary real estate without losing any detail.
+- Top stat row (Best Streak / Avg Rate / Done Today) moved from "always visible at the top" to "inside Overview only," consistent with the sub-view's at-a-glance purpose.
+
+Tunables for follow-up: `< 50%` attention threshold, `> 20pp` falling-behind threshold, monochrome vs. gradient sparkline. Reasonable defaults locked in for now.
+
+Deferred for future passes (per the design below): the Per-habit filter + sort controls and the By-section sub-tab.
+
+#### Pass 2 — original three-sub-view design (for reference)
 
 Add a sub-tab strip at the top of the panel: **Overview · Per-habit · By section**. Range filter (W/M/Y) stays global to all three.
 
