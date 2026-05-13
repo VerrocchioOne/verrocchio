@@ -212,6 +212,50 @@ A subtle but important design choice: **does the 1-week trial require credit-car
 - Findings update this section by reference rather than rewrite (preserves an audit trail of how thinking evolved).
 - **Priority:** High — this directly informs how aggressive the v1 limits in [§1.5](#15-free-tier-limits-proposed-numerical-caps) and the Day-7 prompt in [§1.6](#16-the-referral-mechanic-1-week-trial--invite-to-extend--invite-to-lifetime) should be. Locking these before launch is much cheaper than re-tuning under churn pressure later.
 
+### 1.13 iOS contacts integration — fast-invite flow
+- **Problem:** The referral loop is the entire marketing strategy ([§1.0](#10-strategic-framing--zero-marketing-budget-network-effect-growth)), yet today the only invite path is the native share sheet (open share → pick Messages → pick contact → type message → send). Multi-step friction kills throughput. To send 10 invites a user has to repeat 10× through the share sheet.
+- **Concept:** Add a "Invite from Contacts" action that triggers an in-context iOS Contacts permission prompt and then a native multi-select contact picker. User picks N contacts in one step → reviews/edits a pre-filled invite message → sends to all selected in one batch.
+- **Flow:**
+  1. User taps "Invite friends" anywhere it appears (Day-7 modal, soft-cap prompts, profile "share Verrocchio" affordance).
+  2. App requests Contacts permission with a clear in-app explanation modal **before** triggering iOS's system prompt — Apple reviewers prefer this pattern ("priming the permission"). Sample copy: *"Verrocchio uses your contacts only to help you invite friends. Your contacts stay on your device — we never upload your contact list."*
+  3. On grant: native iOS multi-select contact picker opens. Pre-filtered to contacts with at least a phone or email (so the user only sees actionable rows).
+  4. User selects 1–N contacts → editable message screen with default text + the user's unique referral link (`https://verrocchio.app/r/<short-code>`) → sends.
+  5. Send goes via iOS Messages (SMS/iMessage) by default; email-only contacts fall back to mailto: pre-fill.
+  6. App records sent count + timestamps at `users/<uid>.referrals.sent` — **count and timestamps only, never the contact PII itself**.
+- **On permission denial:**
+  - Fall back gracefully to the existing share sheet flow.
+  - Do not re-prompt aggressively. After the user successfully sends ≥1 invite via the share sheet, offer one reframe: *"Want to invite more at once? Allow contacts access in Settings."* — never more than once per week.
+- **Privacy constraints (non-negotiable):**
+  - **All contact processing happens on-device.** Contacts never reach Firestore, the AI proxy, analytics, or any other server.
+  - `Info.plist` key `NSContactsUsageDescription` must be specific: *"Verrocchio uses your contacts to help you invite friends. Your contacts stay on your device."* Apple reviewers reject vague descriptions like *"for app functionality"*.
+  - Settings tab needs a "Contacts access: [status] — Manage" link that deep-links to the iOS Settings app's permission page for Verrocchio (Capacitor `App.openSettings()` or equivalent).
+  - If/when we ever build a "find friends already on Verrocchio" feature (hashed-email matching against a server-side index), that's a **separate feature with its own privacy review** — out of scope here.
+- **Capacitor integration:**
+  - Plugin: `@capacitor-community/contacts` (verify maintainer activity + iOS 17/18 support before adopting; if stale, evaluate `capacitor-plugin-contacts` or write a thin native bridge).
+  - iOS native bridge: presents `CNContactPickerViewController` (Apple's stock multi-select picker). No custom UI needed for the picker itself.
+  - Web side (verrocchio.app PWA) has no equivalent API — web users always hit the share-sheet path (`navigator.share` where available, `mailto:` / `sms:` / copy-link otherwise).
+- **Pre-filled invite message — proposed default:**
+  > *"I've been using Verrocchio — it's a habit and goal tracker built around disciplined practice rather than streaks/gamification. Try it: https://verrocchio.app/r/<short-code>"*
+  - User can edit before sending. Default kept short to fit one SMS without splitting.
+- **Attribution into §1.6:**
+  - Each contacts-flow invite generates the same referral link format as the share-sheet flow. Conversion gating ([§1.6](#16-the-referral-mechanic-1-week-trial--invite-to-extend--invite-to-lifetime): install + sign up + ≥3 days active) is identical and channel-agnostic.
+  - Invites earned via this flow count toward the unlock ladder ([§1.6](#16-the-referral-mechanic-1-week-trial--invite-to-extend--invite-to-lifetime)) without distinction.
+- **Abuse considerations:**
+  - The 24h invite-credit cap from [§1.6](#16-the-referral-mechanic-1-week-trial--invite-to-extend--invite-to-lifetime) (~5/day) applies regardless of channel. A user can't bulk-send 200 contacts in one session and earn 200 invite credits — Firestore tracks the rate.
+  - Block sending to the user's own phone/email (self-invite). Trivial check on the send action.
+- **App Store review risk:**
+  - Apple scrutinizes apps that request Contacts. Common rejection reasons we must avoid:
+    - Vague usage description in `NSContactsUsageDescription`.
+    - Contact list uploaded to a server without explicit user disclosure.
+    - Contacts used for purposes beyond what's stated (e.g., marketing emails to non-users).
+  - Our position is clean: on-device only, narrow stated purpose, in-app revocation path. Document this clearly in the App Store review notes ([§22](#22-app-store-submission-via-testflight)).
+- **Priority:** **High** — directly serves the most leveraged surface in the app ([§1.0](#10-strategic-framing--zero-marketing-budget-network-effect-growth)). Without it, the referral loop is throttled by per-invite friction. Worth doing **before App Store launch** — adding a new permission post-launch requires another App Store review cycle.
+- **Cross-references:**
+  - [§1.0](#10-strategic-framing--zero-marketing-budget-network-effect-growth) — strategic framing of the referral loop as the marketing strategy
+  - [§1.6](#16-the-referral-mechanic-1-week-trial--invite-to-extend--invite-to-lifetime) — the unlock ladder this surfaces feed into
+  - [§3](#3-onboarding--new-user-experience) — onboarding should mention the social/invite concept so this isn't a surprise when surfaced later
+  - [§22](#22-app-store-submission-via-testflight) — review notes need to address contacts permission usage explicitly
+
 ---
 
 ## 2. Social & Community Layer — Anchor Pillar of the App
@@ -555,7 +599,8 @@ The same four activities done in a different order produce measurably different 
 
 ### 5.2 "Organize Habits" module is broken
 - **Problem:** Certain habits appear simultaneously when they shouldn't. The organize/reorder functionality does not fully work.
-- **Action:** Debug end-to-end. Confirm ordering is persisted, deduped, and rendered correctly.
+- **Problem (additional, 2026-05-12):** The organize tool does **not account for habits that are split into multiple times per day** (e.g., a "Study CFA curriculum" habit with morning / afternoon / evening sessions). The tool either groups or layers them incorrectly, or fails to surface them as a single conceptual habit at all.
+- **Action:** Debug end-to-end. Confirm ordering is persisted, deduped, and rendered correctly. Cross-reference [§5.8](#58-multi-time-per-day-habits--independent-check-ins-summing-to-a-daily-target) — the organize tool depends on getting that data model right before its behavior can be fixed cleanly.
 
 ### 5.3 Full review of the "Edit Habit" card UI
 - **Problem:** Inconsistent font sizes, font types, emoji use vs. no-emoji, spacing.
@@ -580,6 +625,34 @@ The same four activities done in a different order produce measurably different 
   - Tooltip / tap target reveals which fields are missing.
   - Indicator disappears in realtime once the parent goal is completed (no manual refresh).
 - **Priority:** Medium — visibility/quality bug, not blocking.
+
+### 5.7 Visual clarity — distinguish "layered" vs "grouped" habits
+- **Problem:** Today it's hard to tell at a glance which habits on a card are **layered** (a single habit with multiple check-in slots — e.g., 3 study sessions per day) vs **grouped** (multiple distinct habits clustered together for organization — e.g., a "morning routine" containing stretch, meditate, journal). These are conceptually different things and currently look similar in the UI.
+- **Behavior required:**
+  - Layered habits: render stacked / segmented progress (one segment per slot), with a single habit title and per-day rollup (e.g., "2 of 3 today").
+  - Grouped habits: render a clear collapse / expand affordance OR a thin container outline, with a group title and a count of distinct habits (e.g., "3 habits").
+  - Labels must reflect the difference — never reuse "3 of 3" ambiguously for both.
+- **Acceptance:** A user glancing at the habits page can identify in <2 seconds whether a card is layered or grouped, without tapping in.
+- **Cross-reference:** Depends on [§5.8](#58-multi-time-per-day-habits--independent-check-ins-summing-to-a-daily-target) for the layered data model; depends on [§5.2](#52-organize-habits-module-is-broken) for the grouping mechanism.
+- **Priority:** Medium — clarity bug. Users currently can't tell what they're looking at.
+
+### 5.8 Multi-time-per-day habits — independent check-ins summing to a daily target
+- **Concept:** Some habits naturally split into multiple sessions per day. Example: **"Study CFA curriculum" — 3 hours/day across 3 sessions**. Each session should be its own check-in (so the user gets the satisfaction of marking each, and can do them at different times), but the day's goal isn't "complete" until the sum across sessions meets the daily target.
+- **Behavior required:**
+  - User can configure a habit with `slotsPerDay: N` (e.g., 3) and either a per-slot quantity (e.g., 1 hour each) or a per-day cumulative target (e.g., 3 hours total).
+  - Each slot has its own check-in UI — independent timestamp, independent state of completed / skipped / missed.
+  - Day-level rollup: the habit shows as "complete" only when the sum (slots completed, or cumulative quantity) meets the daily target. Partial days display "1 of 3 today" / "2 of 3 today" without claiming completion.
+  - Streak math: a partial day does **not** extend the streak unless the target was hit. (See open question below.)
+- **Implications across the codebase:**
+  - **Data model:** Habit needs `slotsPerDay` (int, default 1) and `slotTarget` (optional). `completions` becomes per-slot-per-day rather than a per-day boolean. Migration: existing habits default to `slotsPerDay: 1` to preserve current behavior.
+  - **`utils.js`:** All streak / completion / "due today" logic must be updated. Tests in `tests/utils.test.mjs` need new cases for partial days, fractional progress, and slot-skipping. This is the most-touched core math change currently in this TODO.
+  - **UI surface area:** Habit cards, today's view, calendar day view, the organize module ([§5.2](#52-organize-habits-module-is-broken)), and the layered-vs-grouped distinction ([§5.7](#57-visual-clarity--distinguish-layered-vs-grouped-habits)) all depend on this.
+  - **AI features ([§14](#14-ai-features)):** The routine optimizer (14.1) and additive-vs-non-negotiable detector (14.3) must reason about slots, not just habits. A "study" habit with 3 missed slots is a different signal than a single missed habit.
+- **Open questions:**
+  - Does a partial day extend the streak? (Likely no — but consider showing a "soft streak" of partial-completion days separately.)
+  - Can slots be **time-bound** (must complete by 11 AM, 3 PM, 8 PM) vs **untimed** (any 3 slots before midnight)? Default: untimed; time-bound is an opt-in.
+  - Migration: do we silently default existing habits to `slotsPerDay: 1`, or offer an in-app prompt to upgrade selected habits?
+- **Priority:** **High** — foundational model change. Gates [§5.2](#52-organize-habits-module-is-broken), [§5.7](#57-visual-clarity--distinguish-layered-vs-grouped-habits), and AI work in §14. Should be planned (via `superpowers:writing-plans`) before any other §5 work begins.
 
 ---
 
@@ -1203,6 +1276,18 @@ A future version of verrocchio should include a **native Apple Watch app**. The 
 
 ## 20. Infrastructure & Scaling — Cost-Efficient to Thousands of Users
 
+### 20.0 BUG (live, P0) — `verrocchio.app` returns NXDOMAIN
+- **Status:** Live production issue as of 2026-05-12. Browsers visiting `https://verrocchio.app` get `DNS_PROBE_FINISHED_NXDOMAIN`. Mail (`support@verrocchio.app`) still works because MX records are intact.
+- **Diagnosis (confirmed via Cloudflare API):** The `verrocchio.app` zone has MX + SPF/DKIM records (email path) and an AAAA on `ai.verrocchio.app` (the AI proxy custom domain), but **no A/AAAA/CNAME on the apex itself**. Browsers have no answer for where to send web requests.
+- **Fix path:**
+  1. Firebase Console → Hosting → Add custom domain → enter `verrocchio.app`.
+  2. Firebase issues a TXT challenge to verify ownership (one-time), then provides the specific A records to add. Use exactly what Firebase shows — IPs change.
+  3. Add the A records to the Cloudflare DNS zone (proxied = orange cloud is typically what Firebase recommends; verify against Firebase's current instructions).
+  4. Wait for Firebase to provision the SSL cert (usually <30 min).
+  5. Verify `https://verrocchio.app` resolves to the app and SSL is green.
+- **Out of scope here:** `www.verrocchio.app` — recommend adding a `www` → apex redirect via Cloudflare page rule as a follow-up.
+- **Priority:** P0 — the app is the product, the product needs a working URL. Blocks all user-facing testing of anything that goes through `verrocchio.app` (including App Store screenshots that link to the marketing URL).
+
 ### 20.1 End-to-end scale + cost audit
 - **Goal:** Confirm the stack (Firebase Hosting, Firestore, Cloudflare Worker AI proxy, GitHub repo, iOS Capacitor shell) can serve **thousands of concurrent users** while keeping hosting cost **as close to $0 as possible** at low volume and predictable at scale.
 - **Action:** Produce a one-page "infra-at-scale" doc capturing per-layer cost model, free-tier limits, projected costs at 1k / 10k / 100k DAU, and breaking points.
@@ -1295,6 +1380,37 @@ A future version of verrocchio should include a **native Apple Watch app**. The 
 - Free tier vs. paid tier feature split? (E.g., images = paid only.)
 - Do we need image moderation? (If user-generated content is private-only, no. If shared, yes — and that's a separate cost line.)
 - Backup/export strategy — let users download their data so we can purge inactive accounts without a PR problem.
+
+### 20.10 Site architecture — split apex into marketing page + app subdomain
+- **Concept:** Today `verrocchio.app` directly serves the React PWA — first-time visitors hit a sign-in screen with no context. Convert to a two-domain split:
+  - **`verrocchio.app`** → static marketing landing page (hero, value prop, screenshots, App Store badge, social proof, legal footer). Optimized for SEO and first-impression conversion.
+  - **`app.verrocchio.app`** → the React PWA, identical to what's there now, just on a different hostname.
+  - The marketing page has a prominent "Log in" / "Open the app" button linking to `app.verrocchio.app`.
+- **Why:**
+  - Visitors and signed-in users have different needs; mixing them hurts both — a curious visitor lands on an auth wall, a returning user sees marketing they don't need.
+  - SEO needs static HTML with proper meta tags / structured data; the PWA can't easily serve that without SSR.
+  - App Store reviewers and press want a "what is this product" landing page, not an immediate sign-in.
+  - Industry convention: Linear, Notion, Stripe — `<product>.com` = marketing, `app.<product>.com` = app.
+- **Implementation notes:**
+  - **Hosting:** Multi-site Firebase Hosting (single repo, two `firebase.json` targets, deploy both at once) is the lightest path. Alternative: Cloudflare Pages for the marketing site if richer build tooling (Astro, MDX) is wanted.
+  - **DNS:** Add `app.verrocchio.app` as a new Firebase Hosting custom domain → A records via Cloudflare API (same flow as the apex setup).
+  - **AI proxy CORS:** [ai-proxy/worker.js](../ai-proxy/worker.js) `ALLOWED_ORIGINS` currently includes `https://verrocchio.app`. Must add `https://app.verrocchio.app` or AI calls from the new origin will fail CORS.
+  - **PWA / service worker scope:** Today registered at the apex. Moving the app to `app.verrocchio.app` changes the scope; users with the PWA installed from `verrocchio.app` will keep loading the now-marketing page. Transition strategy needed — options: (a) redirect-and-prompt-reinstall on the apex for ~30 days, (b) keep apex temporarily double-serving the PWA with a banner directing to the new URL, (c) accept the small breakage and force re-install via App Store post-launch.
+  - **Firebase Auth email links:** Templates (password reset, email verification) point at a configured base URL. Update Firebase Console → Authentication → Templates → "Customize action URL" to `app.verrocchio.app`.
+  - **Existing bookmarks:** Users who bookmarked `verrocchio.app` will hit marketing first, then click through to the app. Acceptable cost — most usage will come via the App Store anyway.
+  - **Capacitor iOS shell:** Unaffected. The iOS app loads `index.html` packaged inside the IPA, not from the network.
+  - **Legal pages:** `/privacy`, `/terms`, etc. — keep on the marketing apex so they're public-reference and don't require being signed in. Update links from inside the app accordingly.
+- **Cutover sequencing (lowest-risk path):**
+  1. Add `app.verrocchio.app` as a second Firebase Hosting site; deploy current app there. Verify everything works.
+  2. Update Firebase Auth + Worker CORS to recognize the new origin.
+  3. Build the marketing site at `marketing/` in this repo (or a separate one).
+  4. Deploy marketing to apex, replacing the app at apex.
+  5. Communicate the change to existing users (in-app banner, email).
+- **Open questions:**
+  - Marketing page content — what goes on it? Hero + features + screenshots + App Store CTA + social proof + legal footer. Tied to [§1](#1-monetization-strategy--free--paid-split--referral-unlock) (referral strategy lives prominently here) and [§2](#2-social--community-layer--anchor-pillar-of-the-app).
+  - Should the marketing page collect emails (newsletter / launch list) before the app is App-Store-public? Probably yes during pre-launch.
+  - Do we want `www.verrocchio.app` to redirect to apex (current setup) or to the app? Current default = apex / marketing.
+- **Priority:** Medium. Not blocking core product work, but a meaningful SEO + brand + conversion improvement. **Worth doing before App Store launch** so reviewers, press, and organic discoverers see a landing page rather than an app shell.
 
 ---
 

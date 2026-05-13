@@ -15,6 +15,9 @@
 
 # Service-account credentials
 firebase-adminsdk-*.json
+
+# Firebase CLI local cache (emulator state, deploy history, etc.)
+.firebase/
 serviceAccountKey.json
 secrets.json
 
