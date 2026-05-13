@@ -3197,6 +3197,13 @@ function hydrateCloudDoc(p) {
       if (!Array.isArray(h.goalIds)) {
         h = { ...h, goalIds: h.goalId != null ? [h.goalId] : [] };
       }
+      // §6 Future Habits — `parked: true` means the habit sits in the
+      // Future Habits drawer instead of the active list. Inert: not
+      // rendered on the Habits tab sections, not counted by streak /
+      // rate / completion math, not scored by the AI features, not
+      // surfaced in neglected-habit warnings. Default false so every
+      // existing habit stays active until the user explicitly parks it.
+      if (typeof h.parked !== "boolean") h = { ...h, parked: false };
       return h;
     });
   }
@@ -6618,6 +6625,8 @@ function App() {
   // workload reads first; tap the divider to expand and review the
   // parked / not-yet-pursued goals.
   const [showFutureGoals, setShowFutureGoals] = useState(false);
+  // §6 Future Habits — collapsed drawer at the bottom of the Habits tab.
+  const [showFutureHabits, setShowFutureHabits] = useState(false);
   // Re-evaluate the "which section is current" default once per session,
   // after data (and therefore the user's custom timeRanges, if any) has
   // loaded. Guarded by a ref so we don't clobber manual toggles afterward.
@@ -7205,10 +7214,13 @@ function App() {
   // identity skips the work on unrelated re-renders (tab switch,
   // scroll, etc.). The briefing prompt, the briefing fallback, and
   // the smartTips block all read these memoized values now.
-  const memoedCorrelations = useMemo(() => findCorrelations((data && data.habits) || []), [data && data.habits]);
+  // §6 Future Habits — exclude parked habits from AI inputs. They're
+  // inert: should not influence correlation discovery, off-schedule
+  // detection, or any other behavioral signal.
+  const memoedCorrelations = useMemo(() => findCorrelations(((data && data.habits) || []).filter(h => h && !h.parked)), [data && data.habits]);
   const memoedOffSchedule  = useMemo(() => {
     const hs = (data && data.habits) || [];
-    return hs.filter(h => h && h.section !== "avoid").map(h => detectOffSchedule(h)).filter(Boolean);
+    return hs.filter(h => h && h.section !== "avoid" && !h.parked).map(h => detectOffSchedule(h)).filter(Boolean);
   }, [data && data.habits]);
   const achievementStats = useMemo(() => {
     const habitsArr = (data && data.habits) || [];
@@ -9902,6 +9914,10 @@ function App() {
 
   const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
+    // §6 Future Habits — parked habits are inert. They sit in the
+    // Future Habits drawer (rendered below the active sections) and
+    // don't appear in any section, filter pill, or count chip.
+    if (h.parked) return false;
     if (impFilter.length > 0 && !impFilter.includes(h.importance)) return false;
     // Goal (Area-of-Life) filter — habit's `type` must match one of the
     // currently selected area values (Physical, Mental, etc.).
@@ -14142,7 +14158,7 @@ function App() {
         const r = (data.dailyRitual && data.dailyRitual[dk(d)]) || {};
         (r.crowdingPromptsShown || []).forEach(p => recentShown.add(p));
       }
-      const det = detectAdditiveCrowding(data.habits, new Date());
+      const det = detectAdditiveCrowding((data.habits || []).filter(h => !h.parked), new Date());
       if (!det) return null;
       const key = det.additive.id + "-" + det.nonNeg.id;
       if (recentShown.has(key)) return null;
@@ -16455,7 +16471,51 @@ function App() {
         fontSize: 13,
         padding: "40px 0"
       }
-    }, "No habits yet \u2014 add one above"));
+    }, "No habits yet \u2014 add one above"),
+    // \u00a76 Future Habits drawer \u2014 collapsed by default. Tap any row to
+    // open the Edit Habit modal and use the "Activate" button there to
+    // pull the habit back into the active list.
+    (() => {
+      const parkedHabits = (data.habits || []).filter(h => h.parked);
+      if (parkedHabits.length === 0) return null;
+      return /*#__PURE__*/React.createElement("div", {
+        className: "future-habits-drawer",
+        style: { marginTop: 18, marginBottom: 18, gridColumn: "1 / -1" }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          onClick: () => setShowFutureHabits(p => !p),
+          title: showFutureHabits ? "Hide future habits" : "Show future habits",
+          style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: showFutureHabits ? 8 : 0, userSelect: "none", WebkitTapHighlightColor: "transparent" }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 11, color: "#6b7280", transform: showFutureHabits ? "rotate(90deg)" : "none", transition: "transform .15s", display: "inline-block", width: 10 }
+          }, "\u25b6"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: .5 }
+          }, "Future Habits"),
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 11, fontWeight: 600, color: "#9ca3af" }
+          }, "(" + parkedHabits.length + ")"),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 1, background: "var(--c-border)" } })
+        ),
+        showFutureHabits && /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }
+        }, parkedHabits.map(h => {
+          const ht = HT.find(t => t.value === h.type);
+          const imp = IMP.find(i => i.value === h.importance);
+          return /*#__PURE__*/React.createElement("div", {
+            key: h.id,
+            style: { background: "#fff", border: "1px solid " + (ht ? ht.border : "var(--c-border)"), borderRadius: 10, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", boxShadow: "0 1px 2px rgba(0,0,0,.04)" },
+            onClick: () => sEHabit(h),
+            title: "Open habit \u2014 tap 'Activate' to move it back to the active list"
+          },
+            ht && /*#__PURE__*/React.createElement("div", { style: { width: 8, height: 8, borderRadius: "50%", background: ht.color, flexShrink: 0 } }),
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 13, color: "var(--c-text)", fontWeight: 500, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" } }, h.text),
+            imp && /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, fontWeight: 700, textTransform: "uppercase", color: imp.color, padding: "2px 7px", borderRadius: 6, background: imp.bg, border: "1px solid " + imp.border, letterSpacing: .4, whiteSpace: "nowrap" } }, h.importance)
+          );
+        }))
+      );
+    })());
   })(), tab === "todos" && (() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -19277,7 +19337,9 @@ function App() {
       if (!m) return new Date();
       return new Date(+m[1], +m[2] - 1, +m[3]);
     })();
-    const allHabits = (data.habits || []);
+    // §6 Future Habits — parked habits are inert and don't appear
+    // on the calendar timeline.
+    const allHabits = (data.habits || []).filter(h => !h.parked);
     // Filter out the two sections that can't sit on a clock:
     //   • all-day  (Daily Completion) — no time of day
     //   • avoid                       — not a scheduled action
@@ -22714,7 +22776,10 @@ function App() {
         );
       }))
     );
-    const allHabitsForReport = (data.habits || []).slice().sort((a, b) => getStreak(b) - getStreak(a));
+    // §6 Future Habits — parked habits hide from the Reports panel.
+    // They aren't being practiced; surfacing them in attention/strongest/
+    // falling-behind buckets or the per-habit heatmap list would be noise.
+    const allHabitsForReport = (data.habits || []).filter(h => !h.parked).slice().sort((a, b) => getStreak(b) - getStreak(a));
     // Shared range for every heatmap in the reports panel. Persisted
     // on the session via useState so flipping the toggle re-renders
     // every row in sync.
@@ -22736,7 +22801,7 @@ function App() {
     // Overview sub-view (§11.4): scannable at-a-glance buckets so the
     // user can answer "is anything broken?" in 5 seconds. The full
     // heatmap-per-habit list lives in the Per-habit sub-tab.
-    const activeReportHabits = (data.habits || []).filter(h => h.section !== "avoid");
+    const activeReportHabits = (data.habits || []).filter(h => h.section !== "avoid" && !h.parked);
     const impOrder = (v) => v === "Non-Negotiable" ? 0 : v === "Important" ? 1 : v === "Additive" ? 2 : 3;
     const needsAttention = activeReportHabits
       .filter(h => getCR(h).pct < 50)
@@ -26876,6 +26941,33 @@ function App() {
         cursor: "pointer"
       }
     }, "Delete"),
+    // §6 Future Habits — park / un-park toggle. Only on existing
+    // habits (no point parking a brand-new one). Writes directly to
+    // `data.habits` since the modal's eH* state doesn't track the
+    // parked flag (it's a status field, not an editable property).
+    editHabitModal && editHabitModal.id !== "__new__" && (() => {
+      const cur = (data.habits || []).find(h => String(h.id) === String(editHabitModal.id));
+      const isParked = !!(cur && cur.parked);
+      return /*#__PURE__*/React.createElement("button", {
+        onClick: () => {
+          const next = (data.habits || []).map(h => String(h.id) === String(editHabitModal.id) ? { ...h, parked: !isParked } : h);
+          save({ ...data, habits: next });
+          setEditHabitModal(null);
+        },
+        title: isParked ? "Move this habit back into the active list" : "Park this habit in Future Habits — it stops counting for streaks, rates, and AI features until you activate it again",
+        style: {
+          background: "var(--c-surface-raised)",
+          border: "1px solid var(--c-border)",
+          borderRadius: 8,
+          padding: "10px 14px",
+          color: "var(--c-text-soft)",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          whiteSpace: "nowrap"
+        }
+      }, isParked ? "Activate" : "Move to Future");
+    })(),
     /*#__PURE__*/React.createElement("button", {
       onClick: saveEditHabitModal,
     style: {

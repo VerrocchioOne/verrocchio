@@ -763,6 +763,26 @@ Build a Future Habits drawer that mirrors the existing Future Goals drawer. Acti
 
 **Start with Path B** for the Future Habits drawer. Ship the smaller change first to validate the UX (does the user actually want a "parked habits" surface?). Migrate to Path A when archived is needed, or when the next status-introducing feature lands (e.g., "snoozed for a week" or "vacation mode"). Defer the explicit-`status` rewrite until there's a second motivating use case.
 
+#### Path B shipped 2026-05-13
+
+- Habit records now carry a `parked: boolean` (default `false`, migrated on read).
+- Edit Habit modal exposes a **Move to Future / Activate** toggle button next to Delete + Save Changes. Writes the flag and closes the modal.
+- New **Future Habits** drawer at the bottom of the Habits tab, collapsed by default. Mirrors the existing Future Goals drawer pattern (`showFutureHabits` state + a header strip that toggles a habit list). Tapping any row opens the Edit Habit modal where the user can hit **Activate** to pull it back into the active list.
+- Parked habits are filtered out of:
+  - `filtH` → so they don't appear in `groupedH` sections on the Habits tab
+  - `memoedCorrelations` input to `findCorrelations`
+  - `memoedOffSchedule` input to `detectOffSchedule`
+  - `detectAdditiveCrowding` input
+  - Calendar `allHabits` / `scheduledOnly`
+  - Reports `allHabitsForReport` (per-habit list) and `activeReportHabits` (Overview buckets)
+
+Still **not filtered** (low-priority, not user-visible regressions):
+- Goal-linked habit lists in goal cards. A goal with a parked habit linked to it still shows the habit name in the goal's "Linked habits" list. Could be intentional ("yes, the goal has this habit parked"); revisit if it confuses anyone.
+- Streak math (`getStreak`, `getCR`, etc.) reads `h.completions` directly. For a parked habit with no recent completions, these return zero — harmless. If a habit was parked WHILE having recent completions, those completions still count toward its streak/rate if anything ever reads them — but nothing does, since parked habits don't render anywhere they'd be measured.
+- Free-tier 5-habit cap counting ([§1.5](#15-free-tier-limits-proposed-numerical-caps)) — not yet wired, so the cap doesn't yet count parked habits either way. When §1.5 ships, the cap should count active habits only.
+
+Deferred to Path A migration when a second status-introducing feature (archive / snooze / vacation) lands.
+
 If Path B ships first:
 - Add `parked: false` default in the data-load shim.
 - Add a "Move to Future" item to the Edit Habit modal's footer; mirror "Move back to Active" in the drawer.
