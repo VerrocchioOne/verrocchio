@@ -637,6 +637,9 @@ The same four activities done in a different order produce measurably different 
 - **Priority:** Medium — clarity bug. Users currently can't tell what they're looking at.
 
 ### 5.8 Multi-time-per-day habits — independent check-ins summing to a daily target
+
+> **🔴 Live bug confirmed 2026-05-13** — multi-occurrence habits do not function properly in production. User reports the per-slot check-in / day-rollup behavior described below is broken. Need a reproduction pass before scoping the fix: which specific failure mode (slots not marking, rollup not crediting, streak math wrong, UI confusion)? See `superpowers:systematic-debugging`. The forward-looking design below remains the target for the fix.
+
 - **Concept:** Some habits naturally split into multiple sessions per day. Example: **"Study CFA curriculum" — 3 hours/day across 3 sessions**. Each session should be its own check-in (so the user gets the satisfaction of marking each, and can do them at different times), but the day's goal isn't "complete" until the sum across sessions meets the daily target.
 - **Behavior required:**
   - User can configure a habit with `slotsPerDay: N` (e.g., 3) and either a per-slot quantity (e.g., 1 hour each) or a per-day cumulative target (e.g., 3 hours total).
