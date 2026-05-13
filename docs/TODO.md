@@ -695,6 +695,77 @@ A "future-goals drawer" already exists per commit `c4f62a9` on the desktop habit
 ### 6.7 Priority
 - **Medium.** High-value organizational feature but not v1-critical. The "future-goals drawer" piece is already shipped per c4f62a9; the extension to habits and the migration-flow polish are the remaining work.
 
+### 6.8 Pass 1 audit (2026-05-13) — what's shipped vs the spec
+
+**What's actually in the code today:**
+
+The existing "Future Goals drawer" at [index.html:19198–19241](../index.html#L19198) is a collapsible row at the bottom of the Goals tab. Its membership is **derived implicitly**, not stored:
+
+```js
+const futureGoals = (data.goals || [])
+  .filter(g => !(data.habits || []).some(h => habitLinkedToGoal(h, g.id)));
+```
+
+A goal lands in the drawer if and only if no habit currently links to it. There is **no `status` field on goals**, and there is **no Future Habits drawer at all** — Habits has no equivalent surface.
+
+**Audit findings against §6.3 / §6.4:**
+
+| Spec | Shipped today | Gap |
+|---|---|---|
+| Two staging buckets (Future Goals, Future Habits) | Future Goals only — Future Habits does not exist | Build the Habits side. |
+| `status: 'active' \| 'future' \| 'archived'` field on records | Not present. Bucket membership for goals is derived from habit linkage. Goals can be archived via a separate `archivedGoals` counter ([index.html:3882](../index.html#L3882)) but archive isn't a status enum. | Two paths — see Pass 2 below. |
+| Future items don't appear in today view / calendar / streak math / neglected-habit warnings / AI features | **Partially.** Drawer goals don't show on the active grid, but they ARE read everywhere else — AI features, completion stats, goal-linked journal queries all see them. | Either add a `status` filter at every read site, or accept the implicit-derivation rule (already correctly excludes from `findCorrelations`/`detectOffSchedule` because those run over habits, and a future goal has no habits). |
+| Full editability while parked | ✓ Drawer rows tap into the same Edit Goal modal. | None. |
+| One-tap migrate active ↔ future | ✗ No explicit toggle. User must add/remove a linking habit to flip a goal's bucket. | Add explicit "Activate" / "Move to Future" buttons. |
+| "Move to Future" preserves history but halts tracking | N/A — no current path to demote an active item. | Build alongside the migration toggle. |
+| Discoverable count badge on the page header | ✗ Drawer label shows the count when expanded ([index.html:19222](../index.html#L19222)), but no top-of-page badge. | Add the badge. |
+| Bulk operations | ✗ Not implemented. | Build. |
+| Optional N-week review reminders | ✗ Not implemented. | Build. |
+
+### 6.9 Pass 2 — two implementation paths
+
+The big decision is the data model. The Pass 1 audit surfaced two viable approaches:
+
+#### Path A — explicit `status` field (matches the §6.4 spec)
+
+Add `status: 'active' | 'future' | 'archived'` to both goal and habit records. Audit every read site:
+
+- Goals: `data.goals.filter(g => g.status === 'active')` on the active grid, AI features, journal-by-goal queries, achievement math.
+- Habits: same — today view, streak math, completion gates, neglected-habit warnings, calendar render, AI features, reports.
+
+**Migration shim:** in the data-load path ([index.html:3245-ish](../index.html#L3245)), default missing `status` to `'active'` so legacy records work. Add an explicit data migration on next save to bake the default in.
+
+**Pros:** Matches the spec exactly. Generalizes cleanly to `archived`. Habits-side trivially supported.
+**Cons:** Multi-region change across `index.html`. Audit risk — a missed read site means a future item bleeds into active math, which would be a real bug (e.g., a future habit getting a streak counter). Per CLAUDE.md this is "substantial work — invoke from the brainstorming/writing-plans loop."
+
+#### Path B — extend the implicit-derivation rule (smaller change)
+
+Define "future" per kind without a new field:
+- **Future Goal:** existing rule. Goal with no linked habit.
+- **Future Habit:** new rule. Habit with `frequency` unset OR a new boolean flag `parked: true` set by an explicit "Move to Future" action.
+
+Build a Future Habits drawer that mirrors the existing Future Goals drawer. Activate = clear `parked` (or set a default frequency). Move to Future = set `parked: true`.
+
+**Pros:** Smaller blast radius — only Habits-tab render code needs a new filter, and parked habits are easy to opt out of streak/calendar logic with one `parked === true` check.
+**Cons:** Doesn't generalize to `archived`. Two different rules for "future" (one derived from links, one from a flag) is inconsistent.
+
+#### Recommendation
+
+**Start with Path B** for the Future Habits drawer. Ship the smaller change first to validate the UX (does the user actually want a "parked habits" surface?). Migrate to Path A when archived is needed, or when the next status-introducing feature lands (e.g., "snoozed for a week" or "vacation mode"). Defer the explicit-`status` rewrite until there's a second motivating use case.
+
+If Path B ships first:
+- Add `parked: false` default in the data-load shim.
+- Add a "Move to Future" item to the Edit Habit modal's footer; mirror "Move back to Active" in the drawer.
+- Hide parked habits from: Habits-tab section render, calendar, streak math (`getStreak` shouldn't be called for them, but if it is, the result is harmless — no completions = streak 0), AI features (`findCorrelations` already filters `!avoid`; add `!parked`), neglected-habit warnings, Reports.
+
+That's a roughly 8–12 callsite change in `index.html` — well under the multi-region threshold that warrants planning ceremony.
+
+### 6.10 Pre-Pass-2 open questions
+
+- Does the user want the "Future" concept to be visible on **mobile** too, or is the desktop drawer enough? The existing drawer is shipped on the desktop layout per c4f62a9 — verify whether it appears on the mobile Goals view.
+- Should a Future *habit* count toward the free-tier 5-habit cap from [§1.5](#15-free-tier-limits-proposed-numerical-caps)? Recommendation: **no** — parked items are inert, so they shouldn't consume the gate. This matters because users will park 5–10 brainstormed habits while picking what to commit to. Penalize parking and they won't use the feature.
+- How does this interact with [§6.6](#66-interaction-with-other-roadmap-items)? The cross-refs there assume Path A's `status` field. If we ship Path B first, the cross-refs need a one-line update.
+
 ---
 
 ## 7. Reflect Tab — Journaling Redesign
@@ -761,8 +832,79 @@ A "future-goals drawer" already exists per commit `c4f62a9` on the desktop habit
 - **Process note:** Add a checklist item to any feature-add / feature-remove PR that touches the progress tracker.
 
 ### 11.4 Reorganize the Habit Reports section
+
 - **Problem:** Current layout makes long-term success/rates hard to browse.
 - **Action:** Design a better scroll / browse pattern for viewing habits and their long-term success rates over time.
+
+#### Pass 1 — audit (2026-05-13)
+
+**Current layout** ([index.html:22716–22779](../index.html#L22716)):
+
+1. Sticky section title "Habit Reports".
+2. Three aggregate stat cards: Best Streak · Avg Rate · Done Today (computed across all non-avoid habits).
+3. Range filter: Week / Month / Year — applies globally to every heatmap below.
+4. Single linear list, one card per habit, sorted by current streak descending ([index.html:22697](../index.html#L22697)). Each card carries:
+   - Habit name + AVOID pill if applicable
+   - 🔥 streak / 📈 rate / importance label
+   - `YearHeatmap` strip (horizontally scrollable)
+
+**What's actually hard to browse:**
+
+| Friction | Why it bites |
+|---|---|
+| One sort, one view | No way to see only struggling habits, only Non-Negotiables, or only morning habits. Everything is in one giant scroll. |
+| Sort by streak desc buries the habits that need attention | A new struggling habit sits at the bottom; oldest reliable habits sit at the top. Inverted from "what should I worry about?" |
+| Aggregate stats are too aggregated | "Avg Rate 67%" doesn't tell you whether your Non-Negotiables are at 95% and your Additives at 20%, or vice versa. |
+| Heatmap takes 80% of each card's height | On mobile, two habit cards fill the viewport; comparing rates across the list requires constant scrolling. |
+| No "is anything broken?" surface | A user opening this tab on a Sunday afternoon to do a weekly review wants the answer in 5 seconds, not 60. |
+| No grouping by section or importance | Can't ask "is my morning routine working?" without scrolling all habits. |
+
+#### Pass 2 — proposed reorg (three sub-views)
+
+Add a sub-tab strip at the top of the panel: **Overview · Per-habit · By section**. Range filter (W/M/Y) stays global to all three.
+
+##### Overview (NEW — the missing capability)
+
+Goal: 5-second answer to "is anything broken?" — no heatmaps, scannable.
+
+- **Top stat row** (preserved): Best Streak · Avg Rate · Done Today.
+- **Attention needed** — habits with rate < 50% over the active range, sorted by importance (Non-Negotiable first). Compact row: name · rate · streak · 1-week sparkline (most-recent 7 cells from `getLast14`).
+- **Strongest performers** — top 5 by current streak.
+- **Falling behind** — habits whose last-7-day rate dropped vs prior-7-day rate by > 20 percentage points. Catches regressions that "current streak" hides.
+
+##### Per-habit (existing list, lightly improved)
+
+- **Filter pills above the list:** All · By section · By importance · At risk (rate < 50%). Multi-select; reuse the pill pattern from the Habits tab filter row.
+- **Sort dropdown:** Streak desc (default) · Rate desc · Recent (most recently completed) · Alphabetical · Importance.
+- **Heatmap collapse:** default to most-recent 90 days. "Show full year" toggle per card. Reduces vertical footprint ~3× on mobile.
+- Card content otherwise unchanged.
+
+##### By section (NEW)
+
+- One collapsible row per section (Morning · Afternoon · Evening · Daily Completion · Avoid + any custom sections).
+- Section header row shows aggregate: section name · total habits · avg rate · done today · best streak in section.
+- Tap to expand → renders the existing per-habit cards scoped to that section.
+- Answers "is my morning routine working?" without scrolling.
+
+#### Implementation cost (rough)
+
+| Sub-view | Effort | Reuses |
+|---|---|---|
+| Overview | M | `getCR`, `getStreak`, `getLast14` from `utils.js`; new tiny sparkline component (could be a degenerate YearHeatmap with `cellSize=6` and `range="week"`). |
+| Per-habit | S | Filter pill pattern from Habits tab; sort dropdown is plain `<select>`. Heatmap-collapse state per habit can live in component state. |
+| By section | S–M | Pure grouping. Reuses the existing per-habit card. Expansion state per section. |
+
+#### Suggested ship order
+
+1. **Overview first** — biggest single improvement (no equivalent surface today), smallest perceived risk (purely additive — current list moves into its own tab unchanged).
+2. **Per-habit filter/sort second** — power-user feature; only adds value once Overview has covered the "default" case.
+3. **By section last** — useful, but the user can already see this on the Habits tab itself in a less data-dense form.
+
+#### Open questions for Pass 2 commit
+
+- Does the sub-tab strip live inside the existing `reportsPanel`, or is each sub-view its own top-level Profile panel? Current Profile nav has `account · scorecard · inspiration · content · history · reports · settings`. Splitting reports into three panels makes the Profile nav longer; inline tabs keep it tight. Recommend inline.
+- Sparkline cell scale: monochrome (filled = done) or color-gradient (matches YearHeatmap)? Recommend monochrome — Overview is meant to be scanned, not studied.
+- "Falling behind" threshold tuning: 20pp drop is a starting guess. Validate against real user data once telemetry exists.
 
 ### 11.5 Full audit of every setting
 
