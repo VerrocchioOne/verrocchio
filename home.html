@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2d5a2d">
-<title>Verrocchio &mdash; Achieve anything. Daily practice, long-horizon goals.</title>
+<title>Verrocchio — Achieve anything. Daily practice, long-horizon goals.</title>
 <meta name="description" content="A habits, goals, and reflection app named after the Renaissance master who trained Leonardo da Vinci. Daily practice. Long-horizon goals.">
 <link rel="canonical" href="https://verrocchio.app/">
 
@@ -15,18 +15,18 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Verrocchio">
 <meta property="og:url" content="https://verrocchio.app/">
-<meta property="og:title" content="Verrocchio &mdash; Achieve anything.">
+<meta property="og:title" content="Verrocchio — Achieve anything.">
 <meta property="og:description" content="A habits, goals, and reflection app named after the Renaissance master who trained Leonardo da Vinci.">
 <!-- TODO: replace with a proper 1200x630 social card; using app icon as stopgap so previews don't 404. -->
 <meta property="og:image" content="https://verrocchio.app/apple-touch-icon-1024.png">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Verrocchio &mdash; Achieve anything.">
+<meta name="twitter:title" content="Verrocchio — Achieve anything.">
 <meta name="twitter:description" content="A habits, goals, and reflection app named after the Renaissance master who trained Leonardo da Vinci.">
 <meta name="twitter:image" content="https://verrocchio.app/apple-touch-icon-1024.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&amp;family=Playfair+Display:ital,wght@0,600;0,700;0,900;1,600;1,700;1,900&amp;display=swap" rel="stylesheet">
 
 <script type="application/ld+json">
 {
@@ -142,8 +142,7 @@ body {
 @media (min-width: 980px) {
   .hero { padding: 88px 0 96px; min-height: calc(100vh - 62px); display: flex; align-items: center; }
 }
-.hero-inner { display: grid; grid-template-columns: 1fr; gap: 56px; align-items: center; width: 100%; }
-@media (min-width: 980px) { .hero-inner { grid-template-columns: 1.05fr 0.95fr; gap: 80px; } }
+.hero-inner { display: grid; grid-template-columns: 1fr; gap: 56px; align-items: start; width: 100%; text-align: left; }
 
 .eyebrow {
   font-family: var(--font-system); font-size: 12px; font-weight: 600;
@@ -157,65 +156,48 @@ body {
 }
 .hero-subtitle {
   font-family: var(--font-display); font-weight: 700; font-style: italic;
-  font-size: clamp(22px, 3vw, 32px); line-height: 1.2;
+  font-size: clamp(18px, 2.4vw, 28px); line-height: 1.2;
   letter-spacing: -.005em; color: var(--accent);
-  margin: 20px 0 0; max-width: 22ch;
+  margin: 20px 0 0; max-width: none; white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .hero-subtitle { white-space: normal; max-width: 28ch; font-size: clamp(16px, 4.5vw, 20px); }
 }
 .hero-sub {
   font-family: var(--font-body); font-size: clamp(17px, 1.7vw, 19px); line-height: 1.55;
-  color: var(--ink-soft); margin: 22px 0 0; max-width: 48ch;
+  color: var(--ink-soft); margin: 22px 0 0; max-width: 56ch;
 }
 .hero-cta { margin-top: 32px; display: inline-flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 
-/* Hero visual: phone */
+/* Hero visual: Vitruvian cycle */
 .hero-visual { display: flex; justify-content: center; align-items: center; order: 2; }
 @media (min-width: 980px) { .hero-visual { order: initial; } }
 
-.phone {
+.vitruvian {
   position: relative;
-  width: 320px; height: 660px;
-  background: var(--bg);
-  border: 12px solid #111;
-  border-radius: 48px;
-  box-shadow: 0 30px 80px -30px rgba(17, 24, 39, 0.35), 0 12px 24px -8px rgba(17, 24, 39, 0.18);
-  overflow: hidden;
+  width: 100%; max-width: 520px;
+  aspect-ratio: 1 / 1;
+  display: block;
+}
+.vitruvian svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.vitruvian .ring-text {
   font-family: var(--font-system);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  fill: var(--accent);
+  paint-order: stroke fill;
+  stroke: var(--bg);
+  stroke-width: 7px;
+  stroke-linejoin: round;
 }
-@media (max-width: 480px) { .phone { width: 280px; height: 580px; border-width: 10px; border-radius: 42px; } }
-.phone::before {
-  content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  width: 96px; height: 26px; background: #0a0c10; border-radius: 14px; z-index: 5;
-}
-.phone-screen { width: 100%; height: 100%; padding: 52px 18px 16px; display: flex; flex-direction: column; gap: 10px; }
-.ps-head { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 4px; }
-.ps-head .date { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--ink); }
-.ps-head .date .day { color: var(--accent); font-style: italic; font-weight: 600; }
-.ps-head .meta { font-size: 11px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
-.ps-tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 10px; border: 1px solid var(--line); margin-bottom: 4px; }
-.ps-tabs span { flex: 1; text-align: center; font-size: 10px; font-weight: 600; padding: 6px; color: var(--ink-faint); letter-spacing: .04em; }
-.ps-tabs span.active { background: var(--surface); color: var(--accent); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-.habit-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 12px; background: var(--surface);
-  border: 1px solid var(--line); border-radius: 10px;
-}
-.habit-row .check {
-  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex-shrink: 0;
-  display: grid; place-items: center;
-}
-.habit-row.done .check { background: var(--accent); border-color: var(--accent); }
-.habit-row.done .check::after { content: ''; width: 6px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
-.habit-row.missed .check { background: transparent; border-color: var(--flame-red); border-style: dashed; }
-.habit-row .body { flex: 1; min-width: 0; }
-.habit-row .ttl { font-size: 13px; font-weight: 600; color: var(--ink); font-family: var(--font-display); line-height: 1.2; }
-.habit-row.done .ttl { color: var(--ink-faint); }
-.habit-row .sub { font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; }
-.habit-row .streak {
-  font-size: 10px; font-weight: 700; color: var(--flame-amber);
-  font-variant-numeric: tabular-nums; padding: 3px 7px; border-radius: 999px;
-  background: rgba(245, 158, 11, .1); display: inline-flex; align-items: center; gap: 3px;
-}
-.habit-row .streak svg { width: 9px; height: 9px; }
+.vitruvian .figure-line { fill: none; stroke: var(--ink); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.vitruvian .figure-fill { fill: var(--ink); }
+.vitruvian .frame-line { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+.vitruvian .arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.vitruvian .arr-fill { fill: var(--accent); }
+@media (max-width: 480px) { .vitruvian { max-width: 320px; } }
 
 /* ───────── Tabbed content panel ───────── */
 .tabs-section {
@@ -356,10 +338,13 @@ body {
 .diff-body { font-size: 15.5px; line-height: 1.6; color: var(--ink-soft); margin: 0; max-width: 36ch; }
 
 /* ───────── Closing CTA ───────── */
-.cta { padding: 88px 0 96px; text-align: center; background: var(--bg); }
-.cta-title { font-family: var(--font-display); font-weight: 900; font-size: clamp(40px, 7vw, 72px); line-height: 1; letter-spacing: -.02em; color: var(--ink); margin: 0; }
-.cta-title em { font-style: italic; color: var(--accent); font-weight: 700; }
+.cta { padding: 88px 0 96px; background: var(--bg); }
+.cta-inner { display: grid; grid-template-columns: 1fr; gap: 56px; align-items: center; text-align: center; }
+@media (min-width: 980px) { .cta-inner { grid-template-columns: 1fr 1fr; gap: 80px; text-align: left; } }
+.cta-title { font-family: var(--font-display); font-weight: 900; font-size: clamp(34px, 5vw, 60px); line-height: 1; letter-spacing: -.02em; color: var(--ink); margin: 0; white-space: nowrap; }
+.cta-title em { font-style: italic; color: var(--accent); font-weight: 700; white-space: nowrap; }
 .cta-sub { font-family: var(--font-display); font-weight: 600; font-style: italic; font-size: clamp(17px, 2vw, 20px); color: var(--ink-soft); margin: 22px auto 0; max-width: 480px; line-height: 1.45; }
+@media (min-width: 980px) { .cta-sub { margin: 22px 0 0; } }
 .cta-actions { margin-top: 36px; display: inline-flex; gap: 14px; flex-wrap: wrap; justify-content: center; align-items: center; }
 
 /* ───────── Footer ───────── */
@@ -379,14 +364,14 @@ body {
   <div class="container topbar-inner">
     <a class="brand" href="/home" aria-label="Verrocchio home">
       <svg class="brand-mark" viewBox="0 0 84 84" aria-hidden="true"><g fill="currentColor">
-        <rect x="33" y="0" width="18" height="18" rx="2"/>
-        <rect x="22" y="22" width="18" height="18" rx="2"/><rect x="44" y="22" width="18" height="18" rx="2"/>
-        <rect x="11" y="44" width="18" height="18" rx="2"/><rect x="33" y="44" width="18" height="18" rx="2"/><rect x="55" y="44" width="18" height="18" rx="2"/>
-        <rect x="0" y="66" width="18" height="18" rx="2"/><rect x="22" y="66" width="18" height="18" rx="2"/><rect x="44" y="66" width="18" height="18" rx="2"/><rect x="66" y="66" width="18" height="18" rx="2"/>
+        <rect x="33" y="0" width="18" height="18" rx="2"></rect>
+        <rect x="22" y="22" width="18" height="18" rx="2"></rect><rect x="44" y="22" width="18" height="18" rx="2"></rect>
+        <rect x="11" y="44" width="18" height="18" rx="2"></rect><rect x="33" y="44" width="18" height="18" rx="2"></rect><rect x="55" y="44" width="18" height="18" rx="2"></rect>
+        <rect x="0" y="66" width="18" height="18" rx="2"></rect><rect x="22" y="66" width="18" height="18" rx="2"></rect><rect x="44" y="66" width="18" height="18" rx="2"></rect><rect x="66" y="66" width="18" height="18" rx="2"></rect>
       </g></svg>
       <span class="brand-word">Verrocchio</span>
     </a>
-    <a class="btn btn-primary" href="/account">Open the app</a>
+    <a class="btn btn-primary" href="/account">Enter the Workshop</a>
   </div>
 </header>
 
@@ -396,73 +381,19 @@ body {
 <section class="hero" aria-labelledby="hero-title">
   <div class="container hero-inner">
     <div>
-      <div class="eyebrow">A habits, goals &amp; reflection app</div>
+      <div class="eyebrow">A Self-Improvement Workshop</div>
       <h1 class="hero-title" id="hero-title">Achieve anything.</h1>
-      <p class="hero-subtitle">Daily practice. Long-horizon goals.</p>
-      <p class="hero-sub">Named after Andrea del Verrocchio &mdash; the Renaissance master whose workshop trained Leonardo da Vinci. A serious tool for people who already believe daily practice matters.</p>
+      <p class="hero-subtitle">Craft your goals. Stack small habits. Build success.</p>
+      <p class="hero-sub">Verrocchio is a science-backed system which will assist you in achieving your goals through improved habit consistency, daily personal reflection and friendly accountability.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary btn-lg" href="/signup">Get started</a>
+        <a class="btn btn-primary btn-lg" href="/signup">Enter the Workshop</a>
         <span class="appstore-badge" aria-label="Coming soon to the App Store">
-          <svg viewBox="0 0 384 512" aria-hidden="true" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zM260.6 110c30.3-36 27.6-67.6 26.7-79-26.9 1.6-58 18.4-75.7 39-19.5 21.9-31 49-28.5 76.4 27.7 2.2 54.5-12.8 77.5-36.4z"/></svg>
+          <svg viewBox="0 0 384 512" aria-hidden="true" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zM260.6 110c30.3-36 27.6-67.6 26.7-79-26.9 1.6-58 18.4-75.7 39-19.5 21.9-31 49-28.5 76.4 27.7 2.2 54.5-12.8 77.5-36.4z"></path></svg>
           <span class="row">
             <span class="lbl">Coming soon</span>
             <span class="val">App Store</span>
           </span>
         </span>
-      </div>
-    </div>
-    <div class="hero-visual">
-      <div class="phone" role="img" aria-label="Verrocchio's Today screen on iPhone">
-        <div class="phone-screen">
-          <div class="ps-head">
-            <div class="date"><span class="day">Today</span> &middot; Tue 12 May</div>
-            <div class="meta">3 of 5</div>
-          </div>
-          <div class="ps-tabs"><span class="active">Habits</span><span>Goals</span><span>Reflect</span></div>
-
-          <div class="habit-row done">
-            <div class="check"></div>
-            <div class="body">
-              <div class="ttl">Morning pages &mdash; 750 words</div>
-              <div class="sub">Daily &middot; linked to <em>Finish first draft of novel</em></div>
-            </div>
-            <span class="streak"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c1.2 3 3 4 3 6 0 1.5-1.2 2.5-3 2.5S5 7.5 5 6c0-2 2-3 3-6z"/><path d="M8 16c-3 0-5-1.8-5-4.5C3 8.5 5 7 6.5 7c0 2 1 3 1.5 3s1.5-1 1.5-3C11 7 13 8.5 13 11.5c0 2.7-2 4.5-5 4.5z"/></svg>112d</span>
-          </div>
-
-          <div class="habit-row done">
-            <div class="check"></div>
-            <div class="body">
-              <div class="ttl">Read &mdash; 30 min</div>
-              <div class="sub">Daily &middot; <em>The Goldfinch</em> p. 142</div>
-            </div>
-            <span class="streak"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c1.2 3 3 4 3 6 0 1.5-1.2 2.5-3 2.5S5 7.5 5 6c0-2 2-3 3-6z"/><path d="M8 16c-3 0-5-1.8-5-4.5C3 8.5 5 7 6.5 7c0 2 1 3 1.5 3s1.5-1 1.5-3C11 7 13 8.5 13 11.5c0 2.7-2 4.5-5 4.5z"/></svg>47d</span>
-          </div>
-
-          <div class="habit-row done">
-            <div class="check"></div>
-            <div class="body">
-              <div class="ttl">Strength training</div>
-              <div class="sub">Mon/Wed/Fri &middot; squats, press, deadlift</div>
-            </div>
-            <span class="streak"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c1.2 3 3 4 3 6 0 1.5-1.2 2.5-3 2.5S5 7.5 5 6c0-2 2-3 3-6z"/><path d="M8 16c-3 0-5-1.8-5-4.5C3 8.5 5 7 6.5 7c0 2 1 3 1.5 3s1.5-1 1.5-3C11 7 13 8.5 13 11.5c0 2.7-2 4.5-5 4.5z"/></svg>23d</span>
-          </div>
-
-          <div class="habit-row">
-            <div class="check"></div>
-            <div class="body">
-              <div class="ttl">Italian &mdash; 15 min</div>
-              <div class="sub">Daily &middot; Anki + Duolingo</div>
-            </div>
-          </div>
-
-          <div class="habit-row">
-            <div class="check"></div>
-            <div class="body">
-              <div class="ttl">Meditation &mdash; 12 min</div>
-              <div class="sub">Daily &middot; evening</div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -473,84 +404,38 @@ body {
   <div class="container">
     <div class="tabs-head">
       <div class="eyebrow">What's inside</div>
-      <h2 class="tabs-title" id="tabs-title">The craft, in five parts.</h2>
-      <p class="tabs-lead">Three things the app does. Why it does them this way. What it refuses to do.</p>
+      <h2 class="tabs-title" id="tabs-title">Explore your workshop</h2>
+      <p class="tabs-lead">Verrocchio provides the tools for your self-improvement journey.</p>
     </div>
 
     <div class="tablist" role="tablist" aria-label="Verrocchio sections">
-      <button class="tab" role="tab" id="tab-habits"      aria-controls="panel-habits"      aria-selected="true"  data-target="habits"><span class="num-prefix">I.</span>Habits</button>
-      <button class="tab" role="tab" id="tab-goals"       aria-controls="panel-goals"       aria-selected="false" data-target="goals"><span class="num-prefix">II.</span>Goals</button>
-      <button class="tab" role="tab" id="tab-reflection"  aria-controls="panel-reflection"  aria-selected="false" data-target="reflection"><span class="num-prefix">III.</span>Reflection</button>
-      <button class="tab" role="tab" id="tab-philosophy"  aria-controls="panel-philosophy"  aria-selected="false" data-target="philosophy"><span class="num-prefix">IV.</span>Philosophy</button>
-      <button class="tab" role="tab" id="tab-different"   aria-controls="panel-different"   aria-selected="false" data-target="different"><span class="num-prefix">V.</span>What's different</button>
+      <button class="tab" role="tab" id="tab-philosophy" aria-controls="panel-philosophy" aria-selected="true" data-target="philosophy"><span class="num-prefix">I.</span>Philosophy</button>
+      <button class="tab" role="tab" id="tab-goals" aria-controls="panel-goals" aria-selected="false" data-target="goals"><span class="num-prefix">II.</span>Goals</button>
+      <button class="tab" role="tab" id="tab-habits" aria-controls="panel-habits" aria-selected="false" data-target="habits"><span class="num-prefix">III.</span>Habits</button>
+      <button class="tab" role="tab" id="tab-reflection" aria-controls="panel-reflection" aria-selected="false" data-target="reflection"><span class="num-prefix">IV.</span>Reflection</button>
+      <button class="tab" role="tab" id="tab-different" aria-controls="panel-different" aria-selected="false" data-target="different"><span class="num-prefix">V.</span>What's different</button>
     </div>
 
-    <!-- ── Panel: Habits ── -->
-    <div class="panel" id="panel-habits" role="tabpanel" aria-labelledby="tab-habits" data-active="true">
-      <div class="panel-grid">
-        <div>
-          <div class="eyebrow">I &middot; The daily practice</div>
-          <h3 class="panel-headline">Daily practice, honestly tracked.</h3>
-          <p class="panel-body">Mark a habit <strong>complete</strong>, <strong>missed</strong>, or <strong>skipped</strong>. Missed is a first-class state &mdash; not just "not done." Streak math is honest; tools that lie to you about your own behavior aren't worth using.</p>
-          <p class="panel-body">Cadence: daily, weekly, or monthly. Each habit links upward to the goal it serves, so the answer to <em>"why am I doing this?"</em> is always one tap away.</p>
-        </div>
-        <div class="panel-mock">
-          <div class="mock">
-            <div class="mock-head">
-              <div class="ttl"><em>Today</em> &middot; Tue 12 May</div>
-              <div class="meta">3 of 5</div>
-            </div>
-            <div class="mock-habit done">
-              <div class="state"></div>
-              <div class="body">
-                <div class="ttl">Morning pages &mdash; 750 words</div>
-                <div class="sub">Daily &middot; 112-day streak</div>
-              </div>
-              <span class="state-label">Done</span>
-            </div>
-            <div class="mock-habit done">
-              <div class="state"></div>
-              <div class="body">
-                <div class="ttl">Read &mdash; 30 min</div>
-                <div class="sub">Daily &middot; 47-day streak</div>
-              </div>
-              <span class="state-label">Done</span>
-            </div>
-            <div class="mock-habit missed">
-              <div class="state"></div>
-              <div class="body">
-                <div class="ttl">Italian &mdash; 15 min</div>
-                <div class="sub">Daily &middot; streak broken (was 31d)</div>
-              </div>
-              <span class="state-label">Missed</span>
-            </div>
-            <div class="mock-habit skipped">
-              <div class="state"></div>
-              <div class="body">
-                <div class="ttl">Strength training</div>
-                <div class="sub">Mon/Wed/Fri &middot; travel day</div>
-              </div>
-              <span class="state-label">Skipped</span>
-            </div>
-            <div class="mock-habit">
-              <div class="state"></div>
-              <div class="body">
-                <div class="ttl">Meditation &mdash; 12 min</div>
-                <div class="sub">Daily &middot; evening</div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <!-- ── Panel: Philosophy ── -->
+    <div class="panel" id="panel-philosophy" role="tabpanel" aria-labelledby="tab-philosophy" data-active="true">
+      <div class="philo">
+        <div class="philo-eyebrow">I · Named for a master</div>
+        <h3 class="philo-title">Verrocchio's workshop trained Leonardo da Vinci.</h3>
+        <p>Andrea del Verrocchio ran the most prestigious workshop in 15th-century Florence. His apprentices included Leonardo da Vinci, Sandro Botticelli, and Domenico Ghirlandaio. They didn't become masters because they were talented — they became masters because they showed up to the workshop every day, sharpened their craft in small increments, and held themselves accountable to a long-horizon vision of what they were becoming.</p>
+        <hr class="philo-rule">
+        <p>Most habit trackers reward you for streaks. <em>This one rewards you for the practice</em> — and tells you the truth when you skip.</p>
+        <hr class="philo-rule">
+        <p>The app does three things: it <strong>tracks what you set out to do daily</strong>, it <strong>links those daily acts to the goals they ladder up to</strong>, and it <strong>gives you a place to reflect</strong> on what's working and what isn't.</p>
       </div>
     </div>
 
     <!-- ── Panel: Goals ── -->
-    <div class="panel" id="panel-goals" role="tabpanel" aria-labelledby="tab-goals" data-active="false" hidden>
+    <div class="panel" id="panel-goals" role="tabpanel" aria-labelledby="tab-goals" data-active="false" hidden="">
       <div class="panel-grid reverse">
         <div class="panel-mock">
           <div class="mock">
             <div class="mock-goal-head">
-              <div class="mock-goal-ttl">Finish the first draft of my novel &mdash; 80,000 words.</div>
+              <div class="mock-goal-ttl">Finish the first draft of my novel — 80,000 words.</div>
               <span class="mock-goal-pill">SMART</span>
             </div>
             <dl class="smart-grid">
@@ -567,27 +452,86 @@ body {
             <div class="linked-habits">
               <div class="label">Linked habits</div>
               <ul>
-                <li>Morning pages &mdash; 750 words<span class="streak-mini">112d</span></li>
-                <li>Read &mdash; 30 min<span class="streak-mini">47d</span></li>
+                <li>Morning pages — 750 words<span class="streak-mini">112d</span></li>
+                <li>Read — 30 min<span class="streak-mini">47d</span></li>
                 <li>Weekly editing session<span class="streak-mini">8w</span></li>
               </ul>
             </div>
           </div>
         </div>
         <div>
-          <div class="eyebrow">II &middot; The long horizon</div>
+          <div class="eyebrow">II · The long horizon</div>
           <h3 class="panel-headline">The line from today to where you're going.</h3>
-          <p class="panel-body">Every habit links to a goal. Every goal uses the <strong>SMART framework</strong> &mdash; Specific, Measurable, Achievable, Relevant, Time-bound.</p>
+          <p class="panel-body">Every habit links to a goal. Every goal uses the <strong>SMART framework</strong> — Specific, Measurable, Achievable, Relevant, Time-bound.</p>
           <p class="panel-body">You can always answer <em>"why am I doing this?"</em> because the answer is one tap away. Goals come first; habits exist to serve them.</p>
         </div>
       </div>
     </div>
 
-    <!-- ── Panel: Reflection ── -->
-    <div class="panel" id="panel-reflection" role="tabpanel" aria-labelledby="tab-reflection" data-active="false" hidden>
+    <!-- ── Panel: Habits ── -->
+    <div class="panel" id="panel-habits" role="tabpanel" aria-labelledby="tab-habits" data-active="false" hidden="">
       <div class="panel-grid">
         <div>
-          <div class="eyebrow">III &middot; The atelier journal</div>
+          <div class="eyebrow">III · The daily practice</div>
+          <h3 class="panel-headline">Daily practice, honestly tracked.</h3>
+          <p class="panel-body">Goals are the result of the underlying habits. Each day, you mark a habit <strong>complete</strong> or <strong>missed</strong>, review yesterday's progress, refine today's priorities, and compound success over time.</p>
+          <p class="panel-body">Every habit links upward to the goal it serves, so the answer to <em>"why am I doing this?"</em> is always one tap away.</p>
+        </div>
+        <div class="panel-mock">
+          <div class="mock">
+            <div class="mock-head">
+              <div class="ttl"><em>Today</em> · Tue 12 May</div>
+              <div class="meta">3 of 5</div>
+            </div>
+            <div class="mock-habit done">
+              <div class="state"></div>
+              <div class="body">
+                <div class="ttl">Morning pages — 750 words</div>
+                <div class="sub">Daily · 112-day streak</div>
+              </div>
+              <span class="state-label">Done</span>
+            </div>
+            <div class="mock-habit done">
+              <div class="state"></div>
+              <div class="body">
+                <div class="ttl">Read — 30 min</div>
+                <div class="sub">Daily · 47-day streak</div>
+              </div>
+              <span class="state-label">Done</span>
+            </div>
+            <div class="mock-habit missed">
+              <div class="state"></div>
+              <div class="body">
+                <div class="ttl">Italian — 15 min</div>
+                <div class="sub">Daily · streak broken (was 31d)</div>
+              </div>
+              <span class="state-label">Missed</span>
+            </div>
+            <div class="mock-habit skipped">
+              <div class="state"></div>
+              <div class="body">
+                <div class="ttl">Strength training</div>
+                <div class="sub">Mon/Wed/Fri · travel day</div>
+              </div>
+              <span class="state-label">Skipped</span>
+            </div>
+            <div class="mock-habit">
+              <div class="state"></div>
+              <div class="body">
+                <div class="ttl">Meditation — 12 min</div>
+                <div class="sub">Daily · evening</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Panel: Reflection ── -->
+    <div class="panel" id="panel-reflection" role="tabpanel" aria-labelledby="tab-reflection" data-active="false" hidden="">
+      <div class="panel-grid">
+        <div>
+          <div class="eyebrow">IV · The atelier journal</div>
           <h3 class="panel-headline">A place to think about what's working.</h3>
           <p class="panel-body">Three modes: <strong>daily reflection</strong>, <strong>goal-specific entries</strong>, and <strong>freeform thinking</strong>. The Reflect tab surfaces what you wrote a week ago, a month ago.</p>
           <p class="panel-body">Patterns become visible only when you can see your own arc. Verrocchio holds the arc for you so you can see it.</p>
@@ -600,10 +544,10 @@ body {
             </div>
             <div class="journal-entry">
               <div class="journal-meta"><span class="kind">Daily</span><time>Tue 12 May</time></div>
-              <p class="journal-text">Morning pages came easy &mdash; finally past the chapter that's been blocking me. Lifting felt heavier than it was on Friday; I think I'm undersleeping.</p>
+              <p class="journal-text">Morning pages came easy — finally past the chapter that's been blocking me. Lifting felt heavier than it was on Friday; I think I'm undersleeping.</p>
             </div>
             <div class="journal-entry">
-              <div class="journal-meta"><span class="kind">Goal</span><time>Sun 10 May</time><span>&middot; Novel draft</span></div>
+              <div class="journal-meta"><span class="kind">Goal</span><time>Sun 10 May</time><span>· Novel draft</span></div>
               <p class="journal-text">Hit 34,000 words. The middle is sagging. Need to introduce the antagonist twenty pages earlier than the outline says.</p>
             </div>
             <div class="journal-entry">
@@ -615,46 +559,33 @@ body {
       </div>
     </div>
 
-    <!-- ── Panel: Philosophy ── -->
-    <div class="panel" id="panel-philosophy" role="tabpanel" aria-labelledby="tab-philosophy" data-active="false" hidden>
-      <div class="philo">
-        <div class="philo-eyebrow">IV &middot; Named for a master</div>
-        <h3 class="philo-title">Verrocchio's workshop trained Leonardo.</h3>
-        <p>Andrea del Verrocchio ran the most prestigious workshop in 15th-century Florence. His apprentices included Leonardo da Vinci, Sandro Botticelli, and Domenico Ghirlandaio. They didn't become masters because they were talented &mdash; they became masters because they showed up to the workshop every day, sharpened their craft in small increments, and held themselves accountable to a long-horizon vision of what they were becoming.</p>
-        <hr class="philo-rule">
-        <p>Most habit trackers reward you for streaks. <em>This one rewards you for the practice</em> &mdash; and tells you the truth when you skip.</p>
-        <hr class="philo-rule">
-        <p>The app does three things: it <strong>tracks what you set out to do daily</strong>, it <strong>links those daily acts to the goals they ladder up to</strong>, and it <strong>gives you a place to reflect</strong> on what's working and what isn't. That's it. No leaderboards. No gamification. No infinite list of tracked metrics.</p>
-      </div>
-    </div>
-
     <!-- ── Panel: What's different ── -->
-    <div class="panel" id="panel-different" role="tabpanel" aria-labelledby="tab-different" data-active="false" hidden>
+    <div class="panel" id="panel-different" role="tabpanel" aria-labelledby="tab-different" data-active="false" hidden="">
       <div>
-        <div class="eyebrow">V &middot; Where we draw the line</div>
-        <h3 class="panel-headline">Four things we won't do.</h3>
-        <p class="panel-body" style="max-width: 60ch;">A serious tool earns its place by what it refuses as much as by what it ships.</p>
+        <div class="eyebrow">V · Built for practice</div>
+        <h3 class="panel-headline">Four ways the workshop differs.</h3>
+        <p class="panel-body" style="max-width: 60ch;">Most habit apps optimize for engagement. Verrocchio optimizes for practice — the slow, honest kind that compounds.</p>
       </div>
       <div class="diff-grid" style="margin-top: 32px;">
         <div class="diff">
           <div class="diff-num">i.</div>
-          <h4 class="diff-ttl">No gamification.</h4>
-          <p class="diff-body">No badges. No XP. No confetti when you complete a habit. The reward is the practice itself &mdash; everything else is noise.</p>
+          <h4 class="diff-ttl">Goals come first. Habits earn their place.</h4>
+          <p class="diff-body">Anchored in SMART. Habits ladder up to a parent goal — and an incomplete SMART goal raises a warning on every habit that links to it. <em>Why am I doing this?</em> is always one tap away.</p>
         </div>
         <div class="diff">
           <div class="diff-num">ii.</div>
-          <h4 class="diff-ttl">Honest streaks.</h4>
-          <p class="diff-body">Missed a day? The streak breaks. That's the point &mdash; discipline is the discipline of facing reality.</p>
+          <h4 class="diff-ttl">Three honest states, not two.</h4>
+          <p class="diff-body"><em>Complete</em>, <em>missed</em>, <em>skipped</em> — three first-class states, not two with a euphemism. Streaks break when you actually broke them. The math respects DST, cadence, and start date. No fake long streaks.</p>
         </div>
         <div class="diff">
           <div class="diff-num">iii.</div>
-          <h4 class="diff-ttl">Goals before habits.</h4>
-          <p class="diff-body">You define the long-horizon outcome first. Habits exist to serve goals, not the other way around.</p>
+          <h4 class="diff-ttl">The app notices patterns you don't.</h4>
+          <p class="diff-body">A correlation engine finds the habits that predict each other. An off-schedule detector spots drift — your <em>"morning run"</em> logged after noon six times in fourteen days. The kind of observation a careful coach would make.</p>
         </div>
         <div class="diff">
           <div class="diff-num">iv.</div>
-          <h4 class="diff-ttl">Renaissance sensibility, modern execution.</h4>
-          <p class="diff-body">Cross-device sync, offline-first PWA, native iOS app, AI coaching where it actually helps &mdash; classical in posture, contemporary in build.</p>
+          <h4 class="diff-ttl">AI tuned for apprenticeship, not affirmation.</h4>
+          <p class="diff-body"><em>Morning Debrief</em> sets the day's intent. <em>Evening Debrief</em> surfaces what worked. A crowding detector flags when easy habits push aside non-negotiables. Tone is yours: <em>Warm</em>, <em>Neutral</em>, or <em>Tough Love</em>.</p>
         </div>
       </div>
     </div>
@@ -664,18 +595,48 @@ body {
 
 <!-- ╭───────── CLOSING CTA ─────────╮ -->
 <section class="cta" aria-labelledby="cta-title">
-  <div class="container">
-    <h2 class="cta-title" id="cta-title">Begin <em>the practice.</em></h2>
-    <p class="cta-sub">Open the workshop. Set a goal worth a year. Show up tomorrow.</p>
-    <div class="cta-actions">
-      <a class="btn btn-primary btn-lg" href="/signup">Get started</a>
-      <span class="appstore-badge" aria-label="Coming soon to the App Store">
-        <svg viewBox="0 0 384 512" aria-hidden="true" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zM260.6 110c30.3-36 27.6-67.6 26.7-79-26.9 1.6-58 18.4-75.7 39-19.5 21.9-31 49-28.5 76.4 27.7 2.2 54.5-12.8 77.5-36.4z"/></svg>
-        <span class="row">
-          <span class="lbl">Coming soon</span>
-          <span class="val">App Store</span>
+  <div class="container cta-inner">
+    <div class="cta-text">
+      <h2 class="cta-title" id="cta-title">Begin <em>the practice.</em></h2>
+      <p class="cta-sub">Open the workshop. Set a goal worth achieving. Build the habit.</p>
+      <div class="cta-actions">
+        <a class="btn btn-primary btn-lg" href="/signup">Enter the Workshop</a>
+        <span class="appstore-badge" aria-label="Coming soon to the App Store">
+          <svg viewBox="0 0 384 512" aria-hidden="true" fill="currentColor"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zM260.6 110c30.3-36 27.6-67.6 26.7-79-26.9 1.6-58 18.4-75.7 39-19.5 21.9-31 49-28.5 76.4 27.7 2.2 54.5-12.8 77.5-36.4z"></path></svg>
+          <span class="row">
+            <span class="lbl">Coming soon</span>
+            <span class="val">App Store</span>
+          </span>
         </span>
-      </span>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <div class="vitruvian" role="img" aria-labelledby="vit-title vit-desc">
+        <svg viewBox="0 0 550 550" xmlns="http://www.w3.org/2000/svg" aria-hidden="false">
+          <title id="vit-title">Vitruvian Man</title>
+          <desc id="vit-desc">Leonardo's Vitruvian figure — the Renaissance ideal of proportion and practice.</desc>
+          <defs>
+            <clipPath id="vit-clip">
+              <circle cx="275" cy="275" r="295"></circle>
+            </clipPath>
+            <marker id="vit-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="arr-fill"></path>
+            </marker>
+          </defs>
+
+          <!-- Vitruvian figure (Leonardo da Vinci, c.1490 — public domain). Drop the PNG at /vitruvian.png to render the central figure; the SVG arcs + labels work without it. -->
+          <image href="/vitruvian.png" x="-55" y="-55" width="660" height="660" preserveAspectRatio="xMidYMid meet" clip-path="url(#vit-clip)"></image>
+
+          <!-- Three-arrow cycle on top of the figure: Goals → Habits → Reflection. Radius 220, centered 275,250 (shifted down 25px). -->
+          <path class="arc" d="M 275 30 A 220 220 0 0 1 465.5 360" marker-end="url(#vit-arrow)"></path>
+          <path class="arc" d="M 465.5 360 A 220 220 0 0 1 84.5 360" marker-end="url(#vit-arrow)"></path>
+          <path class="arc" d="M 84.5 360 A 220 220 0 0 1 275 30" marker-end="url(#vit-arrow)"></path>
+
+          <text class="ring-text" x="275" y="21" text-anchor="middle">Goals</text>
+          <text class="ring-text" x="465.5" y="385" text-anchor="middle">Habits</text>
+          <text class="ring-text" x="84.5" y="385" text-anchor="middle">Reflection</text>
+        </svg>
+      </div>
     </div>
   </div>
 </section>
@@ -686,13 +647,13 @@ body {
   <div class="container footer-inner">
     <div class="footer-brand">
       <svg width="20" height="20" viewBox="0 0 84 84" aria-hidden="true"><g fill="currentColor">
-        <rect x="33" y="0" width="18" height="18" rx="2"/>
-        <rect x="22" y="22" width="18" height="18" rx="2"/><rect x="44" y="22" width="18" height="18" rx="2"/>
-        <rect x="11" y="44" width="18" height="18" rx="2"/><rect x="33" y="44" width="18" height="18" rx="2"/><rect x="55" y="44" width="18" height="18" rx="2"/>
-        <rect x="0" y="66" width="18" height="18" rx="2"/><rect x="22" y="66" width="18" height="18" rx="2"/><rect x="44" y="66" width="18" height="18" rx="2"/><rect x="66" y="66" width="18" height="18" rx="2"/>
+        <rect x="33" y="0" width="18" height="18" rx="2"></rect>
+        <rect x="22" y="22" width="18" height="18" rx="2"></rect><rect x="44" y="22" width="18" height="18" rx="2"></rect>
+        <rect x="11" y="44" width="18" height="18" rx="2"></rect><rect x="33" y="44" width="18" height="18" rx="2"></rect><rect x="55" y="44" width="18" height="18" rx="2"></rect>
+        <rect x="0" y="66" width="18" height="18" rx="2"></rect><rect x="22" y="66" width="18" height="18" rx="2"></rect><rect x="44" y="66" width="18" height="18" rx="2"></rect><rect x="66" y="66" width="18" height="18" rx="2"></rect>
       </g></svg>
       <strong>Verrocchio</strong>
-      <span class="footer-copy">&copy; <span id="footer-year">2026</span>. All rights reserved.</span>
+      <span class="footer-copy">© <span id="footer-year">2026</span>. All rights reserved.</span>
     </div>
     <nav aria-label="Legal and support">
       <a href="/privacy">Privacy</a>
@@ -745,5 +706,6 @@ body {
 })();
 </script>
 
-</body>
-</html>
+
+
+</body></html>
