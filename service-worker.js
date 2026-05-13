@@ -16,10 +16,15 @@
 // Bump CACHE_NAME whenever the precache list meaningfully changes so
 // old caches get purged on next activation.
 
-const CACHE_NAME = "verrocchio-shell-v35";
+const CACHE_NAME = "verrocchio-shell-v36";
 
+// Apex "/" deliberately omitted — it 302-redirects to /home (Firebase
+// Hosting). Precaching "/" stored stale SPA-shell content from before
+// the marketing routing existed, which trapped returning users on the
+// app instead of the landing page. The fetch handler below explicitly
+// bypasses navigation requests for "/" so the browser sees the
+// server's 302 directly with no SW interception.
 const APP_SHELL = [
-  "./",
   "./index.html",
   "./utils.js",
   "./manifest.json",
@@ -80,6 +85,13 @@ self.addEventListener("fetch", event => {
   //     These are precached and rarely change; serving them from cache
   //     keeps cold-start fast.
   if (url.origin === self.location.origin) {
+    // Apex bypass: never intercept "/". Firebase Hosting 302-redirects
+    // "/" → "/home" and we want the browser to see that redirect
+    // directly. Old SW versions cached "/" → SPA-shell content, which
+    // trapped returning users on the app even after the marketing
+    // routing shipped; leaving "/" alone fixes that for any client
+    // that activates this SW.
+    if (url.pathname === "/") return;
     const isNav = req.mode === "navigate"
       || (req.headers.get("accept") || "").includes("text/html");
     event.respondWith(isNav ? networkFirst(req) : cacheFirst(req));

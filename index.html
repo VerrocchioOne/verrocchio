@@ -4233,7 +4233,11 @@ function App() {
       await db.terminate();
       await db.clearPersistence();
     } catch (e) { /* non-fatal */ }
-    finally { window.location.reload(); }
+    // Route to /login (not reload). location.reload() lands on "/"
+    // because the path-aware-entry useEffect rewrites the URL to "/"
+    // on mount — and "/" 302-redirects to /home (the landing page).
+    // Signed-out users want the auth portal, not the marketing page.
+    finally { window.location.replace("/login"); }
   };
   // ── Account management ──
   // Each sensitive action (email change, password change, delete)
