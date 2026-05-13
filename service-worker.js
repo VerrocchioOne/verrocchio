@@ -16,7 +16,7 @@
 // Bump CACHE_NAME whenever the precache list meaningfully changes so
 // old caches get purged on next activation.
 
-const CACHE_NAME = "verrocchio-shell-v36";
+const CACHE_NAME = "verrocchio-shell-v37";
 
 // Apex "/" deliberately omitted — it 302-redirects to /home (Firebase
 // Hosting). Precaching "/" stored stale SPA-shell content from before
@@ -28,7 +28,6 @@ const APP_SHELL = [
   "./index.html",
   "./utils.js",
   "./manifest.json",
-  "./splash-animation.html",
   "./apple-touch-icon-1024.png"
 ];
 

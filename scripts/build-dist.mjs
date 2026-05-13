@@ -10,7 +10,6 @@ const FILES = [
   'utils.js',
   'manifest.json',
   'service-worker.js',
-  'splash-animation.html',
   'apple-touch-icon-1024.png',
   'apple-touch-icon-180.png',
   'apple-touch-icon-167.png',
