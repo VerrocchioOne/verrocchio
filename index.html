@@ -15129,12 +15129,20 @@ function App() {
         const togHabitForRow = renderSlot
           ? (id, fd, mode, atTime) => togHabit(id, fd, mode, atTime, renderSlot)
           : togHabit;
+        // Multi-slot habits appear as one row per slot (e.g. morning +
+        // evening) under the same habit.id. Keying swipeAnim/swipeRef
+        // by id alone caused every row of a multi-slot habit to flash
+        // green together when the user swiped on one — looking like
+        // "all slots marked done" even though togHabitForRow only
+        // updated the tapped slot. Scope the key by slot too so each
+        // row owns its own swipe animation + gesture tracking.
+        const animKey = renderSlot ? habit.id + ":" + renderSlot : habit.id;
         const d = isDone(habit, selDate, renderSlot);
         const missed = isMissed(habit, selDate);
         const resistedCount = resistanceCountFor[habit.id] || 0;
         const isPersistentlyResisted = resistedCount >= 2;
         const isE = eHId === habit.id;
-        const animState = swipeAnim[habit.id];
+        const animState = swipeAnim[animKey];
         const ht = HT.find(t => t.value === habit.type);
         const imp = IMP.find(i => i.value === habit.importance);
         const streak = getStreak(habit);
@@ -15191,7 +15199,7 @@ function App() {
           },
           onTouchStart: e => {
             const t = e.touches[0];
-            swipeRef.current[habit.id] = {
+            swipeRef.current[animKey] = {
               x: t.clientX,
               y: t.clientY,
               t: Date.now()
@@ -15199,12 +15207,12 @@ function App() {
           },
           onTouchMove: e => { return; },
           onTouchEnd: e => {
-            const s = swipeRef.current[habit.id];
+            const s = swipeRef.current[animKey];
             if (!s) return;
             const dx = e.changedTouches[0].clientX - s.x;
             const dy = e.changedTouches[0].clientY - s.y;
             const dt = Date.now() - (s.t || Date.now());
-            delete swipeRef.current[habit.id];
+            delete swipeRef.current[animKey];
             if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
             if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 45) {
               if (dx > 0) {
@@ -15221,7 +15229,7 @@ function App() {
                 // a single uniform "swipe right = complete" gesture.
                 setSwipeAnim(p => ({
                   ...p,
-                  [habit.id]: "done"
+                  [animKey]: "done"
                 }));
                 if (navigator.vibrate) navigator.vibrate(40);
                 const msgs = ["Great work! Keep it up!", "Crushing it! ", "One more done! ", "Consistency is key! ", "You showed up today! "];
@@ -15240,7 +15248,7 @@ function App() {
                     const n = {
                       ...p
                     };
-                    delete n[habit.id];
+                    delete n[animKey];
                     return n;
                   });
                 }, 320);
@@ -15255,7 +15263,7 @@ function App() {
                 // also wipes back to 0 on the second swipe.
                 const wasMissed = isMissed(habit, selDate);
                 const animTag = wasMissed ? "reset" : "missed";
-                setSwipeAnim(p => ({ ...p, [habit.id]: animTag }));
+                setSwipeAnim(p => ({ ...p, [animKey]: animTag }));
                 if (navigator.vibrate) navigator.vibrate(wasMissed ? 20 : 30);
                 setSwipeFeedback({
                   msg: wasMissed ? "Cleared for today" : "Marked missed",
@@ -15274,7 +15282,7 @@ function App() {
                   }
                   setSwipeAnim(p => {
                     const n = { ...p };
-                    delete n[habit.id];
+                    delete n[animKey];
                     return n;
                   });
                 }, 320);
@@ -16319,7 +16327,12 @@ function App() {
         // cards still read cleanly.
         const isCompact = cohort.length > 1;
         const resistSig = (resistanceCountFor[h.id] || 0);
-        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[h.id] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig;
+        // Per-slot key for swipeAnim — see the matching animKey in
+        // renderCard. Sig must include the slot so a swipe on one
+        // multi-slot row only re-renders THAT row, not every row of
+        // the same habit.
+        const sigAnimKey = h._renderSlot ? h.id + ":" + h._renderSlot : h.id;
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig;
         const out = [
           /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard, compact: isCompact })
         ];

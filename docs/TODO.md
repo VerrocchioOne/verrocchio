@@ -638,7 +638,14 @@ The same four activities done in a different order produce measurably different 
 
 ### 5.8 Multi-time-per-day habits — independent check-ins summing to a daily target
 
-> **🔴 Live bug confirmed 2026-05-13** — multi-occurrence habits do not function properly in production. User reports the per-slot check-in / day-rollup behavior described below is broken. Need a reproduction pass before scoping the fix: which specific failure mode (slots not marking, rollup not crediting, streak math wrong, UI confusion)? See `superpowers:systematic-debugging`. The forward-looking design below remains the target for the fix.
+> **🟡 Partial fix shipped 2026-05-13** — User-reported symptom: "all slots mark at once" when tapping one slot. Root cause: `swipeAnim` and `swipeRef` in `renderCard` were keyed by `habit.id` alone. For multi-slot habits that render as multiple rows under the same `habit.id`, swipe state bled across rows — one swipe lit up every row's green flash. Data layer (`togHabit` + `slotCompletions`) was actually correct; only the visual was lying.
+>
+> Fix: derive `animKey = renderSlot ? habit.id + ":" + renderSlot : habit.id` and key swipeAnim/swipeRef + the HabitCardShell sig by it. Each row now owns its own swipe animation. Shipped, deployed, tests stay 25/25.
+>
+> **Still possibly broken** (not yet repro'd or fixed):
+> - Multi-slot habits with a numeric target (`target` + `targetOp`): the `togHabit` "increment" branch is unreachable for multi-slot habits because `isMultiSlot` short-circuits. Tapping the action circle with `mode === "increment"` falls into the multi-slot branch which only knows "done" / "missed" / "none" — so increment for a slot with a target effectively clears the slot.
+> - Partial-day rollup is not visually surfaced. Two of three slots done shows the habit as "not done" with no "2 of 3" indicator. This is intentional per the design but may explain other "doesn't function properly" reports.
+> - The forward-looking model in this section (per-slot quantity targets, optional time-bound slots, streak rules for partial days) is not yet implemented. The current model is binary per slot.
 
 - **Concept:** Some habits naturally split into multiple sessions per day. Example: **"Study CFA curriculum" — 3 hours/day across 3 sessions**. Each session should be its own check-in (so the user gets the satisfaction of marking each, and can do them at different times), but the day's goal isn't "complete" until the sum across sessions meets the daily target.
 - **Behavior required:**
