@@ -1022,54 +1022,6 @@ body.dark [style*="background: rgba(255, 255, 255, 0.5)"]{
 .ob-sparkle-core{animation:obSparkleCore 2s ease-in-out infinite}
 .ob-sparkle-ray{animation:obSparkleRay 2s ease-in-out infinite}
 .ob-sparkle-ray.r2{animation-delay:1s}
-
-/* ── Launch animation ─────────────────────────────────────────────
-   Plays after successful auth, before the app shell renders.
-   Ten green blocks form a 4-3-2-1 pyramid from the bottom up; each
-   block's drop is paired with a letter of "Verrocchio" fading in
-   below. Total ~3s, then the overlay fades out and the app reveals. */
-.launch-overlay{
-  position:fixed;inset:0;z-index:9999;
-  background:#f8f7f4;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:40px;
-  animation:launchOverlayFade 3s ease forwards;
-}
-@keyframes launchOverlayFade{
-  0%{opacity:0}
-  3%{opacity:1}
-  92%{opacity:1}
-  100%{opacity:0}
-}
-.launch-pyramid{position:relative;width:140px;height:140px}
-.launch-block{
-  position:absolute;
-  width:32px;height:32px;
-  background:#2d5a2d;border-radius:3px;
-  opacity:0;transform:translateY(-32px);
-  animation:launchBlockDrop .5s cubic-bezier(.34,1.35,.64,1) forwards;
-}
-@keyframes launchBlockDrop{
-  0%{opacity:0;transform:translateY(-32px)}
-  100%{opacity:1;transform:translateY(0)}
-}
-.launch-wordmark{
-  font-family:'Playfair Display','Iowan Old Style',Georgia,serif;
-  font-weight:700;font-size:36px;color:#2d5a2d;
-  letter-spacing:.005em;display:flex;
-}
-.launch-letter{
-  display:inline-block;
-  opacity:0;transform:translateY(6px);
-  animation:launchLetterFade .45s ease-out forwards;
-}
-@keyframes launchLetterFade{
-  0%{opacity:0;transform:translateY(6px)}
-  100%{opacity:1;transform:translateY(0)}
-}
-@media (prefers-reduced-motion:reduce){
-  .launch-overlay,.launch-block,.launch-letter{animation:none;opacity:1;transform:none}
-}
 </style>
 </head>
 <body>
@@ -3675,10 +3627,6 @@ function App() {
   const [showAuthPass, setShowAuthPass] = useState(false);
   const [authErr, setAuthErr] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
-  // launching: true for ~3s after a successful auth submit. While true,
-  // the LaunchAnimation overlay covers the screen and runs the 10-block
-  // pyramid + Verrocchio wordmark reveal before the app shell renders.
-  const [launching, setLaunching] = useState(false);
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   const [splashPhase, setSplashPhase] = useState("loading"); // "loading" | "quote"
   // Bumped to remount the splash subtree with a fresh CSS animation
@@ -3759,11 +3707,6 @@ function App() {
       } else {
         await auth.signInWithEmailAndPassword(authEmail.trim(), authPass);
       }
-      // Trigger the 10-block launch overlay. Set synchronously after
-      // auth resolves so we cover the brief window between Firebase's
-      // currentUser settling and the SPA's app shell mounting.
-      setLaunching(true);
-      setTimeout(() => setLaunching(false), 3000);
       setAuthPass("");
     } catch (e) {
       setAuthErr(publicAuthErr(e));
@@ -4249,9 +4192,6 @@ function App() {
       setAuthBusy(false);
       return;
     }
-    // Track whether either branch (sign-in or fallback create) succeeded
-    // so the launch overlay fires exactly once at the end.
-    let signedIn = false;
     try {
       await auth.signInWithEmailAndPassword(email, DEMO_PASSWORD);
       // Re-seed with fresh randomized data on every tap — the personas
@@ -4259,7 +4199,6 @@ function App() {
       // seeing a variety of content. Users who want durable state should
       // create a real account.
       await seedDemoPersona(email);
-      signedIn = true;
     } catch (e) {
       const msg = String(e && e.message || "");
       const code = String(e && e.code || "");
@@ -4281,14 +4220,9 @@ function App() {
       try {
         await auth.createUserWithEmailAndPassword(email, DEMO_PASSWORD);
         await seedDemoPersona(email);
-        signedIn = true;
       } catch (e2) {
         setAuthErr(String(e2 && e2.message || "").replace("Firebase: ", "") || "Could not create demo account.");
       }
-    }
-    if (signedIn) {
-      setLaunching(true);
-      setTimeout(() => setLaunching(false), 3000);
     }
     setAuthBusy(false);
   };
@@ -10162,44 +10096,6 @@ function App() {
       textAlign: "center"
     }
   }, children));
-
-  // Launch animation overlay — set by doAuth / signInAsDemoUser
-  // immediately after auth succeeds. Renders above every other branch
-  // (auth, app, even the auth-resolve spinner) for ~3s so the user
-  // sees a single uninterrupted entry sequence: form submit →
-  // pyramid + Verrocchio build → app shell. Each block's drop is
-  // paired with the matching letter of "Verrocchio" fading in.
-  if (launching) {
-    const LAUNCH_BLOCKS = [
-      { x: 0,   y: 108, ch: "V" }, // bottom row, left to right
-      { x: 36,  y: 108, ch: "e" },
-      { x: 72,  y: 108, ch: "r" },
-      { x: 108, y: 108, ch: "r" },
-      { x: 18,  y: 72,  ch: "o" }, // row 3 (3 blocks)
-      { x: 54,  y: 72,  ch: "c" },
-      { x: 90,  y: 72,  ch: "c" },
-      { x: 36,  y: 36,  ch: "h" }, // row 2 (2 blocks)
-      { x: 72,  y: 36,  ch: "i" },
-      { x: 54,  y: 0,   ch: "o" }  // apex
-    ];
-    const LAUNCH_STAGGER = 0.22; // seconds between consecutive blocks
-    return React.createElement("div", { className: "launch-overlay", role: "status", "aria-live": "polite", "aria-label": "Verrocchio" },
-      React.createElement("div", { className: "launch-pyramid" },
-        LAUNCH_BLOCKS.map((b, i) => React.createElement("div", {
-          key: "lb" + i,
-          className: "launch-block",
-          style: { left: b.x + "px", top: b.y + "px", animationDelay: (i * LAUNCH_STAGGER) + "s" }
-        }))
-      ),
-      React.createElement("div", { className: "launch-wordmark", "aria-hidden": "true" },
-        LAUNCH_BLOCKS.map((b, i) => React.createElement("span", {
-          key: "ll" + i,
-          className: "launch-letter",
-          style: { animationDelay: (i * LAUNCH_STAGGER) + "s" }
-        }, b.ch))
-      )
-    );
-  }
 
   // Loading spinner while auth state is resolving
   if (authUser === undefined) {
