@@ -521,6 +521,23 @@
   }
 
   buildTagline();
+
+  // Launch flow: when entered with `?next=/some/path`, hide the Replay
+  // button and auto-redirect once the animation finishes. The CTAs on
+  // /home use this to play a loading animation before dropping the
+  // user into the SPA. Same-origin paths only — reject anything that
+  // doesn't start with a single `/` to prevent open-redirect abuse.
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var next = params.get('next');
+    var safe = next && next.length > 1 && next.charAt(0) === '/' && next.charAt(1) !== '/' && !next.startsWith('/\\');
+    if (!safe) return;
+    var replayBtn = document.querySelector('.replay');
+    if (replayBtn) replayBtn.style.display = 'none';
+    // Total animation runtime: TAGLINE_START (10.2s) + 15 chars * 0.045s + ~0.6s char fade-in ≈ 11.5s.
+    // Hold a beat at full reveal, then redirect.
+    setTimeout(function () { window.location.replace(next); }, 12500);
+  })();
 </script>
 </body>
 </html>

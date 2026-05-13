@@ -24,7 +24,7 @@ const FILES = [
   'apple-touch-icon-29.png',
   'apple-touch-icon-192.png',
   'apple-touch-icon-512.png',
-  'vitruvian.png'
+  'vitruvian.webp'
 ];
 
 if (existsSync(DIST)) await rm(DIST, { recursive: true });
