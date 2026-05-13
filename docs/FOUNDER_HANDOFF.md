@@ -16,9 +16,11 @@ Everything else — code changes, builds, simulator testing, screenshots, regres
 
 ## Phase A — Apple Developer setup (one-time, ~1 hour active + 24-48h wait)
 
+> **🟡 In flight 2026-05-13** — D-U-N-S application form submitted to Dun & Bradstreet. Free DUNS issuance can take ~30 business days (expedited paid path is ~5 days); Apple Developer Program enrollment as an Organization can't complete until the DUNS Number lands. Steps A1–A4 are blocked. Phases B, C, C2, D are not Apple-dependent and can proceed in parallel.
+
 | Step | What | Where | Time |
 |---|---|---|---|
-| A1 | Enroll in Apple Developer Program ($99/yr; DUNS verification can take 24-48h on first enrollment) | developer.apple.com → Account → Membership | 30 min active + wait |
+| A1 | Enroll in Apple Developer Program ($99/yr; DUNS verification can take 24-48h on first enrollment **once you have a DUNS Number — see DUNS application status above**) | developer.apple.com → Account → Membership | 30 min active + wait |
 | A2 | Note your Team ID (10-character alphanumeric) | developer.apple.com → Membership → Team ID | 1 min |
 | A3 | Generate App Store Connect API key (.p8 file + Key ID + Issuer ID) | App Store Connect → Users and Access → Integrations → App Store Connect API | 5 min |
 | A4 | Save the `.p8` file to `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8` (macOS) | local machine | 1 min |
