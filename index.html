@@ -13936,9 +13936,14 @@ function App() {
     // sneaks up. Dismissed by tapping 'Mark Reviewed ✓'; resets
     // to visible the next time their review day rolls around.
     const weeklyReviewCard = (() => {
-      const wr = (data && data.weeklyReview) || { day: 0 };
-      const todayDow = new Date().getDay();
-      if (todayDow !== wr.day) return null;
+      const wr = (data && data.weeklyReview) || { day: 0, hour: 0 };
+      const now = new Date();
+      if (now.getDay() !== wr.day) return null;
+      // Gate on the picked hour too — picker at line 23310 lets the user
+      // choose day AND hour, but the card used to ignore the hour and
+      // appear all day. Nullish-coalesce protects legacy data missing
+      // `hour` (settings written before the hour field existed).
+      if (now.getHours() < (wr.hour ?? 0)) return null;
       if (rit.weeklyReviewDone) return null;
       return /*#__PURE__*/React.createElement("div", { key: "weekly-review", style: cardStyle },
         /*#__PURE__*/React.createElement("div", { style: titleStyle }, "Weekly Review"),
@@ -22975,9 +22980,22 @@ function App() {
           builtIn: IMP,
           custom: data.customImportance || [],
           onDelete: (lvl) => {
-            if (!window.confirm(`Delete importance level "${lvl.value}"? Habits using it will keep the label but it won't appear in the picker.`)) return;
-            const next = (data.customImportance || []).filter(t => t.value !== lvl.value);
-            save({ ...data, customImportance: next });
+            // Non-destructive cleanup: re-assign affected habits to
+            // "Important" (the middle built-in tier) so no habit ends
+            // up with an orphaned label the picker can't show. Mirrors
+            // the goal-category cleanup just above.
+            const affected = (data.habits || []).filter(h => h.importance === lvl.value);
+            const fallback = "Important";
+            const msg = affected.length === 0
+              ? `Delete importance level "${lvl.value}"?`
+              : `Delete "${lvl.value}"? ${affected.length} habit${affected.length === 1 ? "" : "s"} using it will be moved to "${fallback}".`;
+            if (!window.confirm(msg)) return;
+            const nextImp = (data.customImportance || []).filter(t => t.value !== lvl.value);
+            const nextHabits = affected.length === 0
+              ? data.habits
+              : (data.habits || []).map(h => h.importance === lvl.value ? { ...h, importance: fallback } : h);
+            save({ ...data, customImportance: nextImp, habits: nextHabits });
+            setImpFilter(prev => (Array.isArray(prev) ? prev.filter(v => v !== lvl.value) : []));
           },
           onAddClick: () => {
             const name = window.prompt("New importance level name (e.g. Critical, Optional):", "");
@@ -23002,9 +23020,22 @@ function App() {
           iconField: "icon",
           onDelete: (sec) => {
             const key = sec.label || sec.value;
-            if (!window.confirm(`Delete time-of-day group "${key}"? Habits in this group will need to be reassigned.`)) return;
-            const next = (data.customSections || []).filter(t => (t.label || t.value) !== key);
-            save({ ...data, customSections: next });
+            // The manageList rendering remaps `value: s.label || s.value`,
+            // so `sec.value` here is the label, not the kebab-case value
+            // habits actually store on h.section. Recover the original.
+            const original = (data.customSections || []).find(t => (t.label || t.value) === key);
+            const sectionValue = original ? original.value : key;
+            const affected = (data.habits || []).filter(h => h.section === sectionValue);
+            const fallback = "morning"; // earliest built-in section
+            const msg = affected.length === 0
+              ? `Delete time-of-day group "${key}"?`
+              : `Delete "${key}"? ${affected.length} habit${affected.length === 1 ? "" : "s"} in this group will be moved to "Morning".`;
+            if (!window.confirm(msg)) return;
+            const nextSec = (data.customSections || []).filter(t => (t.label || t.value) !== key);
+            const nextHabits = affected.length === 0
+              ? data.habits
+              : (data.habits || []).map(h => h.section === sectionValue ? { ...h, section: fallback } : h);
+            save({ ...data, customSections: nextSec, habits: nextHabits });
           },
           onAddClick: () => {
             const label = window.prompt("New time-of-day group name (e.g. Late Night, Commute):", "");

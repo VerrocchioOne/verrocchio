@@ -765,9 +765,70 @@ A "future-goals drawer" already exists per commit `c4f62a9` on the desktop habit
 - **Action:** Design a better scroll / browse pattern for viewing habits and their long-term success rates over time.
 
 ### 11.5 Full audit of every setting
-- Click through every toggle, dropdown, and option in App Settings.
-- Confirm each one **actually does what it says** and persists correctly.
-- Fix any that are broken or no-op.
+
+#### Pass 1 — audit (2026-05-13)
+
+Settings live in two surfaces:
+- **Local-device prefs** (localStorage only — by design they don't sync across devices)
+- **App data prefs** (in `data.*` — persisted via `save()` to both localStorage and Firestore)
+
+Audit complete. Status legend: ✓ works as described · ⚠️ documented-but-suboptimal · ✗ broken (picker is decorative or wiring is missing).
+
+##### Local-device prefs (localStorage)
+
+| Setting | Key | Status | Notes |
+|---|---|---|---|
+| Theme mode (Default / Custom) | `v-settings-mode` | ✓ | Persists via `useEffect` at [index.html:5926](../index.html#L5926). Local-only by design. |
+| Dark Mode | `v-dark-mode` | ✓ | Body class flip; orthogonal to theme mode. |
+| Accent Color | `v-accent-color` | ✓ | 12 swatches + freeform hex picker; CSS-var injection. |
+
+##### Content prefs (Firestore-synced via `save()`)
+
+| Setting | Field | Status | Notes |
+|---|---|---|---|
+| Goal Categories (custom) | `data.customGoalTypes` | ✓ | Delete clears `goal.type` on tagged goals ([index.html:22963](../index.html#L22963)). |
+| Habit Importance (custom) | `data.customImportance` | ⚠️ | Delete removes the option from the picker but leaves orphaned `habit.importance` strings on existing habits. **User is warned in the confirm dialog**, so this is documented behavior — but the orphaned habits then carry a label that no longer appears in the picker, with no path to re-pick. See Pass 2 candidate fix below. |
+| Time of Day groups (custom) | `data.customSections` | ⚠️ | Same shape as importance — delete confirms "Habits in this group will need to be reassigned" but doesn't actually reassign. Habits in a deleted section need manual rescue. |
+| Time-of-Day Hours (start/end per Morning, Afternoon, Evening) | `data.timeRanges` | ✓ | 24-hour coverage banner warns when gaps or overlaps appear ([index.html:23119](../index.html#L23119)). Evening can wrap past midnight. |
+
+##### Location / Notifications
+
+| Setting | Field | Status | Notes |
+|---|---|---|---|
+| Home location (typed) | `data.homeLocation` | ✓ | 60-char cap. |
+| Home location (GPS) | `data.homeCoords` | ✓ | One-shot fix via `locationService.getCurrent()`. |
+| Detect when away | `data.locationOptIn` | ✓ | `useEffect` at [index.html:8818](../index.html#L8818) checks position on mount + on opt-in change. Toggle visually disabled until GPS captured. |
+| Notifications | `data.notifyOptIn` | ✓ | Fires only when `state === "away" && data.notifyOptIn && permission === "granted"` ([index.html:8841](../index.html#L8841)). Toggle disabled when browser permission is `denied`. |
+
+##### AI / automation
+
+| Setting | Field | Status | Notes |
+|---|---|---|---|
+| Briefing Tone (Warm / Neutral / Tough Love) | `data.aiTone` | ✓ | Cached briefing is cleared on change so the next Brief-tab visit regenerates in the new voice ([index.html:23266](../index.html#L23266)). |
+| Evening Debrief (opt-in) | `data.eveningDebriefEnabled` | ✓ | Card on Brief tab gated by `enabled && hour >= 18` ([index.html:14067](../index.html#L14067)). Shipped in commit `b8d5ed3`. |
+| Weekly Review — **day** | `data.weeklyReview.day` | ✓ | `weeklyReviewCard` shows when `todayDow === wr.day` ([index.html:13941](../index.html#L13941)). |
+| Weekly Review — **hour** | `data.weeklyReview.hour` | ✗ | **Picker is decorative.** The hour is saved ([index.html:23311](../index.html#L23311)) and used to pre-fill the picker on next open, but `weeklyReviewCard` never reads it — the card appears the moment the Brief tab is opened on the chosen day, regardless of the user's chosen hour. The hour-picker label and dropdown promise behavior that doesn't exist. |
+
+##### Other actions
+
+| Action | Status | Notes |
+|---|---|---|
+| Replay Welcome Tour | ✓ | Clears `v-tour-done` (localStorage), closes profile sheet, opens tour at step 1. Note: `v-tour-done` is localStorage-only — replaying on one device doesn't reset tour-seen state on another. Out of scope for Pass 2 unless flagged. |
+| Reset to Verrocchio Defaults | ✓ | Visible only in Custom mode. Resets `settingsMode` + `accentColor`. Intentionally leaves Dark Mode alone (orthogonal toggle, per comment at [index.html:22779](../index.html#L22779)). |
+
+#### Pass 2 — fixes shipped (2026-05-13)
+
+1. **✓ Weekly Review hour wired.** `weeklyReviewCard` now gates on `now.getHours() >= (wr.hour ?? 0)` in addition to the day check. The card appears on the chosen day starting at the chosen hour and persists until the user dismisses it (sets `weeklyReviewDone`) or the day rolls. Legacy data without an `hour` field falls through (treated as hour 0). See [index.html:13938](../index.html#L13938).
+2. **✓ Custom Habit Importance deletion — non-destructive cleanup.** Deleting a custom importance now finds habits with `habit.importance === <deleted value>` and re-assigns them to `"Important"` (the middle built-in tier). The confirm dialog reports the count: *"Delete 'Critical'? 3 habits using it will be moved to 'Important'."* `setImpFilter` is also cleared of the deleted value so the filter pill doesn't leave a stale entry. Mirrors the goal-category cleanup at [index.html:22963](../index.html#L22963).
+3. **✓ Custom Time-of-Day group deletion — same shape as #2.** Deleting a custom time-of-day group re-assigns affected habits to `"morning"` (the earliest built-in section). The deletion path recovers the original kebab-case `value` from `data.customSections` before filtering, since the manageList rendering layer overwrites `value` with `label` for display.
+4. **Deferred — cross-device tour replay.** Moving `v-tour-done` from localStorage to `data.tourSeen` (Firestore-synced) so "Replay Welcome Tour" on one device hides the tour on the user's others is still open. Defer unless multi-device users hit it.
+
+#### Pass 1 scope notes (what wasn't audited)
+
+- **My Account panel** (auth, sign-out, account deletion) — scoped to [§11.7](#117-in-app-account-deletion), not this audit.
+- **My Routines** (Routine Compare, moved out of App Settings per comment at [index.html:23373](../index.html#L23373)) — its own surface; audit when that section is touched.
+- **App Progress scorecard** — read-only, not a settings surface ([§11.3](#113-keep-app-progress-function-in-sync-with-feature-set) tracks it separately).
+- **Inspiration / Content / History panels** — content management, not configuration.
 
 ### 11.6 Surface version history here
 - Per [§10.3](#103-surface-history-inside-my-account--settings), goal and habit version histories should be accessible from this page.
