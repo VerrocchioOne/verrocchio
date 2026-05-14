@@ -5687,10 +5687,16 @@ function App() {
         if (authUser) setShowProfile(true);
       }
       // /login and /signin are no-ops (default auth screen already renders for null user).
-      // Strip the path back to "/" after handling so a back-button reload doesn't re-trigger.
-      if (p === "/signup" || p === "/login" || p === "/signin" || p === "/account") {
-        try { window.history.replaceState({}, "", "/"); } catch (_) {}
-      }
+      //
+      // Intentionally do NOT rewrite the URL to "/" here. The earlier
+      // implementation did `replaceState(..., "/")` for cleanliness,
+      // but that meant a subsequent page reload navigated to "/" and
+      // Firebase Hosting's apex 302 sent the user to /home (the
+      // marketing landing). Users reported "sometimes when I move
+      // around in the app it sends me back to the landing page" —
+      // that was the cause. The Firebase rewrite catch-all serves
+      // index.html for any non-apex path, so leaving the URL alone
+      // (or even on /signup) keeps reloads inside the SPA.
     } catch (_) {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);  // intentional empty deps — runs once on first mount
@@ -7275,6 +7281,30 @@ function App() {
     }
     return out.sort((a, b) => b.ts - a.ts);
   }, [data && data.habits, data && data.goals, data && data.goalArchive]);
+  // §perf — Goals tab "sort areas by recent progress" was an inline
+  // IIFE inside the Goals render that called getCR(h) for every habit
+  // in every area on EVERY Goals render. With 50 habits × ~10 areas
+  // that's 500 completion-rate computations per render. Memoize so it
+  // only recomputes when habits change (parked flag is read inside).
+  // Mirrors the sortAreasByProgress(HT) call at the Goals tab — same
+  // logic, lifted up. Goals-tab IIFE still has a local fallback for
+  // non-default sort modes (custom / date-sort); this memo only feeds
+  // the default "by progress" path.
+  const memoedAreaProgress = useMemo(() => {
+    const allH = (data && data.habits || []).filter(h => !h.parked);
+    const score = (areaValue) => {
+      const inArea = allH.filter(h => h && h.type === areaValue);
+      if (inArea.length === 0) return Infinity;
+      const total = inArea.reduce((s, h) => s + (getCR(h).pct || 0), 0);
+      return total / inArea.length;
+    };
+    return HT.slice().sort((a, b) => {
+      const sa = score(a.value);
+      const sb = score(b.value);
+      if (sa !== sb) return sa - sb;
+      return 0;
+    });
+  }, [data && data.habits]);
   const achievementStats = useMemo(() => {
     const habitsArr = (data && data.habits) || [];
     const goalsArr = (data && data.goals) || [];
@@ -8116,8 +8146,19 @@ function App() {
     const v = h.completions?.[k];
     return v === "done" || v === true;
   };
-  const isMissed = (h, fd) => {
+  const isMissed = (h, fd, slot) => {
     if (!h) return false;
+    // §5.8 — Multi-slot habits store per-slot status in
+    // slotCompletions[date][section]. When the caller asks "is this
+    // SLOT missed", route the lookup there instead of the day-level
+    // rollup (which is "none" when slots are mixed). Without this
+    // the swipe-clear handler reads the rollup, sees "none", and
+    // can't tell that the slot was actually marked missed.
+    const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
+    if (slot && slots && slots.length >= 2) {
+      const sc = (h.slotCompletions || {})[fd || tk()] || {};
+      return sc[slot] === "missed";
+    }
     // A parent counts as "missed" only when EVERY child was
     // explicitly missed — partial misses just leave the parent as
     // not-done-yet, same as a normal incomplete habit.
@@ -9441,7 +9482,12 @@ function App() {
      AI-generated daily briefing behind a minimum week of data. */
   const completionDayCount = () => {
     const set = new Set();
-    (data.habits || []).forEach(h => {
+    // §6 — parked habits' historical completions must not count
+    // toward the AI-briefing unlock gate or dataDays denominator.
+    // Counting them inflated dataDays vs the dH (active, non-parked)
+    // denominator used in area percentages, deflating every "% over
+    // N days" stat shown in the briefing.
+    (data.habits || []).filter(h => h && !h.parked).forEach(h => {
       const comps = h.completions || {};
       for (const day in comps) {
         if (comps[day] && comps[day] !== "missed") set.add(day);
@@ -9600,7 +9646,10 @@ function App() {
           messages: [{ role: "user", content: userPrompt }]
         })
       });
-      if (!r.ok) return null;
+      if (!r.ok) {
+        try { console.warn("[verrocchio:ai-debrief] HTTP", r.status, r.statusText); } catch (_) {}
+        return null;
+      }
       const j = await r.json();
       const text = j && j.content && j.content[0] && j.content[0].text;
       return text ? text.trim() : null;
@@ -9679,23 +9728,51 @@ function App() {
       const neglected = tc.filter(t => t.pct < 40).map(t => t.type);
       const topCorr = memoedCorrelations[0];
       const tone = data.aiTone || "neutral";
-      // Per-habit completion counts over the active window (capped at
-      // dataDays so the "top" habit is the most-consistent, not just
-      // the one with the most history).
+      // Per-habit completion counts over each habit's own active window.
+      // Earlier this divided by global `dataDays` for every habit, which
+      // punished new habits: a habit created 5 days ago with 5/5
+      // completions scored worse than an old habit with 20/30 — and the
+      // briefing then labeled the perfect new habit as "slipping".
+      // Use h.startDate (or the habit's createdAt fallback) capped at
+      // the global window so percentages reflect the period the habit
+      // actually existed.
       const habitScores = dH.map(h => {
         const cnt = l30.filter(d => h.completions?.[d]).length;
-        return { h, cnt, pct: Math.round(cnt / dataDays * 100) };
-      }).sort((a, b) => b.cnt - a.cnt);
+        // Per-habit window: how many days of l30 fall on or after the
+        // habit's startDate. Falls back to dataDays for habits without
+        // a startDate (which behave as if they've always existed).
+        const startKey = h.startDate || null;
+        const perHabitWindow = startKey
+          ? Math.max(1, l30.filter(d => d >= startKey).length)
+          : dataDays;
+        return { h, cnt, pct: Math.round(cnt / perHabitWindow * 100), perHabitWindow };
+      }).sort((a, b) => b.pct - a.pct);
       const topHabit = habitScores[0];
-      const offHabit = [...habitScores].sort((a, b) => a.cnt - b.cnt)[0];
-      // Trend: compare last-7-days completion rate to the prior window.
+      const offHabit = [...habitScores].sort((a, b) => a.pct - b.pct)[0];
+      // Trend: compare last-7-days completion RATE to the prior 7-days
+      // rate. Earlier this compared raw counts where the second window
+      // could be partial — making the trend mathematically biased
+      // upward for users with < 14 days of data (a "+40% this week"
+      // that was actually just the prior window being shorter).
       const sumWindow = (from, to) => {
         const w = l30.slice(from, to);
         return dH.reduce((s, h) => s + w.filter(d => h.completions?.[d]).length, 0);
       };
-      const thisWk = sumWindow(0, Math.min(7, dataDays));
-      const prevWk = sumWindow(7, Math.min(14, dataDays));
-      const trend = prevWk > 0 ? Math.round(((thisWk - prevWk) / prevWk) * 100) : null;
+      const thisLen = Math.min(7, dataDays);
+      const prevLen = Math.max(0, Math.min(14, dataDays) - 7);
+      const thisCnt = sumWindow(0, thisLen);
+      const prevCnt = sumWindow(7, 7 + prevLen);
+      // Normalize to "per-day completions per habit" before comparing.
+      const denomThis = thisLen * Math.max(1, dH.length);
+      const denomPrev = prevLen * Math.max(1, dH.length);
+      const thisRate = denomThis > 0 ? thisCnt / denomThis : 0;
+      const prevRate = denomPrev > 0 ? prevCnt / denomPrev : 0;
+      const trend = prevRate > 0 && prevLen >= 3
+        ? Math.round(((thisRate - prevRate) / prevRate) * 100)
+        : null;
+      // Keep thisWk/prevWk var names for downstream paragraph builders.
+      const thisWk = thisCnt;
+      const prevWk = prevCnt;
       // Current streak — consecutive days ending today with at least
       // one completion across any active habit.
       const streak = (() => {
@@ -10119,7 +10196,11 @@ function App() {
     border: "1px solid #e5e7eb",
     borderRadius: 8,
     padding: "10px",
-    fontSize: 12,
+    // §5.3 — was fontSize: 12 but the adjacent `IS` input is 13, so
+    // a <select> next to an <input> in the same row produced a
+    // visible 12-vs-13 jump on iOS (where the system also inflates
+    // <select> text independently). Match the input scale.
+    fontSize: 13,
     cursor: "pointer",
     color: "var(--c-text-soft)",
     boxShadow: "0 1px 2px rgba(0,0,0,.04)"
@@ -15319,7 +15400,9 @@ function App() {
         // row owns its own swipe animation + gesture tracking.
         const animKey = renderSlot ? habit.id + ":" + renderSlot : habit.id;
         const d = isDone(habit, selDate, renderSlot);
-        const missed = isMissed(habit, selDate);
+        // §5.8 — pass renderSlot so multi-slot rows show their own
+        // per-slot missed state, not the day-level rollup.
+        const missed = isMissed(habit, selDate, renderSlot);
         const resistedCount = resistanceCountFor[habit.id] || 0;
         const isPersistentlyResisted = resistedCount >= 2;
         const isE = eHId === habit.id;
@@ -15442,7 +15525,10 @@ function App() {
                 // didn't do it." Sub-unit habits go through the
                 // increment/"reset" sentinel so the day's count
                 // also wipes back to 0 on the second swipe.
-                const wasMissed = isMissed(habit, selDate);
+                // §5.8 — pass renderSlot so the second swipe on a
+                // multi-slot row correctly detects "this slot was
+                // already missed" and resets rather than re-marking.
+                const wasMissed = isMissed(habit, selDate, renderSlot);
                 const animTag = wasMissed ? "reset" : "missed";
                 setSwipeAnim(p => ({ ...p, [animKey]: animTag }));
                 if (navigator.vibrate) navigator.vibrate(wasMissed ? 20 : 30);
@@ -15968,7 +16054,31 @@ function App() {
                   }
                 }, word)
               ))
-            : (habit.text || "")
+            : (habit.text || ""),
+          // §5.7 / user request: (x/y) badge on each row of a
+          // multi-slot habit. Each slot's card now shows how many
+          // of today's slots are complete out of total. Green when
+          // fully done; soft-text otherwise. Hidden for single-slot
+          // habits.
+          (() => {
+            const slots = Array.isArray(habit.slotSections) ? habit.slotSections : null;
+            if (!slots || slots.length < 2) return null;
+            const todaySC = (habit.slotCompletions || {})[selDate] || {};
+            const doneCount = slots.filter(s => {
+              const v = todaySC[s];
+              return v === "done" || v === true;
+            }).length;
+            return /*#__PURE__*/React.createElement("span", {
+              "aria-label": doneCount + " of " + slots.length + " slots done today",
+              style: {
+                marginLeft: 6,
+                fontSize: 12, fontWeight: 700,
+                fontVariantNumeric: "tabular-nums",
+                color: doneCount === slots.length ? "var(--c-tint-brand-fg, #2d5a2d)" : "var(--c-text-soft)",
+                whiteSpace: "nowrap"
+              }
+            }, "(" + doneCount + "/" + slots.length + ")");
+          })()
         ),
         habit.notes && !compact && /*#__PURE__*/React.createElement("div", {
           style: {
@@ -18443,7 +18553,7 @@ function App() {
     };
     const groups = isDateSort
       ? [{ value: "__all__", color: "#9ca3af", border: "var(--c-border)", merged: true }]
-      : (goalSortMode === "custom" ? sortAreasCustom(HT) : sortAreasByProgress(HT));
+      : (goalSortMode === "custom" ? sortAreasCustom(HT) : memoedAreaProgress);
     return groups;
   })().map(ht => {
     const goalSortMode = (data.sortPrefs && data.sortPrefs.goals) || "default";
@@ -22964,7 +23074,13 @@ function App() {
         const ht = HT.find(t => t.value === ev.type);
         const isCompleted = ev.kind === "goal-completed";
         const isGoalEdit = ev.kind === "goal-edited";
-        const dotColor = isCompleted ? "#22c55e" : isGoalEdit ? "#2d5a2d" : "#6366f1";
+        // §dark-mode — bare hex codes for dot/label render harshly on
+        // the dark surface. Pipe through CSS vars so light + dark
+        // themes both get a readable accent. #2d5a2d is the verrocchio
+        // brand green; we keep it for goal-edit because it's a
+        // brand-stable mark, but route through --c-tint-brand-fg so
+        // dark mode lightens it to the legible green token.
+        const dotColor = isCompleted ? "var(--c-tint-success-fg)" : isGoalEdit ? "var(--c-tint-brand-fg)" : "var(--c-tint-purple-fg)";
         const kindLabel = isCompleted ? "Goal completed" : isGoalEdit ? "Goal edited" : "Habit edited";
         return /*#__PURE__*/React.createElement("div", {
           key: ev.id,
@@ -23171,7 +23287,7 @@ function App() {
         style: { textAlign: "center", color: "#d1d5db", fontSize: 13, padding: "40px 0" }
       }, "No habits yet") : /*#__PURE__*/React.createElement("div", null,
         /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", borderBottom: "1px solid var(--c-border)", marginBottom: 16 }
+          style: { display: "flex", borderBottom: "1px solid var(--c-border)", marginBottom: 16, position: "sticky", top: 0, zIndex: 2, background: "var(--c-surface, #fff)" }
         },
           subTabBtn("overview",  "Overview"),
           subTabBtn("per-habit", "Per-habit")
@@ -27153,8 +27269,13 @@ function App() {
   // (Starts row was here; moved into the modal header as a
   // compact pill so the form is one viewport shorter.)
   /*#__PURE__*/React.createElement("div", {
+    // §narrow-viewport — three buttons (Delete + Move to Future +
+    // Save Changes) overflow 320px-wide screens when forced to a
+    // single row. Allow wrap so the row spills onto a second line
+    // gracefully on the smallest iPhone widths.
     style: {
       display: "flex",
+      flexWrap: "wrap",
       gap: 10,
       marginTop: 4
     }
@@ -27182,9 +27303,18 @@ function App() {
       const isParked = !!(cur && cur.parked);
       return /*#__PURE__*/React.createElement("button", {
         onClick: () => {
-          const next = (data.habits || []).map(h => String(h.id) === String(editHabitModal.id) ? { ...h, parked: !isParked } : h);
-          save({ ...data, habits: next });
-          setEditHabitModal(null);
+          // §6 Future Habits — wrap in try so a rare local-write
+          // failure (quota exceeded, storage disabled, etc.) surfaces
+          // a syncError banner instead of silently swallowing the
+          // toggle. save() is fire-and-forget for Firestore, so
+          // anything that throws here is a localStorage failure.
+          try {
+            const next = (data.habits || []).map(h => String(h.id) === String(editHabitModal.id) ? { ...h, parked: !isParked } : h);
+            save({ ...data, habits: next });
+            setEditHabitModal(null);
+          } catch (err) {
+            try { setLastSyncError((err && (err.message || err.code)) || "park-toggle-failed"); } catch (_) {}
+          }
         },
         title: isParked ? "Move this habit back into the active list" : "Park this habit in Future Habits — it stops counting for streaks, rates, and AI features until you activate it again",
         style: {
