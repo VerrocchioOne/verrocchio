@@ -260,6 +260,9 @@ A subtle but important design choice: **does the 1-week trial require credit-car
 
 ## 2. Social & Community Layer — Anchor Pillar of the App
 
+> **📐 Implementation spec:** [docs/SOCIAL_LAYER_V1.md](SOCIAL_LAYER_V1.md) — minimum-shippable-slice with concrete Firestore schemas, security rules pseudocode, client API surface, UI flows, test plan, and rollout sequence. The strategy below remains authoritative; the spec doc is the implementer's blueprint.
+
+
 ### 2.0 Strategic framing — social is core, not bolted on
 **The social/community/accountability layer is an anchor pillar of the product, alongside the habit/goal tracking core itself.** It is not a future "phase 2" feature, not a paid add-on tacked onto a private tracker. The product's identity is *the habit tracker your friends help you keep* — alone-mode and with-friends-mode are equally first-class.
 
