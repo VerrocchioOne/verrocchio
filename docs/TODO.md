@@ -1170,6 +1170,26 @@ Audit complete. Status legend: ✓ works as described · ⚠️ documented-but-s
 ### 14.4 AI-personalized home page tips
 - Per [§4.2](#42-ai-generated-tips-based-on-user-data), tips and reminders should be personalized by analyzing several days of inputted user data.
 
+#### Shipped 2026-05-13
+
+The `smartTips` engine on the Brief tab already analyzes the user's data (off-schedule detection, habit-pair correlations, low-completion habits, incomplete SMART goals, missing details, unused-feature nudges). §14.4 adds an AI rewrite layer on top of that data signal.
+
+- **Trigger:** a useEffect runs on Brief tab visit when `AI_ENABLED && data.aiConsentAt && completionDayCount() >= 7`.
+- **Signal selection mirrors smartTips priority:** top off-schedule hit first, then top correlation by lift. If neither exists, the AI path is silent — pure templates render.
+- **Prompt:** assembled from the signal's exact specifics (habit names, percentages, section, lift). System prompt enforces tone (Warm / Neutral / Tough love from `data.aiTone`), 2-sentence max, no new facts, no moralizing.
+- **API call:** reuses the existing `callAiForDebrief(systemPrompt, userPrompt, 110)` helper. Same auth + consent + idToken plumbing as Morning/Evening Debrief.
+- **Cache:** result stored at `dailyRitual[<dateKey>].aiTipBody` keyed by `aiTipKey` (a hash of the signal). Same signal on the same day reads the cache; signal change or new day re-fires.
+- **In-session dedupe:** a useRef-backed `Set` prevents a second fire before the first call's `updateRitual` lands.
+- **Render:** the cached `aiTipBody` is prepended to `smartTips[0]` with title "Personalized for you" and an icon matching the signal (🕘 off-schedule, 🔗 correlation). Existing templated tips slot in below — no template is ever overwritten.
+- **Graceful degradation:** any failure path (no consent, no signal, AI off, fetch error, < 7 days of data) results in the existing templated tips rendering exactly as before.
+
+What this gives users: the same data-driven signal now arrives in their preferred voice, with natural language phrasing instead of a template. Cost: one Anthropic call per signal-changeover per day.
+
+Future enhancements (not in this pass):
+- Pro gating per [§1.4](#14-whats-behind-the-paid-wall-pro-only) once the paid tier ships. Currently available to anyone with AI consent.
+- Journal-sentiment-based tips (§4.2 explicitly mentions journal sentiment as a data source). The infrastructure exists; just needs a new signal extractor.
+- An "AI rewrite all three tips" mode rather than just the top one.
+
 ### 14.5 Voice-driven AI scheduling
 - See [§18.3](#183-voice-driven-ai-scheduling) — the AI half of calendar integration. Tracked under the calendar section since it depends on calendar OAuth.
 

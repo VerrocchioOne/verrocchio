@@ -9761,6 +9761,58 @@ function App() {
     }
   }, [tab, data.dailyRitual, data.onboardingComplete, data.aiConsentAt]);
 
+  /* §14.4 — AI-personalized tip rewrite for the Brief tab.
+     Pulls the top observed signal (off-schedule habit, then habit
+     correlation) and asks the AI proxy to rephrase it as a single
+     coach-style tip in the user's chosen tone (Warm / Neutral /
+     Tough love). Cached per day per signal key in dailyRitual so
+     we don't burn tokens on every Brief-tab render. The deterministic
+     smartTips list is unchanged — the AI tip is prepended as an extra
+     first item when available, never overwrites a template. */
+  const aiTipFiredRef = useRef(new Set());
+  useEffect(() => {
+    if (tab !== "brief") return;
+    if (!AI_ENABLED) return;
+    if (!data.aiConsentAt) return;
+    if (completionDayCount() < 7) return;
+    const todayKey = tk();
+    const rit = (data.dailyRitual && data.dailyRitual[todayKey]) || {};
+    // Pick the top signal mirroring smartTips priority.
+    const offTop = (memoedOffSchedule && memoedOffSchedule[0]) || null;
+    const corrTop = (memoedCorrelations && memoedCorrelations[0]) || null;
+    let signalKey = "";
+    let promptUser = "";
+    if (offTop) {
+      signalKey = "off:" + offTop.habitId + ":" + offTop.section + ":" + offTop.lateCount + "/" + offTop.loggedCount;
+      const suggestSec = offTop.section === "morning" ? "afternoon" : offTop.section === "afternoon" ? "evening" : "morning";
+      promptUser = `Signal: the habit "${offTop.habitText}" was logged AFTER the ${offTop.section} cutoff in ${offTop.lateCount} of the last ${offTop.loggedCount} sessions. Suggest moving it to ${suggestSec} or accepting the new time. Keep specifics (habit name, counts, sections) exact.`;
+    } else if (corrTop) {
+      const hrLabel = corrTop.aCutoffHour === 12 ? "by noon" : corrTop.aCutoffHour === 18 ? "by 6pm" : "before bed";
+      signalKey = "corr:" + corrTop.aHabitId + "+" + corrTop.bHabitId + ":" + Math.round(corrTop.lift * 100);
+      promptUser = `Signal: when the user does "${corrTop.aText}" ${hrLabel}, "${corrTop.bText}" follows ${Math.round(corrTop.conditional * 100)}% of the time (vs ${Math.round(corrTop.base * 100)}% otherwise) over a 14-day window. Frame it as a useful pattern they can exploit. Keep specifics exact.`;
+    }
+    if (!signalKey) return;
+    if (rit.aiTipKey === signalKey && rit.aiTipBody) return;
+    // Dedupe in-session fires so a re-render doesn't trigger a second
+    // call before the first one's result lands and writes the cache.
+    const fireKey = todayKey + ":" + signalKey;
+    if (aiTipFiredRef.current.has(fireKey)) return;
+    aiTipFiredRef.current.add(fireKey);
+    (async () => {
+      const tone = data.aiTone || "neutral";
+      const toneInstr = tone === "encouraging"
+        ? "Warm and encouraging. Lead with positive framing."
+        : tone === "tough-love"
+          ? "Direct and honest, no cheerleading or softening."
+          : "Neutral and factual, no cheerleading or scolding.";
+      const sys = `You are an analytical coach for the Verrocchio habit-tracking app. Convert one observed behavioral signal into a single concise tip the user sees on their home page. Tone: ${toneInstr} Max 2 sentences. Keep every specific (habit names, percentages, counts, sections) exactly as given. Do not add facts you weren't told. Do not moralize. Do not predict the future.`;
+      const body = await callAiForDebrief(sys, promptUser, 110);
+      if (body) {
+        updateRitual({ aiTipKey: signalKey, aiTipBody: body });
+      }
+    })();
+  }, [tab, data.aiConsentAt, data.aiTone, memoedOffSchedule, memoedCorrelations, data.dailyRitual]);
+
   /* Splash loading -> quote transition for the welcome screen.
      Kept here (before any conditional returns) to respect React's
      rules of hooks. Only runs once the welcome screen is actually
@@ -12638,6 +12690,21 @@ function App() {
     // nudges and observed correlations beat generic SMART reminders
     // because they reflect the user's actual behavior).
     const smartTips = [];
+    // §14.4 — when an AI-personalized tip has been generated for today
+    // (see the useEffect near genBrief), prepend it. Voice matches the
+    // user's tone setting; specifics match the underlying signal.
+    // Falls through silently when the AI hasn't run yet (off, no
+    // consent, < 7 days of data, no signal, or call failed).
+    const _ritForAiTip = (data.dailyRitual && data.dailyRitual[tk()]) || {};
+    if (_ritForAiTip.aiTipBody && _ritForAiTip.aiTipKey) {
+      const aiIcon = _ritForAiTip.aiTipKey.startsWith("corr:") ? "🔗" : "🕘";
+      smartTips.push({
+        icon: aiIcon,
+        title: "Personalized for you",
+        body: _ritForAiTip.aiTipBody,
+        action: null
+      });
+    }
     // Off-schedule: habits the user is consistently logging AFTER their
     // section cutoff. Reads the App-scoped memoized result so the scan
     // doesn't re-run on every Home-tab render.
