@@ -9565,7 +9565,8 @@ function App() {
     setBriefing(true);
     setBriefTxt("");
     const habits = data.habits || [];
-    const dH = habits.filter(h => h.section !== "avoid");
+    // §6 Future Habits — exclude parked from AI briefing inputs.
+    const dH = habits.filter(h => h.section !== "avoid" && !h.parked);
     const td = tk();
     const pend = data.todos.filter(t => !t.done);
     const q = todayQ();
@@ -16495,7 +16496,13 @@ function App() {
                   .join(" ");
                 const cTodayUnits = (child.completionUnits && child.completionUnits[selDate]) || 0;
                 const cTargetSig = (child.target == null ? "" : child.target) + "/" + (child.targetOp || "") + "/" + (child.unitLabel || "") + "/" + cTodayUnits;
-                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[child.id] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + (isCompact ? "c" : "");
+                // Per-slot swipeAnim key — mirrors the parent's
+                // sigAnimKey treatment so a child habit that ever
+                // appears in multi-slot rendering doesn't flash
+                // every row green together. Latent bug fix (sub-habits
+                // inheriting parent multi-slot config).
+                const cSigAnimKey = child._renderSlot ? child.id + ":" + child._renderSlot : child.id;
+                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[cSigAnimKey] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + (isCompact ? "c" : "");
                 return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard, compact: !!isCompact });
               };
               return childCohorts.map((cohort, ki) => {
@@ -18306,7 +18313,10 @@ function App() {
     // habits land at the end (nothing to score; nothing pressing
     // to re-engage with).
     const sortAreasByProgress = (areas) => {
-      const allH = data.habits || [];
+      // §6 Future Habits — parked habits dilute area scoring with
+      // zero recent completions. Filter them out so a user who parks
+      // an inactive habit doesn't see their area drift higher (worse).
+      const allH = (data.habits || []).filter(h => !h.parked);
       const score = (areaValue) => {
         const inArea = allH.filter(h => h && h.type === areaValue);
         if (inArea.length === 0) return Infinity; // no data → bottom of list
@@ -18432,7 +18442,10 @@ function App() {
         + (_hasVal(_sm.achievable) ? 1 : 0)
         + (_hasVal(_sm.relevant) ? 1 : 0)
         + (_hasVal(_sm.timebound) ? 1 : 0);
-      const linkedHabits = data.habits.filter(h => habitLinkedToGoal(h, goal.id));
+      // §6 Future Habits — exclude parked habits from goal momentum +
+      // "X of Y done" chip. A parked habit is inert; counting it
+      // against the goal would corrupt the momentum signal.
+      const linkedHabits = data.habits.filter(h => habitLinkedToGoal(h, goal.id) && !h.parked);
       const linkedDone = linkedHabits.filter(h => isDone(h, selDate)).length;
       const linkedTotal = linkedHabits.length;
       const momentum = (() => {

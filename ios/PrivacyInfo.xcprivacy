@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Verrocchio — App Privacy Manifest
+
+  Lives at ios/PrivacyInfo.xcprivacy pre-staged for the `cap add ios`
+  pass. When the Xcode project is generated on macOS, copy / drag this
+  file into the App target inside Xcode (it must be a target member
+  of the main app target, not just sitting in the workspace).
+
+  Apple requires this manifest as of iOS 17 / Spring 2024 submissions
+  for any app that uses a "Required Reason API" or that distributes
+  via the App Store.
+
+  Source for what we declare:
+    • Auth (Firebase): collects email — Account Authentication
+    • Firestore: stores user-entered habits, goals, journal text,
+      and the contents of every form field in the app — Other User
+      Content
+    • Support contact: when a user emails support@verrocchio.app
+      they self-disclose their email — Customer Support
+
+  We do NOT:
+    • Collect Sensitive Info (health, finance, biometrics, etc.)
+    • Track users across apps/websites (NSPrivacyTracking = false)
+    • Use third-party analytics, ads, attribution, or any tracking
+      domain (NSPrivacyTrackingDomains = empty)
+
+  Required Reason APIs:
+    • CA92.1 — UserDefaults: Capacitor + Firebase SDKs use it for
+      session persistence. Reason "CA92.1" = access for the app's
+      own functionality.
+    • C617.1 — File timestamps: Firebase Storage uses for cache
+      validation. Reason "C617.1" = inside the app or required by
+      system frameworks.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Required-reason APIs -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Tracking declarations -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<!-- Collected data types -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCustomerSupport</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
