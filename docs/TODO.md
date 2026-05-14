@@ -56,6 +56,9 @@
 
 ## 1. Monetization Strategy — Free / Paid Split + Referral Unlock
 
+> **📐 Implementation spec:** [docs/MONETIZATION_V1.md](MONETIZATION_V1.md) — entitlement model, trial state machine, referral link generation + redemption, conversion gating, cap enforcement UX, Day-7 prompt, StoreKit stub, analytics events, grandfather flag, test plan, and rollout sequence. The strategy below remains authoritative; the spec doc is the implementer's blueprint.
+
+
 ### 1.0 Strategic framing — zero marketing budget, network-effect growth
 **Acquisition channel = the product itself.** No paid ads, no influencer spend, no SEO machine. Growth comes from users inviting other users in exchange for app access. The referral ladder is therefore not a side feature — it is **the entire marketing strategy**. Two implications:
 - The free → paid funnel matters less than the free → free-but-invited funnel. We're optimizing for *invites sent that convert to active users*, not just paid conversions.
