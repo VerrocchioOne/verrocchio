@@ -836,14 +836,28 @@ That's a roughly 8–12 callsite change in `index.html` — well under the multi
 
 ## 10. Version History
 
+> **🟢 Shipped 2026-05-13** — §10.1, §10.2, and §10.3 are now implemented end-to-end. The data layer was already stamping snapshots on every edit (the `h.history` and `g.history` arrays were populated since well before this session); §10.3 added the surfacing.
+
 ### 10.1 Goal version history
-- Track edits to goals over time.
+- ✅ Track edits to goals over time.
+- **How:** Goal saves stamp a snapshot of the prior state (`{ ts, text, type, smart, icon }`) into `g.history` whenever a tracked field changed. See [index.html:7657](../index.html#L7657) for the snapshot-creation path.
 
 ### 10.2 Habit version history
-- Track edits to habits over time.
+- ✅ Track edits to habits over time.
+- **How:** Habit saves stamp a snapshot of the prior state (`{ ts, text, duration, type, importance, section, notes, frequency, icon }`) into `h.history` whenever a tracked field changed. See [index.html:8268](../index.html#L8268) for the snapshot-creation path.
 
 ### 10.3 Surface history inside My Account / settings
-- Both goal and habit version histories should be viewable from within [§11 My Profile](#11-my-profile-account--app-settings).
+- ✅ Goal completions + goal edits + habit edits are surfaced in **My Profile → History** as a single unified reverse-chronological timeline.
+- Each row shows a colored kind-dot ("Goal completed" / "Goal edited" / "Habit edited"), the item's current name, its Area-of-Life pill, and a relative timestamp (Today / Yesterday / Nd ago / date).
+- Edit rows include a *Previously: "old text"* line so the user can see what changed at a glance.
+- Goal-completion rows preserve the existing "Next: <follow-up goal>" affordance.
+- Empty state when no events exist: "No history yet — keep using the app and edits will land here."
+- See [§11.6](#116-surface-version-history-here) — this section was its cross-reference. Same page; check it off.
+
+Deferred for future passes:
+- **Restore from snapshot** — clicking an edit row could revert the habit/goal to that prior state. Not implemented; would need a confirm modal + careful overwrite logic. Data is preserved, so this is buildable when there's demand.
+- **Per-snapshot diff detail** — showing exactly which field changed (text vs section vs frequency) rather than just the prior name. Currently shows the prior text for both habits and goals; that's the most identifying field. The other snapshot fields are kept in the data — the render just doesn't surface them yet.
+- **Deleted habit/goal history** — when a habit or goal is hard-deleted, its history vanishes with it. To preserve, we'd need a separate `habitGraveyard` / `goalGraveyard` collection. Not done.
 
 ---
 
