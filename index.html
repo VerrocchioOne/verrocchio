@@ -3171,8 +3171,13 @@ function hydrateCloudDoc(p) {
     return t;
   }).filter(Boolean);
   if (Array.isArray(p.habits)) {
-    p.habits = p.habits.map(h => {
-      if (!h) return h;
+    // Drop falsy entries at hydration time. Bare `!h.parked` checks
+    // downstream would otherwise pass nulls through (since
+    // !undefined === true), and the next access to h.text / h.id /
+    // h.completions would throw a TypeError mid-render and crash a
+    // whole panel. One filter here is cheaper than guarding every
+    // call site individually.
+    p.habits = p.habits.filter(Boolean).map(h => {
       // Backfill frequency (pre-frequency-field habits default to daily).
       if (!h.frequency) h = { ...h, frequency: { type: "daily", days: [], day: null } };
       // Backfill completionTimes — parallel to `completions`, stores the
@@ -7222,6 +7227,54 @@ function App() {
     const hs = (data && data.habits) || [];
     return hs.filter(h => h && h.section !== "avoid" && !h.parked).map(h => detectOffSchedule(h)).filter(Boolean);
   }, [data && data.habits]);
+  // §perf — App-wide streak. Was an inline IIFE in the top-bar JSX
+  // walking up to 365 days × N habits on EVERY app render (every
+  // keypress, every toggle, every state write — CRITICAL hot path).
+  // Memoize so it only recomputes when habits change.
+  const memoedAppStreak = useMemo(() => {
+    const hs = (data && data.habits || []).filter(h => h && !h.parked);
+    if (!hs.length) return 0;
+    let streak = 0;
+    let started = false;
+    for (let i = 0; i < 365; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = dk(d);
+      const any = hs.some(h => h.completions && h.completions[key]);
+      if (any) { streak++; started = true; }
+      else if (started) break;
+      else if (i > 0) break; // today blank is OK, day-1 blank breaks
+    }
+    return streak;
+  }, [data && data.habits]);
+  // §perf — historyPanel timeline. The Profile sheet's history IIFE
+  // used to iterate goalArchive + every goal's history + every
+  // habit's history and sort the whole flat array on every Profile
+  // render. For 50 habits × 10 edits + 20 goals × 5 edits that is
+  // 600 events sorted O(N log N) per render — CRITICAL hot path on
+  // mid-range phones. Memoize on the three underlying collections.
+  const memoedHistoryEvents = useMemo(() => {
+    const out = [];
+    for (const g of (data && data.goalArchive || [])) {
+      const ts = g.archivedAt ? new Date(g.archivedAt).getTime() : 0;
+      if (!ts || !isFinite(ts)) continue;
+      const nextGoal = (data && data.goals || []).find(ng => ng.parentGoalId === g.id);
+      out.push({ ts, kind: "goal-completed", name: g.text, type: g.type, nextGoal: nextGoal || null, id: "gc-" + g.id });
+    }
+    for (const g of (data && data.goals || [])) {
+      for (const snap of (g.history || [])) {
+        if (!snap || typeof snap.ts !== "number") continue;
+        out.push({ ts: snap.ts, kind: "goal-edited", name: g.text, type: g.type, prevText: snap.text, id: "ge-" + g.id + "-" + snap.ts });
+      }
+    }
+    for (const h of (data && data.habits || [])) {
+      for (const snap of (h.history || [])) {
+        if (!snap || typeof snap.ts !== "number") continue;
+        out.push({ ts: snap.ts, kind: "habit-edited", name: h.text, type: h.type, prevText: snap.text, prevImp: snap.importance, prevSec: snap.section, id: "he-" + h.id + "-" + snap.ts });
+      }
+    }
+    return out.sort((a, b) => b.ts - a.ts);
+  }, [data && data.habits, data && data.goals, data && data.goalArchive]);
   const achievementStats = useMemo(() => {
     const habitsArr = (data && data.habits) || [];
     const goalsArr = (data && data.goals) || [];
@@ -9821,7 +9874,17 @@ function App() {
         updateRitual({ aiTipKey: signalKey, aiTipBody: body });
       }
     })();
-  }, [tab, data.aiConsentAt, data.aiTone, memoedOffSchedule, memoedCorrelations, data.dailyRitual]);
+    // Intentionally do NOT include `data.dailyRitual` here. dailyRitual
+    // is mutated on every unrelated ritual write (briefingReviewed,
+    // yesterdayReviewed, evening debrief steps, tip acknowledgements)
+    // and re-firing the effect on each of those caused observable
+    // jank in the Brief tab's interactive flow. The cache lookup
+    // reads dailyRitual via fresh closure each run, so a new signal
+    // still flushes the cache through memoedOffSchedule /
+    // memoedCorrelations changing. The aiTipFiredRef guards
+    // in-session double-fires; cross-device echo is gated by the
+    // existing _updatedAt detection in the realtime listener.
+  }, [tab, data.aiConsentAt, data.aiTone, memoedOffSchedule, memoedCorrelations]);
 
   /* Splash loading -> quote transition for the welcome screen.
      Kept here (before any conditional returns) to respect React's
@@ -11861,23 +11924,10 @@ function App() {
       /*#__PURE__*/React.createElement("line", { x1: "12", y1: "18", x2: "12", y2: "22" })
     )),
     (() => {
-    // App-wide streak: consecutive days (back from today) where at least one habit was logged (done or missed). Today may be blank.
-    // §6 — parked habits are inert; their historical completions
-    // must not keep the app-wide streak alive after the user shelves
-    // them. The streak should reflect ACTIVE practice only.
-    const hs = (data.habits || []).filter(h => !h.parked);
-    let appStreak = 0;
-    if (hs.length > 0) {
-      let started = false;
-      for (let i = 0; i < 365; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        const key = dk(d);
-        const any = hs.some(h => h.completions && h.completions[key]);
-        if (any) { appStreak++; started = true; }
-        else if (started) break;
-      }
-    }
+    // §perf — App-wide streak computation lifted to memoedAppStreak
+    // at the App-component top level. This IIFE used to walk up to
+    // 365 days × N habits on every App render (CRITICAL hot path).
+    const appStreak = memoedAppStreak;
     const active = appStreak > 0;
     return /*#__PURE__*/React.createElement("div", {
       title: active ? `${appStreak}-day streak` : "No streak yet — log a habit to start one!",
@@ -16463,7 +16513,13 @@ function App() {
         // multi-slot row only re-renders THAT row, not every row of
         // the same habit.
         const sigAnimKey = h._renderSlot ? h.id + ":" + h._renderSlot : h.id;
-        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig;
+        // §6 — `parked` MUST be part of the sig. When the user taps
+        // "Move to Future" the habit's parked flag flips, but if
+        // parked isn't in the sig the memoized card holds its prior
+        // render — leaving a ghost card on screen in the active list
+        // until something else forces a sig change. That ghost was
+        // the user-reported "glitchy" symptom after yesterday's bundle.
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig + "|p" + (h.parked ? 1 : 0);
         const out = [
           /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard, compact: isCompact })
         ];
@@ -16545,7 +16601,8 @@ function App() {
                 // every row green together. Latent bug fix (sub-habits
                 // inheriting parent multi-slot config).
                 const cSigAnimKey = child._renderSlot ? child.id + ":" + child._renderSlot : child.id;
-                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[cSigAnimKey] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + (isCompact ? "c" : "");
+                // §6 — same `parked` rule as the parent sig above.
+                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[cSigAnimKey] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + (isCompact ? "c" : "") + "|p" + (child.parked ? 1 : 0);
                 return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard, compact: !!isCompact });
               };
               return childCohorts.map((cohort, ki) => {
@@ -22880,31 +22937,10 @@ function App() {
     // + habit edits (from h.history snapshots). All three streams
     // flatten into a single reverse-chronological feed so the user
     // sees one "what happened when" view.
-    const historyEvents = (() => {
-      const out = [];
-      for (const g of (data.goalArchive || [])) {
-        // Guard against malformed archivedAt strings — Date.parse of
-        // garbage returns NaN, which would slip past `!ts` only by
-        // accident. Be explicit about finiteness.
-        const ts = g.archivedAt ? new Date(g.archivedAt).getTime() : 0;
-        if (!ts || !isFinite(ts)) continue;
-        const nextGoal = (data.goals || []).find(ng => ng.parentGoalId === g.id);
-        out.push({ ts, kind: "goal-completed", name: g.text, type: g.type, nextGoal: nextGoal || null, id: "gc-" + g.id });
-      }
-      for (const g of (data.goals || [])) {
-        for (const snap of (g.history || [])) {
-          if (!snap || typeof snap.ts !== "number") continue;
-          out.push({ ts: snap.ts, kind: "goal-edited", name: g.text, type: g.type, prevText: snap.text, id: "ge-" + g.id + "-" + snap.ts });
-        }
-      }
-      for (const h of (data.habits || [])) {
-        for (const snap of (h.history || [])) {
-          if (!snap || typeof snap.ts !== "number") continue;
-          out.push({ ts: snap.ts, kind: "habit-edited", name: h.text, type: h.type, prevText: snap.text, prevImp: snap.importance, prevSec: snap.section, id: "he-" + h.id + "-" + snap.ts });
-        }
-      }
-      return out.sort((a, b) => b.ts - a.ts);
-    })();
+    // §perf — historyEvents now computed via memoedHistoryEvents at
+    // App-component top level. Was an inline IIFE building + sorting
+    // hundreds of events on every Profile render.
+    const historyEvents = memoedHistoryEvents;
     const fmtEventWhen = (ms) => {
       if (!ms) return "—";
       const days = Math.floor((Date.now() - ms) / 86400000);
@@ -22996,15 +23032,20 @@ function App() {
       .filter(h => getStreak(h) > 0)
       .sort((a, b) => getStreak(b) - getStreak(a))
       .slice(0, 5);
+    // §perf — Build last14 map once per habit and share between
+    // fallingBehind compute and the sparkline7 render. Was N×14 array
+    // allocations on every Overview tab render (audit HIGH).
+    const last14ByHabit = new Map();
+    for (const h of activeReportHabits) last14ByHabit.set(h.id, getLast14(h));
     const fallingBehind = activeReportHabits.map(h => {
-      const l14 = getLast14(h);
+      const l14 = last14ByHabit.get(h.id);
       const last7Pct  = l14.slice(7).filter(d => d.done).length / 7 * 100;
       const prior7Pct = l14.slice(0, 7).filter(d => d.done).length / 7 * 100;
       return { h, drop: prior7Pct - last7Pct, last7Pct };
     }).filter(r => r.drop > 20).sort((a, b) => b.drop - a.drop);
     const sparkline7 = (h) => /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", gap: 2, flexShrink: 0 }
-    }, getLast14(h).slice(7).map((d, i) => /*#__PURE__*/React.createElement("div", {
+    }, (last14ByHabit.get(h.id) || getLast14(h)).slice(7).map((d, i) => /*#__PURE__*/React.createElement("div", {
       key: i,
       title: d.k + (d.done ? " — done" : " — not done"),
       style: { width: 6, height: 14, borderRadius: 1, background: d.done ? "#2d5a2d" : "#e5e7eb" }
