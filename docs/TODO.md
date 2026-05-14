@@ -389,6 +389,8 @@ Social features change the review picture:
 
 ## 3. Onboarding & New-User Experience
 
+> **📐 Implementation spec:** [docs/ONBOARDING_V1.md](ONBOARDING_V1.md) — five-act onboarding (genesis pre-step → welcome → social-concept card → focused goal-setting OR switcher import → completion + trial start), with state model, lifecycle flows, client API surface, UI surfaces, test plan, and rollout sequence. The strategy below remains authoritative; the spec doc is the implementer's blueprint.
+
 ### 3.1 Animated genesis sequence before onboarding
 - **Note for future build:** New users should see an **animated intro** explaining the genesis of the app and its purpose **before** the standard onboarding flow begins.
 - **Status:** Spec only — animation assets and timing TBD.
@@ -1212,6 +1214,51 @@ Future enhancements (not in this pass):
 
 ### 14.5 Voice-driven AI scheduling
 - See [§18.3](#183-voice-driven-ai-scheduling) — the AI half of calendar integration. Tracked under the calendar section since it depends on calendar OAuth.
+
+### 14.6 Shrink-the-habit nudge — combat inertia on chronically missed large-unit habits
+- **Problem:** When a habit's target is large (e.g. *"Study CFA for 1.5 hr"*, *"Run 5 mi"*, *"Read 50 pages"*), the cognitive/physical activation cost on a low-energy day is high enough that the user defaults to skipping rather than partially completing. Misses cluster, the streak dies, and the habit becomes a source of guilt instead of momentum. Standard behavioral-science fix (Fogg, *Tiny Habits*): the smallest viable version of the behavior is always available — start, and the brain finishes.
+- **Two-tier intervention. Escalate only if the lower tier fails.**
+
+  **Tier 1 — "Just 5 minutes today" nudge** (preserves the goal, lowers today's bar)
+  - **Detection signal:** habit with `targetUnit` numeric magnitude above a per-unit threshold (e.g. ≥ 60 min, ≥ 3 mi, ≥ 20 pages — calibrate per unit family) AND completion rate < 40% over the trailing 7–14 days.
+  - **Tip / AI summary text:** *"You've missed CFA Study 5 of the last 7 days. Don't aim for 1.5 hours today — just open the book for 5 minutes. Starting is the win."* — voice modulated by `data.aiTone` per the existing §14.4 plumbing.
+  - **In-app affordance:** the habit card surfaces a "Log 5 min" button alongside the normal completion control. Tapping it marks the day as completed at a fractional amount (do NOT count toward target progress in a way that distorts averages — see Acceptance below) and visibly registers the streak save.
+  - **Throttle:** at most one shrink-nudge per habit per 3 days; never more than 2 such nudges active across all habits in a single tip slot.
+
+  **Tier 2 — "Maybe this target is too big" suggestion** (changes the goal itself)
+  - **Detection signal:** Tier 1 has fired ≥ 3 times for the habit over the last 30 days AND completion rate remains < 40% AND the user has tapped "Log 5 min" enough times that the 5-min version *is* the habit in practice.
+  - **Tip / AI summary text:** *"Your 1.5 hr CFA Study habit has been completed 3 of 21 days. Want to shrink the target to 30 min for the next 2 weeks and rebuild the streak from there?"* Offer an in-tip CTA that opens the habit edit form with the suggested new target pre-filled. User confirms — no silent changes.
+  - **Behavioral rationale:** consistency at a smaller target compounds; ambition at a target you miss 80% of the time does not. Restore the streak first, scale the target back up later from a position of momentum.
+  - **Versioning:** the original target is preserved in the habit's [§10 Version History](#10-version-history) timeline so the user can see "I shrank my CFA habit on 2026-05-13 — restored to 1.5 hr on 2026-06-30 once the streak was stable."
+
+- **Detection thresholds (initial; tune from data):**
+  | Unit family | "Large target" threshold | Miss-rate window | Miss-rate threshold |
+  |---|---|---|---|
+  | Time (min/hr) | ≥ 60 min | trailing 14 days | < 40% |
+  | Distance (mi/km) | ≥ 3 mi / 5 km | trailing 14 days | < 40% |
+  | Count (pages, reps, words) | unit-specific (≥ 20 pages, ≥ 30 reps, ≥ 500 words) | trailing 14 days | < 40% |
+  | Boolean / no-unit habits | n/a — skip this nudge entirely; resize doesn't apply | — | — |
+
+- **AI behavior — surface:** the existing `smartTips` engine on the Brief tab is the natural home (§14.4). Add a new signal extractor that ranks shrink-candidates alongside the existing off-schedule and correlation signals. When a shrink-candidate is the top signal, the AI rewrite layer phrases it in the user's tone.
+
+- **Acceptance:**
+  - Tier 1 nudge appears in the Brief tab tip slot when the detection signal fires; respects the throttle.
+  - "Log 5 min" affordance on the habit card writes a completion record that increments the streak but stores `amount` as the partial value (so weekly/monthly averages don't claim the user hit their full target).
+  - Tier 2 suggestion appears only after Tier 1 has fired ≥ 3 times in 30 days with the miss-pattern still active.
+  - Tier 2 CTA opens the habit edit form with the proposed new target pre-filled; user must confirm — never silently rewrite the habit.
+  - Original target preserved in [§10 Version History](#10-version-history); restore-to-original action available later.
+  - Boolean habits (no numeric target) are excluded from this nudge entirely.
+  - All shrink-nudge events recorded so we can later measure whether they actually improved streak retention vs. control (no-nudge users).
+
+- **Cross-references:**
+  - **[§4.3 Home-page daily sequence](#43-home-page-daily-sequence--optimize-for-routine-consistency-evidence-based):** Fogg / *Tiny Habits* basis already discussed there — same principle applied to a different surface.
+  - **[§14.1 Habit-routine optimizer](#141-habit-routine-optimizer-based-on-neglected-habits):** routine-level optimization; §14.6 is the per-habit micro-intervention beneath it.
+  - **[§14.3 Detect additive habits crowding out non-negotiables](#143-detect-additive-habits-crowding-out-non-negotiables):** same detection-then-intervene pattern, different signal.
+  - **[§14.4 AI-personalized home page tips](#144-ai-personalized-home-page-tips):** the rewrite layer used to phrase the Tier 1/2 prompts.
+  - **[§10 Version History](#10-version-history):** target changes from Tier 2 must show up here.
+  - **[§5 Habits & Goals](#5-habits--goals--cards-bugs-organization):** habit card UI changes (the "Log 5 min" affordance) live with other card work.
+
+- **Priority:** **High.** Streak preservation on hard habits is exactly where the app should differentiate from passive trackers — this is the "coach who shows up on a bad day" behavior. Tier 1 is cheap to build (signal extractor + tip template + one new card button). Tier 2 is incremental on top.
 
 ---
 

@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#2d5a2d" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b0d0f" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.json">
-<title>Verrocchio</title>
+<title>Verrocchio: Achieve Anything</title>
 <!-- iOS "Add to Home Screen" requires a raster apple-touch-icon; Safari
      silently ignores data:image/svg+xml here. Single 1024×1024 PNG
      covers both home-screen install and high-DPI favicon — iOS
@@ -7269,7 +7269,10 @@ function App() {
                      + archiveArr.filter(isSmartComplete).length;
     const goalsCreated = goalsArr.length + archiveArr.length;
     const activeGoalsCleared = (goalsArr.length === 0 && archiveArr.length >= 1) ? 1 : 0;
-    const linkedGoalIds = new Set(habitsArr.map(h => h && h.goalId).filter(Boolean).map(String));
+    // §6 — only ACTIVE habits should satisfy the "every goal has a
+    // linked habit" achievement check. Parked habits don't count.
+    const activeHabitsArr = habitsArr.filter(h => h && !h.parked);
+    const linkedGoalIds = new Set(activeHabitsArr.map(h => h && h.goalId).filter(Boolean).map(String));
     const habitPerGoal = (goalsArr.length >= 1 && goalsArr.every(g => linkedGoalIds.has(String(g.id)))) ? 1 : 0;
     // featuresExplored: number of FEATURES entries the user has actually
     // touched at least once. touchFeature writes a timestamp into
@@ -7282,7 +7285,8 @@ function App() {
       visits: ((data && data.dayVisits) || []).length,
       bestStreak: Math.max(currentBest, cachedBest),
       goals: archiveArr.length,
-      habitsActive: habitsArr.length,
+      // §6 — count only active habits toward the Builder achievement.
+      habitsActive: activeHabitsArr.length,
       xp: (data && data.xp) || 0,
       smartGoals,
       goalsCreated,
@@ -9781,15 +9785,21 @@ function App() {
     // Pick the top signal mirroring smartTips priority.
     const offTop = (memoedOffSchedule && memoedOffSchedule[0]) || null;
     const corrTop = (memoedCorrelations && memoedCorrelations[0]) || null;
+    // Encode tone in the signal key so a tone change invalidates the
+    // cached body (otherwise an old-tone body persists silently after
+    // the user switches voices). Drop the late/logged counters from
+    // the key — they tick mid-day with every completion and force
+    // wasteful re-fires for what is effectively the same signal.
+    const tone = data.aiTone || "neutral";
     let signalKey = "";
     let promptUser = "";
     if (offTop) {
-      signalKey = "off:" + offTop.habitId + ":" + offTop.section + ":" + offTop.lateCount + "/" + offTop.loggedCount;
+      signalKey = tone + ":off:" + offTop.habitId + ":" + offTop.section;
       const suggestSec = offTop.section === "morning" ? "afternoon" : offTop.section === "afternoon" ? "evening" : "morning";
       promptUser = `Signal: the habit "${offTop.habitText}" was logged AFTER the ${offTop.section} cutoff in ${offTop.lateCount} of the last ${offTop.loggedCount} sessions. Suggest moving it to ${suggestSec} or accepting the new time. Keep specifics (habit name, counts, sections) exact.`;
     } else if (corrTop) {
       const hrLabel = corrTop.aCutoffHour === 12 ? "by noon" : corrTop.aCutoffHour === 18 ? "by 6pm" : "before bed";
-      signalKey = "corr:" + corrTop.aHabitId + "+" + corrTop.bHabitId + ":" + Math.round(corrTop.lift * 100);
+      signalKey = tone + ":corr:" + corrTop.aHabitId + "+" + corrTop.bHabitId;
       promptUser = `Signal: when the user does "${corrTop.aText}" ${hrLabel}, "${corrTop.bText}" follows ${Math.round(corrTop.conditional * 100)}% of the time (vs ${Math.round(corrTop.base * 100)}% otherwise) over a 14-day window. Frame it as a useful pattern they can exploit. Keep specifics exact.`;
     }
     if (!signalKey) return;
@@ -9800,7 +9810,6 @@ function App() {
     if (aiTipFiredRef.current.has(fireKey)) return;
     aiTipFiredRef.current.add(fireKey);
     (async () => {
-      const tone = data.aiTone || "neutral";
       const toneInstr = tone === "encouraging"
         ? "Warm and encouraging. Lead with positive framing."
         : tone === "tough-love"
@@ -9857,7 +9866,10 @@ function App() {
   // §8.1: archived todos are hidden from the main render. They're surfaced
   // via the "View archive" toggle below the active list, and can be restored.
   const pending = data.todos.filter(t => !t.done && !t.archived);
-  const dH = habits.filter(h => h.section !== "avoid");
+  // §6 — parked habits are inert and excluded from every daily-stat
+  // aggregator that reads `dH` (Habits-tab header count, 30-day
+  // sparkline heatmap, etc.).
+  const dH = habits.filter(h => h.section !== "avoid" && !h.parked);
   const doneHCt = dH.filter(h => isDone(h, selDate)).length;
   const isToday = selDate === tk();
   const travelDays = data.travelDays || [];
@@ -11850,7 +11862,10 @@ function App() {
     )),
     (() => {
     // App-wide streak: consecutive days (back from today) where at least one habit was logged (done or missed). Today may be blank.
-    const hs = data.habits || [];
+    // §6 — parked habits are inert; their historical completions
+    // must not keep the app-wide streak alive after the user shelves
+    // them. The streak should reflect ACTIVE practice only.
+    const hs = (data.habits || []).filter(h => !h.parked);
     let appStreak = 0;
     if (hs.length > 0) {
       let started = false;
@@ -12397,7 +12412,10 @@ function App() {
     // month currently on screen, up to today (future days are
     // excluded so an empty future doesn't tank the percentage).
     (() => {
-      const activeH = (data.habits || []).filter(h => h.section !== "avoid");
+      // §6 — calendar month-stats (perfect days, zero days, totalDonePct,
+      // all-done streak) must exclude parked habits or every parked
+      // habit tanks "perfect" days and inflates "zero" days.
+      const activeH = (data.habits || []).filter(h => h.section !== "avoid" && !h.parked);
       const today = tk();
       const daysThisMonth = [];
       for (let d = 1; d <= dim; d++) {
@@ -12661,7 +12679,11 @@ function App() {
     // of the daily checklist too, so they belong in the per-day
     // counts. Only habits that are turned off by routine (home-only
     // while travelling, etc.) get filtered out here.
-    const activeH = habits.filter(h => matchesRoutine(h));
+    // §6 — exclude parked habits from the Brief tab's activeH. Every
+    // downstream stat (today X/Y, yesterday X/Y, 7-Day %, perfect-week
+    // count, lowHabit scan) reads activeH, so a parked habit otherwise
+    // silently corrupts every counter the user sees on Home.
+    const activeH = habits.filter(h => matchesRoutine(h) && !h.parked);
     // Per-day denominators: count only the habits that were
     // actually DUE on that day (frequency-aware) — a weekly
     // Monday habit shouldn't count toward yesterday's total on
@@ -12697,8 +12719,24 @@ function App() {
     // Falls through silently when the AI hasn't run yet (off, no
     // consent, < 7 days of data, no signal, or call failed).
     const _ritForAiTip = (data.dailyRitual && data.dailyRitual[tk()]) || {};
-    if (_ritForAiTip.aiTipBody && _ritForAiTip.aiTipKey) {
-      const aiIcon = _ritForAiTip.aiTipKey.startsWith("corr:") ? "🔗" : "🕘";
+    // Render guard: only show the cached AI tip if the user is still
+    // entitled to AI features. A consent withdrawal or AI disable
+    // should hide the previously-cached body immediately, not leave
+    // a stale "Personalized for you" item lingering. Cache key shape
+    // is now "<tone>:<kind>:..." after the §14.4 hardening, so
+    // detect off vs correlation by looking for the ":corr:" segment
+    // rather than the legacy `startsWith("corr:")` check.
+    let _aiTipHabitId = null;
+    if (AI_ENABLED && data.aiConsentAt && _ritForAiTip.aiTipBody && _ritForAiTip.aiTipKey) {
+      const isCorr = _ritForAiTip.aiTipKey.indexOf(":corr:") !== -1;
+      const aiIcon = isCorr ? "🔗" : "🕘";
+      // Off-schedule cache key shape: "<tone>:off:<habitId>:<section>".
+      // Extract the habit id so smartTips can skip the duplicate
+      // templated entry for the same habit.
+      if (!isCorr) {
+        const m = /:off:([^:]+):/.exec(_ritForAiTip.aiTipKey);
+        if (m) _aiTipHabitId = m[1];
+      }
       smartTips.push({
         icon: aiIcon,
         title: "Personalized for you",
@@ -12709,7 +12747,12 @@ function App() {
     // Off-schedule: habits the user is consistently logging AFTER their
     // section cutoff. Reads the App-scoped memoized result so the scan
     // doesn't re-run on every Home-tab render.
-    const offSchedHits = memoedOffSchedule.slice(0, 2);
+    // Skip the habit the AI tip already covers — otherwise the user
+    // sees two adjacent 🕘 items for the same habit (one AI-voiced,
+    // one templated).
+    const offSchedHits = memoedOffSchedule
+      .filter(o => !_aiTipHabitId || String(o.habitId) !== String(_aiTipHabitId))
+      .slice(0, 2);
     for (const o of offSchedHits) {
       const secLabel = o.section.charAt(0).toUpperCase() + o.section.slice(1);
       const suggestSec = o.section === "morning" ? "afternoon" : o.section === "afternoon" ? "evening" : "morning";
@@ -13321,7 +13364,7 @@ function App() {
           },
             goalsList.map(g => {
               const t = HT.find(x => x.value === g.type) || HT[0];
-              const linked = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id) && h.section !== "avoid");
+              const linked = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id) && h.section !== "avoid" && !h.parked);
               const doneToday = linked.filter(h => isDone(h, tk())).length;
               return /*#__PURE__*/React.createElement("div", {
                 key: "gl-" + g.id,
@@ -18353,7 +18396,10 @@ function App() {
     // Active-only: each per-area card list only shows goals that
     // have at least one linked habit. Goals with no linked habits
     // are "future" and surface in the Future Goals drawer below.
-    const isActiveGoal = g => (data.habits || []).some(h => habitLinkedToGoal(h, g.id));
+    // §6 — a goal whose only linked habits are all parked is NOT
+    // actively being pursued. Drop the future-goals drawer's noise
+    // and treat it as a future-bucket candidate again.
+    const isActiveGoal = g => (data.habits || []).some(h => habitLinkedToGoal(h, g.id) && !h.parked);
     const filtered = (ht.merged
       ? data.goals.filter(g => goalTypeFilter.length === 0 || goalTypeFilter.includes(g.type))
       : data.goals.filter(g => g.type === ht.value && (goalTypeFilter.length === 0 || goalTypeFilter.includes(ht.value))))
@@ -19037,8 +19083,10 @@ function App() {
         // now live INSIDE each expanded section (not in their own
         // always-visible row at the bottom), keeping the closed
         // panel compact.
+        // §6 — exclude parked habits from each goal card's expanded
+        // "Linked Habits" list. They aren't being practiced.
         const linked = habits
-          .filter(h => habitLinkedToGoal(h, goal.id))
+          .filter(h => habitLinkedToGoal(h, goal.id) && !h.parked)
           .slice()
           .sort((a, b) => freqRank(a) - freqRank(b));
         const linkedTodos = (data.todos || []).filter(t => String(t.goalId) === String(goal.id));
@@ -19260,7 +19308,7 @@ function App() {
       )
       );
     })));
-  }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type && (data.habits || []).some(h => habitLinkedToGoal(h, g.id))).length > 0 && /*#__PURE__*/React.createElement("div", {
+  }), goalTypeFilter.length === 0 && data.goals.filter(g => !g.type && (data.habits || []).some(h => habitLinkedToGoal(h, g.id) && !h.parked)).length > 0 && /*#__PURE__*/React.createElement("div", {
     "data-area": "general",
     style: {
       marginBottom: 16
@@ -19287,7 +19335,7 @@ function App() {
     }
   })), /*#__PURE__*/React.createElement("div", {
     className: "habit-grid"
-  }, sortItems(data.goals.filter(g => !g.type && (data.habits || []).some(h => habitLinkedToGoal(h, g.id))), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal").map(goal => {
+  }, sortItems(data.goals.filter(g => !g.type && (data.habits || []).some(h => habitLinkedToGoal(h, g.id) && !h.parked)), (data.sortPrefs && data.sortPrefs.goals) || "default", "goal").map(goal => {
     const isE = eGId === goal.id;
     const hasSm = goal.smart && Object.values(goal.smart).some(v => v && v.trim());
     return /*#__PURE__*/React.createElement("div", {
@@ -19360,7 +19408,10 @@ function App() {
     // habit. These are parked / aspirational goals that the user
     // hasn't started actively pursuing. Collapsed by default so the
     // active workload reads first; tap the row to expand.
-    const futureGoals = (data.goals || []).filter(g => !(data.habits || []).some(h => habitLinkedToGoal(h, g.id)));
+    // §6 — Future Goals drawer membership: a goal IS future-bucket
+    // if it has no ACTIVE habit links. Parked links don't make a
+    // goal "active" — keep parked-only-linked goals here.
+    const futureGoals = (data.goals || []).filter(g => !(data.habits || []).some(h => habitLinkedToGoal(h, g.id) && !h.parked));
     if (futureGoals.length === 0) return null;
     const sortedFuture = sortItems(futureGoals, (data.sortPrefs && data.sortPrefs.goals) || "default", "goal");
     return /*#__PURE__*/React.createElement("div", {
@@ -22832,8 +22883,11 @@ function App() {
     const historyEvents = (() => {
       const out = [];
       for (const g of (data.goalArchive || [])) {
+        // Guard against malformed archivedAt strings — Date.parse of
+        // garbage returns NaN, which would slip past `!ts` only by
+        // accident. Be explicit about finiteness.
         const ts = g.archivedAt ? new Date(g.archivedAt).getTime() : 0;
-        if (!ts) continue;
+        if (!ts || !isFinite(ts)) continue;
         const nextGoal = (data.goals || []).find(ng => ng.parentGoalId === g.id);
         out.push({ ts, kind: "goal-completed", name: g.text, type: g.type, nextGoal: nextGoal || null, id: "gc-" + g.id });
       }
@@ -22854,7 +22908,11 @@ function App() {
     const fmtEventWhen = (ms) => {
       if (!ms) return "—";
       const days = Math.floor((Date.now() - ms) / 86400000);
-      if (days <= 0) return "Today";
+      // Future-ts (clock skew or bad data) renders as a literal
+      // "Future" rather than silently collapsing into "Today" — both
+      // labels are honest and the row still sorts correctly.
+      if (days < 0) return "Future";
+      if (days === 0) return "Today";
       if (days === 1) return "Yesterday";
       if (days < 7) return days + "d ago";
       return new Date(ms).toLocaleDateString();
@@ -22997,7 +23055,8 @@ function App() {
         needsAttention.map(h => overviewRow(h, getCR(h).pct + "% · " + getStreak(h) + "d"))
       ) : null,
       strongest.length > 0 ? overviewBucket(
-        "Strongest performers", "#2d5a2d", "top " + Math.min(5, strongest.length),
+        "Strongest performers", "#2d5a2d",
+        strongest.length === 1 ? "1 habit" : "top " + Math.min(5, strongest.length),
         strongest.map(h => overviewRow(h, getStreak(h) + "d · " + getCR(h).pct + "%"))
       ) : null,
       fallingBehind.length > 0 ? overviewBucket(
@@ -24801,7 +24860,9 @@ function App() {
       const yest = new Date();
       yest.setDate(yest.getDate() - 1);
       const yestDk = dk(yest);
-      const habits = data.habits || [];
+      // §6 — parked habits are inert. The debrief shouldn't ask the
+      // user to act on habits they've explicitly shelved.
+      const habits = (data.habits || []).filter(h => !h.parked);
       const completed = habits.filter(h => h.completions && (h.completions[yestDk] === "done" || h.completions[yestDk] === true));
       const missed = habits.filter(h => h.completions && h.completions[yestDk] === "missed");
       // Scheduled-but-unmarked daily habits: candidates to carry forward.
@@ -25036,7 +25097,9 @@ function App() {
           (async () => {
             const yest = new Date(); yest.setDate(yest.getDate() - 1);
             const yestDk = dk(yest);
-            const habits = data.habits || [];
+            // §6 — parked habits are inert; the journal-prompt AI
+            // should not treat shelved habits as practice targets.
+            const habits = (data.habits || []).filter(h => !h.parked);
             const completed = habits
               .filter(h => h.completions && (h.completions[yestDk] === "done" || h.completions[yestDk] === true))
               .map(h => h.text);
@@ -25086,7 +25149,9 @@ function App() {
         if (cur.obstacle && !debriefObstacle) setDebriefObstacle(cur.obstacle);
         if (!cur.aiIntentionSuggestion && AI_ENABLED && data.aiConsentAt) {
           (async () => {
-            const habits = data.habits || [];
+            // §6 — parked Non-Negotiables shouldn't be sent to the AI
+            // as today's intention targets. They've been shelved.
+            const habits = (data.habits || []).filter(h => !h.parked);
             const nonNeg = habits
               .filter(h => h.importance === "Non-Negotiable")
               .map(h => h.text);
@@ -25189,7 +25254,8 @@ function App() {
 
     // Step 1 — Log today's habit activity (today, not yesterday).
     const renderEveningStep1 = () => {
-      const habits = data.habits || [];
+      // §6 — parked habits stay out of the evening debrief.
+      const habits = (data.habits || []).filter(h => !h.parked);
       const completed = habits.filter(h => h.completions && (h.completions[tDk] === "done" || h.completions[tDk] === true));
       const missed = habits.filter(h => h.completions && h.completions[tDk] === "missed");
       const blank = habits.filter(h => h.completions && !h.completions[tDk] && h.frequency && h.frequency.type === "daily");
@@ -25528,7 +25594,9 @@ function App() {
     };
     const renderGoalDetail = (g) => {
       const sm = g.smart || {};
-      const linkedHabits = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id));
+      // §6 — coach detail panel's linked-habit stats must exclude
+      // parked habits so the "Today: X/Y linked done" chip is honest.
+      const linkedHabits = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id) && !h.parked);
       const linkedDone = linkedHabits.filter(h => isDone(h, tk())).length;
       return /*#__PURE__*/React.createElement("div", { key: g.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3, wordBreak: "break-word", overflowWrap: "anywhere" } }, g.text),
