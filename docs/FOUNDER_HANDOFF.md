@@ -17,6 +17,10 @@ Everything else — code changes, builds, simulator testing, screenshots, regres
 ## Phase A — Apple Developer setup (one-time, ~1 hour active + 24-48h wait)
 
 > **🟡 In flight 2026-05-13** — D-U-N-S application form submitted to Dun & Bradstreet. Free DUNS issuance can take ~30 business days (expedited paid path is ~5 days); Apple Developer Program enrollment as an Organization can't complete until the DUNS Number lands. Steps A1–A4 are blocked. Phases B, C, C2, D are not Apple-dependent and can proceed in parallel.
+>
+> **🟢 Pre-staged for the post-DUNS Mac session (2026-05-14):** while DUNS processes, two assets are now ready to drop into Xcode the moment `cap add ios` runs:
+> - **[ios/PrivacyInfo.xcprivacy](../ios/PrivacyInfo.xcprivacy)** — full app privacy manifest. Drag into the Xcode App target after `cap add ios`. Header comment in the file describes the copy-into-Xcode steps.
+> - **[ios/AppIcon.appiconset/](../ios/AppIcon.appiconset/)** — full app-icon asset catalog with all 9 required pixel sizes (20pt/29pt/40pt/60pt @ 2x and 3x, plus the 1024 marketing). After `cap add ios`, replace the auto-generated `ios/App/App/Assets.xcassets/AppIcon.appiconset/` with this directory. **One manual check required:** verify `AppIcon-1024.png` has no alpha channel and no rounded corners before App Store submit — Apple will reject otherwise. If it does, flatten via Preview's Export as PNG with "Alpha" unchecked, or run `sips -s format png --setProperty hasAlpha no AppIcon-1024.png` on the Mac.
 
 | Step | What | Where | Time |
 |---|---|---|---|
