@@ -26746,7 +26746,9 @@ function App() {
   }, /*#__PURE__*/React.createElement("div", {
     className: "fade-in",
     style: {
-      background: "#fff",
+      // §5.3 — modal background was hardcoded #fff which doesn't
+      // participate in dark-mode token cascade. Use the surface var.
+      background: "var(--c-surface, #fff)",
       borderRadius: "20px 20px 0 0",
       padding: "24px 20px",
       width: "100%",
@@ -26805,11 +26807,14 @@ function App() {
       style: {
         alignSelf: "flex-start",
         display: "inline-flex", alignItems: "center", gap: 4,
-        padding: "3px 8px",
+        padding: "4px 10px",
         borderRadius: 14,
         border: "1px solid var(--c-border)",
         background: "var(--c-surface-muted)",
-        fontSize: 10, fontWeight: 600, color: "var(--c-text-soft)",
+        // §5.3 — label was fontSize 10 (sub-readable on iOS).
+        // Bump label to 11 and embedded date input to 12 so the
+        // pill stays compact but legible.
+        fontSize: 11, fontWeight: 600, color: "var(--c-text-soft)",
         cursor: "pointer", whiteSpace: "nowrap"
       }
     },
@@ -26819,7 +26824,10 @@ function App() {
         value: eHStart || dk(new Date()),
         onChange: e => sEHStart(e.target.value || dk(new Date())),
         "aria-label": "Start date",
-        style: { border: "none", background: "transparent", padding: 0, fontSize: 10, fontWeight: 600, color: "var(--c-text)", outline: "none", cursor: "pointer", width: 110 }
+        // §5.3 — width 110 was a magic number that clipped on some
+        // locales (MM/DD/YYYY vs YYYY-MM-DD). Use minWidth + auto so
+        // the picker resizes to fit the rendered format.
+        style: { border: "none", background: "transparent", padding: 0, fontSize: 12, fontWeight: 600, color: "var(--c-text)", outline: "none", cursor: "pointer", minWidth: 96, width: "auto" }
       })
     )
   ), /*#__PURE__*/React.createElement("input", {
@@ -27059,7 +27067,10 @@ function App() {
                 style: { flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }
               }, g.text),
               g.type && /*#__PURE__*/React.createElement("span", {
-                style: { fontSize: 9, color: "#9ca3af", flexShrink: 0 }
+                // §5.3 — goal-type badge bumped 9 → 11; 9px was
+                // below readable threshold on iOS. Color migrated
+                // from hex to token.
+                style: { fontSize: 11, color: "var(--c-text-faint)", flexShrink: 0 }
               }, g.type)
             );
           })
@@ -27258,20 +27269,20 @@ function App() {
     value: eHNotes,
     onChange: e => sEHNotes(e.target.value),
     placeholder: "Details",
-    // Single-row default — kept compact so the entire edit-habit
-    // modal fits on a phone viewport without scrolling. Users with
-    // long notes can drag the textarea handle (or just keep typing
-    // and let it overflow internally — the textarea itself
-    // scrolls).
-    rows: 1,
+    // §5.3 — was rows: 1 which collapsed to a single ~28px line on
+    // iOS, visually indistinguishable from an <input>. Bumped to
+    // rows: 2 + minHeight 56 so the multi-line affordance is
+    // obvious without overwhelming the modal height.
+    rows: 2,
     style: {
       ...IS,
       width: "100%",
       marginBottom: 6,
       resize: "none",
       lineHeight: 1.4,
-      padding: "6px 12px",
-      fontSize: 12
+      padding: "8px 12px",
+      fontSize: 13,
+      minHeight: 56
     }
   }),
   // (Starts row was here; moved into the modal header as a
