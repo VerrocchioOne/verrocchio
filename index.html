@@ -17684,19 +17684,50 @@ function App() {
       const ts = new Date(e.timestamp);
       return ts >= _wStart && ts < _wEnd;
     }) : dailyEntries;
-    return filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        textAlign: "center",
-        color: "#d1d5db",
-        fontSize: 13,
-        padding: "24px 0"
-      }
-    }, "No entries yet") : /*#__PURE__*/React.createElement("div", {
+    // §7.1 — Past entries were rendering but easy to miss: long write
+    // form + filter pills + optional AI insights pushed the list
+    // below the fold, and "No entries yet" was ambiguous when a
+    // narrow filter (today / week) was active even though the user
+    // had a full history under "All". Anchor the section with a
+    // labeled header showing the count of entries CURRENTLY visible
+    // under the active filter, plus the total in the catalog when
+    // the filter is hiding any. Empty state names the filter so the
+    // user knows to switch.
+    const totalEntries = dailyEntries.length;
+    const filterLabel = jFil === "today" ? "today" : jFil === "week" ? "this week" : "";
+    return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 24 } },
+      totalEntries > 0 && /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex", alignItems: "baseline", gap: 8,
+          marginBottom: 8
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          className: "card-title",
+          style: { fontSize: 14, color: "var(--c-text-strong)" }
+        }, "Past Entries"),
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, color: "var(--c-text-faint)", fontVariantNumeric: "tabular-nums" }
+        }, filtered.length === totalEntries
+          ? filtered.length + " total"
+          : filtered.length + " of " + totalEntries + (filterLabel ? " · " + filterLabel : ""))
+      ),
+      filtered.length === 0 ? /*#__PURE__*/React.createElement("div", {
+        style: {
+          textAlign: "center",
+          color: "var(--c-text-faint)",
+          fontSize: 13,
+          padding: "24px 0",
+          lineHeight: 1.5
+        }
+      }, totalEntries === 0
+        ? "No entries yet — write your first above."
+        : "No entries " + (filterLabel || "in this view") + ". Tap “All” to see your full history (" + totalEntries + ").")
+      : /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         flexDirection: "column",
-        gap: 6,
-        marginBottom: 24
+        gap: 6
       }
     }, [...filtered].reverse().map(entry => {
       const isE = eJId === entry.id;
@@ -17828,7 +17859,7 @@ function App() {
           padding: "3px 0"
         }
       }, isX ? "▲ Less" : "▼ More"))));
-    }));
+    })));
   })(), false && /*#__PURE__*/React.createElement("div", {
     style: {
       height: 1,

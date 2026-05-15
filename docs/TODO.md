@@ -602,8 +602,11 @@ The same four activities done in a different order produce measurably different 
 ## 5. Habits & Goals — Cards, Bugs, Organization
 
 ### 5.1 Badge overlap on habit/goal cards
-- **Problem:** When opening edit on a card, the target/unit-amount badge is sometimes covered by other components on the card.
-- **Acceptance:** Badges remain visible and legible in both view and edit states.
+
+> **🟢 Shipped** — addressed at [index.html:16291](../index.html#L16291) (Yes/No pill) and [index.html:16319](../index.html#L16319) (target chip). Both badges are hidden when the card is in edit mode (`!isE` gate) because the inline edit form already surfaces the target value directly. When NOT editing, the chip carries `position: relative; zIndex: 2` so it sits above any metadata pill that would otherwise overlap it on the right edge. The hide-while-editing choice diverges slightly from the original "visible in both states" acceptance but is documented inline at [index.html:16285-16290](../index.html#L16285) — the edit form's own input row makes the badge redundant while editing.
+
+- **Original problem:** When opening edit on a card, the target/unit-amount badge is sometimes covered by other components on the card.
+- **Original acceptance:** Badges remain visible and legible in both view and edit states.
 
 ### 5.2 "Organize Habits" module is broken
 - **Problem:** Certain habits appear simultaneously when they shouldn't. The organize/reorder functionality does not fully work.
@@ -615,16 +618,25 @@ The same four activities done in a different order produce measurably different 
 - **Action:** Audit and standardize. Reference Apple native apps (Reminders, Health, Notes) for layout/option presentation conventions.
 
 ### 5.4 Highlight neglected habits/goals with text emphasis
-- **Current:** Neglected cards get a red dotted outline.
-- **Add:** Red, all-caps text on top of the card (e.g., **"PRIORITIZE TODAY"** or **"NEGLECTED"**) for higher visual emphasis.
+
+> **🟢 Shipped** — a "Prioritize today" red uppercase tag now sits in the top-left corner of every persistently-resisted habit card at [index.html:15654-15669](../index.html#L15654). `pointer-events: none` and `position: absolute` keep the gesture surface intact. Triggers on `isPersistentlyResisted` (`resistedCount >= 2`). The pre-existing dotted-red border at [index.html:15621](../index.html#L15621) is preserved alongside the new caps tag.
+
+- **Original behavior:** Neglected cards get a red dotted outline.
+- **Original add:** Red, all-caps text on top of the card (e.g., **"PRIORITIZE TODAY"** or **"NEGLECTED"**) for higher visual emphasis.
 - *(See also [§17.9](#179-cross-references) — HealthKit-backed neglect signals are more reliable; promote them harder.)*
 
 ### 5.5 SMART framework display under goals
-- **Current:** Less readable layout for SMART category data.
-- **Change:** For each SMART category, render the **category label** on its own line, then the user-entered string **indented** beneath it.
+
+> **🟢 Shipped** — implemented at [index.html:19170-19224](../index.html#L19170). Each SMART field renders as uppercase label-on-its-own-line + indented value below (`paddingLeft: 8`). Code comment at [index.html:19212-19214](../index.html#L19212) explicitly references §5.5.
+
+- **Original current:** Less readable layout for SMART category data.
+- **Original change:** For each SMART category, render the **category label** on its own line, then the user-entered string **indented** beneath it.
 
 ### 5.6 Warning emoji on habits linked to incomplete goals
-- **Problem:** A habit can be linked to a parent goal whose SMART fields (or other required fields) are not fully filled out. Today the habit gives no visual signal that its underlying goal is half-defined.
+
+> **🟢 Shipped** — implemented at [index.html:16003-16030](../index.html#L16003). A ⚠️ appears on every habit card whose `goalIds`/`goalId` resolves to one or more goals where `isLinkedGoalIncomplete()` returns true. Tooltip enumerates the specific missing fields per goal ("Linked goal incomplete — 'Run a marathon': Specific, Measurable, Time-bound"). Realtime — when the user completes the parent goal's SMART fields, the badge disappears on the next render via the existing data-flow reactivity.
+
+- **Original problem:** A habit can be linked to a parent goal whose SMART fields (or other required fields) are not fully filled out. Today the habit gives no visual signal that its underlying goal is half-defined.
 - **Behavior:** If a habit's linked goal is incomplete (any required field — SMART category, target, deadline, etc. — is empty), the habit card displays a **⚠️** warning emoji.
 - **Interaction:** Tapping/hovering the emoji should explain *why* it's flagged (e.g., "Linked goal 'Run a marathon' is missing: Measurable, Time-bound") and offer a direct link to edit that goal.
 - **Mirror existing pattern:** Goals themselves already show a warning when their own SMART fields are incomplete — this propagates that signal down to any habits attached to those goals so the user notices in the more frequently visited habits view.
@@ -809,8 +821,15 @@ That's a roughly 8–12 callsite change in `index.html` — well under the multi
 ## 7. Reflect Tab — Journaling Redesign
 
 ### 7.1 Past journal entries don't appear in the Reflect tab
-- **Bug:** Previously written entries are not surfaced.
-- **Acceptance:** Reflect tab lists historical entries, browsable by date.
+
+> **🟢 Addressed 2026-05-15** — the entries WERE rendering at the data layer (a `.map` at [index.html:17710+](../index.html#L17710)) but were visually buried below a long write form + filter pills + optional AI-insights card. Empty state read "No entries yet" regardless of whether the user just had a narrow filter active. Two surgical fixes:
+> 1. Anchor the section with a labeled "Past Entries · N total" (or "N of M · today/this week") header above the list.
+> 2. Filter-aware empty state — "No entries today. Tap 'All' to see your full history (N)." instead of the ambiguous "No entries yet."
+>
+> If past entries are still missing after the fix, the next investigation lane is data-layer (whether `data.journal` actually contains the entries on the device — could be a sync race or a localStorage write that didn't land). Wire `console.warn` around the filter step if reproduced.
+
+- **Original bug:** Previously written entries are not surfaced.
+- **Original acceptance:** Reflect tab lists historical entries, browsable by date.
 
 ### 7.2 Redesign Reflect tab using best-in-class journaling apps as reference
 - **Research target:** Day One, Apple Journal, Stoic, Reflectly, etc.
