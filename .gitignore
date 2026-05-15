@@ -52,6 +52,10 @@ android/local.properties
 .claude/settings.local.json
 .claude/state/
 
+# Local visual-verification harness — Playwright screenshots, throwaway scripts,
+# patched dist outputs. Never committed; kept for fast re-runs during dev.
+.verify-tmp/
+
 # Private business / legal / formation docs. NEVER commit these.
 private/
 

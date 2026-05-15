@@ -3217,6 +3217,47 @@ function hydrateCloudDoc(p) {
       // (a 20:00 evening completion would be compared against the
       // morning cutoff). Empty on legacy data; new toggles populate.
       if (!h.slotCompletionTimes || typeof h.slotCompletionTimes !== "object") h = { ...h, slotCompletionTimes: {} };
+      // §5.8b — Multi-slot key migration. Legacy slotCompletions were
+      // keyed by bare section name ("morning"). The expanded model
+      // allows multiple slots per section, so keys are now
+      // "<section>:<localIdx>". Rekey any bare-section keys to ":0"
+      // of that section if the habit has the section in slotSections;
+      // drop orphans. Existing colon-format keys win — they're
+      // already canonical, so they don't get overwritten by a bare
+      // fallback if both are present (the rare double-write race).
+      if (Array.isArray(h.slotSections) && h.slotSections.length > 0) {
+        const fields = ["slotCompletions", "slotCompletionTimes"];
+        for (const f of fields) {
+          if (!h[f] || typeof h[f] !== "object") continue;
+          const out = {};
+          let mutated = false;
+          for (const dkey of Object.keys(h[f])) {
+            const day = h[f][dkey] || {};
+            const next = {};
+            for (const k of Object.keys(day)) {
+              if (k.indexOf(":") !== -1) {
+                // Already canonical "<section>:<localIdx>". Preserve as-is.
+                next[k] = day[k];
+                continue;
+              }
+              // Bare section name. Promote to "section:0" only if
+              // the habit declares that section AND a ":0" entry
+              // doesn't already exist (canonical wins).
+              if (h.slotSections.includes(k)) {
+                const promoted = k + ":0";
+                if (!(promoted in next)) next[promoted] = day[k];
+                mutated = true;
+              } else {
+                // Orphan (section dropped from slotSections). Drop it.
+                mutated = true;
+              }
+            }
+            if (Object.keys(next).length > 0) out[dkey] = next;
+            else mutated = true;
+          }
+          if (mutated) h = { ...h, [f]: out };
+        }
+      }
       return h;
     });
   }
@@ -3294,6 +3335,73 @@ function loadData() {
     }
   } catch (e) {}
   return JSON.parse(JSON.stringify(DD));
+}
+
+/* ── DEFENSIVE TODAY-MERGE on sign-in ──
+   Used when the sign-in load path adopts the cloud doc (cloud is newer-or-
+   equal to local by _updatedAt). For "today" fields that are volatile and
+   user-facing (morning ritual, tips-reviewed dismissals, habit completions,
+   app-streak day-visit), we re-overlay the local copy so a recent local
+   edit that hadn't reached cloud isn't silently dropped.
+
+   - dayVisits: cloud + local unique union, sorted.
+   - dailyRitual[today]: spread cloud first, then local — local wins on
+     keys the user just flipped on this device (briefingReviewed,
+     yesterdayReviewed, goalsReviewed, tipsReviewed, intention, etc.).
+   - habits[*].completions[today], completionTimes[today],
+     completionUnits[today], slotCompletions[today],
+     slotCompletionTimes[today]: take local's value if present, else
+     cloud's. Matched by habit.id so a habit list reordered on cloud
+     still merges its today-cell from local correctly.
+
+   All other fields fall through to cloud (the user's intent for fields
+   they didn't touch today is "use whatever the cloud has"). This is the
+   "take latest per field" defensive merge requested in the data-loss fix:
+   not a generic 3-way diff (which would need a write log we don't have),
+   but a targeted overlay of the specific cells that are at risk during
+   the sign-out flush window.
+
+   Pure function. Returns a new object — does not mutate inputs. */
+function mergeRemoteWithLocalToday(remote, local, todayK) {
+  if (!remote || typeof remote !== "object") return remote;
+  if (!local || typeof local !== "object" || !todayK) return remote;
+  // dayVisits — append-set union.
+  const cloudVisits = Array.isArray(remote.dayVisits) ? remote.dayVisits : [];
+  const localVisits = Array.isArray(local.dayVisits) ? local.dayVisits : [];
+  const visitSet = new Set([...cloudVisits, ...localVisits]);
+  const mergedVisits = Array.from(visitSet).sort();
+  // dailyRitual[today] — overlay local on top of cloud.
+  const cloudRitual = (remote.dailyRitual && typeof remote.dailyRitual === "object") ? remote.dailyRitual : {};
+  const localRitual = (local.dailyRitual && typeof local.dailyRitual === "object") ? local.dailyRitual : {};
+  const cloudToday = (cloudRitual[todayK] && typeof cloudRitual[todayK] === "object") ? cloudRitual[todayK] : {};
+  const localToday = (localRitual[todayK] && typeof localRitual[todayK] === "object") ? localRitual[todayK] : {};
+  const mergedToday = { ...cloudToday, ...localToday };
+  const mergedRitual = { ...cloudRitual };
+  if (Object.keys(mergedToday).length > 0) mergedRitual[todayK] = mergedToday;
+  // habits — overlay today's completion cells from local.
+  const cloudHabits = Array.isArray(remote.habits) ? remote.habits : [];
+  const localHabits = Array.isArray(local.habits) ? local.habits : [];
+  const localByIdMap = {};
+  for (const h of localHabits) {
+    if (h && (h.id || h.id === 0)) localByIdMap[String(h.id)] = h;
+  }
+  const mergedHabits = cloudHabits.map(h => {
+    if (!h) return h;
+    const lh = localByIdMap[String(h.id)];
+    if (!lh) return h;
+    // Pull today's cells from local if local has them.
+    let next = h;
+    const cellFields = ["completions", "completionTimes", "completionUnits", "slotCompletions", "slotCompletionTimes"];
+    for (const f of cellFields) {
+      const localField = lh[f];
+      if (!localField || typeof localField !== "object") continue;
+      if (!(todayK in localField)) continue;
+      const cloudField = (next[f] && typeof next[f] === "object") ? next[f] : {};
+      next = { ...next, [f]: { ...cloudField, [todayK]: localField[todayK] } };
+    }
+    return next;
+  });
+  return { ...remote, dayVisits: mergedVisits, dailyRitual: mergedRitual, habits: mergedHabits };
 }
 
 /* ── CONFETTI BURST ───────────────────────────────────────────────
@@ -4248,10 +4356,66 @@ function App() {
   };
   const doSignOut = async () => {
     if (demoMode) { exitDemo(); return; }
+    // Sign-out data-preservation flow (data-loss bug fix).
+    //
+    // Old order: auth.signOut() → db.terminate() → db.clearPersistence()
+    // killed every in-flight save. save() is fire-and-forget: localStorage
+    // commits synchronously, then `userDoc(uid).set()` queues a network
+    // write via Firestore's offline mutation queue and returns immediately.
+    // If the user signed out within that ack window (typical: hundreds of
+    // ms on a phone connection), three things compounded:
+    //   1. auth.signOut() invalidated the auth token, so the still-queued
+    //      mutation would be rejected by security rules on retry.
+    //   2. db.terminate() froze the mutation in IndexedDB.
+    //   3. db.clearPersistence() DELETED IndexedDB — including the
+    //      pending mutation — so the write never reached the server.
+    // Result: today's morning ritual flip, "tips reviewed" dismissal, app
+    // streak day-visit append, and habit-card completions made shortly
+    // before sign-out were silently dropped from the cloud. localStorage
+    // retained them, but on iOS Capacitor (shared persistence layer) the
+    // local copy could also be disturbed — and on web the cloud-side
+    // gap meant any sign-in on another device showed yesterday's state.
+    //
+    // New order: flush pending writes WHILE auth is still valid, then
+    // signOut, then navigate. clearPersistence() is dropped — the full
+    // page reload below creates a fresh Firestore SDK with its own cache
+    // anyway, and the user's own doc is not a privacy leak to themselves.
+    // terminate() is dropped for the same reason.
     try {
+      // Step 1: explicitly re-push the latest in-memory snapshot. This is
+      // a belt to the suspenders of waitForPendingWrites — if a save()
+      // call was in-flight, its set() is already in the mutation queue
+      // and waitForPendingWrites will catch it; if no save() was in
+      // flight but `latestData.current` is somehow ahead of what reached
+      // cloud (e.g. a save() that failed and parked on lastSaveRef),
+      // this explicit set() catches that case.
+      if (uid && latestData.current) {
+        try {
+          await userDoc(uid).set(sanitizeForFirestore(latestData.current));
+        } catch (e) {
+          try { console.warn("[verrocchio signOut] final flush set() failed:", e && e.code, e && e.message); } catch (_) {}
+        }
+      }
+      // Step 2: wait for Firestore to ack every queued mutation. Caps at
+      // 4s so a flaky network at sign-out time doesn't trap the user on
+      // a half-disabled UI. If the cap fires, localStorage still has
+      // the latest snapshot — sign-in's conflict resolution (localTs >
+      // remoteTs branch in the load useEffect) will push the missing
+      // writes up on next session.
+      try {
+        if (typeof db.waitForPendingWrites === "function") {
+          await Promise.race([
+            db.waitForPendingWrites(),
+            new Promise(resolve => setTimeout(resolve, 4000))
+          ]);
+        }
+      } catch (e) {
+        try { console.warn("[verrocchio signOut] waitForPendingWrites failed:", e && e.code, e && e.message); } catch (_) {}
+      }
+      // Step 3: drop the auth token. Any further Firestore reads/writes
+      // from this page lifetime would now fail rules, but we navigate
+      // away below before that matters.
       await auth.signOut();
-      await db.terminate();
-      await db.clearPersistence();
     } catch (e) { /* non-fatal */ }
     // Route to /login (not reload). location.reload() lands on "/"
     // because the path-aware-entry useEffect rewrites the URL to "/"
@@ -5153,6 +5317,57 @@ function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+  // §13.3 — Habits-tab "reorder mode" (iOS-Home-Screen-style).
+  // Declared early because the two useEffects below depend on
+  // `reorderMode` / `exitReorderMode` and React `let`/`const` are
+  // not hoisted — placing the declaration after the useEffects
+  // crashes the App component on first render with a temporal
+  // dead-zone ReferenceError.
+  const [reorderMode, setReorderMode] = useState(false);
+  const reorderLongPressRef = useRef({ timer: null, habitId: null, startX: 0, startY: 0, pointerId: null });
+  const reorderDragRef = useRef(null);
+  const [reorderDragTick, setReorderDragTick] = useState(0);
+  const cancelReorderLongPress = () => {
+    const r = reorderLongPressRef.current;
+    if (r && r.timer) {
+      clearTimeout(r.timer);
+    }
+    reorderLongPressRef.current = { timer: null, habitId: null, startX: 0, startY: 0, pointerId: null };
+  };
+  const exitReorderMode = () => {
+    cancelReorderLongPress();
+    reorderDragRef.current = null;
+    setReorderMode(false);
+  };
+  // §13.3 — Exit habit reorder mode whenever the user navigates away
+  // from the Habits tab (bottom-tab tap). Tap-Home, tap-Goals etc.
+  // implicitly mean "done reordering" — no need to make the user hit
+  // Done first.
+  useEffect(() => {
+    if (tab !== "habits" && reorderMode) {
+      exitReorderMode();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+  // §13.3 — Scroll-to-top gesture exits reorder mode. Listens on
+  // window so any upward scroll past 0 dismisses the mode. Throttled
+  // by the browser's native scroll cadence; no extra rAF needed.
+  useEffect(() => {
+    if (!reorderMode) return;
+    let lastY = window.scrollY || window.pageYOffset || 0;
+    const onScroll = () => {
+      const y = window.scrollY || window.pageYOffset || 0;
+      // Only exit on a clear scroll-to-top — reached top after being
+      // somewhere below. Filters out tiny rubber-band noise on iOS.
+      if (y <= 0 && lastY > 24) {
+        exitReorderMode();
+      }
+      lastY = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reorderMode]);
   const [saved, setSaved] = useState(false);
   // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
@@ -5512,6 +5727,16 @@ function App() {
   // follow-up double-click can cancel it (avoids the row growing
   // mid-double-click and shifting the second tap target).
   const habitClickTimerRef = useRef(null);
+  // §13.3 — Reorder-mode state + helpers are hoisted ~400 lines up
+  // (just before the first useEffect that depends on them) to avoid
+  // a temporal-dead-zone crash. Behavior unchanged:
+  //   • Entered by long-press (≥500ms hold without movement).
+  //   • While true: tap/double-tap/swipe handlers early-return.
+  //     Top-level cards render a drag handle (≡) on the right edge.
+  //     A fixed "Done" bar pins to the top of the Habits tab.
+  //   • Exits via Done button, tab nav, or scroll-to-top.
+  //   • Long-press cancels the 250ms click-defer in renderCard so
+  //     releasing the finger doesn't pop the row open afterward.
   const shakeRef = useRef({
     lastShake: 0
   });
@@ -7008,9 +7233,40 @@ function App() {
           latestData.current = localData;
           try { userDoc(uid).set(sanitizeForFirestore(localData)).catch(() => {}); } catch (e) {}
         } else {
-          setData(remote);
-          latestData.current = remote;
-          try { localStorage.setItem(lsKey, JSON.stringify(remote)); } catch (e) {}
+          // Defensive per-field merge for the volatile "today" fields.
+          // Pure overwrite (setData(remote)) would discard any local
+          // edits to dailyRitual[today] / habit.completions[today] /
+          // dayVisits that hadn't reached cloud yet — the exact data-
+          // loss path the sign-out flush was added to close, but kept
+          // here as belt-and-suspenders in case (a) sign-out flush
+          // timed out on a flaky network, or (b) a non-signout path
+          // (tab close, iOS WebView eviction, crash) left local
+          // newer-shaped without a higher _updatedAt. Local is the
+          // authority for today's progress on THIS device; cloud is
+          // the authority for everything else.
+          const todayK = tk();
+          const merged = mergeRemoteWithLocalToday(remote, localData, todayK);
+          // If the merge actually grafted something from local that the
+          // cloud doc didn't have (i.e. the JSON shapes differ), push
+          // the merged result up so cloud catches the missing cells.
+          // We bump _updatedAt so this push wins the next echo-detect
+          // round on the realtime listener AND on any other device
+          // signing in next. Skipping the push when shapes are equal
+          // saves a Firestore write on the typical "no local edits
+          // pending" sign-in.
+          let mergedDiffers = false;
+          try { mergedDiffers = JSON.stringify(merged) !== JSON.stringify(remote); } catch (e) {}
+          const final = mergedDiffers ? { ...merged, _updatedAt: Date.now() } : merged;
+          setData(final);
+          latestData.current = final;
+          try { localStorage.setItem(lsKey, JSON.stringify(final)); } catch (e) {}
+          if (mergedDiffers) {
+            try {
+              userDoc(uid).set(sanitizeForFirestore(final)).catch(err => {
+                try { console.warn("[verrocchio load merge] cloud write rejected:", err && err.code, err && err.message); } catch (_) {}
+              });
+            } catch (e) {}
+          }
         }
       } else {
         // Brand-new account — no doc yet. Leave `data` at the blank
@@ -7920,12 +8176,24 @@ function App() {
 
     // Multi-slot habits: a single habit can be due in multiple sections
     // each day (e.g. "Take meds" at morning + evening). Each slot has
-    // its own done/missed toggle stored in slotCompletions[key][slot].
+    // its own done/missed toggle stored in slotCompletions[key][slotId].
     // The day-level completions[key] is the rollup ("done" iff every
     // slot is "done") so streak / sparkline / correlations keep working
     // unchanged — they read the rollup.
+    // §5.8b — `slot` is now a slot ID like "morning:0" (NOT a bare
+    // section name). slotSections may contain duplicates, so a single
+    // section can host multiple slots (2x morning = "morning:0" and
+    // "morning:1"). Identity is positional within slotSections.
     const slots = Array.isArray(targetH.slotSections) ? targetH.slotSections : null;
-    const isMultiSlot = !!(slots && slots.length > 0 && slot && slots.includes(slot));
+    const parsedSlot = parseSlotId(slot);
+    const isMultiSlot = !!(
+      slots && slots.length > 0 && parsedSlot &&
+      // The section must appear at least localIdx+1 times in
+      // slotSections for this slot to be valid. Guards against stale
+      // slot IDs surviving a section removal (e.g. user dropped
+      // "morning:1" but a queued toggle still references it).
+      slots.filter(s => s === parsedSlot.section).length > parsedSlot.localIdx
+    );
 
     let newState;
     let nextUnits = null;
@@ -7936,12 +8204,16 @@ function App() {
       if (newSlotState === "none") delete sc[slot];
       else sc[slot] = newSlotState;
       nextSlotComp = sc;
+      // §5.8b — Iterate slot IDs (not bare section names) for the
+      // rollup. Building IDs once here avoids slipping into the old
+      // section-name lookup that would collapse duplicate sections.
+      const slotIds = slots.map((_, i) => slotIdForIndex(slots, i));
       // Day-level rollup: ALL slots done → "done", ALL slots missed →
       // "missed", anything in between → "none" (mixed). The "none"
       // mixed case keeps streaks honest — you don't get streak credit
       // for half-finishing a multi-slot habit.
-      const allDone = slots.every(s => sc[s] === "done" || sc[s] === true);
-      const allMissed = slots.every(s => sc[s] === "missed");
+      const allDone = slotIds.every(sid => sc[sid] === "done" || sc[sid] === true);
+      const allMissed = slotIds.every(sid => sc[sid] === "missed");
       newState = allDone ? "done" : (allMissed ? "missed" : "none");
     } else if (mode === "increment" && typeof targetH.target === "number") {
       const curUnits = Number(targetH.completionUnits && targetH.completionUnits[key]) || 0;
@@ -8161,11 +8433,21 @@ function App() {
     if (slots && slots.length > 0) {
       const sc = (h.slotCompletions || {})[k] || {};
       if (slot) {
+        // §5.8b — `slot` is a slot ID ("<section>:<localIdx>"). The
+        // hydration shim migrated legacy bare-section keys to ":0",
+        // so a direct lookup is sufficient. No bare-name fallback is
+        // needed here — that would mask bugs where a slot row was
+        // wired up with a stale identifier.
         const v = sc[slot];
         return v === "done" || v === true;
       }
-      return slots.every(s => {
-        const v = sc[s];
+      // §5.8b — Build slot IDs and check every one is done. Iterating
+      // slotSections directly with bare-section lookups would collapse
+      // duplicate sections into a single check, falsely reporting "all
+      // done" the moment ONE slot of a 2x-morning habit was done.
+      const slotIds = slots.map((_, i) => slotIdForIndex(slots, i));
+      return slotIds.every(sid => {
+        const v = sc[sid];
         return v === "done" || v === true;
       });
     }
@@ -8182,6 +8464,8 @@ function App() {
     // can't tell that the slot was actually marked missed.
     const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
     if (slot && slots && slots.length >= 2) {
+      // §5.8b — `slot` is a slot ID ("<section>:<localIdx>"). Direct
+      // lookup; the hydration shim normalized any bare-section keys.
       const sc = (h.slotCompletions || {})[fd || tk()] || {};
       return sc[slot] === "missed";
     }
@@ -8462,6 +8746,55 @@ function App() {
     arr.splice(target, 0, moved);
     const stamped = arr.map((x, i) => ({ ...x, _order: i }));
     save({ ...data, [arrName]: stamped });
+  };
+  // §13.3 — Reorder-mode drop commit. Moves the habit identified by
+  // `habitId` to position `targetIndexInSection` inside `targetSection`
+  // (clamped to 0..N), updating `section` if it changed, and
+  // re-stamping `_order` on every habit so the new global ordering
+  // survives the Firestore round-trip. Reads from latestData.current
+  // for the same staleness reason as reorderHabitSection.
+  const commitHabitReorderDrop = (habitId, targetSection, targetIndexInSection) => {
+    const cur = latestData.current || data;
+    const all = (cur.habits || []).slice();
+    const moved = all.find(h => String(h.id) === String(habitId));
+    if (!moved) return;
+    // Update the moved habit's section. (Doesn't touch slotSections —
+    // multi-slot habits' rendering is driven by slotSections, not
+    // `section`. Dragging a multi-slot habit between section columns
+    // changes its primary `section` only, which is the right call:
+    // the section drives the default home for single-slot habits, but
+    // slot rendering for multi-slot habits is unchanged.)
+    const updatedMoved = moved.section === targetSection ? moved : { ...moved, section: targetSection };
+    // Build the new section-local sequence with `moved` inserted at
+    // targetIndexInSection. Other sections are untouched.
+    const sectionPeers = all
+      .filter(h => h.section === targetSection && String(h.id) !== String(habitId) && !h.parentId)
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    const clamped = Math.max(0, Math.min(targetIndexInSection, sectionPeers.length));
+    const newSequence = [...sectionPeers.slice(0, clamped), updatedMoved, ...sectionPeers.slice(clamped)];
+    // Re-stamp _order on the section's habits using a section-local
+    // index (matches reorderHabitSection's approach — using global
+    // index would clobber every other section's ordering).
+    const orderById = {};
+    newSequence.forEach((h, i) => { orderById[h.id] = i; });
+    // Sub-habits (parentId set) inherit their parent's section but
+    // sit outside the section's _order list; we leave their _order
+    // alone so the child's relative position within the parent's
+    // sub-list isn't disturbed.
+    const nextHabits = all.map(h => {
+      if (String(h.id) === String(habitId)) {
+        return { ...updatedMoved, _order: orderById[h.id] };
+      }
+      if (h.section === targetSection && !h.parentId && Object.prototype.hasOwnProperty.call(orderById, h.id)) {
+        return { ...h, _order: orderById[h.id] };
+      }
+      return h;
+    });
+    save({
+      ...cur,
+      habits: nextHabits,
+      sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" }
+    });
   };
   /* Per-goal habit draft (mirrors goalTodoDraft). Empty string per
      goal id; populated as the user types into the inline habit
@@ -10037,10 +10370,78 @@ function App() {
   // §8.1: archived todos are hidden from the main render. They're surfaced
   // via the "View archive" toggle below the active list, and can be restored.
   const pending = data.todos.filter(t => !t.done && !t.archived);
-  // §6 — parked habits are inert and excluded from every daily-stat
+  // §6 Future Habits — a habit is "future" if either (a) the user
+  // manually parked it (h.parked === true) OR (b) its startDate is
+  // strictly after today (calendar-based future). Both states feed
+  // the Future Habits drawer and are excluded from active lists,
+  // tips, daily briefing inputs, and home widgets. Date comparison
+  // works because dk()-format keys ("YYYY-MM-DD") are lexicographically
+  // ordered. Defined early so all downstream derived state can use it.
+  const _todayKForFuture = tk();
+  const isFutureHabit = h => !!(h && (h.parked || (h.startDate && h.startDate > _todayKForFuture)));
+  // §5.8b — Slot IDs are "<section>:<localIdx>" where localIdx is the
+  // 0-based position of that occurrence within slotSections filtered
+  // to that section. Pure helpers, no React state. slotSections may
+  // contain duplicates (e.g. ["morning","morning","afternoon"]) so
+  // multiple chunks of the same habit can land in the same time
+  // section (2x morning study). MAX_SLOTS caps the per-habit total
+  // at 12; the stepper UI enforces this and the migration is tolerant
+  // of any cap change later. Slot IDs are stable identifiers used as
+  // keys in slotCompletions / slotCompletionTimes / swipeAnim.
+  const MAX_SLOTS = 12;
+  const slotIdForIndex = (slotSections, arrayIdx) => {
+    if (!Array.isArray(slotSections)) return null;
+    const section = slotSections[arrayIdx];
+    if (section == null) return null;
+    let localIdx = 0;
+    for (let i = 0; i < arrayIdx; i++) if (slotSections[i] === section) localIdx++;
+    return section + ":" + localIdx;
+  };
+  const parseSlotId = id => {
+    if (!id || typeof id !== "string") return null;
+    const i = id.indexOf(":");
+    if (i === -1) return { section: id, localIdx: 0 };
+    const idx = parseInt(id.slice(i + 1), 10);
+    return { section: id.slice(0, i), localIdx: isFinite(idx) ? idx : 0 };
+  };
+  // §5.8b — Map of section → number of times it appears in
+  // slotSections. Used by the stepper UI ("morning x 2") and by the
+  // renderer to decide whether a slot row needs the "#N" suffix.
+  const slotSectionCounts = slotSections => {
+    const counts = {};
+    for (const s of (slotSections || [])) counts[s] = (counts[s] || 0) + 1;
+    return counts;
+  };
+  // §5.8b — Materialize a slotSections array into the per-row objects
+  // the renderer iterates. Each entry pairs a section name with its
+  // canonical slot ID + the local index of that occurrence + the
+  // total count of that section in the array (used to decide whether
+  // to suffix the row label with "#N").
+  const slotRowsFor = slotSections => {
+    if (!Array.isArray(slotSections)) return [];
+    const counts = slotSectionCounts(slotSections);
+    let seen = {};
+    return slotSections.map((section, arrayIdx) => {
+      const localIdx = seen[section] || 0;
+      seen[section] = localIdx + 1;
+      return {
+        section,
+        arrayIdx,
+        localIdx,
+        countInSection: counts[section] || 1,
+        slotId: section + ":" + localIdx
+      };
+    });
+  };
+  // A goal is "future" if no currently-active (non-future) habit is
+  // linked to it. Mirrors the existing Future Goals drawer rule but
+  // routes through isFutureHabit so a goal whose only linked habits
+  // are date-future is also future.
+  const isFutureGoal = g => !(data.habits || []).some(h => habitLinkedToGoal(h, g.id) && !isFutureHabit(h));
+  // §6 — future habits are inert and excluded from every daily-stat
   // aggregator that reads `dH` (Habits-tab header count, 30-day
   // sparkline heatmap, etc.).
-  const dH = habits.filter(h => h.section !== "avoid" && !h.parked);
+  const dH = habits.filter(h => h.section !== "avoid" && !isFutureHabit(h));
   const doneHCt = dH.filter(h => isDone(h, selDate)).length;
   const isToday = selDate === tk();
   const travelDays = data.travelDays || [];
@@ -10150,10 +10551,11 @@ function App() {
 
   const matchesRoutine = h => { const loc = h.location || "both"; return loc === "both" || loc === routineMode; };
   const filtH = habits.filter(h => {
-    // §6 Future Habits — parked habits are inert. They sit in the
-    // Future Habits drawer (rendered below the active sections) and
-    // don't appear in any section, filter pill, or count chip.
-    if (h.parked) return false;
+    // §6 Future Habits — both parked AND startDate>today habits are
+    // inert. They sit in the Future Habits drawer (rendered below
+    // active sections) and don't appear in any section, filter pill,
+    // or count chip.
+    if (isFutureHabit(h)) return false;
     if (impFilter.length > 0 && !impFilter.includes(h.importance)) return false;
     // Goal (Area-of-Life) filter — habit's `type` must match one of the
     // currently selected area values (Physical, Mental, etc.).
@@ -10189,6 +10591,27 @@ function App() {
     }
     return true;
   });
+  // §13.3 — Block entry to reorder mode while ANY filter pill is
+  // active. Reordering a partial set risks misordering the hidden
+  // habits behind the filter (the new _order is computed only over
+  // the visible peers in the section). Future enhancement: surface a
+  // toast on long-press explaining the gate; for now we silently
+  // no-op the long-press so the user's existing tap/swipe handlers
+  // are undisturbed.
+  const reorderEntryBlockedByFilter = (
+    impFilter.length > 0 ||
+    habGoalFilter.length > 0 ||
+    habFreqFilter.length > 0 ||
+    secFilter.length > 0 ||
+    dueFilter !== "all" && dueFilter !== "today" ||
+    (durRange[0] !== DUR_MIN || durRange[1] !== DUR_MAX)
+  );
+  // NB: dueFilter defaults to "today" — that's effectively the user's
+  // working set, NOT a deliberate filter to block reorder on. We keep
+  // reorder entry allowed in the default "today" view; only the
+  // explicit "other" or "all" filters (and the explicit filter pills)
+  // gate entry. The expression above leaves "today" and "all" as
+  // non-blocking ("all" is "show everything", also non-restrictive).
   const dateOpts = Array.from({
     length: 14
   }, (_, i) => {
@@ -10317,19 +10740,45 @@ function App() {
   // addition to (or instead of) their primary section. Each occurrence
   // is rendered with a `_renderSlot` marker so the row can pass that
   // slot to togHabit / isDone for per-slot toggling.
-  const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => ({
-    ...sec,
-    habits: sortItems(filtH.filter(h => {
-      if (h.parentId) return false;
+  // §5.8b — slotSections may contain duplicates ("2x morning"), so a
+  // habit with ["morning","morning"] appears as TWO rows in the
+  // Morning section, each carrying its own slot ID ("morning:0" and
+  // "morning:1"). `_renderSlot` is now a slot ID, not a bare section
+  // name, so downstream togHabit / isDone treat each row as its own
+  // identity. Each row also carries `_renderSlotMeta` with section,
+  // localIdx, and total countInSection so the renderer can build the
+  // "Morning #2" label without re-deriving the same index data.
+  const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => {
+    // Expand each habit into one row per matching slot occurrence in
+    // this section. Non-multi-slot habits return a single row.
+    const expanded = [];
+    for (const h of filtH) {
+      if (h.parentId) continue;
       const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
-      if (slots && slots.length > 0) return slots.includes(sec.value);
-      return h.section === sec.value;
-    }).map(h => {
-      const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
-      if (slots && slots.length > 0) return { ...h, _renderSlot: sec.value };
-      return h;
-    }), habitSortMode, "habit")
-  })).filter(g => g.habits.length > 0), [filtH, secFilter, habitSortMode]);
+      if (slots && slots.length > 0) {
+        const rows = slotRowsFor(slots);
+        for (const r of rows) {
+          if (r.section !== sec.value) continue;
+          expanded.push({
+            ...h,
+            _renderSlot: r.slotId,
+            _renderSlotMeta: {
+              section: r.section,
+              localIdx: r.localIdx,
+              countInSection: r.countInSection,
+              arrayIdx: r.arrayIdx
+            }
+          });
+        }
+      } else if (h.section === sec.value) {
+        expanded.push(h);
+      }
+    }
+    return {
+      ...sec,
+      habits: sortItems(expanded, habitSortMode, "habit")
+    };
+  }).filter(g => g.habits.length > 0), [filtH, secFilter, habitSortMode]);
 
   /* ── ONBOARDING: AUTH + WELCOME GATES ── */
   // Shared page shell for auth/welcome
@@ -12941,13 +13390,17 @@ function App() {
         action: null
       });
     }
-    const noSmartGoal = data.goals.find(g => !g.smart || !Object.values(g.smart).some(v => v && v.trim()));
+    // §11.0 — Tips & Reminders must never reference future habits or
+    // future goals. The Home-tab Tips card is for ACTIVE workload only;
+    // future items live exclusively in their tab's Future drawer. Each
+    // candidate list below is filtered through isFutureHabit / isFutureGoal.
+    const noSmartGoal = data.goals.find(g => !isFutureGoal(g) && (!g.smart || !Object.values(g.smart).some(v => v && v.trim())));
     if (noSmartGoal) smartTips.push({ icon: "🎯", title: "Add S.M.A.R.T. details", body: `Your goal "${noSmartGoal.text.slice(0, 40)}…" has no SMART framework. Tap to add specifics.`, action: () => setTab("goals") });
     // Incomplete-item tips — voice-captured / fast-add items
     // missing area / section / due date / SMART. The 🚨 chip on
     // each card is the inline cue; this surfaces the same items
     // up at the top of Home so the user can fix them in batch.
-    const incompleteHabits = (data.habits || []).filter(h => isHabitIncomplete(h));
+    const incompleteHabits = (data.habits || []).filter(h => isHabitIncomplete(h) && !isFutureHabit(h));
     if (incompleteHabits.length > 0) {
       const sample = incompleteHabits[0];
       smartTips.push({
@@ -12959,7 +13412,7 @@ function App() {
         action: () => setCoachContext({ kind: "habit", habit: sample, reason: "incomplete-details" })
       });
     }
-    const incompleteGoals = (data.goals || []).filter(g => isGoalIncomplete(g));
+    const incompleteGoals = (data.goals || []).filter(g => isGoalIncomplete(g) && !isFutureGoal(g));
     if (incompleteGoals.length > 0) {
       const sample = incompleteGoals[0];
       smartTips.push({
@@ -14579,6 +15032,70 @@ function App() {
       className: "fade-in"
     },
       returnBanner,
+      // §13.3 — Reorder-mode top bar. Pinned at the top of the
+      // viewport (position:fixed) so the user can always see the
+      // "Done" exit affordance even after scrolling down a long list
+      // of habits. Renders only when reorderMode is true; otherwise
+      // null collapses out of the tree entirely. Bar height (~44px)
+      // is reserved by a spacer below so the first habit section
+      // header isn't visually clipped by the bar.
+      reorderMode && /*#__PURE__*/React.createElement("div", {
+        style: {
+          position: "fixed",
+          top: 0, left: 0, right: 0,
+          zIndex: 50,
+          background: "var(--c-surface-raised)",
+          borderBottom: "1px solid var(--c-border)",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 14px",
+          gap: 12
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            "aria-hidden": true,
+            style: { fontSize: 16, lineHeight: 1, color: "var(--c-text-soft)", flexShrink: 0 }
+          }, "≡"),
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", flexDirection: "column", minWidth: 0 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 12, fontWeight: 700, color: "var(--c-text)", lineHeight: 1.2 }
+            }, "Reorder habits"),
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.2, marginTop: 2 }
+            }, "Drag the ≡ handle on any card. Tap Done when finished.")
+          )
+        ),
+        /*#__PURE__*/React.createElement("button", {
+          type: "button",
+          onClick: () => exitReorderMode(),
+          style: {
+            background: "#2d5a2d",
+            color: "#fff",
+            border: "none",
+            borderRadius: 999,
+            padding: "8px 18px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+            flexShrink: 0
+          }
+        }, "Done")
+      ),
+      // Spacer to push content below the fixed reorder bar so the
+      // first section header isn't visually trapped under it. Sized
+      // to roughly match the bar's height (10px padding + ~32px
+      // content row = ~52px; round up to 56 for a touch of breathing
+      // room).
+      reorderMode && /*#__PURE__*/React.createElement("div", {
+        style: { height: 56, flexShrink: 0 }
+      }),
       // W3-T10: framing sentence for new users. The add-habit affordance
       // (the [+] button + the inline "No habits yet — add one above"
       // empty state below) is already prominent on this tab, so we just
@@ -15430,9 +15947,27 @@ function App() {
         // updated the tapped slot. Scope the key by slot too so each
         // row owns its own swipe animation + gesture tracking.
         const animKey = renderSlot ? habit.id + ":" + renderSlot : habit.id;
-        const d = isDone(habit, selDate, renderSlot);
+        // For multi-slot rows, "done" means EITHER this specific slot is
+        // marked done OR the day-level rollup says all slots are done.
+        // The day-level fallback covers two real-world cases:
+        //   (1) Migration — a habit was a plain daily habit before the
+        //       user enabled slotSections; its old completions[key]="done"
+        //       has no slotCompletions counterpart, so without the
+        //       fallback the row would read as not-done forever after.
+        //   (2) Defensive parity — when togHabit rolls up to a
+        //       day-level "done" (every slot done), each per-slot row
+        //       should visibly reflect that the whole habit is complete.
+        //       Per-slot lookup already returns true in that case, but
+        //       the fallback guards against any data desync between
+        //       slotCompletions and the day-level rollup.
+        const d = isDone(habit, selDate, renderSlot)
+          || (renderSlot ? isDone(habit, selDate, null) : false);
         // §5.8 — pass renderSlot so multi-slot rows show their own
-        // per-slot missed state, not the day-level rollup.
+        // per-slot missed state, not the day-level rollup. The "all
+        // slots missed" rollup is intentionally NOT folded back here:
+        // a per-slot "missed" is a user action on that one slot, so
+        // each row reads its own state honestly without a sibling
+        // slot inadvertently flipping it red.
         const missed = isMissed(habit, selDate, renderSlot);
         const resistedCount = resistanceCountFor[habit.id] || 0;
         const isPersistentlyResisted = resistedCount >= 2;
@@ -15443,6 +15978,18 @@ function App() {
         const streak = getStreak(habit);
         const rate = getCR(habit);
         const l14 = getLast14(habit);
+        // §13.3 — Identify the "parent" habit id used for reorder
+        // grouping: for a sub-habit (parentId set) we'd reorder the
+        // PARENT (all children move together), for a multi-slot row
+        // we use the un-suffixed habit.id. For top-level habits this
+        // resolves to habit.id directly. The card is "draggable" in
+        // reorder mode only when it represents a top-level habit
+        // (parentId is falsy) — sub-habit rows render inside their
+        // parent's expanded block and aren't reorderable individually.
+        const reorderHabitId = habit.parentId || habit.id;
+        const isTopLevelForReorder = !habit.parentId;
+        const isBeingDragged = reorderMode && reorderDragRef.current && String(reorderDragRef.current.habitId) === String(reorderHabitId);
+        const dragOffsetY = isBeingDragged ? (reorderDragRef.current.currentY - reorderDragRef.current.startY) : 0;
         // Avoid habits used to take a separate, simpler render branch
         // (different action button, fewer pills, "Strong willpower!"
         // swipe copy). They now share this exact same render with
@@ -15452,7 +15999,16 @@ function App() {
         // reason to exist.
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
-          className: "hrow",
+          className: "hrow" + (reorderMode ? " hrow-reorder" : "") + (isBeingDragged ? " hrow-dragging" : ""),
+          "data-habit-id": habit.id,
+          "data-habit-section": habit.section || "",
+          // Identify drop-target eligibility from CSS attributes alone:
+          // a sub-habit row (parentId set) cannot be reordered as a
+          // standalone — the parent moves the whole group. We stamp
+          // an explicit "data-reorderable" so the drop resolver in
+          // the drag handle can filter out non-targets without
+          // re-reading habit objects from React state.
+          "data-reorderable": isTopLevelForReorder ? "1" : "0",
           // Tap          = toggle expanded metadata row.
           // Double-tap   = open the edit-habit modal (where the user
           //                can change the habit's position via the
@@ -15460,11 +16016,65 @@ function App() {
           // Swipe right  = mark done / fill target.
           // Swipe left   = clear today.
           //
-          // Drag-to-reorder was removed — having an Order input in
-          // the edit modal is more discoverable and avoids the
-          // accidental-drag mishaps with mobile scroll. Hence no
-          // pointer-down hold timer here anymore.
+          // Drag-to-reorder was removed (then re-added as an opt-in
+          // §13.3 "reorder mode" entered by long-press) — having an
+          // Order input in the edit modal is more discoverable and
+          // avoids the accidental-drag mishaps with mobile scroll.
+          // While `reorderMode` is true the standard tap / double-tap
+          // / swipe gestures early-return so the only interactions
+          // are pointerdown-on-handle (drag) and tap-Done (exit mode).
+          onPointerDown: e => {
+            // Long-press to enter reorder mode. Skipped when:
+            //   • already in reorder mode (the handle owns drag there);
+            //   • there's an active swipe in flight (swipeRef carries
+            //     state from onTouchStart) — a horizontal swipe wins
+            //     over the hold.
+            // Filters disable reorder entry — see filter-active gate
+            // below; entry from a card while filters are on would risk
+            // misordering hidden habits.
+            if (reorderMode) return;
+            if (swipeRef.current[animKey]) {
+              // Swipe in flight — don't enter reorder mode.
+              return;
+            }
+            if (reorderEntryBlockedByFilter) return;
+            cancelReorderLongPress();
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const pid = e.pointerId;
+            reorderLongPressRef.current = {
+              startX, startY, pointerId: pid, habitId: reorderHabitId,
+              timer: setTimeout(() => {
+                // Long-press fired — enter reorder mode, cancel any
+                // pending click-defer expand so releasing the finger
+                // doesn't pop the row open.
+                if (habitClickTimerRef.current) {
+                  clearTimeout(habitClickTimerRef.current);
+                  habitClickTimerRef.current = null;
+                }
+                if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) {} }
+                reorderLongPressRef.current = { timer: null, habitId: null, startX: 0, startY: 0, pointerId: null };
+                setReorderMode(true);
+              }, 500)
+            };
+          },
+          onPointerMove: e => {
+            const r = reorderLongPressRef.current;
+            if (!r || !r.timer) return;
+            const dx = Math.abs(e.clientX - r.startX);
+            const dy = Math.abs(e.clientY - r.startY);
+            if (dx > 6 || dy > 6) {
+              cancelReorderLongPress();
+            }
+          },
+          onPointerUp: e => {
+            cancelReorderLongPress();
+          },
+          onPointerCancel: e => {
+            cancelReorderLongPress();
+          },
           onClick: e => {
+            if (reorderMode) return;
             // Defer the expand-toggle by ~250ms so a follow-up second
             // click cancels it and goes straight to the edit modal.
             // Without the delay, the row grew on click 1, shifted
@@ -15483,6 +16093,7 @@ function App() {
             }, 250);
           },
           onDoubleClick: e => {
+            if (reorderMode) { e.stopPropagation(); return; }
             e.stopPropagation();
             // Cancel any pending single-click expand so the row stays
             // put while the edit modal opens.
@@ -15493,6 +16104,7 @@ function App() {
             sEHabit(habit);
           },
           onTouchStart: e => {
+            if (reorderMode) return;
             const t = e.touches[0];
             swipeRef.current[animKey] = {
               x: t.clientX,
@@ -15502,6 +16114,11 @@ function App() {
           },
           onTouchMove: e => { return; },
           onTouchEnd: e => {
+            if (reorderMode) {
+              // Make sure no swipe state lingers if mode entered mid-touch.
+              delete swipeRef.current[animKey];
+              return;
+            }
             const s = swipeRef.current[animKey];
             if (!s) return;
             const dx = e.changedTouches[0].clientX - s.x;
@@ -15630,43 +16247,54 @@ function App() {
             padding: compact
               ? (expHabitGoals[habit.id] ? "8px 8px" : "6px 8px")
               : (expHabitGoals[habit.id] ? "10px 12px" : "7px 12px"),
-            paddingRight: compact ? 8 : (ht ? "30px" : "12px"),
-            transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
-            transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s",
-            boxShadow: d || animState === "done" ? "0 1px 3px rgba(22,163,74,.1)" : missed || animState === "missed" ? "0 1px 3px rgba(220,38,38,.08)" : "0 1px 2px rgba(0,0,0,.04)",
+            // Reserve room for the drag handle on the right when in
+            // reorder mode so it doesn't overlap the area-of-life chip.
+            paddingRight: reorderMode && isTopLevelForReorder
+              ? 36
+              : (compact ? 8 : (ht ? "30px" : "12px")),
+            transform: isBeingDragged
+              ? `translateY(${dragOffsetY}px) scale(1.02)`
+              : (animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)"),
+            // While being dragged, drop the animation transition so the
+            // card tracks the pointer instantly. Otherwise keep the
+            // existing 0.32s ease that powers the swipe-out animation.
+            transition: isBeingDragged
+              ? "transform 0s, box-shadow 0.15s"
+              : "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s, box-shadow 0.15s",
+            boxShadow: isBeingDragged
+              ? "0 12px 28px rgba(0,0,0,0.18)"
+              : (reorderMode && isTopLevelForReorder
+                ? "0 4px 14px rgba(0,0,0,0.10)"
+                : (d || animState === "done"
+                  ? "0 1px 3px rgba(22,163,74,.1)"
+                  : missed || animState === "missed"
+                    ? "0 1px 3px rgba(220,38,38,.08)"
+                    : "0 1px 2px rgba(0,0,0,.04)")),
             position: "relative",
-            overflow: "hidden",
+            // Drag-out-of-bounds: lift overflow clipping during a drag
+            // so a card translated >half its height is fully visible.
+            overflow: isBeingDragged ? "visible" : "hidden",
+            zIndex: isBeingDragged ? 10 : undefined,
+            opacity: isBeingDragged ? 0.94 : 1,
             marginBottom: 8,
-            cursor: "pointer",
+            cursor: reorderMode && isTopLevelForReorder ? "grab" : "pointer",
             userSelect: "none",
+            // touchAction: none on the card while in reorder mode so
+            // the browser doesn't try to scroll the page when the user
+            // drags vertically on the card body. Outside reorder mode
+            // we leave touch-action at the browser default so vertical
+            // scrolling and horizontal swipe both work as today.
+            touchAction: reorderMode && isTopLevelForReorder ? "none" : undefined,
             WebkitTapHighlightColor: "transparent"
           }
         },
-        // §5.4 — "Prioritize today" banner for persistently-resisted
-        // habits. The dotted-red border alone wasn't loud enough; this
-        // adds a small uppercase tag inside the top-left corner so the
-        // card reads as "this is the one you keep avoiding" at a glance.
-        // Uses position:absolute because the card itself is a horizontal
-        // flex row (would otherwise distort layout). z-index 1 keeps it
-        // above the card background but below the donut/chip controls,
-        // and pointer-events:none ensures the underlying tap/swipe
-        // gestures stay intact.
-        isPersistentlyResisted && /*#__PURE__*/React.createElement("div", {
-          "aria-label": "Prioritize today — persistently resisted",
-          style: {
-            position: "absolute",
-            top: 3,
-            left: 10,
-            fontSize: 9,
-            fontWeight: 800,
-            letterSpacing: "0.1em",
-            color: "var(--c-tint-danger-fg, #b91c1c)",
-            textTransform: "uppercase",
-            lineHeight: 1,
-            pointerEvents: "none",
-            zIndex: 1
-          }
-        }, "Prioritize today"),
+        // §5.4 — "Prioritize today" signal for persistently-resisted
+        // habits now rendered INLINE as a habit-name prefix (see the
+        // span next to the habit title below). The previous absolute-
+        // positioned banner at top:3/left:10 overlapped the action
+        // donut and the start of the habit name on every resisted card.
+        // The dotted-red border at the card's `border:` style above
+        // remains as the primary always-visible signal.
         // §13.1 Desktop hover-reveal mark-missed X. Invisible by
         // default (opacity:0, pointer-events:none); a CSS rule scoped
         // to body[data-device="desktop"/"desktop-wide"] .hrow:hover
@@ -15722,34 +16350,194 @@ function App() {
             zIndex: 2
           }
         }, "✕"),
-        // §13.2 — Desktop ↑/↓ reorder buttons. Additive to the
-        // existing drag-to-reorder on touch (which is owned by the
-        // Organize modal for habits); these buttons give trackpad +
-        // keyboard users a discoverable way to nudge a habit up or
-        // down. Gated to desktop/desktop-wide via window.__deviceProfile
-        // — the value is kept in sync on resize by the same listener
-        // that sets body[data-device], so a window resize will hide
-        // the buttons on the next render. stopPropagation prevents the
-        // row's expand-on-click / edit-on-doubleclick handlers from
-        // firing.
-        (typeof window !== "undefined" && (window.__deviceProfile === "desktop" || window.__deviceProfile === "desktop-wide")) && /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", flexDirection: "column", gap: 1, marginRight: 2, flexShrink: 0, alignSelf: "center" }
-        },
-          /*#__PURE__*/React.createElement("button", {
-            onClick: (e) => { e.stopPropagation(); moveItemByDelta("habits", habit.id, -1); },
-            onDoubleClick: (e) => e.stopPropagation(),
-            title: "Move up",
-            "aria-label": "Move habit up",
-            style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "0 4px", fontSize: 10, lineHeight: 1 }
-          }, "▲"),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: (e) => { e.stopPropagation(); moveItemByDelta("habits", habit.id, 1); },
-            onDoubleClick: (e) => e.stopPropagation(),
-            title: "Move down",
-            "aria-label": "Move habit down",
-            style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "0 4px", fontSize: 10, lineHeight: 1 }
-          }, "▼")
-        ),
+        // §13.3 — Reorder-mode drag handle. Rendered only when the
+        // user has entered reorder mode (long-press anywhere on a
+        // habit card) AND this row represents a top-level habit
+        // (sub-habits / multi-slot rows piggyback on the parent).
+        // Pointerdown on the handle starts an absolute drag; the
+        // global pointermove/up listeners installed by the
+        // reorder-mode effect handle the rest (cards under the
+        // pointer get re-stamped on drop). The handle is the ONLY
+        // pointer-active element in reorder mode — the rest of the
+        // card body is gated by the reorderMode-aware handlers
+        // above. Note: the desktop-only ▲▼ nudge buttons that used
+        // to live here were removed when reorder-mode landed; the
+        // long-press + drag flow now covers both touch and mouse
+        // via Pointer Events.
+        (reorderMode && isTopLevelForReorder) && /*#__PURE__*/React.createElement("div", {
+          className: "hrow-drag-handle",
+          "aria-label": "Drag to reorder",
+          role: "button",
+          onPointerDown: (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            // Find the card root (the .hrow element) by walking up
+            // from the handle. Used by global pointermove to compute
+            // drop targets via getBoundingClientRect, and so the
+            // handle's drag tracks a stable element.
+            let cardEl = e.currentTarget;
+            while (cardEl && !(cardEl.classList && cardEl.classList.contains("hrow"))) {
+              cardEl = cardEl.parentElement;
+            }
+            if (!cardEl) return;
+            // Pointer capture: any pointermove/pointerup after this
+            // point is routed back to the handle regardless of where
+            // the pointer is over the page. Without capture, fast
+            // drags off the card edge would lose the event stream.
+            try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+            reorderDragRef.current = {
+              habitId: reorderHabitId,
+              pointerId: e.pointerId,
+              startY: e.clientY,
+              currentY: e.clientY,
+              originalSection: habit.section || "morning",
+              cardEl
+            };
+            setReorderDragTick(t => t + 1);
+          },
+          onPointerMove: (e) => {
+            const r = reorderDragRef.current;
+            if (!r || r.pointerId !== e.pointerId) return;
+            r.currentY = e.clientY;
+            // Throttle the visual update to rAF so the card transform
+            // doesn't update faster than the browser can paint.
+            if (!r._rafScheduled) {
+              r._rafScheduled = true;
+              requestAnimationFrame(() => {
+                r._rafScheduled = false;
+                setReorderDragTick(t => t + 1);
+              });
+            }
+          },
+          onPointerUp: (e) => {
+            const r = reorderDragRef.current;
+            if (!r || r.pointerId !== e.pointerId) {
+              reorderDragRef.current = null;
+              setReorderDragTick(t => t + 1);
+              return;
+            }
+            // Compute the drop target. Walk every visible top-level
+            // habit card on the page, find the one whose vertical
+            // midpoint is closest to (or just below) the pointer's
+            // current Y, and treat that as the insertion slot. If
+            // the pointer is over a card in a DIFFERENT section than
+            // the dragged habit's original section, the drop also
+            // changes the habit's `section`. If the pointer drops
+            // outside any habit container entirely, the drag snaps
+            // back (no-op).
+            const dropY = e.clientY;
+            const allCards = Array.from(document.querySelectorAll(".hrow[data-habit-id]"));
+            // Filter out sub-habits (they shouldn't be drop targets)
+            // and the dragged card itself. We also filter out future-
+            // habits-drawer rows which never carry data-reorderable=1.
+            const peers = allCards.filter(el => {
+              if (String(el.getAttribute("data-habit-id")) === String(r.habitId)) return false;
+              if (el.getAttribute("data-reorderable") !== "1") return false;
+              return true;
+            });
+            // Map each peer to {section, top, mid, bottom} for
+            // section + index resolution.
+            const rects = peers.map(el => {
+              const rect = el.getBoundingClientRect();
+              return {
+                el,
+                id: el.getAttribute("data-habit-id"),
+                section: el.getAttribute("data-habit-section") || "morning",
+                top: rect.top, mid: rect.top + rect.height / 2, bottom: rect.bottom
+              };
+            });
+            // Find the closest section column by checking which
+            // section group contains the pointer Y. We use peer
+            // bounds as a proxy for the section's vertical span.
+            let targetSection = r.originalSection;
+            let targetIndexInSection = -1;
+            // Group peer rects by section, sorted by top → for each
+            // section, expand its span to its min(top) and max(bottom).
+            const sectionSpans = {};
+            for (const rc of rects) {
+              const s = rc.section;
+              if (!sectionSpans[s]) sectionSpans[s] = { top: rc.top, bottom: rc.bottom, peers: [] };
+              else {
+                sectionSpans[s].top = Math.min(sectionSpans[s].top, rc.top);
+                sectionSpans[s].bottom = Math.max(sectionSpans[s].bottom, rc.bottom);
+              }
+              sectionSpans[s].peers.push(rc);
+            }
+            // Pick the section whose span contains dropY; otherwise
+            // pick the section whose midpoint is closest to dropY.
+            const sectionEntries = Object.entries(sectionSpans);
+            let chosen = null;
+            for (const [sec, span] of sectionEntries) {
+              if (dropY >= span.top && dropY <= span.bottom) {
+                chosen = sec;
+                break;
+              }
+            }
+            if (!chosen && sectionEntries.length > 0) {
+              let best = null;
+              let bestDist = Infinity;
+              for (const [sec, span] of sectionEntries) {
+                const m = (span.top + span.bottom) / 2;
+                const dist = Math.abs(dropY - m);
+                if (dist < bestDist) { bestDist = dist; best = sec; }
+              }
+              chosen = best;
+            }
+            if (chosen) {
+              targetSection = chosen;
+              // Within the chosen section, find the insertion index:
+              // count peers whose midpoint is above dropY.
+              const inSec = sectionSpans[chosen].peers.slice().sort((a, b) => a.top - b.top);
+              let idx = 0;
+              for (const rc of inSec) {
+                if (dropY > rc.mid) idx++;
+                else break;
+              }
+              targetIndexInSection = idx;
+            } else {
+              // No peers at all (every section empty except the one
+              // being dragged from) — keep original section, drop at
+              // top (index 0).
+              targetSection = r.originalSection;
+              targetIndexInSection = 0;
+            }
+            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+            reorderDragRef.current = null;
+            setReorderDragTick(t => t + 1);
+            // Commit. If we couldn't resolve a section (shouldn't
+            // happen — sectionSpans always has at least the dragged
+            // habit's home section) fall back to snap-back (no-op).
+            if (targetIndexInSection >= 0) {
+              commitHabitReorderDrop(r.habitId, targetSection, targetIndexInSection);
+            }
+          },
+          onPointerCancel: (e) => {
+            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
+            reorderDragRef.current = null;
+            setReorderDragTick(t => t + 1);
+          },
+          // Block tap/double-tap propagation while in reorder mode so
+          // touching the handle doesn't bubble up to the card-level
+          // gated handlers.
+          onClick: (e) => { e.stopPropagation(); e.preventDefault(); },
+          onDoubleClick: (e) => { e.stopPropagation(); e.preventDefault(); },
+          style: {
+            position: "absolute",
+            top: 0, right: 0, bottom: 0,
+            width: 32,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "grab",
+            color: "var(--c-text-faint)",
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: 1,
+            background: "transparent",
+            touchAction: "none",
+            userSelect: "none",
+            WebkitTapHighlightColor: "transparent",
+            zIndex: 3
+          }
+        }, "≡"),
         (() => {
           // Sub-unit habits (target > 0, e.g. "8 cups of water"): the
           // button becomes an increment tap — each tap adds `increment`
@@ -16000,6 +16788,27 @@ function App() {
             title: "Incomplete — double-tap to fill in area, section, or frequency.",
             style: { marginRight: 4, display: "inline-flex", alignItems: "center", verticalAlign: "middle" }
           }, Glyph("🚨", { size: 12, color: "#b91c1c" })),
+          // §5.4 — "PRIORITIZE TODAY" tag for persistently-resisted
+          // habits, rendered inline as a name-prefix so it flows in
+          // the title's line instead of floating absolute over the
+          // donut + first word of the name (which is the overlap the
+          // user was reporting). Pairs with the dotted-red border at
+          // the card level for redundancy.
+          isPersistentlyResisted && /*#__PURE__*/React.createElement("span", {
+            "aria-label": "Prioritize today — persistently resisted",
+            title: "Persistently resisted — prioritize today.",
+            style: {
+              marginRight: 5,
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: "0.08em",
+              color: "var(--c-tint-danger-fg, #b91c1c)",
+              textTransform: "uppercase",
+              lineHeight: 1,
+              verticalAlign: "middle",
+              whiteSpace: "nowrap"
+            }
+          }, "Prioritize today"),
           // Linked-goal-incomplete warning (§5.6). When the habit
           // points at one or more goals (canonical goalIds array, or
           // legacy goalId scalar) whose SMART set or text is not
@@ -16091,12 +16900,17 @@ function App() {
           // of today's slots are complete out of total. Green when
           // fully done; soft-text otherwise. Hidden for single-slot
           // habits.
+          // §5.8b — Iterate slot IDs (not bare section names) so a
+          // 2x-morning habit reads 0/2 → 1/2 → 2/2 instead of
+          // collapsing to 0/2 → 1/2 → 1/2 (the bare-name lookup
+          // would only see one entry per unique section).
           (() => {
             const slots = Array.isArray(habit.slotSections) ? habit.slotSections : null;
             if (!slots || slots.length < 2) return null;
             const todaySC = (habit.slotCompletions || {})[selDate] || {};
-            const doneCount = slots.filter(s => {
-              const v = todaySC[s];
+            const slotIds = slots.map((_, i) => slotIdForIndex(slots, i));
+            const doneCount = slotIds.filter(sid => {
+              const v = todaySC[sid];
               return v === "done" || v === true;
             }).length;
             return /*#__PURE__*/React.createElement("span", {
@@ -16109,6 +16923,27 @@ function App() {
                 whiteSpace: "nowrap"
               }
             }, "(" + doneCount + "/" + slots.length + ")");
+          })(),
+          // §5.8b — "#N" suffix on the row title when the same section
+          // hosts multiple slots of the same habit. Without it, a 2x-
+          // morning habit looks like two identical rows under the
+          // Morning header with no visual cue which is which. localIdx
+          // is the 0-based per-section position; the displayed number
+          // is 1-based ("Morning #1" / "Morning #2"). Hidden for
+          // sections that only host a single slot of this habit.
+          (() => {
+            const meta = habit._renderSlotMeta;
+            if (!meta || meta.countInSection < 2) return null;
+            return /*#__PURE__*/React.createElement("span", {
+              "aria-label": "Slot " + (meta.localIdx + 1) + " of " + meta.countInSection,
+              style: {
+                marginLeft: 6,
+                fontSize: 11, fontWeight: 600,
+                color: "var(--c-text-soft)",
+                fontVariantNumeric: "tabular-nums",
+                whiteSpace: "nowrap"
+              }
+            }, "#" + (meta.localIdx + 1));
           })()
         ),
         habit.notes && !compact && /*#__PURE__*/React.createElement("div", {
@@ -16222,7 +17057,12 @@ function App() {
         // ht-stripe sibling below uses position:absolute so it does
         // not occupy a grid track and never collides with this block.
         expHabitGoals[habit.id] && linkedContentForEntity("habit", habit.id),
-        ht && /*#__PURE__*/React.createElement("div", {
+        // §13.3 — Hide the area-color stripe (right edge, 22px wide) while
+        // in reorder mode so the drag handle (also right-edge, 32px) has a
+        // clean target. Stripe + handle compete for the same px column;
+        // the stripe wins by paint order without this gate. Reorder mode
+        // is a deliberate visual quiet anyway — colors return on exit.
+        ht && !reorderMode && /*#__PURE__*/React.createElement("div", {
           style: {
             position: "absolute",
             right: 0,
@@ -16641,6 +17481,32 @@ function App() {
         // sig so toggling a sub-habit (or expanding the group) bumps
         // the memo and re-renders the parent's "3/5" chip.
         const childSig = kids.length > 0 ? (kids.length + "|" + kidsDone + "|" + (expChildren[h.id] ? 1 : 0)) : "";
+        // Multi-slot rollup: per-slot done states + the day-level
+        // rollup, both relevant to whether THIS slot's row should
+        // paint green. Without these in the sig, a toggle on one
+        // slot's donut/swipe wouldn't invalidate the memo for the
+        // OTHER sibling slot rows (they'd still see the old per-slot
+        // state in slotCompletions and miss the "all slots done"
+        // visual fallback added in renderCard). Per-row sig already
+        // changes on its own slot (via the habit ref swap from
+        // groupedH) — but stamping the full per-day slot map +
+        // day-level rollup guarantees every sibling row also bumps,
+        // covering both the desync defense and any future
+        // stabilization of filtH/groupedH (today they recompute every
+        // render, but if either ever gets memoized this is the
+        // backstop).
+        const slotSig = (() => {
+          const ss = Array.isArray(h.slotSections) ? h.slotSections : null;
+          if (!ss || ss.length === 0) return "";
+          const sc = (h.slotCompletions && h.slotCompletions[selDate]) || {};
+          const dayRollup = (h.completions && h.completions[selDate]) || "";
+          // §5.8b — Stamp slot-ID-keyed state, not bare section names,
+          // so a 2x-morning habit's two slots produce distinct entries
+          // in the sig string (and memo invalidation fires when either
+          // one toggles).
+          const slotIds = ss.map((_, i) => slotIdForIndex(ss, i));
+          return "s:" + slotIds.map(sid => (sc[sid] || "")).join(",") + "|d:" + dayRollup;
+        })();
         // Concurrent cohorts (h.concurrent === true) share one slot
         // and split it evenly: a cohort of 2 renders as two
         // half-width cards side-by-side, a cohort of 3 as three
@@ -16660,7 +17526,19 @@ function App() {
         // render — leaving a ghost card on screen in the active list
         // until something else forces a sig change. That ghost was
         // the user-reported "glitchy" symptom after yesterday's bundle.
-        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig + "|p" + (h.parked ? 1 : 0);
+        // §13.3 — Stamp reorder mode + per-card drag state into the
+        // sig so toggling reorderMode (and ticking reorderDragTick
+        // while dragging) invalidates the memo for every card. The
+        // dragged card's per-tick position update is included via
+        // reorderDragTick, but ONLY for the card actually being
+        // dragged — every other card just needs to re-render on the
+        // mode toggle (not on every mousemove).
+        const draggedId = reorderDragRef.current ? String(reorderDragRef.current.habitId) : "";
+        const isThisDragged = draggedId && draggedId === String(h.parentId || h.id);
+        const reorderSig = (reorderMode ? "r1" : "r0")
+          + "|d" + (isThisDragged ? reorderDragTick : "0")
+          + "|s" + (h.section || "");
+        const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + slotSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig + "|p" + (h.parked ? 1 : 0) + "|" + reorderSig;
         const out = [
           /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard, compact: isCompact })
         ];
@@ -16742,8 +17620,31 @@ function App() {
                 // every row green together. Latent bug fix (sub-habits
                 // inheriting parent multi-slot config).
                 const cSigAnimKey = child._renderSlot ? child.id + ":" + child._renderSlot : child.id;
+                // Mirror the parent slotSig logic so a child habit
+                // that ever inherits a multi-slot config picks up
+                // sibling-slot state changes too. No-op for the
+                // overwhelming majority of children (which aren't
+                // multi-slot) — returns an empty string when
+                // slotSections isn't set.
+                const cSlotSig = (() => {
+                  const ss = Array.isArray(child.slotSections) ? child.slotSections : null;
+                  if (!ss || ss.length === 0) return "";
+                  const sc = (child.slotCompletions && child.slotCompletions[selDate]) || {};
+                  const dayRollup = (child.completions && child.completions[selDate]) || "";
+                  // §5.8b — Slot-ID-keyed sig (see parent slotSig).
+                  const slotIds = ss.map((_, i) => slotIdForIndex(ss, i));
+                  return "s:" + slotIds.map(sid => (sc[sid] || "")).join(",") + "|d:" + dayRollup;
+                })();
                 // §6 — same `parked` rule as the parent sig above.
-                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[cSigAnimKey] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + (isCompact ? "c" : "") + "|p" + (child.parked ? 1 : 0);
+                // §13.3 — Same reorder sig stamping as the parent
+                // card. Sub-habits aren't independently draggable (the
+                // PARENT carries them as a group), but they still need
+                // to re-render on reorderMode toggle so their gated
+                // tap/swipe handlers pick up the mode change, and so
+                // their visual cue (cursor, shadow) is consistent
+                // with the parent's appearance.
+                const cReorderSig = (reorderMode ? "r1" : "r0") + "|d0";
+                const cSig = selDate + "|" + (eHId === child.id ? 1 : 0) + "|" + (swipeAnim[cSigAnimKey] || "") + "|" + (expHabitGoals[child.id] ? 1 : 0) + "|" + cTargetSig + "|" + cGoalText + "|" + cSlotSig + "|" + (isCompact ? "c" : "") + "|p" + (child.parked ? 1 : 0) + "|" + cReorderSig;
                 return /*#__PURE__*/React.createElement(HabitCardShell, { key: child.id, habit: child, sig: cSig, renderImpl: renderCard, compact: !!isCompact });
               };
               return childCohorts.map((cohort, ki) => {
@@ -16791,19 +17692,29 @@ function App() {
     // open the Edit Habit modal and use the "Activate" button there to
     // pull the habit back into the active list.
     (() => {
-      const parkedHabits = (data.habits || []).filter(h => h.parked);
+      // Includes both manually-parked habits AND habits whose
+      // startDate is in the future. The drawer surfaces everything
+      // that isFutureHabit() considers inactive, so users can find
+      // and activate any not-yet-active habit from one place.
+      const parkedHabits = (data.habits || []).filter(h => isFutureHabit(h));
       if (parkedHabits.length === 0) return null;
+      // \u00a713.3 \u2014 Lock the Future Habits drawer closed while the user
+      // is in reorder mode. Future-habits cards aren't part of the
+      // section _order grid (they live in a separate drawer below
+      // the active sections), so making them reorderable would
+      // demand a parallel drop-target spec. Simpler: hide them.
+      const futureDrawerOpen = showFutureHabits && !reorderMode;
       return /*#__PURE__*/React.createElement("div", {
         className: "future-habits-drawer",
         style: { marginTop: 18, marginBottom: 18, gridColumn: "1 / -1" }
       },
         /*#__PURE__*/React.createElement("div", {
-          onClick: () => setShowFutureHabits(p => !p),
-          title: showFutureHabits ? "Hide future habits" : "Show future habits",
-          style: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: showFutureHabits ? 8 : 0, userSelect: "none", WebkitTapHighlightColor: "transparent" }
+          onClick: () => { if (reorderMode) return; setShowFutureHabits(p => !p); },
+          title: reorderMode ? "Locked during reorder" : (showFutureHabits ? "Hide future habits" : "Show future habits"),
+          style: { display: "flex", alignItems: "center", gap: 8, cursor: reorderMode ? "default" : "pointer", marginBottom: futureDrawerOpen ? 8 : 0, userSelect: "none", WebkitTapHighlightColor: "transparent", opacity: reorderMode ? 0.55 : 1 }
         },
           /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 11, color: "#6b7280", transform: showFutureHabits ? "rotate(90deg)" : "none", transition: "transform .15s", display: "inline-block", width: 10 }
+            style: { fontSize: 11, color: "#6b7280", transform: futureDrawerOpen ? "rotate(90deg)" : "none", transition: "transform .15s", display: "inline-block", width: 10 }
           }, "\u25b6"),
           /*#__PURE__*/React.createElement("span", {
             style: { fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "#6b7280", letterSpacing: .5 }
@@ -16813,7 +17724,7 @@ function App() {
           }, "(" + parkedHabits.length + ")"),
           /*#__PURE__*/React.createElement("div", { style: { flex: 1, height: 1, background: "var(--c-border)" } })
         ),
-        showFutureHabits && /*#__PURE__*/React.createElement("div", {
+        futureDrawerOpen && /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }
         }, parkedHabits.map(h => {
           const ht = HT.find(t => t.value === h.type);
@@ -26952,34 +27863,48 @@ function App() {
   })(),
   // Habit flavor toggle: Yes/No vs Target & Unit. Switches whether
   // the rows below render.
-  /*#__PURE__*/React.createElement("div", {
-    // §5.3 — Apple-form-style section divider. Visually separates
-    // the metadata block above from the habit-type group below.
-    style: { display: "flex", gap: 6, marginTop: 14, paddingTop: 12, marginBottom: 6, borderTop: "1px solid var(--c-border)" }
-  },
-    /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => sEHHasTarget(false),
-      style: {
-        flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-        cursor: "pointer",
-        border: "1px solid " + (!eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
-        background: !eHHasTarget ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
-        color: !eHHasTarget ? "#2d5a2d" : "var(--c-text-soft)"
-      }
-    }, "Yes / No"),
-    /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      onClick: () => sEHHasTarget(true),
-      style: {
-        flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-        cursor: "pointer",
-        border: "1px solid " + (eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
-        background: eHHasTarget ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
-        color: eHHasTarget ? "#2d5a2d" : "var(--c-text-soft)"
-      }
-    }, "Target & Unit")
-  ),
+  // §5.8 — Mutual exclusion with multi-slot: a habit can be either
+  // multi-slot (binary done/missed per section) OR target-based
+  // (cumulative count per day), not both. Multi-slot semantics are
+  // per-slot and don't compose with a daily target. When multi-slot
+  // has ≥2 slots, both buttons here are disabled to make the
+  // either/or relationship explicit.
+  (() => {
+    const multiSlotActive = !!(eHSlotSections && eHSlotSections.length >= 2);
+    const lockedTip = "Multi-slot habits use binary done/missed per slot. Clear multi-slot to use Target & Unit.";
+    return /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 6, marginTop: 14, paddingTop: 12, marginBottom: 6, borderTop: "1px solid var(--c-border)" }
+    },
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => { if (!multiSlotActive) sEHHasTarget(false); },
+        disabled: multiSlotActive,
+        title: multiSlotActive ? lockedTip : "",
+        style: {
+          flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+          cursor: multiSlotActive ? "not-allowed" : "pointer",
+          border: "1px solid " + (!eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-border)"),
+          background: !eHHasTarget && !multiSlotActive ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+          color: !eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-text-soft)",
+          opacity: multiSlotActive ? 0.55 : 1
+        }
+      }, "Yes / No"),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => { if (!multiSlotActive) sEHHasTarget(true); },
+        disabled: multiSlotActive,
+        title: multiSlotActive ? lockedTip : "",
+        style: {
+          flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+          cursor: multiSlotActive ? "not-allowed" : "pointer",
+          border: "1px solid " + (eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-border)"),
+          background: eHHasTarget && !multiSlotActive ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+          color: eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-text-soft)",
+          opacity: multiSlotActive ? 0.55 : 1
+        }
+      }, "Target & Unit")
+    );
+  })(),
   // Sub-unit target rows. The previous single 3-column row (Target /
   // Unit / +/tap) wrapped awkwardly on narrow phones where Unit was
   // squeezed and +/tap's placeholder text overflowed. Split into two
@@ -27248,34 +28173,146 @@ function App() {
     key: d.value,
     value: d.value
   }, d.label)))),
-  // Multi-slot toggle. Pick 2+ sections to make this a habit you do
-  // multiple times a day (e.g. take meds at morning + evening). Each
-  // section will get its own row + done/missed toggle on the habit
-  // tab. Picking 0 or 1 falls back to the single-section dropdown
-  // above.
+  // §5.8b — Multi-slot steppers. Each section row shows: icon + label
+  // + [−] + count + [+]. Tapping [+] appends another instance of that
+  // section to eHSlotSections (allowing duplicates so the user can
+  // schedule e.g. "2x morning + 2x afternoon" study chunks). Tapping
+  // [−] removes the LAST occurrence of that section. Total slots
+  // across all sections capped at MAX_SLOTS (12). The single-section
+  // dropdown above is used when the resulting slotSections has 0 or 1
+  // entries (i.e. no multi-slot behavior); 2+ entries flips on the
+  // multi-slot rendering path (one row per slot, per-slot completion).
+  // §5.8 — Mutual exclusion with Target & Unit: steppers (the [+]
+  // buttons specifically) are disabled when a numeric target is
+  // active. The two modes can't compose (per-slot binary vs
+  // cumulative-per-day). [−] stays enabled in Target mode so a user
+  // who's switching INTO Target & Unit can clear out leftover slots.
   /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8, alignItems: "center" }
+    style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }
   },
     /*#__PURE__*/React.createElement("div", {
-      style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginRight: 4, width: "100%", marginBottom: 4 }
-    }, "Multiple slots per day (optional)"),
-    SECTIONS.filter(s => s.value !== "avoid" && s.value !== "all-day").map(s => {
-      const active = (eHSlotSections || []).includes(s.value);
-      return /*#__PURE__*/React.createElement("button", {
-        key: s.value,
-        type: "button",
-        onClick: () => sEHSlotSections(prev => active ? (prev || []).filter(x => x !== s.value) : [...(prev || []), s.value]),
+      style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 }
+    }, "Slots per day",
+      eHHasTarget && /*#__PURE__*/React.createElement("span", {
+        style: { marginLeft: 6, fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--c-text-faint)" }
+      }, "— adding slots disabled while Target & Unit is on")
+    ),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 11, color: "var(--c-text-soft)", lineHeight: 1.4, marginBottom: 6 }
+    }, "Up to " + MAX_SLOTS + " slots per day. Use multiple slots to break a habit into chunks (e.g., 2x morning study)."),
+    (() => {
+      const list = eHSlotSections || [];
+      const total = list.length;
+      const counts = slotSectionCounts(list);
+      const canAddMore = total < MAX_SLOTS;
+      const locked = !!eHHasTarget;
+      return SECTIONS.filter(s => s.value !== "avoid" && s.value !== "all-day").map(s => {
+        const count = counts[s.value] || 0;
+        const plusDisabled = locked || !canAddMore;
+        const minusDisabled = count <= 0;
+        const sectionColor = s.color || "var(--c-text)";
+        return /*#__PURE__*/React.createElement("div", {
+          key: s.value,
+          style: {
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "6px 10px",
+            border: "1px solid var(--c-border)",
+            borderRadius: 8,
+            background: count > 0 ? "var(--c-tint-success-bg)" : "var(--c-surface-raised)"
+          }
+        },
+          /*#__PURE__*/React.createElement("span", {
+            style: { fontSize: 14, lineHeight: 1, flexShrink: 0 }
+          }, s.icon),
+          /*#__PURE__*/React.createElement("span", {
+            style: {
+              flex: 1, fontSize: 13, fontWeight: 600,
+              color: count > 0 ? "var(--c-tint-brand-fg, #2d5a2d)" : "var(--c-text-soft)"
+            }
+          }, s.label),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            disabled: minusDisabled,
+            title: minusDisabled ? "" : "Remove one " + s.label.toLowerCase() + " slot",
+            "aria-label": "Remove one " + s.label.toLowerCase() + " slot",
+            onClick: () => {
+              if (minusDisabled) return;
+              // Remove the LAST occurrence of this section. Slot
+              // identity is positional, so dropping the tail keeps
+              // earlier slots' IDs stable (morning:0 stays morning:0
+              // when you remove morning:1) — preserves the user's
+              // completion data on the remaining slots.
+              sEHSlotSections(prev => {
+                const arr = (prev || []).slice();
+                for (let i = arr.length - 1; i >= 0; i--) {
+                  if (arr[i] === s.value) { arr.splice(i, 1); break; }
+                }
+                return arr;
+              });
+            },
+            style: {
+              width: 28, height: 28, borderRadius: 14,
+              border: "1px solid var(--c-border)",
+              background: minusDisabled ? "var(--c-surface-muted)" : "#fff",
+              color: minusDisabled ? "var(--c-text-faint)" : "var(--c-text)",
+              fontSize: 16, fontWeight: 700, lineHeight: 1,
+              cursor: minusDisabled ? "not-allowed" : "pointer",
+              opacity: minusDisabled ? 0.5 : 1,
+              flexShrink: 0,
+              WebkitTapHighlightColor: "transparent"
+            }
+          }, "−"),
+          /*#__PURE__*/React.createElement("span", {
+            style: {
+              minWidth: 18, textAlign: "center",
+              fontSize: 14, fontWeight: 700,
+              fontVariantNumeric: "tabular-nums",
+              color: count > 0 ? "var(--c-text)" : "var(--c-text-faint)"
+            }
+          }, String(count)),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            disabled: plusDisabled,
+            title: locked
+              ? "Target & Unit habits use a single cumulative daily count. Switch to Yes / No to add slots."
+              : (!canAddMore ? "Maximum " + MAX_SLOTS + " slots per habit" : "Add another " + s.label.toLowerCase() + " slot"),
+            "aria-label": "Add another " + s.label.toLowerCase() + " slot",
+            onClick: () => {
+              if (plusDisabled) return;
+              sEHSlotSections(prev => {
+                const arr = (prev || []).slice();
+                if (arr.length >= MAX_SLOTS) return arr;
+                arr.push(s.value);
+                return arr;
+              });
+            },
+            style: {
+              width: 28, height: 28, borderRadius: 14,
+              border: "1px solid " + (plusDisabled ? "var(--c-border)" : "var(--c-tint-brand-fg, #2d5a2d)"),
+              background: plusDisabled ? "var(--c-surface-muted)" : "var(--c-tint-brand-fg, #2d5a2d)",
+              color: plusDisabled ? "var(--c-text-faint)" : "#fff",
+              fontSize: 16, fontWeight: 700, lineHeight: 1,
+              cursor: plusDisabled ? "not-allowed" : "pointer",
+              opacity: plusDisabled ? 0.5 : 1,
+              flexShrink: 0,
+              WebkitTapHighlightColor: "transparent"
+            }
+          }, "+")
+        );
+      });
+    })(),
+    (() => {
+      const total = (eHSlotSections || []).length;
+      if (total === 0) return null;
+      return /*#__PURE__*/React.createElement("div", {
         style: {
-          fontSize: 12, fontWeight: 600,
-          padding: "6px 12px", borderRadius: 999,
-          border: "1px solid " + (active ? "var(--c-tint-brand-fg)" : "var(--c-border)"),
-          background: active ? "var(--c-tint-success-bg)" : "var(--c-surface-raised)",
-          color: active ? "var(--c-tint-brand-fg)" : "var(--c-text-soft)",
-          cursor: "pointer",
-          WebkitTapHighlightColor: "transparent"
+          fontSize: 11,
+          color: total >= MAX_SLOTS ? "var(--c-tint-warn-fg)" : "var(--c-text-soft)",
+          marginTop: 2,
+          fontWeight: total >= MAX_SLOTS ? 600 : 500
         }
-      }, s.icon, " ", s.label);
-    })
+      }, total + " / " + MAX_SLOTS + " slot" + (total === 1 ? "" : "s") + " today" + (total < 2 ? " (need 2+ to enable multi-slot)" : ""));
+    })()
   ),
   /*#__PURE__*/React.createElement("div", {
     style: {

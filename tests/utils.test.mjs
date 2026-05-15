@@ -325,6 +325,67 @@ test("findCorrelations excludes a multi-slot habit from the A side when any slot
   });
 });
 
+// §5.8b — Multi-instance slot ID format. slotSections can now contain
+// duplicate sections (["morning","morning"] for two morning chunks of
+// the same habit), and slotCompletionTimes is keyed by slot ID rather
+// than bare section name. Slot ID format: "<section>:<localIdx>" where
+// localIdx is the 0-based position of that occurrence within
+// slotSections filtered to that section.
+test("findCorrelations admits a multi-instance habit (2x morning) when both slots beat the morning cutoff", () => {
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 20; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const aC = {}; for (let i = 0; i < 14; i++) aC[days[i]] = "07:00";
+    const bC = {}; for (let i = 0; i < 14; i++) bC[days[i]] = "22:00";
+    const multi = habitWith("a", "morning", "Study CFA", aC);
+    // Two morning slots = "morning:0" + "morning:1"
+    multi.slotSections = ["morning", "morning"];
+    multi.slotCompletionTimes = {};
+    for (let i = 0; i < 14; i++) {
+      // Both slots logged before the noon morning cutoff.
+      multi.slotCompletionTimes[days[i]] = { "morning:0": "08:00", "morning:1": "09:30" };
+    }
+    const reader = habitWith("b", "evening", "Read", bC);
+    const out = findCorrelations([multi, reader]);
+    const hit = out.find(r => r.aHabitId === "a");
+    assert.ok(hit, "expected multi-instance morning habit to predict reader");
+    assert.equal(hit.aSection, "morning+morning");
+    assert.ok(hit.support >= 14);
+  });
+});
+
+test("detectOffSchedule flags 2x morning habit when one of the two morning slots is consistently late", () => {
+  // ["morning","morning"] with morning:0 on-time and morning:1 well
+  // past noon for 7 days. Aggregate late rate (50%) trips the default
+  // 0.6 threshold once we include the same data twice... so push the
+  // late slot above the on-time one and verify the flag fires.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const h = habitWith("h", "morning", "Study CFA", {});
+    h.slotSections = ["morning", "morning"];
+    h.slotCompletionTimes = {};
+    for (let i = 0; i < 7; i++) {
+      // morning:0 at 13:00 (late); morning:1 at 15:00 (late). Both
+      // morning cutoffs are noon, so 100% late rate → flag fires.
+      h.slotCompletionTimes[days[i]] = { "morning:0": "13:00", "morning:1": "15:00" };
+    }
+    const out = detectOffSchedule(h);
+    assert.ok(out, "expected off-schedule detection on multi-instance morning");
+    assert.equal(out.loggedCount, 14); // 7 days × 2 slots
+    assert.equal(out.lateCount, 14);
+    assert.equal(out.section, "morning+morning");
+  });
+});
+
 test("findCorrelations excludes a multi-slot habit from the A side when per-slot times are missing", () => {
   // Legacy data path — habit has slotSections but no
   // slotCompletionTimes filled in. The strict check requires a

@@ -160,6 +160,30 @@ function recentDays(n, today) {
 // minLift = 0.20 (conditional probability must beat the base by at
 // least 20 percentage points). Windows back 60 days so slow-building
 // habits still generate findings.
+// §5.8b — Build the per-slot IDs for a slotSections array. Mirrors
+// the slotIdForIndex helper defined inside the App component in
+// index.html; reimplemented here because utils.js is loaded before
+// the inline app script and Node tests require this file directly
+// without access to App-scope helpers. Slot ID = "<section>:<localIdx>"
+// where localIdx is the 0-based position of that occurrence within
+// slotSections filtered to that section. Duplicate sections allowed:
+// ["morning","morning","evening"] → [
+//   { section: "morning", slotId: "morning:0" },
+//   { section: "morning", slotId: "morning:1" },
+//   { section: "evening", slotId: "evening:0" }
+// ]
+function buildSlotIds(slotSections) {
+  if (!Array.isArray(slotSections)) return [];
+  const counts = {};
+  const out = [];
+  for (const s of slotSections) {
+    const i = counts[s] || 0;
+    out.push({ section: s, slotId: s + ":" + i });
+    counts[s] = i + 1;
+  }
+  return out;
+}
+
 function findCorrelations(habits, opts) {
   const minSupport = (opts && opts.minSupport) || 14;
   const minLift    = (opts && opts.minLift)    || 0.20;
@@ -181,6 +205,11 @@ function findCorrelations(habits, opts) {
     // slot of habit A on schedule, did habit B follow?"
     const isMultiSlot = Array.isArray(h && h.slotSections) && h.slotSections.length >= 2;
     const cutoff = isMultiSlot ? null : SECTION_CUTOFFS[h && h.section];
+    // §5.8b — Build slot IDs once per habit. The slotCompletionTimes
+    // map is keyed by slot ID ("morning:0", "morning:1"), not by bare
+    // section name. Hydration in index.html migrates legacy bare-key
+    // shapes to ":0" so this lookup is uniform.
+    const slotIds = isMultiSlot ? buildSlotIds(h.slotSections) : [];
     // canBeASide replaces the old `cutoff != null` skip-marker — we
     // need to allow multi-slot habits through even though they have
     // no single cutoff. Single-slot avoid habits still get filtered
@@ -194,12 +223,17 @@ function findCorrelations(habits, opts) {
         if (c !== "done" && c !== true) continue;
         any.add(day);
         if (isMultiSlot) {
-          const slots = h.slotSections;
           const dayTimes = (h.slotCompletionTimes || {})[day] || {};
-          let allOnTime = slots.length > 0;
-          for (const slotName of slots) {
-            const slotCutoff = SECTION_CUTOFFS[slotName];
-            const mins = parseClock(dayTimes[slotName]);
+          let allOnTime = slotIds.length > 0;
+          for (const { section, slotId } of slotIds) {
+            const slotCutoff = SECTION_CUTOFFS[section];
+            // §5.8b — Look up by slot ID first; fall back to bare
+            // section name so legacy data that never went through
+            // hydration still reads correctly. Hydration normally
+            // converts both, but a Node test or freshly-imported
+            // doc may skip the migration shim.
+            const recorded = dayTimes[slotId] != null ? dayTimes[slotId] : dayTimes[section];
+            const mins = parseClock(recorded);
             if (slotCutoff == null || mins == null || mins >= slotCutoff * 60) {
               allOnTime = false;
               break;
@@ -272,15 +306,23 @@ function detectOffSchedule(habit, opts) {
   const slots = Array.isArray(habit.slotSections) ? habit.slotSections : null;
   if (slots && slots.length >= 2) {
     const slotTimes = habit.slotCompletionTimes || {};
+    // §5.8b — Iterate by slot ID ("<section>:<localIdx>") not bare
+    // section name, so duplicates within slotSections (e.g.
+    // ["morning","morning"] for two morning study chunks) each get
+    // their own per-day time lookup. Legacy data keyed by bare
+    // section name falls back to dayTimes[section] for back-compat
+    // until hydration rewrites it to ":0".
+    const slotIds = buildSlotIds(slots);
     let logged = 0, late = 0;
     const days = recentDays(windowDays, today);
     for (const d of days) {
       const dayTimes = slotTimes[d];
       if (!dayTimes) continue;
-      for (const slotName of slots) {
-        const slotCutoff = SECTION_CUTOFFS[slotName];
+      for (const { section, slotId } of slotIds) {
+        const slotCutoff = SECTION_CUTOFFS[section];
         if (slotCutoff == null) continue;
-        const mins = parseClock(dayTimes[slotName]);
+        const recorded = dayTimes[slotId] != null ? dayTimes[slotId] : dayTimes[section];
+        const mins = parseClock(recorded);
         if (mins == null) continue;
         logged++;
         if (mins >= slotCutoff * 60) late++;
