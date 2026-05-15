@@ -201,12 +201,11 @@ test("detectOffSchedule returns null for avoid habits", () => {
   });
 });
 
-test("detectOffSchedule returns null for multi-slot habits", () => {
-  // §5.8 — Multi-slot habits store one completionTimes[date] per day
-  // across all slots. The off-schedule check has no way to know which
-  // slot was completed at what time, so flagging it would be wrong
-  // (e.g., a 20:00 evening completion compared against a morning
-  // cutoff). Skip until per-slot timestamps land.
+test("detectOffSchedule returns null for multi-slot habits with no per-slot times recorded", () => {
+  // Legacy data path: multi-slot habit exists but slotCompletionTimes
+  // is empty (data written before the field shipped). With no
+  // per-slot timestamps, there's nothing to compare against the
+  // section cutoffs — return null instead of guessing.
   withFakeNow("2026-04-23T10:00:00", () => {
     const today = new Date(2026, 3, 23);
     const days = [];
@@ -218,6 +217,53 @@ test("detectOffSchedule returns null for multi-slot habits", () => {
     for (let i = 0; i < 7; i++) comps[days[i]] = "15:00";
     const h = habitWith("h", "morning", "Study CFA", comps);
     h.slotSections = ["morning", "evening"];
+    assert.equal(detectOffSchedule(h), null);
+  });
+});
+
+test("detectOffSchedule flags multi-slot habit when per-slot times are late", () => {
+  // Multi-slot habit "Study CFA" with morning + evening slots.
+  // Morning slot consistently lands after noon (the morning cutoff).
+  // Aggregate late rate should trip the threshold.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const h = habitWith("h", "morning", "Study CFA", {});
+    h.slotSections = ["morning", "evening"];
+    h.slotCompletionTimes = {};
+    for (let i = 0; i < 7; i++) {
+      h.slotCompletionTimes[days[i]] = { morning: "15:00" };
+    }
+    const out = detectOffSchedule(h);
+    assert.ok(out, "expected off-schedule detection on multi-slot");
+    assert.equal(out.loggedCount, 7);
+    assert.equal(out.lateCount, 7);
+    assert.equal(out.section, "morning+evening");
+    assert.equal(out.cutoffHour, null);
+  });
+});
+
+test("detectOffSchedule does NOT flag multi-slot habit when each slot is within its own cutoff", () => {
+  // Per-slot semantics: morning slot at 07:15 (before noon) and
+  // evening slot at 21:00 (before midnight) for 7 days. Each slot
+  // beats its own cutoff. Should return null.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const h = habitWith("h", "morning", "Study CFA", {});
+    h.slotSections = ["morning", "evening"];
+    h.slotCompletionTimes = {};
+    for (let i = 0; i < 7; i++) {
+      h.slotCompletionTimes[days[i]] = { morning: "07:15", evening: "21:00" };
+    }
     assert.equal(detectOffSchedule(h), null);
   });
 });

@@ -240,12 +240,45 @@ function detectOffSchedule(habit, opts) {
   const threshold  = (opts && opts.threshold)  || 0.6;
   const today      = opts && opts.today;
   if (!habit) return null;
-  // §5.8 — Skip multi-slot habits. completionTimes[date] is shared
-  // across all slots, so we'd be comparing a (possibly evening)
-  // timestamp against the (possibly morning) section cutoff and
-  // wrongly flagging "your morning habit ran late." Re-enable once
-  // per-slot completionTimes lands.
-  if (Array.isArray(habit.slotSections) && habit.slotSections.length >= 2) return null;
+  // §5.8 — Multi-slot path: each slot has its own cutoff. Walk the
+  // window comparing each slot's recorded time against that slot's
+  // section cutoff. Aggregate late count across all slots so a habit
+  // gets flagged when its overall on-time discipline slips below
+  // threshold, regardless of which slot is the offender.
+  const slots = Array.isArray(habit.slotSections) ? habit.slotSections : null;
+  if (slots && slots.length >= 2) {
+    const slotTimes = habit.slotCompletionTimes || {};
+    let logged = 0, late = 0;
+    const days = recentDays(windowDays, today);
+    for (const d of days) {
+      const dayTimes = slotTimes[d];
+      if (!dayTimes) continue;
+      for (const slotName of slots) {
+        const slotCutoff = SECTION_CUTOFFS[slotName];
+        if (slotCutoff == null) continue;
+        const mins = parseClock(dayTimes[slotName]);
+        if (mins == null) continue;
+        logged++;
+        if (mins >= slotCutoff * 60) late++;
+      }
+    }
+    if (logged < minLogged) return null;
+    const lateRate = late / logged;
+    if (lateRate < threshold) return null;
+    return {
+      habitId: habit.id,
+      habitText: habit.text,
+      // Composite identifier for multi-slot — caller can format
+      // ("morning+evening") for display, or render a per-slot
+      // breakdown by re-walking slotCompletionTimes.
+      section: slots.join("+"),
+      cutoffHour: null,
+      lateCount: late,
+      loggedCount: logged,
+      lateRate
+    };
+  }
+  // Single-slot path
   const cutoff = SECTION_CUTOFFS[habit.section];
   if (cutoff == null) return null;
   let logged = 0, late = 0;

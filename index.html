@@ -3209,6 +3209,14 @@ function hydrateCloudDoc(p) {
       // surfaced in neglected-habit warnings. Default false so every
       // existing habit stays active until the user explicitly parks it.
       if (typeof h.parked !== "boolean") h = { ...h, parked: false };
+      // §5.8 — per-slot completion times for multi-slot habits.
+      // Parallel to slotCompletions, but stores the local HH:MM of
+      // each slot's completion: { dateKey: { sectionValue: "HH:MM" } }.
+      // Without this, all slots of a multi-slot habit shared one
+      // completionTimes[date] entry, breaking off-schedule detection
+      // (a 20:00 evening completion would be compared against the
+      // morning cutoff). Empty on legacy data; new toggles populate.
+      if (!h.slotCompletionTimes || typeof h.slotCompletionTimes !== "object") h = { ...h, slotCompletionTimes: {} };
       return h;
     });
   }
@@ -7979,6 +7987,9 @@ function App() {
       const ct = { ...(h.completionTimes || {}) };
       const cu = { ...(h.completionUnits || {}) };
       const slc = { ...(h.slotCompletions || {}) };
+      // §5.8 — per-slot completion times for multi-slot habits.
+      // Mirrors slotCompletions: { dateKey: { sectionValue: "HH:MM" } }.
+      const slct = { ...(h.slotCompletionTimes || {}) };
       if (nextUnits != null) {
         if (nextUnits > 0) cu[key] = nextUnits; else delete cu[key];
       }
@@ -7986,10 +7997,25 @@ function App() {
         if (Object.keys(nextSlotComp).length === 0) delete slc[key];
         else slc[key] = nextSlotComp;
       }
+      // Per-slot time write: when a slot transitions to done/missed,
+      // record THAT slot's time; when it clears, drop the entry. Day
+      // entry is pruned when no slot times remain so the dictionary
+      // doesn't grow stale empty days.
+      if (isMultiSlot && slot) {
+        const dayTimes = { ...(slct[key] || {}) };
+        const slotState = nextSlotComp ? nextSlotComp[slot] : null;
+        if (slotState === "done" || slotState === "missed") {
+          if (resolvedTime) dayTimes[slot] = resolvedTime;
+        } else {
+          delete dayTimes[slot];
+        }
+        if (Object.keys(dayTimes).length === 0) delete slct[key];
+        else slct[key] = dayTimes;
+      }
       if (newState === "done") { c[key] = "done"; ct[key] = resolvedTime; }
       else if (newState === "missed") { c[key] = "missed"; ct[key] = resolvedTime; }
       else { delete c[key]; delete ct[key]; }
-      return { ...h, completions: c, completionTimes: ct, completionUnits: cu, slotCompletions: slc };
+      return { ...h, completions: c, completionTimes: ct, completionUnits: cu, slotCompletions: slc, slotCompletionTimes: slct };
     });
     // XP rules: done = +imp, missed = -imp, none = 0. Delta = new - prev.
     const imp = targetH.importance;
@@ -26794,7 +26820,7 @@ function App() {
           height: 30,
           cursor: "pointer",
           fontSize: 16,
-          color: "#6b7280",
+          color: "var(--c-text-soft)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -26878,7 +26904,7 @@ function App() {
     return /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex", justifyContent: "space-between", gap: 12,
-        fontSize: 10, color: "#9ca3af",
+        fontSize: 10, color: "var(--c-text-faint)",
         marginBottom: 6, paddingBottom: 4,
         borderBottom: "1px dashed var(--c-border)"
       }
@@ -26905,8 +26931,8 @@ function App() {
         flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
         cursor: "pointer",
         border: "1px solid " + (!eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
-        background: !eHHasTarget ? "var(--c-tint-success-bg)" : "#fff",
-        color: !eHHasTarget ? "#2d5a2d" : "#6b7280"
+        background: !eHHasTarget ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+        color: !eHHasTarget ? "#2d5a2d" : "var(--c-text-soft)"
       }
     }, "Yes / No"),
     /*#__PURE__*/React.createElement("button", {
@@ -26916,8 +26942,8 @@ function App() {
         flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
         cursor: "pointer",
         border: "1px solid " + (eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
-        background: eHHasTarget ? "var(--c-tint-success-bg)" : "#fff",
-        color: eHHasTarget ? "#2d5a2d" : "#6b7280"
+        background: eHHasTarget ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+        color: eHHasTarget ? "#2d5a2d" : "var(--c-text-soft)"
       }
     }, "Target & Unit")
   ),
@@ -26989,11 +27015,11 @@ function App() {
       style: { ...IS, width: 60, textAlign: "center" }
     }),
     /*#__PURE__*/React.createElement("span", {
-      style: { fontSize: 12, color: "#6b7280", flex: 1 }
+      style: { fontSize: 12, color: "var(--c-text-soft)", flex: 1 }
     }, "units added per tap (default 1)")
   ),
   eHHasTarget && /*#__PURE__*/React.createElement("div", {
-    style: { fontSize: 10, color: "#9ca3af", marginBottom: 10 }
+    style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 10 }
   }, "Leave Target blank for a simple done/not-done habit."),
   // Cross-habit relationships (parent / child, concurrent layering,
   // relative ordering) live in the section-level Organize modal —
@@ -27019,7 +27045,7 @@ function App() {
     }, "Linked Goals" + (eHGoalIds.length > 0 ? " (" + eHGoalIds.length + ")" : "")),
     (data.goals || []).length === 0
       ? /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, color: "#9ca3af", marginBottom: 4 }
+          style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 4 }
         }, "No goals yet. Add the goal first, then link it here.")
       : /*#__PURE__*/React.createElement("div", {
           style: {
