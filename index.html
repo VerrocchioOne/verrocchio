@@ -5327,6 +5327,51 @@ function App() {
   const reorderLongPressRef = useRef({ timer: null, habitId: null, startX: 0, startY: 0, pointerId: null });
   const reorderDragRef = useRef(null);
   const [reorderDragTick, setReorderDragTick] = useState(0);
+  // §13.3c — Auto-scroll while a reorder drag is active. A single
+  // rAF loop reads reorderDragRef.current.currentY and scrolls the
+  // window when the pointer is within EDGE_PX of the viewport top or
+  // bottom. Rate falls off linearly: at the very edge the page moves
+  // by MAX_RATE px/frame, easing to 0 as the pointer leaves the
+  // edge zone. Started on pointerdown, stopped on pointerup /
+  // pointercancel. Using "auto" (instant) scroll behavior — smooth
+  // scroll would fight the drag's translateY transform which is
+  // driven by clientY (a viewport coordinate that stays constant
+  // as the page scrolls underneath the pointer).
+  const reorderAutoScrollRafRef = useRef(0);
+  const startReorderAutoScroll = () => {
+    if (reorderAutoScrollRafRef.current) return; // already running
+    const EDGE_PX = 80;
+    const MAX_RATE = 8; // px per frame at the very edge
+    const step = () => {
+      const r = reorderDragRef.current;
+      if (!r) {
+        reorderAutoScrollRafRef.current = 0;
+        return;
+      }
+      const y = r.currentY;
+      const vh = window.innerHeight || 0;
+      let dy = 0;
+      if (y < EDGE_PX) {
+        // Falloff: y = 0  → 1.0, y = EDGE_PX → 0.0
+        const ratio = Math.max(0, Math.min(1, (EDGE_PX - y) / EDGE_PX));
+        dy = -Math.ceil(MAX_RATE * ratio);
+      } else if (y > vh - EDGE_PX) {
+        const ratio = Math.max(0, Math.min(1, (y - (vh - EDGE_PX)) / EDGE_PX));
+        dy = Math.ceil(MAX_RATE * ratio);
+      }
+      if (dy !== 0) {
+        window.scrollBy({ top: dy, left: 0, behavior: "auto" });
+      }
+      reorderAutoScrollRafRef.current = requestAnimationFrame(step);
+    };
+    reorderAutoScrollRafRef.current = requestAnimationFrame(step);
+  };
+  const stopReorderAutoScroll = () => {
+    if (reorderAutoScrollRafRef.current) {
+      cancelAnimationFrame(reorderAutoScrollRafRef.current);
+      reorderAutoScrollRafRef.current = 0;
+    }
+  };
   const cancelReorderLongPress = () => {
     const r = reorderLongPressRef.current;
     if (r && r.timer) {
@@ -5337,6 +5382,7 @@ function App() {
   const exitReorderMode = () => {
     cancelReorderLongPress();
     reorderDragRef.current = null;
+    stopReorderAutoScroll();
     setReorderMode(false);
   };
   // §13.3 — Exit habit reorder mode whenever the user navigates away
@@ -5780,6 +5826,21 @@ function App() {
   // Empty array = single-slot habit (uses eHSec for its primary
   // section). The schema field is habit.slotSections.
   const [eHSlotSections, sEHSlotSections] = useState([]);
+  // §5.8c — Explicit timing-mode toggle in the edit-habit modal.
+  //   "single" → habit runs once per day; assigned to ONE time-of-day
+  //              section (morning / afternoon / evening / daily
+  //              completion / avoid) via the eHSec dropdown.
+  //   "multi"  → habit runs multiple times per day across morning /
+  //              afternoon / evening; the stepper rows pick how many
+  //              of each (capped at MAX_SLOTS=12 total). Daily-completion
+  //              and Avoid are NOT valid multi-slot sections.
+  // Drives which UI surface renders below the toggle. Mutually
+  // exclusive with eHHasTarget (Target & Unit) — clicking Target &
+  // Unit forces this back to "single" because targets are cumulative-
+  // per-day and don't compose with per-slot binary completions.
+  // Default for new habits = "single"; for existing habits, derived
+  // from slotSections.length >= 2 in sEHabit().
+  const [eHTimeMode, sEHTimeMode] = useState("single");
   const [eHNotes, sEHNotes] = useState("");
   // Edit-habit goal links. Stored as array of id strings — a habit
   // can belong to multiple goals (e.g. "sleep 8 hours" underlying
@@ -8544,6 +8605,10 @@ function App() {
     sEHImp("Important");
     sEHSec("morning");
     sEHSlotSections([]);
+    // New habits start in single-time-of-day mode. The Timing toggle
+    // in the modal switches between single (Time of Day dropdown) and
+    // multi (per-section stepper rows).
+    sEHTimeMode("single");
     sEHNotes("");
     sEHGoalIds([]);
     sEHLoc("both");
@@ -8622,7 +8687,11 @@ function App() {
       // Multi-slot: when slotSections has 2+ entries, the habit shows
       // up as one row per listed section each day with its own toggle.
       // Stored even when single-section so the schema is uniform.
-      slotSections: (eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [],
+      // §5.8c — Also gate by eHTimeMode: only persist slots when the
+      // user is actively in multi-time-a-day mode. If they toggled
+      // back to single, slots should be cleared regardless of array
+      // contents (the toggle handler clears, this is belt-and-braces).
+      slotSections: (eHTimeMode === "multi" && eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [],
       completions: {},
       completionTimes: {},
       completionUnits: {},
@@ -8651,6 +8720,17 @@ function App() {
     sEHImp(h.importance || "Important");
     sEHSec(h.section || "morning");
     sEHSlotSections(Array.isArray(h.slotSections) ? h.slotSections.slice() : []);
+    // §5.8c — Derive timing mode from the stored slotSections. A habit
+    // with 2+ slot entries was authored in multi-time-a-day mode;
+    // anything else (0 or 1 slot, or no slotSections field at all)
+    // opens as single-time-of-day. Defensive: if a legacy habit
+    // somehow has BOTH a numeric target AND 2+ slot entries, prefer
+    // single (target wins) since the two modes can't coexist in the
+    // new UI. The target+slot bad state is not creatable from this
+    // codebase but might exist in old documents.
+    const _hasNumTarget = typeof h.target === "number";
+    const _hasMultiSlots = Array.isArray(h.slotSections) && h.slotSections.length >= 2;
+    sEHTimeMode((_hasMultiSlots && !_hasNumTarget) ? "multi" : "single");
     sEHNotes(h.notes || "");
     sEHGoalIds(habitGoalIds(h).map(String));
     sEHLoc(h.location || "both");
@@ -8707,7 +8787,10 @@ function App() {
       monthDay: typeof eHFreq.monthDay === "number" ? eHFreq.monthDay : null,
       month:    typeof eHFreq.month    === "number" ? eHFreq.month    : null
     };
-    const nextSlotSections = (eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [];
+    // §5.8c — Gate slot persistence on Timing mode AND length >= 2.
+    // If the user toggled back to "single", drop any leftover slot
+    // entries so the saved habit matches the visible UI.
+    const nextSlotSections = (eHTimeMode === "multi" && eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [];
     const nextTarget    = eHHasTarget ? (() => { const n = parseFloat(eHTarget); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; })() : null;
     const nextTargetOp  = eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=";
     const nextUnitLabel = eHHasTarget ? (eHUnitLabel.trim() || null) : null;
@@ -8956,11 +9039,41 @@ function App() {
   // re-stamping `_order` on every habit so the new global ordering
   // survives the Firestore round-trip. Reads from latestData.current
   // for the same staleness reason as reorderHabitSection.
-  const commitHabitReorderDrop = (habitId, targetSection, targetIndexInSection) => {
+  //
+  // §13.3b — `opts` can carry layered-drop info:
+  //   opts.targetConcurrent : boolean — true when the drop landed on
+  //                                     a peer's left/right edge and
+  //                                     the dragged habit should join
+  //                                     that peer's cohort row.
+  //   opts.layeredPeerId    : id of the peer the drop landed on.
+  //   opts.layeredSide      : "left" | "right" — which edge of the
+  //                                              peer the drop hit.
+  // When targetConcurrent is false (or opts omitted) the dragged
+  // habit's `concurrent` is forced to false so a layered card dropped
+  // into open space (section padding, between rows, different
+  // section) automatically un-layers. Cross-section drags default to
+  // un-layer unless they land on a target row's edge in the new
+  // section.
+  const commitHabitReorderDrop = (habitId, targetSection, targetIndexInSection, opts) => {
+    opts = opts || {};
     const cur = latestData.current || data;
     const all = (cur.habits || []).slice();
     const moved = all.find(h => String(h.id) === String(habitId));
     if (!moved) return;
+    const targetConcurrent = !!opts.targetConcurrent;
+    const layeredPeerId = opts.layeredPeerId != null ? String(opts.layeredPeerId) : null;
+    const layeredSide = opts.layeredSide || null;
+    // The original-section state matters for the "dragged habit was
+    // a cohort starter" detection below — if the dragged habit had
+    // a concurrent=true successor in its old position, removing it
+    // would orphan that successor, so we flip it to concurrent=false.
+    const origSection = moved.section || "morning";
+    const origPeers = all
+      .filter(h => h.section === origSection && !h.parentId)
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    const origIdx = origPeers.findIndex(h => String(h.id) === String(habitId));
+    const origSuccessor = (origIdx >= 0 && origIdx + 1 < origPeers.length) ? origPeers[origIdx + 1] : null;
+    const movedWasCohortStarter = !!(moved && !moved.concurrent && origSuccessor && origSuccessor.concurrent);
     // Update the moved habit's section. (Doesn't touch slotSections —
     // multi-slot habits' rendering is driven by slotSections, not
     // `section`. Dragging a multi-slot habit between section columns
@@ -8975,6 +9088,58 @@ function App() {
       .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
     const clamped = Math.max(0, Math.min(targetIndexInSection, sectionPeers.length));
     const newSequence = [...sectionPeers.slice(0, clamped), updatedMoved, ...sectionPeers.slice(clamped)];
+    // §13.3b — Compute the final `concurrent` flag for the moved
+    // habit and (in the left-edge layered case) the peer it's being
+    // dropped next to. Rules:
+    //   - Unlayered drop: moved.concurrent = false.
+    //   - Right-edge drop on peer: moved.concurrent = true (joins
+    //     peer's cohort from the right).
+    //   - Left-edge drop on peer:
+    //       · If peer was a cohort STARTER (peer.concurrent === false),
+    //         moved becomes the new starter (concurrent=false) and
+    //         peer flips to concurrent=true to join moved's cohort.
+    //       · If peer was MID-cohort (peer.concurrent === true), moved
+    //         slots in ahead of it with concurrent=true (continuing
+    //         the prior habit's cohort chain).
+    // Plus: position 0 of the new sequence MUST be concurrent=false
+    // (the cohort bucketing in render relies on the first habit in a
+    // section starting its own cohort), and if the moved habit was
+    // pulled out of being a cohort starter, its old successor must
+    // flip to concurrent=false to avoid an "orphan" concurrent=true
+    // that would visually merge into whatever lands above it.
+    const peerFlips = {}; // habitId → new concurrent value
+    let movedConcurrent = false;
+    if (targetConcurrent && layeredPeerId) {
+      const peer = all.find(h => String(h.id) === String(layeredPeerId));
+      const peerConc = !!(peer && peer.concurrent);
+      if (layeredSide === "right") {
+        movedConcurrent = true;
+      } else if (layeredSide === "left") {
+        if (!peerConc) {
+          movedConcurrent = false;
+          peerFlips[String(layeredPeerId)] = true;
+        } else {
+          movedConcurrent = true;
+        }
+      }
+    }
+    if (movedWasCohortStarter && origSuccessor && String(origSuccessor.id) !== String(habitId)) {
+      // The habit that used to sit immediately after `moved` in the
+      // original section needs its concurrent flipped to false — its
+      // cohort starter just left.
+      peerFlips[String(origSuccessor.id)] = false;
+    }
+    // Position 0 in the new sequence must always be concurrent=false.
+    // If the new first habit isn't the moved habit (whose flag we
+    // set explicitly), force-flip it to false via peerFlips.
+    if (newSequence.length > 0) {
+      const first = newSequence[0];
+      if (String(first.id) === String(habitId)) {
+        movedConcurrent = false;
+      } else if (first.concurrent) {
+        peerFlips[String(first.id)] = false;
+      }
+    }
     // Re-stamp _order on the section's habits using a section-local
     // index (matches reorderHabitSection's approach — using global
     // index would clobber every other section's ordering).
@@ -8986,7 +9151,14 @@ function App() {
     // sub-list isn't disturbed.
     const nextHabits = all.map(h => {
       if (String(h.id) === String(habitId)) {
-        return { ...updatedMoved, _order: orderById[h.id] };
+        return { ...updatedMoved, _order: orderById[h.id], concurrent: movedConcurrent };
+      }
+      if (Object.prototype.hasOwnProperty.call(peerFlips, String(h.id))) {
+        const base = (h.section === targetSection && !h.parentId && Object.prototype.hasOwnProperty.call(orderById, h.id))
+          ? { ...h, _order: orderById[h.id] }
+          : { ...h };
+        base.concurrent = peerFlips[String(h.id)];
+        return base;
       }
       if (h.section === targetSection && !h.parentId && Object.prototype.hasOwnProperty.call(orderById, h.id)) {
         return { ...h, _order: orderById[h.id] };
@@ -16694,15 +16866,21 @@ function App() {
               pointerId: e.pointerId,
               startY: e.clientY,
               currentY: e.clientY,
+              currentX: e.clientX,
               originalSection: habit.section || "morning",
               cardEl
             };
+            // §13.3c — Start the auto-scroll rAF loop so the page
+            // follows the pointer when it nears the top/bottom of
+            // the viewport. Stops on pointerup / pointercancel.
+            startReorderAutoScroll();
             setReorderDragTick(t => t + 1);
           },
           onPointerMove: (e) => {
             const r = reorderDragRef.current;
             if (!r || r.pointerId !== e.pointerId) return;
             r.currentY = e.clientY;
+            r.currentX = e.clientX;
             // Throttle the visual update to rAF so the card transform
             // doesn't update faster than the browser can paint.
             if (!r._rafScheduled) {
@@ -16717,6 +16895,7 @@ function App() {
             const r = reorderDragRef.current;
             if (!r || r.pointerId !== e.pointerId) {
               reorderDragRef.current = null;
+              stopReorderAutoScroll();
               setReorderDragTick(t => t + 1);
               return;
             }
@@ -16742,6 +16921,15 @@ function App() {
             const sectionEls = Array.from(document.querySelectorAll('[data-sec]'));
             let targetSection = r.originalSection;
             let targetIndexInSection = -1;
+            // §13.3b — Layered drop: when the drop lands inside a
+            // peer's row vertically AND near the peer's left or
+            // right edge horizontally, the dragged habit becomes
+            // `concurrent` with the peer (joins the cohort row).
+            // These fields stay null when the drop is between rows
+            // or in section padding — falling back to the standard
+            // unlayered insertion path.
+            let layeredPeerId = null;
+            let layeredSide = null; // "left" or "right"
             // Match by horizontal overlap on desktop (4 columns side-
             // by-side); fall back to vertical overlap on mobile (1
             // column stacked). The bounding rect's x-range is what
@@ -16769,34 +16957,84 @@ function App() {
               targetSection = chosenEl.getAttribute("data-sec") || r.originalSection;
               // Within the chosen section, count reorderable peers
               // whose midpoint is above dropY. Excludes the dragged
-              // habit itself + sub-habits + future-drawer rows.
+              // habit itself + sub-habits + future-drawer rows. We
+              // capture the full rect (not just midY) so the layered-
+              // drop edge-test below can read peer left/right too.
               const peers = Array.from(chosenEl.querySelectorAll('.hrow[data-habit-id][data-reorderable="1"]'))
                 .filter(el => String(el.getAttribute("data-habit-id")) !== String(r.habitId))
                 .map(el => {
                   const rc = el.getBoundingClientRect();
-                  return { mid: rc.top + rc.height / 2 };
+                  return {
+                    id: el.getAttribute("data-habit-id"),
+                    mid: rc.top + rc.height / 2,
+                    top: rc.top,
+                    bottom: rc.bottom,
+                    left: rc.left,
+                    right: rc.right,
+                    width: rc.width
+                  };
                 })
                 .sort((a, b) => a.mid - b.mid);
+              // §13.3b — Edge-of-peer detection. Any peer the drop
+              // falls inside vertically is a candidate; if dropX is
+              // within ~25% of either horizontal edge (measured
+              // relative to that peer's own width — cohort halves
+              // get their own narrower edge zones), the drop becomes
+              // a layered drop and we mark the side. Used for both
+              // Fix 1 (drop on edge of a solo habit → layer) and
+              // Fix 2 (drop on cohort partner's far edge → swap
+              // within cohort). The 25% zone leaves a 50%-wide
+              // "middle" stripe that still falls through to the
+              // unlayered between-rows path so users can drop next
+              // to a row without accidentally layering.
+              const EDGE_RATIO = 0.25;
+              let layeredPeer = null;
+              for (const p of peers) {
+                if (dropY < p.top || dropY > p.bottom) continue;
+                const leftEdgeMax = p.left + p.width * EDGE_RATIO;
+                const rightEdgeMin = p.right - p.width * EDGE_RATIO;
+                if (dropX <= leftEdgeMax) {
+                  layeredPeer = p; layeredSide = "left"; break;
+                }
+                if (dropX >= rightEdgeMin) {
+                  layeredPeer = p; layeredSide = "right"; break;
+                }
+              }
               let idx = 0;
               for (const p of peers) {
                 if (dropY > p.mid) idx++;
                 else break;
               }
-              targetIndexInSection = idx;
+              if (layeredPeer) {
+                // Drop is layered. Position dragged immediately
+                // before/after the peer in section-local order. The
+                // commit function applies the `concurrent` flag flip.
+                const peerIndex = peers.indexOf(layeredPeer);
+                targetIndexInSection = peerIndex + (layeredSide === "right" ? 1 : 0);
+                layeredPeerId = layeredPeer.id;
+              } else {
+                targetIndexInSection = idx;
+              }
             }
             try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
             reorderDragRef.current = null;
+            stopReorderAutoScroll();
             setReorderDragTick(t => t + 1);
             // Commit. If we couldn't resolve a section (shouldn't
             // happen — sectionSpans always has at least the dragged
             // habit's home section) fall back to snap-back (no-op).
             if (targetIndexInSection >= 0) {
-              commitHabitReorderDrop(r.habitId, targetSection, targetIndexInSection);
+              commitHabitReorderDrop(r.habitId, targetSection, targetIndexInSection, {
+                targetConcurrent: !!layeredPeerId,
+                layeredPeerId: layeredPeerId,
+                layeredSide: layeredSide
+              });
             }
           },
           onPointerCancel: (e) => {
             try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
             reorderDragRef.current = null;
+            stopReorderAutoScroll();
             setReorderDragTick(t => t + 1);
           },
           // Block tap/double-tap propagation while in reorder mode so
@@ -28317,44 +28555,48 @@ function App() {
   })(),
   // Habit flavor toggle: Yes/No vs Target & Unit. Switches whether
   // the rows below render.
-  // §5.8 — Mutual exclusion with multi-slot: a habit can be either
-  // multi-slot (binary done/missed per section) OR target-based
-  // (cumulative count per day), not both. Multi-slot semantics are
-  // per-slot and don't compose with a daily target. When multi-slot
-  // has ≥2 slots, both buttons here are disabled to make the
-  // either/or relationship explicit.
+  // §5.8c — Mutual exclusion with the Timing toggle (multi-time-a-day):
+  // a habit can be either multi-slot (binary done/missed per slot) OR
+  // target-based (cumulative count per day), not both. Yes/No is fine
+  // in either timing mode. Clicking Target & Unit while in multi mode
+  // forces the Timing toggle back to "single" and clears the slot
+  // list — both modes are auto-switchable here, no disabled state.
   (() => {
-    const multiSlotActive = !!(eHSlotSections && eHSlotSections.length >= 2);
-    const lockedTip = "Multi-slot habits use binary done/missed per slot. Clear multi-slot to use Target & Unit.";
+    const multiTimeActive = (eHTimeMode === "multi");
+    const lockedTip = "Switches Timing back to single (Target & Unit is cumulative-per-day, not per-slot).";
     return /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", gap: 6, marginTop: 14, paddingTop: 12, marginBottom: 6, borderTop: "1px solid var(--c-border)" }
     },
       /*#__PURE__*/React.createElement("button", {
         type: "button",
-        onClick: () => { if (!multiSlotActive) sEHHasTarget(false); },
-        disabled: multiSlotActive,
-        title: multiSlotActive ? lockedTip : "",
+        onClick: () => { sEHHasTarget(false); },
         style: {
           flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-          cursor: multiSlotActive ? "not-allowed" : "pointer",
-          border: "1px solid " + (!eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-border)"),
-          background: !eHHasTarget && !multiSlotActive ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
-          color: !eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-text-soft)",
-          opacity: multiSlotActive ? 0.55 : 1
+          cursor: "pointer",
+          border: "1px solid " + (!eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
+          background: !eHHasTarget ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+          color: !eHHasTarget ? "#2d5a2d" : "var(--c-text-soft)"
         }
       }, "Yes / No"),
       /*#__PURE__*/React.createElement("button", {
         type: "button",
-        onClick: () => { if (!multiSlotActive) sEHHasTarget(true); },
-        disabled: multiSlotActive,
-        title: multiSlotActive ? lockedTip : "",
+        title: multiTimeActive ? lockedTip : "",
+        onClick: () => {
+          // §5.8c — Target & Unit forces single-time-of-day. If the
+          // user was in multi mode, switch them back and drop the
+          // slot list so the saved habit matches the visible UI.
+          if (multiTimeActive) {
+            sEHTimeMode("single");
+            sEHSlotSections([]);
+          }
+          sEHHasTarget(true);
+        },
         style: {
           flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
-          cursor: multiSlotActive ? "not-allowed" : "pointer",
-          border: "1px solid " + (eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-border)"),
-          background: eHHasTarget && !multiSlotActive ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
-          color: eHHasTarget && !multiSlotActive ? "#2d5a2d" : "var(--c-text-soft)",
-          opacity: multiSlotActive ? 0.55 : 1
+          cursor: "pointer",
+          border: "1px solid " + (eHHasTarget ? "#2d5a2d" : "var(--c-border)"),
+          background: eHHasTarget ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+          color: eHHasTarget ? "#2d5a2d" : "var(--c-text-soft)"
         }
       }, "Target & Unit")
     );
@@ -28588,69 +28830,150 @@ function App() {
       background: "#2d5a2d"
     }
   }, "Add")),
+  // §5.8c — Timing section. Two-mode toggle (single time-of-day vs
+  // multiple times a day) that drives whether the Time-of-Day dropdown
+  // OR the per-section stepper rows render below. Mutually exclusive
+  // with Target & Unit (the Y/N vs T&U toggle above): targets are
+  // cumulative-per-day and don't compose with per-slot binary
+  // completions. Clicking "Multiple times a day" while Target & Unit
+  // is on flips it off; clicking Target & Unit while in multi mode
+  // flips this back to single. The §5.3 divider lives on this row's
+  // wrapper so it groups with the categorization section visually.
   /*#__PURE__*/React.createElement("div", {
-    // §5.3 — Apple-form-style section divider. Separates the linked-
-    // goals group above from the time-of-day / area / importance /
-    // frequency / location categorization group below.
     style: {
-      display: "flex",
-      gap: 8,
       marginTop: 14, paddingTop: 12, marginBottom: 6,
       borderTop: "1px solid var(--c-border)"
     }
-  }, /*#__PURE__*/React.createElement("select", {
-    value: eHSec,
-    onChange: e => sEHSec(e.target.value),
-    "aria-label": "Time of Day",
-    disabled: (eHSlotSections && eHSlotSections.length >= 2),
-    style: {
-      ...S,
-      flex: 1,
-      color: SECTIONS.find(s => s.value === eHSec)?.color || "var(--c-text-soft)",
-      opacity: (eHSlotSections && eHSlotSections.length >= 2) ? 0.55 : 1
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\uD83C\uDF05 Time of Day"), SECTIONS.map(s => /*#__PURE__*/React.createElement("option", {
-    key: s.value,
-    value: s.value
-  }, s.icon, " ", s.label))), /*#__PURE__*/React.createElement("select", {
-    value: eHDur,
-    onChange: e => sEHDur(e.target.value),
-    style: {
-      ...S,
-      flex: 1
-    }
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\u23F1 Duration"), DURS.map(d => /*#__PURE__*/React.createElement("option", {
-    key: d.value,
-    value: d.value
-  }, d.label)))),
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }
+    }, "Timing"),
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 6, marginBottom: 8 }
+    },
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: e => {
+          if (e && e.preventDefault) e.preventDefault();
+          if (eHTimeMode === "single") return;
+          // Switching multi → single: clear slot list so the saved
+          // habit matches the visible single dropdown. eHSec is
+          // preserved if it was set; otherwise it stays at its
+          // previous value (default "morning").
+          sEHTimeMode("single");
+          sEHSlotSections([]);
+        },
+        style: {
+          flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+          cursor: "pointer",
+          border: "1px solid " + (eHTimeMode === "single" ? "#2d5a2d" : "var(--c-border)"),
+          background: eHTimeMode === "single" ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+          color: eHTimeMode === "single" ? "#2d5a2d" : "var(--c-text-soft)",
+          WebkitTapHighlightColor: "transparent"
+        }
+      }, "Time of day"),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: e => {
+          if (e && e.preventDefault) e.preventDefault();
+          if (eHTimeMode === "multi") return;
+          // Switching single → multi: force off Target & Unit (the
+          // two modes are mutually exclusive — target is cumulative-
+          // per-day, multi-slot is per-slot binary). Seed the slot
+          // list with the current eHSec if it's a valid multi-slot
+          // section (morning/afternoon/evening), so the user sees
+          // an immediate "1 in <section>" instead of a blank stepper.
+          sEHHasTarget(false);
+          sEHTimeMode("multi");
+          sEHSlotSections(prev => {
+            // Preserve existing slot list if non-empty (round-trip:
+            // user toggled to single by accident, this restores).
+            if (Array.isArray(prev) && prev.length > 0) return prev.slice();
+            const seed = eHSec;
+            if (seed === "morning" || seed === "afternoon" || seed === "evening") {
+              return [seed];
+            }
+            return [];
+          });
+        },
+        style: {
+          flex: 1, padding: "8px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+          cursor: "pointer",
+          border: "1px solid " + (eHTimeMode === "multi" ? "#2d5a2d" : "var(--c-border)"),
+          background: eHTimeMode === "multi" ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+          color: eHTimeMode === "multi" ? "#2d5a2d" : "var(--c-text-soft)",
+          WebkitTapHighlightColor: "transparent"
+        }
+      }, "Multiple times a day")
+    ),
+    // Single mode: paired Time-of-Day + Duration row (the original
+    // §5.3 layout). All five SECTIONS values are available here
+    // (morning / afternoon / evening / daily completion / avoid).
+    eHTimeMode === "single" && /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 8, marginBottom: 6 }
+    }, /*#__PURE__*/React.createElement("select", {
+      value: eHSec,
+      onChange: e => sEHSec(e.target.value),
+      "aria-label": "Time of Day",
+      style: {
+        ...S,
+        flex: 1,
+        color: SECTIONS.find(s => s.value === eHSec)?.color || "var(--c-text-soft)"
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "\uD83C\uDF05 Time of Day"), SECTIONS.map(s => /*#__PURE__*/React.createElement("option", {
+      key: s.value,
+      value: s.value
+    }, s.icon, " ", s.label))), /*#__PURE__*/React.createElement("select", {
+      value: eHDur,
+      onChange: e => sEHDur(e.target.value),
+      style: {
+        ...S,
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "\u23F1 Duration"), DURS.map(d => /*#__PURE__*/React.createElement("option", {
+      key: d.value,
+      value: d.value
+    }, d.label)))),
+    // Multi mode: Duration on its own row above the per-section
+    // stepper. Time-of-Day dropdown is hidden — the stepper IS the
+    // time-of-day picker in multi mode.
+    eHTimeMode === "multi" && /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 8, marginBottom: 6 }
+    }, /*#__PURE__*/React.createElement("select", {
+      value: eHDur,
+      onChange: e => sEHDur(e.target.value),
+      "aria-label": "Duration",
+      style: { ...S, flex: 1 }
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "\u23F1 Duration"), DURS.map(d => /*#__PURE__*/React.createElement("option", {
+      key: d.value,
+      value: d.value
+    }, d.label))))
+  ),
   // §5.8b — Multi-slot steppers. Each section row shows: icon + label
   // + [−] + count + [+]. Tapping [+] appends another instance of that
   // section to eHSlotSections (allowing duplicates so the user can
   // schedule e.g. "2x morning + 2x afternoon" study chunks). Tapping
   // [−] removes the LAST occurrence of that section. Total slots
-  // across all sections capped at MAX_SLOTS (12). The single-section
-  // dropdown above is used when the resulting slotSections has 0 or 1
-  // entries (i.e. no multi-slot behavior); 2+ entries flips on the
-  // multi-slot rendering path (one row per slot, per-slot completion).
-  // §5.8 — Mutual exclusion with Target & Unit: steppers (the [+]
-  // buttons specifically) are disabled when a numeric target is
-  // active. The two modes can't compose (per-slot binary vs
-  // cumulative-per-day). [−] stays enabled in Target mode so a user
-  // who's switching INTO Target & Unit can clear out leftover slots.
-  /*#__PURE__*/React.createElement("div", {
+  // across all sections capped at MAX_SLOTS (12).
+  // §5.8c — Render gate: only visible when eHTimeMode === "multi".
+  // In single mode the Time-of-Day dropdown above handles the
+  // section choice; the steppers don't show at all. Target & Unit
+  // is also forced off when entering multi mode (mutually
+  // exclusive — per-slot binary vs cumulative-per-day), so the
+  // legacy in-stepper lock copy is no longer reachable here. We
+  // keep `locked = !!eHHasTarget` as a belt-and-braces guard.
+  eHTimeMode === "multi" && /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }
   },
     /*#__PURE__*/React.createElement("div", {
       style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 }
-    }, "Slots per day",
-      eHHasTarget && /*#__PURE__*/React.createElement("span", {
-        style: { marginLeft: 6, fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--c-text-faint)" }
-      }, "— adding slots disabled while Target & Unit is on")
-    ),
+    }, "Slots per day"),
     /*#__PURE__*/React.createElement("div", {
       style: { fontSize: 11, color: "var(--c-text-soft)", lineHeight: 1.4, marginBottom: 6 }
     }, "Up to " + MAX_SLOTS + " slots per day. Use multiple slots to break a habit into chunks (e.g., 2x morning study)."),
@@ -28757,15 +29080,24 @@ function App() {
     })(),
     (() => {
       const total = (eHSlotSections || []).length;
-      if (total === 0) return null;
+      // §5.8c — Always show the counter in multi mode (was previously
+      // hidden when total === 0). At 0 we prompt the user to add
+      // slots; at 1 we warn that the habit will save as single-slot
+      // (the data model treats <2 as single); at MAX_SLOTS we lock
+      // the styling to warn-fg.
+      const atCap = total >= MAX_SLOTS;
+      const tooFew = total < 2;
+      let suffix = "";
+      if (total === 0) suffix = " — add slots above to enable per-section logging";
+      else if (tooFew) suffix = " (add at least 2 to save as multi-slot)";
       return /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
-          color: total >= MAX_SLOTS ? "var(--c-tint-warn-fg)" : "var(--c-text-soft)",
+          color: atCap || tooFew ? "var(--c-tint-warn-fg)" : "var(--c-text-soft)",
           marginTop: 2,
-          fontWeight: total >= MAX_SLOTS ? 600 : 500
+          fontWeight: atCap || tooFew ? 600 : 500
         }
-      }, total + " / " + MAX_SLOTS + " slot" + (total === 1 ? "" : "s") + " today" + (total < 2 ? " (need 2+ to enable multi-slot)" : ""));
+      }, total + " / " + MAX_SLOTS + " slot" + (total === 1 ? "" : "s") + " today" + suffix);
     })()
   ),
   /*#__PURE__*/React.createElement("div", {
