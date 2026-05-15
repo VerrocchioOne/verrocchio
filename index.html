@@ -15066,10 +15066,10 @@ function App() {
           },
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 12, fontWeight: 700, color: "var(--c-text)", lineHeight: 1.2 }
-            }, "Reorder habits"),
+            }, "Organize habits"),
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.2, marginTop: 2 }
-            }, "Drag the ≡ handle on any card. Tap Done when finished.")
+            }, "Drag any card to reorder. Tap Done when finished.")
           )
         ),
         /*#__PURE__*/React.createElement("button", {
@@ -15422,14 +15422,19 @@ function App() {
       // (The "Routine" pill previously lived here. Moved to Profile →
       // App Settings → Routine Compare so the Habits tab's filter row
       // stays focused on filters.)
-      // Global Organize entry point — last item in the toolbar row.
-      // Tapping opens a section picker, which in turn opens the
-      // existing per-section organize modal. Sitting at the end of
-      // the row (vs next to [+]) keeps the Add and Filter controls
-      // grouped on the left and gives Organize its own quiet slot.
+      // Global Organize entry point — the ONLY way to reorder habits.
+      // Tapping enters inline reorder mode: cards become inert (no tap,
+      // no swipe, no edit), each gets a drag handle on the right edge,
+      // and explicit "first/last" drop zones flank each section column.
+      // Tap Done in the top bar to exit. Disabled when filter pills
+      // are active (reordering a filtered subset would risk misordering
+      // hidden habits).
       /*#__PURE__*/React.createElement("button", {
-        onClick: () => setOrganizePickerOpen(true),
-        title: "Organize habits — reorder, group sub-habits, layer concurrent",
+        onClick: () => { if (!reorderEntryBlockedByFilter) setReorderMode(true); },
+        disabled: reorderEntryBlockedByFilter,
+        title: reorderEntryBlockedByFilter
+          ? "Clear filters before reordering — partial reorders can misorder hidden habits."
+          : "Organize habits — tap to enter drag-to-reorder mode",
         "aria-label": "Organize habits",
         style: {
           width: 32, height: 32,
@@ -16023,56 +16028,12 @@ function App() {
           // While `reorderMode` is true the standard tap / double-tap
           // / swipe gestures early-return so the only interactions
           // are pointerdown-on-handle (drag) and tap-Done (exit mode).
-          onPointerDown: e => {
-            // Long-press to enter reorder mode. Skipped when:
-            //   • already in reorder mode (the handle owns drag there);
-            //   • there's an active swipe in flight (swipeRef carries
-            //     state from onTouchStart) — a horizontal swipe wins
-            //     over the hold.
-            // Filters disable reorder entry — see filter-active gate
-            // below; entry from a card while filters are on would risk
-            // misordering hidden habits.
-            if (reorderMode) return;
-            if (swipeRef.current[animKey]) {
-              // Swipe in flight — don't enter reorder mode.
-              return;
-            }
-            if (reorderEntryBlockedByFilter) return;
-            cancelReorderLongPress();
-            const startX = e.clientX;
-            const startY = e.clientY;
-            const pid = e.pointerId;
-            reorderLongPressRef.current = {
-              startX, startY, pointerId: pid, habitId: reorderHabitId,
-              timer: setTimeout(() => {
-                // Long-press fired — enter reorder mode, cancel any
-                // pending click-defer expand so releasing the finger
-                // doesn't pop the row open.
-                if (habitClickTimerRef.current) {
-                  clearTimeout(habitClickTimerRef.current);
-                  habitClickTimerRef.current = null;
-                }
-                if (navigator.vibrate) { try { navigator.vibrate(20); } catch (_) {} }
-                reorderLongPressRef.current = { timer: null, habitId: null, startX: 0, startY: 0, pointerId: null };
-                setReorderMode(true);
-              }, 500)
-            };
-          },
-          onPointerMove: e => {
-            const r = reorderLongPressRef.current;
-            if (!r || !r.timer) return;
-            const dx = Math.abs(e.clientX - r.startX);
-            const dy = Math.abs(e.clientY - r.startY);
-            if (dx > 6 || dy > 6) {
-              cancelReorderLongPress();
-            }
-          },
-          onPointerUp: e => {
-            cancelReorderLongPress();
-          },
-          onPointerCancel: e => {
-            cancelReorderLongPress();
-          },
+          // Long-press to enter reorder mode was removed — the single
+          // entry point is now the three-line Organize button in the
+          // toolbar. The card-body pointer events stay clean (no timer,
+          // no ref bookkeeping) so the only gestures are tap-to-expand,
+          // double-tap-to-edit, and horizontal swipe-to-mark, all gated
+          // off when `reorderMode` is true.
           onClick: e => {
             if (reorderMode) return;
             // Defer the expand-toggle by ~250ms so a follow-up second
@@ -16426,80 +16387,59 @@ function App() {
             // outside any habit container entirely, the drag snaps
             // back (no-op).
             const dropY = e.clientY;
-            const allCards = Array.from(document.querySelectorAll(".hrow[data-habit-id]"));
-            // Filter out sub-habits (they shouldn't be drop targets)
-            // and the dragged card itself. We also filter out future-
-            // habits-drawer rows which never carry data-reorderable=1.
-            const peers = allCards.filter(el => {
-              if (String(el.getAttribute("data-habit-id")) === String(r.habitId)) return false;
-              if (el.getAttribute("data-reorderable") !== "1") return false;
-              return true;
-            });
-            // Map each peer to {section, top, mid, bottom} for
-            // section + index resolution.
-            const rects = peers.map(el => {
-              const rect = el.getBoundingClientRect();
-              return {
-                el,
-                id: el.getAttribute("data-habit-id"),
-                section: el.getAttribute("data-habit-section") || "morning",
-                top: rect.top, mid: rect.top + rect.height / 2, bottom: rect.bottom
-              };
-            });
-            // Find the closest section column by checking which
-            // section group contains the pointer Y. We use peer
-            // bounds as a proxy for the section's vertical span.
+            const dropX = e.clientX;
+            // §13.3 — Section detection uses [data-sec] containers,
+            // not card-derived spans. The container's bounding rect
+            // includes the section header, margin, and any padding
+            // below the last card — much more forgiving than the
+            // tight min(card.top)..max(card.bottom) range used
+            // previously. Result: dropping just above the first card
+            // OR just below the last card both land cleanly without
+            // needing pixel-perfect aim.
+            const sectionEls = Array.from(document.querySelectorAll('[data-sec]'));
             let targetSection = r.originalSection;
             let targetIndexInSection = -1;
-            // Group peer rects by section, sorted by top → for each
-            // section, expand its span to its min(top) and max(bottom).
-            const sectionSpans = {};
-            for (const rc of rects) {
-              const s = rc.section;
-              if (!sectionSpans[s]) sectionSpans[s] = { top: rc.top, bottom: rc.bottom, peers: [] };
-              else {
-                sectionSpans[s].top = Math.min(sectionSpans[s].top, rc.top);
-                sectionSpans[s].bottom = Math.max(sectionSpans[s].bottom, rc.bottom);
-              }
-              sectionSpans[s].peers.push(rc);
+            // Match by horizontal overlap on desktop (4 columns side-
+            // by-side); fall back to vertical overlap on mobile (1
+            // column stacked). The bounding rect's x-range is what
+            // splits MORNING / AFTERNOON / EVENING / AVOID into their
+            // own columns at >=1024px widths.
+            let chosenEl = null;
+            for (const el of sectionEls) {
+              const rect = el.getBoundingClientRect();
+              const horizontalHit = dropX >= rect.left && dropX <= rect.right;
+              const verticalHit = dropY >= rect.top && dropY <= rect.bottom;
+              if (horizontalHit && verticalHit) { chosenEl = el; break; }
             }
-            // Pick the section whose span contains dropY; otherwise
-            // pick the section whose midpoint is closest to dropY.
-            const sectionEntries = Object.entries(sectionSpans);
-            let chosen = null;
-            for (const [sec, span] of sectionEntries) {
-              if (dropY >= span.top && dropY <= span.bottom) {
-                chosen = sec;
-                break;
-              }
-            }
-            if (!chosen && sectionEntries.length > 0) {
-              let best = null;
+            // Fallback: nearest section center if no direct hit.
+            if (!chosenEl && sectionEls.length > 0) {
               let bestDist = Infinity;
-              for (const [sec, span] of sectionEntries) {
-                const m = (span.top + span.bottom) / 2;
-                const dist = Math.abs(dropY - m);
-                if (dist < bestDist) { bestDist = dist; best = sec; }
+              for (const el of sectionEls) {
+                const rect = el.getBoundingClientRect();
+                const cx = (rect.left + rect.right) / 2;
+                const cy = (rect.top + rect.bottom) / 2;
+                const dist = Math.hypot(dropX - cx, dropY - cy);
+                if (dist < bestDist) { bestDist = dist; chosenEl = el; }
               }
-              chosen = best;
             }
-            if (chosen) {
-              targetSection = chosen;
-              // Within the chosen section, find the insertion index:
-              // count peers whose midpoint is above dropY.
-              const inSec = sectionSpans[chosen].peers.slice().sort((a, b) => a.top - b.top);
+            if (chosenEl) {
+              targetSection = chosenEl.getAttribute("data-sec") || r.originalSection;
+              // Within the chosen section, count reorderable peers
+              // whose midpoint is above dropY. Excludes the dragged
+              // habit itself + sub-habits + future-drawer rows.
+              const peers = Array.from(chosenEl.querySelectorAll('.hrow[data-habit-id][data-reorderable="1"]'))
+                .filter(el => String(el.getAttribute("data-habit-id")) !== String(r.habitId))
+                .map(el => {
+                  const rc = el.getBoundingClientRect();
+                  return { mid: rc.top + rc.height / 2 };
+                })
+                .sort((a, b) => a.mid - b.mid);
               let idx = 0;
-              for (const rc of inSec) {
-                if (dropY > rc.mid) idx++;
+              for (const p of peers) {
+                if (dropY > p.mid) idx++;
                 else break;
               }
               targetIndexInSection = idx;
-            } else {
-              // No peers at all (every section empty except the one
-              // being dragged from) — keep original section, drop at
-              // top (index 0).
-              targetSection = r.originalSection;
-              targetIndexInSection = 0;
             }
             try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
             reorderDragRef.current = null;
@@ -16521,11 +16461,18 @@ function App() {
           // gated handlers.
           onClick: (e) => { e.stopPropagation(); e.preventDefault(); },
           onDoubleClick: (e) => { e.stopPropagation(); e.preventDefault(); },
+          // §13.3 — In reorder mode the handle covers the ENTIRE card,
+          // not just a 32px right-edge sliver. Per user feedback the
+          // card body has no other functionality in reorder mode, so
+          // the whole surface is a grab target. The ≡ glyph keeps its
+          // visual position on the right edge via justifyContent +
+          // paddingRight; alignItems: center keeps it vertically
+          // centered regardless of card height (multi-row habits, etc.).
           style: {
             position: "absolute",
-            top: 0, right: 0, bottom: 0,
-            width: 32,
-            display: "flex", alignItems: "center", justifyContent: "center",
+            top: 0, right: 0, bottom: 0, left: 0,
+            display: "flex", alignItems: "center", justifyContent: "flex-end",
+            paddingRight: 12,
             cursor: "grab",
             color: "var(--c-text-faint)",
             fontSize: 18,
@@ -17220,7 +17167,21 @@ function App() {
         // horizontal slide makes no sense.
         "data-collapsed": collapsed ? "1" : "0",
         style: {
-          marginBottom: 22
+          marginBottom: 22,
+          // §13.3 — In reorder mode, pad each section column with
+          // generous bottom space so dropping a card below the last
+          // habit (= "place last in this section") is easy. The
+          // padding is part of the [data-sec] bounding rect used by
+          // the drop resolver, so this directly expands the drop
+          // target. Visible-via-position only; the column shifts
+          // down by ~60px in reorder mode and snaps back on exit.
+          paddingBottom: reorderMode ? 60 : 0,
+          paddingTop: reorderMode ? 8 : 0,
+          transition: "padding 0.18s ease",
+          // Subtle hint: in reorder mode the section column gets a
+          // dashed bottom edge so users see WHERE the droppable area
+          // ends. Faint enough not to compete with the cards.
+          borderBottom: reorderMode ? "1px dashed var(--c-border)" : "none"
         }
       }, /*#__PURE__*/React.createElement("div", {
         // Short tap = toggle collapse (same as before). Long press
@@ -17229,39 +17190,11 @@ function App() {
         // two gestures; the long-press timer fires open-reorder and
         // sets a ref flag so the subsequent pointerup doesn't ALSO
         // toggle collapse.
-        onPointerDown: e => {
-          if (e.pointerType === "mouse" && e.button !== 0) return;
-          sectionLongPressRef.current.fired = false;
-          if (sectionLongPressRef.current.timer) clearTimeout(sectionLongPressRef.current.timer);
-          sectionLongPressRef.current.timer = setTimeout(() => {
-            sectionLongPressRef.current.fired = true;
-            sectionLongPressRef.current.timer = null;
-            openSectionReorder(group.value);
-          }, 600);
-        },
-        onPointerUp: () => {
-          if (sectionLongPressRef.current.timer) {
-            clearTimeout(sectionLongPressRef.current.timer);
-            sectionLongPressRef.current.timer = null;
-            if (!sectionLongPressRef.current.fired) {
-              setCollapsedSections(p => ({ ...p, [group.value]: !p[group.value] }));
-            }
-          }
-        },
-        onPointerLeave: () => {
-          if (sectionLongPressRef.current.timer) {
-            clearTimeout(sectionLongPressRef.current.timer);
-            sectionLongPressRef.current.timer = null;
-          }
-        },
-        onPointerCancel: () => {
-          if (sectionLongPressRef.current.timer) {
-            clearTimeout(sectionLongPressRef.current.timer);
-            sectionLongPressRef.current.timer = null;
-          }
-        },
-        // Right-click as a desktop-friendly alternative to long-press.
-        onContextMenu: e => { e.preventDefault(); openSectionReorder(group.value); },
+        // Section header is now a simple collapse toggle. The historical
+        // long-press / right-click that opened the per-section organize
+        // modal was retired in favor of the single global Organize
+        // button in the toolbar (§13.3).
+        onClick: () => setCollapsedSections(p => ({ ...p, [group.value]: !p[group.value] })),
         style: {
           display: "flex",
           alignItems: "center",
@@ -27164,83 +27097,11 @@ function App() {
       }, "Clear and start over")
     ));
   })(),
-  // Section-picker bottom sheet — shown when the toolbar's
-  // Organize button is tapped. The user picks a time-of-day
-  // section, which then opens the existing per-section organize
-  // modal (the ⇅ button on individual section headers has been
-  // retired in favor of this single global entry point).
-  organizePickerOpen && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    style: {
-      position: "fixed", inset: 0,
-      background: "rgba(0,0,0,0.5)",
-      zIndex: 305,
-      display: "flex", alignItems: "flex-end", justifyContent: "center"
-    },
-    onClick: e => { if (e.target === e.currentTarget) setOrganizePickerOpen(false); }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "fade-in",
-    style: {
-      background: "var(--c-surface, #fff)",
-      borderRadius: "20px 20px 0 0",
-      padding: "20px 18px 22px",
-      width: "100%", maxWidth: 520,
-      boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
-    }
-  },
-    /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
-      }, "Organize"),
-      /*#__PURE__*/React.createElement("button", {
-        type: "button", "aria-label": "Close",
-        onClick: () => setOrganizePickerOpen(false),
-        style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 28, height: 28, fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
-      }, "×")
-    ),
-    /*#__PURE__*/React.createElement("div", {
-      style: { fontSize: 12, color: "#6b7280", marginBottom: 14, lineHeight: 1.45 }
-    }, "Pick a section to reorder, group sub-habits, or layer concurrent habits."),
-    /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", flexDirection: "column", gap: 6 }
-    },
-      SECTIONS.map(sec => {
-        const count = (data.habits || []).filter(h => h.section === sec.value).length;
-        const enabled = count > 0;
-        return /*#__PURE__*/React.createElement("button", {
-          key: sec.value,
-          type: "button",
-          disabled: !enabled,
-          onClick: () => {
-            setOrganizePickerOpen(false);
-            openSectionReorder(sec.value);
-          },
-          style: {
-            display: "flex", alignItems: "center", gap: 10,
-            padding: "12px 14px",
-            background: enabled ? "var(--c-surface-raised)" : "var(--c-surface-muted)",
-            border: "1px solid var(--c-border)",
-            borderLeft: "3px solid " + (enabled ? sec.color : "var(--c-border)"),
-            borderRadius: 8,
-            fontSize: 14, fontWeight: 600,
-            color: enabled ? "var(--c-text)" : "#9ca3af",
-            cursor: enabled ? "pointer" : "default",
-            opacity: enabled ? 1 : 0.6,
-            textAlign: "left"
-          }
-        },
-          /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 16 } }, sec.icon || ""),
-          /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, sec.label),
-          /*#__PURE__*/React.createElement("span", {
-            style: { fontSize: 11, fontWeight: 700, color: "#9ca3af" }
-          }, count + " habit" + (count === 1 ? "" : "s"))
-        );
-      })
-    )
-  )),
+  // §13.3 — The section-picker bottom sheet was retired. The three-line
+  // Organize button now enters inline reorder mode directly (no
+  // intermediate modal). The per-section reorder modal is still alive
+  // below (reorderCtx) for goals/todos but is no longer reachable for
+  // habits.
   reorderCtx && (() => {
     const ctx = reorderCtx;
     const pool =
