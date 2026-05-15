@@ -268,12 +268,11 @@ test("detectOffSchedule does NOT flag multi-slot habit when each slot is within 
   });
 });
 
-test("findCorrelations never uses a multi-slot habit as the A side", () => {
-  // Same rationale as detectOffSchedule — the A-side of a correlation
-  // is "did A happen by its cutoff?", and a multi-slot habit has
-  // multiple cutoffs but only one completionTimes[date]. Mark it
-  // cutoff:null so it never qualifies as a predictor. It can still
-  // appear on the B side via the `any` set.
+test("findCorrelations admits a multi-slot habit on the A side when every slot beats its cutoff", () => {
+  // §5.8 strict semantic — a multi-slot habit qualifies as the
+  // conditioning A side only when every slot has a per-slot time
+  // AND each time is before its slot's section cutoff. Here both
+  // slots beat their cutoffs every day, so the habit can predict.
   withFakeNow("2026-04-23T10:00:00", () => {
     const today = new Date(2026, 3, 23);
     const days = [];
@@ -285,6 +284,63 @@ test("findCorrelations never uses a multi-slot habit as the A side", () => {
     const bC = {}; for (let i = 0; i < 14; i++) bC[days[i]] = "22:00";
     const multi = habitWith("a", "morning", "Study CFA", aC);
     multi.slotSections = ["morning", "evening"];
+    multi.slotCompletionTimes = {};
+    for (let i = 0; i < 14; i++) {
+      // morning before noon, evening before midnight — both on time.
+      multi.slotCompletionTimes[days[i]] = { morning: "07:00", evening: "21:00" };
+    }
+    const reader = habitWith("b", "evening", "Read", bC);
+    const out = findCorrelations([multi, reader]);
+    const hit = out.find(r => r.aHabitId === "a");
+    assert.ok(hit, "expected multi-slot to predict reader");
+    assert.equal(hit.aSection, "morning+evening");
+    assert.equal(hit.aCutoffHour, null);
+    assert.ok(hit.support >= 14);
+  });
+});
+
+test("findCorrelations excludes a multi-slot habit from the A side when any slot misses its cutoff", () => {
+  // Inverse of the strict-semantic test — even one late slot per day
+  // means the day doesn't count as on-time, and with no on-time days
+  // the habit fails minSupport and can't be the A side.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 20; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const aC = {}; for (let i = 0; i < 14; i++) aC[days[i]] = "07:00";
+    const bC = {}; for (let i = 0; i < 14; i++) bC[days[i]] = "22:00";
+    const multi = habitWith("a", "morning", "Study CFA", aC);
+    multi.slotSections = ["morning", "evening"];
+    multi.slotCompletionTimes = {};
+    for (let i = 0; i < 14; i++) {
+      // Morning slot at 13:00 — past noon cutoff. Day not on-time.
+      multi.slotCompletionTimes[days[i]] = { morning: "13:00", evening: "21:00" };
+    }
+    const reader = habitWith("b", "evening", "Read", bC);
+    const out = findCorrelations([multi, reader]);
+    assert.equal(out.filter(r => r.aHabitId === "a").length, 0);
+  });
+});
+
+test("findCorrelations excludes a multi-slot habit from the A side when per-slot times are missing", () => {
+  // Legacy data path — habit has slotSections but no
+  // slotCompletionTimes filled in. The strict check requires a
+  // recorded time per slot per day; missing → not on-time.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 20; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const aC = {}; for (let i = 0; i < 14; i++) aC[days[i]] = "07:00";
+    const bC = {}; for (let i = 0; i < 14; i++) bC[days[i]] = "22:00";
+    const multi = habitWith("a", "morning", "Study CFA", aC);
+    multi.slotSections = ["morning", "evening"];
+    // No slotCompletionTimes field.
     const reader = habitWith("b", "evening", "Read", bC);
     const out = findCorrelations([multi, reader]);
     assert.equal(out.filter(r => r.aHabitId === "a").length, 0);

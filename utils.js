@@ -172,14 +172,20 @@ function findCorrelations(habits, opts) {
   // bitmap across the window so the N×N pair loop doesn't re-scan
   // completions on every iteration.
   const prepped = habits.map(h => {
-    // §5.8 — Multi-slot habits store one completionTimes[date] entry
-    // shared across all slots, so we cannot tell which cutoff to
-    // measure against. Marking cutoff:null excludes the habit from
-    // the A side of any correlation (the loop below skips A.cutoff
-    // == null), so we don't silently use the wrong section's cutoff.
-    // Multi-slot habits can still appear on the B side via `any`.
+    // §5.8 — Multi-slot habits qualify as the A (conditioning) side
+    // under the STRICT semantic: a day counts as "on time" only when
+    // every slot in slotSections has a per-slot completion time AND
+    // each time is before its slot's section cutoff. If any slot is
+    // missing or late, the day is not on-time. This makes the
+    // correlation signal trustworthy: "when the user nailed every
+    // slot of habit A on schedule, did habit B follow?"
     const isMultiSlot = Array.isArray(h && h.slotSections) && h.slotSections.length >= 2;
     const cutoff = isMultiSlot ? null : SECTION_CUTOFFS[h && h.section];
+    // canBeASide replaces the old `cutoff != null` skip-marker — we
+    // need to allow multi-slot habits through even though they have
+    // no single cutoff. Single-slot avoid habits still get filtered
+    // out (they have no SECTION_CUTOFFS entry and no slotSections).
+    const canBeASide = isMultiSlot || cutoff != null;
     const onTime = new Set();
     const any = new Set();
     if (h && h.completions) {
@@ -187,17 +193,30 @@ function findCorrelations(habits, opts) {
         const c = h.completions[day];
         if (c !== "done" && c !== true) continue;
         any.add(day);
-        if (cutoff != null) {
+        if (isMultiSlot) {
+          const slots = h.slotSections;
+          const dayTimes = (h.slotCompletionTimes || {})[day] || {};
+          let allOnTime = slots.length > 0;
+          for (const slotName of slots) {
+            const slotCutoff = SECTION_CUTOFFS[slotName];
+            const mins = parseClock(dayTimes[slotName]);
+            if (slotCutoff == null || mins == null || mins >= slotCutoff * 60) {
+              allOnTime = false;
+              break;
+            }
+          }
+          if (allOnTime) onTime.add(day);
+        } else if (cutoff != null) {
           const mins = parseClock(h.completionTimes && h.completionTimes[day]);
           if (mins != null && mins < cutoff * 60) onTime.add(day);
         }
       }
     }
-    return { h, cutoff, onTime, any };
+    return { h, cutoff, canBeASide, isMultiSlot, onTime, any };
   });
   const totalDays = days.length;
   for (const A of prepped) {
-    if (A.cutoff == null) continue; // avoid or unknown section
+    if (!A.canBeASide) continue; // avoid or single-slot with no cutoff
     if (A.onTime.size < minSupport) continue;
     for (const B of prepped) {
       if (!B.h || A.h.id === B.h.id) continue;
@@ -211,7 +230,12 @@ function findCorrelations(habits, opts) {
         results.push({
           aHabitId: A.h.id,
           aText: A.h.text,
-          aSection: A.h.section,
+          // Multi-slot habits expose a composite section so the caller
+          // can render "morning+evening" rather than the form-default
+          // .section value. cutoffHour stays null for multi-slot —
+          // the strict semantic means there's no single "by hour"
+          // label that fits.
+          aSection: A.isMultiSlot ? A.h.slotSections.join("+") : A.h.section,
           aCutoffHour: A.cutoff,
           bHabitId: B.h.id,
           bText: B.h.text,
