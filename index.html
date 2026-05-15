@@ -8656,12 +8656,17 @@ function App() {
               setFreq({ ...freq, days: cur });
             },
             style: {
-              flex: "1 1 0", minWidth: 0, padding: "5px 2px",
+              // §5.3 — day-of-week chips were 5px-vertical padding +
+              // 10px font, resolving to ~24px tall. Apple HIG minimum
+              // touch target is 44pt — bumped padding to 12px and
+              // font to 12 so the chips reach the threshold and
+              // become reliably tappable on mobile.
+              flex: "1 1 0", minWidth: 0, padding: "12px 4px", minHeight: 44,
               borderRadius: 12,
               border: selected ? "1px solid var(--accent, #2d5a2d)" : "1px solid #d1d5db",
               background: selected ? "var(--accent, #2d5a2d)" : "#fff",
               color: selected ? "#fff" : "var(--c-text-soft)",
-              fontSize: 10, fontWeight: selected ? 700 : 500,
+              fontSize: 12, fontWeight: selected ? 700 : 500,
               cursor: "pointer", WebkitTapHighlightColor: "transparent",
               textAlign: "center", whiteSpace: "nowrap"
             }
@@ -26997,10 +27002,13 @@ function App() {
   },
     /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 11, fontWeight: 600, color: "#6b7280",
-        textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4
+        // §5.3 — section sub-headers standardized to weight 600 +
+        // soft text token + letter-spacing 0.6. Was inconsistent
+        // with "MULTIPLE SLOTS PER DAY" weight 700 below.
+        fontSize: 11, fontWeight: 600, color: "var(--c-text-soft)",
+        textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4
       }
-    }, "🎯 Linked Goals" + (eHGoalIds.length > 0 ? " (" + eHGoalIds.length + ")" : "")),
+    }, "Linked Goals" + (eHGoalIds.length > 0 ? " (" + eHGoalIds.length + ")" : "")),
     (data.goals || []).length === 0
       ? /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 11, color: "#9ca3af", marginBottom: 4 }

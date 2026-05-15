@@ -201,6 +201,50 @@ test("detectOffSchedule returns null for avoid habits", () => {
   });
 });
 
+test("detectOffSchedule returns null for multi-slot habits", () => {
+  // §5.8 — Multi-slot habits store one completionTimes[date] per day
+  // across all slots. The off-schedule check has no way to know which
+  // slot was completed at what time, so flagging it would be wrong
+  // (e.g., a 20:00 evening completion compared against a morning
+  // cutoff). Skip until per-slot timestamps land.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const comps = {};
+    for (let i = 0; i < 7; i++) comps[days[i]] = "15:00";
+    const h = habitWith("h", "morning", "Study CFA", comps);
+    h.slotSections = ["morning", "evening"];
+    assert.equal(detectOffSchedule(h), null);
+  });
+});
+
+test("findCorrelations never uses a multi-slot habit as the A side", () => {
+  // Same rationale as detectOffSchedule — the A-side of a correlation
+  // is "did A happen by its cutoff?", and a multi-slot habit has
+  // multiple cutoffs but only one completionTimes[date]. Mark it
+  // cutoff:null so it never qualifies as a predictor. It can still
+  // appear on the B side via the `any` set.
+  withFakeNow("2026-04-23T10:00:00", () => {
+    const today = new Date(2026, 3, 23);
+    const days = [];
+    for (let i = 0; i < 20; i++) {
+      const d = new Date(today); d.setDate(today.getDate() - i);
+      days.push(dk(d));
+    }
+    const aC = {}; for (let i = 0; i < 14; i++) aC[days[i]] = "07:00";
+    const bC = {}; for (let i = 0; i < 14; i++) bC[days[i]] = "22:00";
+    const multi = habitWith("a", "morning", "Study CFA", aC);
+    multi.slotSections = ["morning", "evening"];
+    const reader = habitWith("b", "evening", "Read", bC);
+    const out = findCorrelations([multi, reader]);
+    assert.equal(out.filter(r => r.aHabitId === "a").length, 0);
+  });
+});
+
 test("pastDays returns N keys starting with today, going back one day at a time", () => {
   withFakeNow("2026-04-23T10:00:00", () => {
     const keys = pastDays(5);

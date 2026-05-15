@@ -172,7 +172,14 @@ function findCorrelations(habits, opts) {
   // bitmap across the window so the N×N pair loop doesn't re-scan
   // completions on every iteration.
   const prepped = habits.map(h => {
-    const cutoff = SECTION_CUTOFFS[h && h.section];
+    // §5.8 — Multi-slot habits store one completionTimes[date] entry
+    // shared across all slots, so we cannot tell which cutoff to
+    // measure against. Marking cutoff:null excludes the habit from
+    // the A side of any correlation (the loop below skips A.cutoff
+    // == null), so we don't silently use the wrong section's cutoff.
+    // Multi-slot habits can still appear on the B side via `any`.
+    const isMultiSlot = Array.isArray(h && h.slotSections) && h.slotSections.length >= 2;
+    const cutoff = isMultiSlot ? null : SECTION_CUTOFFS[h && h.section];
     const onTime = new Set();
     const any = new Set();
     if (h && h.completions) {
@@ -233,6 +240,12 @@ function detectOffSchedule(habit, opts) {
   const threshold  = (opts && opts.threshold)  || 0.6;
   const today      = opts && opts.today;
   if (!habit) return null;
+  // §5.8 — Skip multi-slot habits. completionTimes[date] is shared
+  // across all slots, so we'd be comparing a (possibly evening)
+  // timestamp against the (possibly morning) section cutoff and
+  // wrongly flagging "your morning habit ran late." Re-enable once
+  // per-slot completionTimes lands.
+  if (Array.isArray(habit.slotSections) && habit.slotSections.length >= 2) return null;
   const cutoff = SECTION_CUTOFFS[habit.section];
   if (cutoff == null) return null;
   let logged = 0, late = 0;
