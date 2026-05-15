@@ -5442,8 +5442,22 @@ function App() {
     let indicatorRect = null;
     if (chosenEl) {
       targetSection = chosenEl.getAttribute("data-sec") || r.originalSection;
+      // §5.8c — Slot-aware peer filter. For multi-slot drags, only the
+      // ACTUAL dragged card (matching habitId + slotId) is excluded
+      // from the peer list — sibling slot cards of the same habit are
+      // legitimate drop neighbors. For single-slot drags (r.slotId
+      // null), any card with the same habitId is excluded (legacy
+      // behavior: a habit can't be its own peer).
+      const _isMultiSlot = r.slotId != null;
       const peers = Array.from(chosenEl.querySelectorAll('.hrow[data-habit-id][data-reorderable="1"]'))
-        .filter(el => String(el.getAttribute("data-habit-id")) !== String(r.habitId))
+        .filter(el => {
+          const elHabit = String(el.getAttribute("data-habit-id"));
+          if (elHabit !== String(r.habitId)) return true;
+          if (!_isMultiSlot) return false;
+          const elSlot = el.getAttribute("data-slot-id") || null;
+          // Same habitId — exclude only the exact slot being dragged.
+          return elSlot !== r.slotId;
+        })
         .map(el => {
           const rc = el.getBoundingClientRect();
           return {
@@ -5460,15 +5474,23 @@ function App() {
         .sort((a, b) => a.mid - b.mid);
       const EDGE_RATIO = 0.25;
       let layeredPeer = null;
-      for (const p of peers) {
-        if (dropY < p.top || dropY > p.bottom) continue;
-        const leftEdgeMax = p.left + p.width * EDGE_RATIO;
-        const rightEdgeMin = p.right - p.width * EDGE_RATIO;
-        if (dropX <= leftEdgeMax) {
-          layeredPeer = p; layeredSide = "left"; break;
-        }
-        if (dropX >= rightEdgeMin) {
-          layeredPeer = p; layeredSide = "right"; break;
+      // §5.8c — Multi-slot drags ignore layered-edge detection. A
+      // "layered cohort" (two habits sharing one row) is a whole-habit
+      // concept; one SLOT of a multi-slot habit can't layer into a
+      // peer's cohort. Treating layered drops as cross-section moves
+      // for multi-slot drags falls through to the horizontal-insertion
+      // path below.
+      if (!_isMultiSlot) {
+        for (const p of peers) {
+          if (dropY < p.top || dropY > p.bottom) continue;
+          const leftEdgeMax = p.left + p.width * EDGE_RATIO;
+          const rightEdgeMin = p.right - p.width * EDGE_RATIO;
+          if (dropX <= leftEdgeMax) {
+            layeredPeer = p; layeredSide = "left"; break;
+          }
+          if (dropX >= rightEdgeMin) {
+            layeredPeer = p; layeredSide = "right"; break;
+          }
         }
       }
       let idx = 0;
@@ -9339,6 +9361,90 @@ function App() {
       }
       return h;
     });
+    save({
+      ...cur,
+      habits: nextHabits,
+      sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" }
+    });
+  };
+  // §5.8c — Slot-level reorder commit for multi-slot habits.
+  // Rewrites slotSections[slotArrayIdx] to a new section without
+  // touching the habit's primary `section`/`_order`. Completion
+  // history is rekeyed on the fly because changing one slot's section
+  // can shift the localIdx of OTHER slots in the same section.
+  //
+  // Concrete example showing why every slot needs inspection:
+  //   slotSections: ["morning", "morning"]
+  //   Old slot IDs: "morning:0", "morning:1"
+  //   Move slotSections[0] from "morning" to "evening" →
+  //   slotSections: ["evening", "morning"]
+  //   New slot IDs: "evening:0", "morning:0"
+  //   The REMAINING morning slot's ID shifted from "morning:1" → "morning:0".
+  //   We must rekey BOTH affected slots in slotCompletions[date] +
+  //   slotCompletionTimes[date], preserving completion history.
+  //
+  // Algorithm: for each date entry in each per-slot map, build a
+  // per-arrayIdx oldId → newId mapping. Where the IDs differ AND the
+  // date has an entry under oldId, move it to newId. Two-pass keyed
+  // by arrayIdx (not by slotId) prevents collisions like rekeying
+  // "morning:1" → "morning:0" stomping on an existing "morning:0"
+  // that ALSO needs to move.
+  const commitSlotReorderDrop = (habitId, slotArrayIdx, newSection) => {
+    const cur = latestData.current || data;
+    const all = (cur.habits || []).slice();
+    const moved = all.find(h => String(h.id) === String(habitId));
+    if (!moved) return;
+    const oldSlots = Array.isArray(moved.slotSections) ? moved.slotSections.slice() : [];
+    if (slotArrayIdx < 0 || slotArrayIdx >= oldSlots.length) return;
+    if (oldSlots[slotArrayIdx] === newSection) return; // no-op
+    const newSlots = oldSlots.slice();
+    newSlots[slotArrayIdx] = newSection;
+    // Build per-arrayIdx oldId → newId mapping. Identity entries
+    // (where the ID didn't shift) skip the rekey work.
+    const oldIds = oldSlots.map((_, i) => slotIdForIndex(oldSlots, i));
+    const newIds = newSlots.map((_, i) => slotIdForIndex(newSlots, i));
+    const rekeyPairs = [];
+    for (let i = 0; i < oldSlots.length; i++) {
+      if (oldIds[i] !== newIds[i]) rekeyPairs.push({ oldId: oldIds[i], newId: newIds[i] });
+    }
+    const rekeyDayMap = day => {
+      if (!day || typeof day !== "object") return day;
+      if (rekeyPairs.length === 0) return day;
+      // Snapshot the old values first so two rekeys aren't visible to
+      // each other (preventing "morning:1" → "morning:0" stomping on
+      // an existing "morning:0" before that one has moved).
+      const captured = {};
+      for (const { oldId } of rekeyPairs) {
+        if (Object.prototype.hasOwnProperty.call(day, oldId)) {
+          captured[oldId] = day[oldId];
+        }
+      }
+      const next = { ...day };
+      for (const { oldId } of rekeyPairs) {
+        if (Object.prototype.hasOwnProperty.call(next, oldId)) delete next[oldId];
+      }
+      for (const { oldId, newId } of rekeyPairs) {
+        if (Object.prototype.hasOwnProperty.call(captured, oldId)) {
+          next[newId] = captured[oldId];
+        }
+      }
+      return next;
+    };
+    const rekeyMap = topLevel => {
+      if (!topLevel || typeof topLevel !== "object") return topLevel;
+      const out = {};
+      for (const dateKey of Object.keys(topLevel)) {
+        out[dateKey] = rekeyDayMap(topLevel[dateKey]);
+      }
+      return out;
+    };
+    const updatedMoved = {
+      ...moved,
+      slotSections: newSlots,
+      slotCompletions: rekeyMap(moved.slotCompletions || {}),
+      slotCompletionTimes: rekeyMap(moved.slotCompletionTimes || {})
+    };
+    const nextHabits = all.map(h => String(h.id) === String(habitId) ? updatedMoved : h);
     save({
       ...cur,
       habits: nextHabits,
@@ -16739,8 +16845,17 @@ function App() {
         // parent's expanded block and aren't reorderable individually.
         const reorderHabitId = habit.parentId || habit.id;
         const isTopLevelForReorder = !habit.parentId;
-        const isBeingDragged = reorderMode && reorderDragRef.current && String(reorderDragRef.current.habitId) === String(reorderHabitId);
-        const dragOffsetY = isBeingDragged ? (reorderDragRef.current.currentY - reorderDragRef.current.startY) : 0;
+        // §5.8c — Multi-slot drag isolation. Each slot card of a multi-slot
+        // habit shares the same habit.id but carries its own _renderSlot.
+        // Single-slot drags leave draggedRef.slotId === null and match by
+        // habitId only (legacy behavior). Multi-slot drags require the
+        // slotId to match so only the actual dragged slot card receives
+        // the translateY transform — its sibling slot cards stay still.
+        const _draggedRef = reorderDragRef.current;
+        const isBeingDragged = reorderMode && _draggedRef
+          && String(_draggedRef.habitId) === String(reorderHabitId)
+          && (_draggedRef.slotId == null || _draggedRef.slotId === (habit._renderSlot || null));
+        const dragOffsetY = isBeingDragged ? (_draggedRef.currentY - _draggedRef.startY) : 0;
         // Avoid habits used to take a separate, simpler render branch
         // (different action button, fewer pills, "Strong willpower!"
         // swipe copy). They now share this exact same render with
@@ -16752,6 +16867,12 @@ function App() {
           key: habit.id,
           className: "hrow" + (reorderMode ? " hrow-reorder" : "") + (isBeingDragged ? " hrow-dragging" : ""),
           "data-habit-id": habit.id,
+          // §5.8c — Slot-aware reorder. Multi-slot habits render one card
+          // per slot; each carries its own slot ID so resolveReorderDrop
+          // can distinguish them when filtering peer lists. Empty string
+          // for single-slot habits (no behavior change for the legacy
+          // path).
+          "data-slot-id": habit._renderSlot || "",
           "data-habit-section": habit.section || "",
           // Identify drop-target eligibility from CSS attributes alone:
           // a sub-habit row (parentId set) cannot be reordered as a
@@ -17092,13 +17213,27 @@ function App() {
             // the pointer is over the page. Without capture, fast
             // drags off the card edge would lose the event stream.
             try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+            // §5.8c — Multi-slot drag context. When the dragged card
+            // represents one slot of a multi-slot habit, capture the
+            // slot ID + arrayIdx so resolveReorderDrop can filter
+            // sibling slots out of the peer list AND the drop commit
+            // can rewrite slotSections[arrayIdx] without touching the
+            // habit's primary `section`/`_order`. slotId stays null for
+            // single-slot habits (legacy whole-habit reorder path).
+            const _slotMeta = habit._renderSlotMeta || null;
+            const _slotId = habit._renderSlot || null;
+            const _origSection = _slotMeta && _slotMeta.section
+              ? _slotMeta.section
+              : (habit.section || "morning");
             reorderDragRef.current = {
               habitId: reorderHabitId,
+              slotId: _slotId,
+              slotArrayIdx: _slotMeta ? _slotMeta.arrayIdx : -1,
               pointerId: e.pointerId,
               startY: e.clientY,
               currentY: e.clientY,
               currentX: e.clientX,
-              originalSection: habit.section || "morning",
+              originalSection: _origSection,
               cardEl
             };
             // §13.3c — Start the auto-scroll rAF loop so the page
@@ -17159,11 +17294,32 @@ function App() {
             stopReorderAutoScroll();
             setReorderDragTick(t => t + 1);
             if (resolved && resolved.targetIndexInSection >= 0) {
-              commitHabitReorderDrop(r.habitId, resolved.targetSection, resolved.targetIndexInSection, {
-                targetConcurrent: resolved.targetConcurrent,
-                layeredPeerId: resolved.layeredPeerId,
-                layeredSide: resolved.layeredSide
-              });
+              // §5.8c — Slot drags rewrite slotSections, not the
+              // habit-level section/_order. Same-section moves are
+              // no-ops for now (slot order within a section drives the
+              // "(Part N/M)" label, which would shuffle confusingly if
+              // we let same-section drops reorder); cross-section
+              // moves rewrite slotSections[arrayIdx] and rekey
+              // completion history. Layered drops are treated as
+              // cross-section moves — "concurrent cohort" is a
+              // whole-habit-level concept that doesn't apply to one
+              // slot of a multi-slot habit.
+              if (r.slotId != null && r.slotArrayIdx >= 0) {
+                if (resolved.targetSection && resolved.targetSection !== r.originalSection) {
+                  commitSlotReorderDrop(r.habitId, r.slotArrayIdx, resolved.targetSection);
+                }
+                // Same-section drop on a multi-slot card: intentionally
+                // no-op. The user dragged one slot card within its own
+                // section; renumbering "(Part N/M)" labels mid-drag is
+                // more confusing than helpful. A future iteration can
+                // add same-section slot reorder if requested.
+              } else {
+                commitHabitReorderDrop(r.habitId, resolved.targetSection, resolved.targetIndexInSection, {
+                  targetConcurrent: resolved.targetConcurrent,
+                  layeredPeerId: resolved.layeredPeerId,
+                  layeredSide: resolved.layeredSide
+                });
+              }
             }
           },
           onPointerCancel: (e) => {
@@ -17591,27 +17747,10 @@ function App() {
               }
             }, "(Part " + partNum + "/" + partTotal + ")");
           })(),
-          // §5.8b — "#N" suffix on the row title when the same section
-          // hosts multiple slots of the same habit. Without it, a 2x-
-          // morning habit looks like two identical rows under the
-          // Morning header with no visual cue which is which. localIdx
-          // is the 0-based per-section position; the displayed number
-          // is 1-based ("Morning #1" / "Morning #2"). Hidden for
-          // sections that only host a single slot of this habit.
-          (() => {
-            const meta = habit._renderSlotMeta;
-            if (!meta || meta.countInSection < 2) return null;
-            return /*#__PURE__*/React.createElement("span", {
-              "aria-label": "Slot " + (meta.localIdx + 1) + " of " + meta.countInSection,
-              style: {
-                marginLeft: 6,
-                fontSize: 11, fontWeight: 600,
-                color: "var(--c-text-soft)",
-                fontVariantNumeric: "tabular-nums",
-                whiteSpace: "nowrap"
-              }
-            }, "#" + (meta.localIdx + 1));
-          })()
+          // The "#N" suffix that used to appear here for same-section
+          // duplicate slots was retired — the "(Part N/M)" badge above
+          // already disambiguates each slot card, so the suffix was
+          // redundant ("Take meds (Part 1/4) #1" → "Take meds (Part 1/4)").
         ),
         habit.notes && !compact && /*#__PURE__*/React.createElement("div", {
           style: {
@@ -18186,8 +18325,16 @@ function App() {
         // reorderDragTick, but ONLY for the card actually being
         // dragged — every other card just needs to re-render on the
         // mode toggle (not on every mousemove).
-        const draggedId = reorderDragRef.current ? String(reorderDragRef.current.habitId) : "";
-        const isThisDragged = draggedId && draggedId === String(h.parentId || h.id);
+        // §5.8c — Slot-aware drag-tick stamping. Sibling slot cards of
+        // the same habit should NOT re-render on every drag-tick of an
+        // unrelated slot; we match on (habitId, slotId) so only the
+        // actually-dragged row picks up the per-tick offset.
+        const _dRef = reorderDragRef.current;
+        const draggedId = _dRef ? String(_dRef.habitId) : "";
+        const draggedSlotId = _dRef ? _dRef.slotId : null;
+        const isThisDragged = draggedId
+          && draggedId === String(h.parentId || h.id)
+          && (draggedSlotId == null || draggedSlotId === (h._renderSlot || null));
         const reorderSig = (reorderMode ? "r1" : "r0")
           + "|d" + (isThisDragged ? reorderDragTick : "0")
           + "|s" + (h.section || "");
