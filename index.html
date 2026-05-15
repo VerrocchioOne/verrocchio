@@ -26922,7 +26922,9 @@ function App() {
   // Habit flavor toggle: Yes/No vs Target & Unit. Switches whether
   // the rows below render.
   /*#__PURE__*/React.createElement("div", {
-    style: { display: "flex", gap: 6, marginBottom: 6 }
+    // §5.3 — Apple-form-style section divider. Visually separates
+    // the metadata block above from the habit-type group below.
+    style: { display: "flex", gap: 6, marginTop: 14, paddingTop: 12, marginBottom: 6, borderTop: "1px solid var(--c-border)" }
   },
     /*#__PURE__*/React.createElement("button", {
       type: "button",
@@ -27032,7 +27034,9 @@ function App() {
   // Compact layout: tighter row padding + smaller max-height so
   // the modal stays inside one viewport.
   /*#__PURE__*/React.createElement("div", {
-    style: { marginBottom: 8 }
+    // §5.3 — Apple-form-style section divider. Separates the habit
+    // type / target config group above from the linked-goals group.
+    style: { marginTop: 14, paddingTop: 12, marginBottom: 8, borderTop: "1px solid var(--c-border)" }
   },
     /*#__PURE__*/React.createElement("div", {
       style: {
@@ -27175,10 +27179,14 @@ function App() {
     }
   }, "Add")),
   /*#__PURE__*/React.createElement("div", {
+    // §5.3 — Apple-form-style section divider. Separates the linked-
+    // goals group above from the time-of-day / area / importance /
+    // frequency / location categorization group below.
     style: {
       display: "flex",
       gap: 8,
-      marginBottom: 6
+      marginTop: 14, paddingTop: 12, marginBottom: 6,
+      borderTop: "1px solid var(--c-border)"
     }
   }, /*#__PURE__*/React.createElement("select", {
     value: eHSec,
@@ -27303,6 +27311,12 @@ function App() {
     style: {
       ...IS,
       width: "100%",
+      // §5.3 — Apple-form-style section divider above the notes input.
+      // Use marginTop alone (no borderTop on the textarea itself — a
+      // border on the textarea would visually merge with its own
+      // input border). Vertical breathing room provides the section
+      // break.
+      marginTop: 18,
       marginBottom: 6,
       resize: "none",
       lineHeight: 1.4,
