@@ -5688,6 +5688,22 @@ function App() {
   const [resistanceFlagged, setResistanceFlagged] = useState([]);
   const [resistancePlanText, setResistancePlanText] = useState("");
   const [editHabitModal, setEditHabitModal] = useState(null); // habit object for modal
+  // §StreakChoice — bottom-sheet prompt that appears when the user
+  // saves the Edit Habit modal AND one or more "tracked fields"
+  // (text / duration / section / slotSections / target / targetOp /
+  // unitLabel / frequency / importance) actually changed. Holds the
+  // pending draft so the user can choose Keep / Reset / New-habit
+  // before we persist. null when no prompt is active.
+  // Shape: { id, prev, draft, changedFields:string[] }
+  const [streakChoicePending, setStreakChoicePending] = useState(null);
+  // §VersionTimeline — when the user clicks a "habit-edited" row in
+  // My Profile → History, this holds the habit id whose full version
+  // timeline is expanded inline. null = flat feed only.
+  const [historyDrillHabitId, setHistoryDrillHabitId] = useState(null);
+  // §EditHabitCompletionList — toggles the "View completion history"
+  // collapsible panel inside the Edit Habit modal. Boolean local
+  // disclosure state, not persisted.
+  const [editHabitCompletionsOpen, setEditHabitCompletionsOpen] = useState(false);
   // Generic custom-order reorder modal. `reorderCtx` is null when
   // closed, else an object describing what's being reordered:
   //   { kind: "habitSection", section: "morning", label, icon, color }
@@ -7540,7 +7556,23 @@ function App() {
     for (const h of (data && data.habits || [])) {
       for (const snap of (h.history || [])) {
         if (!snap || typeof snap.ts !== "number") continue;
-        out.push({ ts: snap.ts, kind: "habit-edited", name: h.text, type: h.type, prevText: snap.text, prevImp: snap.importance, prevSec: snap.section, id: "he-" + h.id + "-" + snap.ts });
+        // §VersionTimeline — carry habitId so the History panel can
+        // expand the row into the full per-habit version timeline.
+        // `archived` propagates the archive flag (set by the §StreakChoice
+        // "This is a new habit" path) so the UI can mark old definitions
+        // as superseded.
+        out.push({
+          ts: snap.ts,
+          kind: "habit-edited",
+          name: h.text,
+          type: h.type,
+          prevText: snap.text,
+          prevImp: snap.importance,
+          prevSec: snap.section,
+          habitId: h.id,
+          archived: !!h.archived,
+          id: "he-" + h.id + "-" + snap.ts
+        });
       }
     }
     return out.sort((a, b) => b.ts - a.ts);
@@ -8528,6 +8560,7 @@ function App() {
     // the toggle in the modal header to switch to Target & Unit
     // when they want sub-unit logging.
     sEHHasTarget(false);
+    setEditHabitCompletionsOpen(false);
     setEditHabitModal({ id: "__new__", section: "morning" });
   };
   // Save handler for the edit-habit modal that picks the right
@@ -8537,10 +8570,18 @@ function App() {
   const saveEditHabitModal = () => {
     if (editHabitModal && editHabitModal.id === "__new__") {
       addHabitFromEdit();
-    } else if (editHabitModal) {
-      svEHabit(editHabitModal.id);
+      setEditHabitModal(null);
+      return;
     }
-    setEditHabitModal(null);
+    if (editHabitModal) {
+      // §StreakChoice — svEHabit returns true when it has deferred
+      // the write into the streak-choice prompt. In that case leave
+      // the modal stack as-is; the prompt's Keep / Reset / New-habit
+      // buttons each finish the save and close both modals.
+      const deferred = svEHabit(editHabitModal.id);
+      if (deferred) return;
+      setEditHabitModal(null);
+    }
   };
   // Build a brand-new habit from the eH* state and save it. Mirrors
   // the field shape of the legacy addHabit() so both paths produce
@@ -8640,12 +8681,19 @@ function App() {
       sEHAfterId(pos > 0 ? String(inSec[pos - 1].id) : "");
     }
     sEHConcurrent(h.concurrent === true);
+    // §EditHabitCompletionList — collapse the completion-history
+    // disclosure on each open so it doesn't carry over from a
+    // previous habit's edit session.
+    setEditHabitCompletionsOpen(false);
     setEditHabitModal(h);
   };
-  const svEHabit = id => {
-    if (!eHTxt.trim()) return;
-    const prev = (data.habits || []).find(h => h.id === id);
-    if (!prev) return;
+  // §StreakChoice — build the patch object that svEHabit would
+  // apply, plus the OLD-state snapshot, from the eH* state. Pure
+  // function over the current modal inputs so the commit helpers
+  // (Keep / Reset / New-habit) can reuse it without re-reading the
+  // form. `prev` is the habit pre-edit; `snapshot` may be null when
+  // nothing the user would care about changed.
+  const buildHabitEditDraft = (prev) => {
     const nextText = eHTxt.trim();
     const nextDur = eHDur || null;
     const nextType = eHType || null;
@@ -8659,20 +8707,32 @@ function App() {
       monthDay: typeof eHFreq.monthDay === "number" ? eHFreq.monthDay : null,
       month:    typeof eHFreq.month    === "number" ? eHFreq.month    : null
     };
-    // Snapshot the OLD state if anything the user would care about
-    // (text / duration / importance / section / notes / frequency /
-    // category) actually changed. goalId, location and startDate are
-    // intentionally excluded — they aren't part of the "how did this
-    // habit evolve" story.
+    const nextSlotSections = (eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [];
+    const nextTarget    = eHHasTarget ? (() => { const n = parseFloat(eHTarget); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; })() : null;
+    const nextTargetOp  = eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=";
+    const nextUnitLabel = eHHasTarget ? (eHUnitLabel.trim() || null) : null;
+    const nextIncrement = eHHasTarget ? (() => { const n = parseFloat(eHIncrement); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; })() : null;
     const prevFreqStr = JSON.stringify(prev.frequency || {});
     const nextFreqStr = JSON.stringify(nextFreq);
+    const prevSlotStr = JSON.stringify(Array.isArray(prev.slotSections) ? prev.slotSections : []);
+    const nextSlotStr = JSON.stringify(nextSlotSections);
+    // Snapshot the OLD state if anything the user would care about
+    // (text / duration / importance / section / notes / frequency /
+    // category / slot config / target / op / unit) actually changed.
+    // goalId, location and startDate are intentionally excluded —
+    // they aren't part of the "how did this habit evolve" story.
     const changed = prev.text !== nextText
       || (prev.duration || null) !== nextDur
       || (prev.type || null) !== nextType
       || (prev.importance || "Important") !== nextImp
       || (prev.section || "morning") !== nextSec
       || (prev.notes || null) !== nextNotes
-      || prevFreqStr !== nextFreqStr;
+      || prevFreqStr !== nextFreqStr
+      || prevSlotStr !== nextSlotStr
+      || (typeof prev.target === "number" ? prev.target : null) !== nextTarget
+      || (prev.targetOp || ">=") !== nextTargetOp
+      || (prev.unitLabel || null) !== nextUnitLabel
+      || (typeof prev.increment === "number" ? prev.increment : null) !== nextIncrement;
     const snapshot = changed ? {
       ts: Date.now(),
       text: prev.text,
@@ -8680,51 +8740,194 @@ function App() {
       type: prev.type || null,
       importance: prev.importance || "Important",
       section: prev.section || "morning",
+      slotSections: Array.isArray(prev.slotSections) ? prev.slotSections.slice() : [],
       notes: prev.notes || null,
       frequency: prev.frequency || null,
+      target: typeof prev.target === "number" ? prev.target : null,
+      targetOp: prev.targetOp || ">=",
+      unitLabel: prev.unitLabel || null,
+      increment: typeof prev.increment === "number" ? prev.increment : null,
       icon: prev.icon || null
     } : null;
+    // §StreakChoice — tracked fields trigger the "what about the
+    // streak?" prompt. notes / _order / parked / startDate / parentId /
+    // concurrent / location intentionally NOT in this list — those are
+    // either silent edits or already streak-aware on their own.
+    const changedFields = [];
+    if (prev.text !== nextText) changedFields.push("name");
+    if ((prev.duration || null) !== nextDur) changedFields.push("duration");
+    if ((prev.section || "morning") !== nextSec) changedFields.push("section");
+    if (prevSlotStr !== nextSlotStr) changedFields.push("slots");
+    if ((typeof prev.target === "number" ? prev.target : null) !== nextTarget) changedFields.push("target");
+    if ((prev.targetOp || ">=") !== nextTargetOp) changedFields.push("target operator");
+    if ((prev.unitLabel || null) !== nextUnitLabel) changedFields.push("unit");
+    if (prevFreqStr !== nextFreqStr) changedFields.push("frequency");
+    if ((prev.importance || "Important") !== nextImp) changedFields.push("importance");
+    return {
+      nextText, nextDur, nextType, nextImp, nextSec, nextNotes, nextFreq, nextSlotSections,
+      nextTarget, nextTargetOp, nextUnitLabel, nextIncrement,
+      snapshot, changedFields
+    };
+  };
+  // §StreakChoice — write the edited habit back into data.habits.
+  // Used by every commit path (silent save, Keep, Reset). The optional
+  // `streakOverride` lets the Reset path stamp a fresh startDate so
+  // getStreak resets from today without otherwise touching the record.
+  const applyHabitEdit = (id, draft, streakOverride) => {
     save({
       ...data,
       habits: (data.habits || []).map(h => String(h.id) === String(id) ? {
         ...h,
-        text: nextText,
-        duration: nextDur,
-        type: nextType,
-        importance: nextImp,
-        section: nextSec,
+        text: draft.nextText,
+        duration: draft.nextDur,
+        type: draft.nextType,
+        importance: draft.nextImp,
+        section: draft.nextSec,
         // 2+ slots → multi-slot habit, otherwise clear back to []
         // (single-slot uses `section`).
-        slotSections: (eHSlotSections && eHSlotSections.length >= 2) ? eHSlotSections.slice() : [],
-        notes: nextNotes,
+        slotSections: draft.nextSlotSections,
+        notes: draft.nextNotes,
         // Write both the new array form (goalIds) and the legacy
         // scalar (goalId = first link) so a downgrade to an older
         // client doesn't lose all goal links.
         goalIds: eHGoalIds.slice(),
         goalId: eHGoalIds[0] != null ? eHGoalIds[0] : null,
         location: eHLoc || "both",
-        startDate: eHStart || h.startDate || dk(new Date()),
-        frequency: nextFreq,
+        // §StreakChoice — streakOverride wins when set (Reset path
+        // stamps today as the new startDate). Otherwise honor the
+        // user-set start date from the form, falling back to whatever
+        // was on the record.
+        startDate: streakOverride || eHStart || h.startDate || dk(new Date()),
+        frequency: draft.nextFreq,
         // Sub-unit fields. Yes/No mode (eHHasTarget=false) writes
         // null/null/null regardless of what's in the inputs — the
         // target / unit / increment fields are hidden, so any
         // residual values from a previous Target & Unit attempt
         // shouldn't leak into the saved record. Target & Unit
         // mode parses normally; explicit 0 is preserved (≤ 0 cap).
-        target:    eHHasTarget ? (() => { const n = parseFloat(eHTarget); return isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null; })() : null,
-        targetOp:  eHHasTarget ? (eHTargetOp === "<=" ? "<=" : ">=") : ">=",
-        unitLabel: eHHasTarget ? (eHUnitLabel.trim() || null) : null,
-        increment: eHHasTarget ? (() => { const n = parseFloat(eHIncrement); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null; })() : null,
+        target:    draft.nextTarget,
+        targetOp:  draft.nextTargetOp,
+        unitLabel: draft.nextUnitLabel,
+        increment: draft.nextIncrement,
         // parentId / concurrent / _order are NOT touched here —
         // those are cross-habit relationships, owned by the
         // section-level Organize modal. Saving the edit form
         // preserves whatever the user last set there.
-        history: snapshot ? [...(h.history || []), snapshot] : (h.history || [])
+        history: draft.snapshot ? [...(h.history || []), draft.snapshot] : (h.history || [])
       } : h)
     });
     const targetN = parseInt(eHTarget, 10);
     if (isFinite(targetN) && targetN >= 0) touchFeature("habit.subunits");
     sEHId(null);
+  };
+  // §StreakChoice — main entry from the modal footer. Returns true
+  // when the save was deferred into the choice prompt (caller leaves
+  // the Edit Habit modal open); false when the save committed
+  // immediately (caller closes the modal).
+  const svEHabit = id => {
+    if (!eHTxt.trim()) return false;
+    const prev = (data.habits || []).find(h => h.id === id);
+    if (!prev) return false;
+    const draft = buildHabitEditDraft(prev);
+    // If a tracked field actually changed, defer to the streak-choice
+    // prompt. Note: snapshot is non-null whenever ANY of the snapshot
+    // fields changed, which is a superset of changedFields (e.g. notes
+    // edits set snapshot but NOT changedFields, so notes-only changes
+    // still log a history entry without triggering the prompt).
+    if (draft.changedFields.length > 0) {
+      setStreakChoicePending({ id, prev, draft });
+      return true;
+    }
+    applyHabitEdit(id, draft, null);
+    return false;
+  };
+  // §StreakChoice — "Keep the streak going" — write the edit, history
+  // snapshot lands, no startDate change. Closes both modals.
+  const commitStreakKeep = () => {
+    if (!streakChoicePending) return;
+    applyHabitEdit(streakChoicePending.id, streakChoicePending.draft, null);
+    setStreakChoicePending(null);
+    setEditHabitModal(null);
+  };
+  // §StreakChoice — "Reset the streak" — write the edit, stamp today
+  // as the new startDate so getStreak walks back from today.
+  const commitStreakReset = () => {
+    if (!streakChoicePending) return;
+    applyHabitEdit(streakChoicePending.id, streakChoicePending.draft, dk(new Date()));
+    setStreakChoicePending(null);
+    setEditHabitModal(null);
+  };
+  // §StreakChoice — "This is a new habit" — archive the old record
+  // (parked + archived flags so existing visibility filters hide it,
+  // plus an archivedAt timestamp for the timeline) and append a brand-
+  // new habit carrying the edited definition with a fresh id, fresh
+  // completions, and today as startDate. The OLD habit also gets the
+  // snapshot appended so its version timeline records the divergence.
+  const commitStreakArchiveAndCreate = () => {
+    if (!streakChoicePending) return;
+    const { id, prev, draft } = streakChoicePending;
+    const newId = Date.now();
+    const todayKey = dk(new Date());
+    const archivedOld = {
+      ...prev,
+      parked: true,
+      archived: true,
+      archivedAt: Date.now(),
+      // Preserve the version-history trail on the OLD habit so the
+      // timeline still shows "edited then split off" without losing
+      // any prior snapshots.
+      history: draft.snapshot ? [...(prev.history || []), draft.snapshot] : (prev.history || [])
+    };
+    const newHabit = {
+      id: newId,
+      text: draft.nextText,
+      section: draft.nextSec,
+      importance: draft.nextImp,
+      type: draft.nextType,
+      duration: draft.nextDur,
+      notes: draft.nextNotes,
+      goalIds: eHGoalIds.slice(),
+      goalId: eHGoalIds[0] != null ? eHGoalIds[0] : null,
+      location: eHLoc || "both",
+      startDate: todayKey,
+      frequency: draft.nextFreq,
+      target: draft.nextTarget,
+      targetOp: draft.nextTargetOp,
+      unitLabel: draft.nextUnitLabel,
+      increment: draft.nextIncrement,
+      slotSections: draft.nextSlotSections,
+      // Brand-new completions / units — the whole point of "new habit"
+      // is starting over. parentId/concurrent default false so the new
+      // habit lives at top level under its section until the user
+      // explicitly relinks it via Organize.
+      parentId: null,
+      concurrent: false,
+      completions: {},
+      completionTimes: {},
+      completionUnits: {},
+      slotCompletions: {},
+      slotCompletionTimes: {},
+      // Position at the end of the target section. Computed against
+      // the live habits list minus the archived old record.
+      _order: (() => {
+        const max = (data.habits || [])
+          .filter(h => (h.section || "morning") === draft.nextSec && String(h.id) !== String(id))
+          .reduce((m, h) => Math.max(m, (h._order ?? -1)), -1);
+        return max + 1;
+      })()
+    };
+    save({
+      ...data,
+      habits: (data.habits || []).map(h => String(h.id) === String(id) ? archivedOld : h).concat([newHabit])
+    });
+    setStreakChoicePending(null);
+    setEditHabitModal(null);
+  };
+  // §StreakChoice — Cancel from the prompt: abort the save entirely.
+  // Leaves the Edit Habit modal open so the user can revise their
+  // change or close it without persisting.
+  const cancelStreakChoice = () => {
+    setStreakChoicePending(null);
   };
   const reordHabits = l => save({
     ...data,
@@ -10023,6 +10226,42 @@ function App() {
     }
   };
 
+  /* Gate predicate for the AI Daily Briefing.
+     Today's briefing summarizes yesterday's data, so generating before
+     the user has explicitly marked every habit either done or missed
+     for yesterday gives the model a partial picture. The gate excludes:
+       - parked / future-start habits (not active yet)
+       - habits whose frequency excludes yesterday (e.g. Monday-only on
+         a Tuesday) — they were not due, so absence is not a gap
+       - "avoid" habits (their daily count is implicit, no explicit state)
+     For multi-slot habits we walk every slot ID and require an explicit
+     "done" or "missed" state per slot (matches §5.8b semantics). New
+     users with no yesterday data (no dailyRitual yet) pass trivially —
+     dueYesterday is empty, .every returns true. */
+  const allYesterdayHabitsReviewed = () => {
+    const yKey = dk(new Date(Date.now() - 86400000));
+    const habitsList = data.habits || [];
+    const dueYesterday = habitsList.filter(h => {
+      if (!h) return false;
+      if (isFutureHabit(h)) return false;
+      if (h.section === "avoid") return false;
+      return isHabitDueOn(h, yKey);
+    });
+    return dueYesterday.every(h => {
+      const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
+      if (slots && slots.length > 0) {
+        const sc = (h.slotCompletions && h.slotCompletions[yKey]) || {};
+        return slots.every((_, i) => {
+          const sid = slotIdForIndex(slots, i);
+          const v = sc[sid];
+          return v === "done" || v === true || v === "missed";
+        });
+      }
+      const v = (h.completions || {})[yKey];
+      return v === "done" || v === true || v === "missed";
+    });
+  };
+
   const genBrief = async () => {
     // New users (< 7 days of completion data) get the welcome briefing —
     // no API call. Saves quota and avoids shallow AI output.
@@ -10030,6 +10269,14 @@ function App() {
       const txt = welcomeBriefing();
       setBriefTxt(txt);
       updateRitual({ briefing: txt });
+      return;
+    }
+    // Gate: skip generation if yesterday is incomplete. Today's briefing
+    // depends on a clean yesterday — unreviewed habits produce shallow
+    // summaries. The placeholder in the briefing card explains the gate
+    // and links to the Review Yesterday widget.
+    if (!allYesterdayHabitsReviewed()) {
+      setBriefing(false);
       return;
     }
     setBriefing(true);
@@ -10256,9 +10503,15 @@ function App() {
       // which the design doc explicitly rules out (Surface A is passive).
       const needsAi = completionDayCount() >= 7;
       if (needsAi && AI_ENABLED && !data.aiConsentAt) return;
+      // Yesterday-completeness gate: don't auto-generate when yesterday's
+      // habits aren't fully reviewed (done or missed for each due habit).
+      // The card itself shows a placeholder + link to the Review Yesterday
+      // widget. The pre-7-days welcome branch bypasses this (no real AI
+      // call, deterministic message), so we only gate the live path.
+      if (needsAi && !allYesterdayHabitsReviewed()) return;
       genBrief();
     }
-  }, [tab, data.dailyRitual, data.onboardingComplete, data.aiConsentAt]);
+  }, [tab, data.dailyRitual, data.onboardingComplete, data.aiConsentAt, data.habits]);
 
   /* §14.4 — AI-personalized tip rewrite for the Brief tab.
      Pulls the top observed signal (off-schedule habit, then habit
@@ -13607,12 +13860,69 @@ function App() {
         ]
       ));
     }
+    // Yesterday-completeness gate for the briefing. Mirrors the
+    // allYesterdayHabitsReviewed() helper at function scope \u2014 we reuse
+    // the already-computed dueYesterday / yestResolvedCount totals from
+    // the Brief render so we don't walk the habits list a second time.
+    // dueYesterday excludes parked/future habits AND avoid habits via
+    // the same predicates the helper uses (matchesRoutine drops parked;
+    // isHabitDueOn handles frequency; avoid habits are filtered below
+    // because they have section === "avoid"). For the predicate-level
+    // count we strip avoid habits (their no-violation state is implicit
+    // and doesn't need an explicit review).
+    const dueYesterdayNonAvoid = dueYesterday.filter(h => h.section !== "avoid");
+    const yestResolvedNonAvoid = dueYesterdayNonAvoid.filter(h => isDone(h, yest) || isMissed(h, yest)).length;
+    const briefGateOpen = dueYesterdayNonAvoid.length === 0 || yestResolvedNonAvoid === dueYesterdayNonAvoid.length;
+    // Pre-7-days welcome users always have the gate "open" since their
+    // briefing is deterministic and not data-quality sensitive.
+    const briefIsWelcomeStage = completionDayCount() < 7;
+    const refreshAllowed = (briefIsWelcomeStage || briefGateOpen) && !briefing;
+    const refreshTooltip = briefing
+      ? "Generating\u2026"
+      : (!briefGateOpen && !briefIsWelcomeStage
+          ? "Mark yesterday's habits done or missed first."
+          : "Refresh briefing");
+    const refreshBtn = /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      "aria-label": "Refresh briefing",
+      title: refreshTooltip,
+      disabled: !refreshAllowed,
+      onClick: () => {
+        if (!refreshAllowed) return;
+        // Clear cached text so the auto-hydrate effect doesn't immediately
+        // restore the prior briefing while we wait for the new one. Also
+        // strip the cached briefing from today's ritual so a tab switch
+        // mid-flight doesn't re-hydrate the stale text. genBrief() will
+        // write the fresh value back into dailyRitual.briefing on success.
+        setBriefTxt("");
+        updateRitual({ briefing: "" });
+        genBrief();
+      },
+      style: {
+        width: 28, height: 28, borderRadius: "50%",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        background: "transparent",
+        border: "1px solid var(--c-border, #e5e7eb)",
+        color: refreshAllowed ? "var(--c-text-faint, #9ca3af)" : "var(--c-text-faint, #d1d5db)",
+        fontSize: 14, lineHeight: 1,
+        cursor: refreshAllowed ? "pointer" : "not-allowed",
+        opacity: refreshAllowed ? 1 : 0.45,
+        padding: 0,
+        flexShrink: 0
+      }
+    }, briefing ? "\u22ef" : "\u21bb");
+
     const briefingCard = briefReviewed
       ? null
       : /*#__PURE__*/React.createElement("div", { key: "brief", style: cardStyle },
           /*#__PURE__*/React.createElement("div", {
-            style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12 }
-          }, "Your Daily Briefing"),
+            style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12 }
+          },
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)" }
+            }, "Your Daily Briefing"),
+            refreshBtn
+          ),
           briefing && /*#__PURE__*/React.createElement("div", {
             className: "pulsing",
             style: { textAlign: "center", padding: "28px 0", color: "#9ca3af", fontSize: 13 }
@@ -13621,16 +13931,42 @@ function App() {
             style: { fontSize: 14, lineHeight: 1.8, color: "var(--c-text-soft)", whiteSpace: "pre-wrap", marginBottom: 14 }
           }, briefTxt),
           !briefing && !briefTxt && (() => {
-            // Gate the briefing on days-of-use so new users see a
-            // concrete countdown instead of a vague "add a goal" nag.
-            // `dayVisits` is the sorted de-duped list of dates the
-            // user has opened the app; threshold = 3 so the briefing
-            // unlocks on their third visit. Using Math.max guards
-            // against the rare case where dayVisits hasn't been
-            // populated yet for today.
+            // Gate the briefing on (a) days-of-use so new users see a
+            // concrete countdown, and (b) yesterday-completeness so the
+            // AI input is clean. `dayVisits` is the sorted de-duped list
+            // of dates the user has opened the app; threshold = 3 so the
+            // briefing unlocks on their third visit.
             const BRIEF_UNLOCK = 3;
             const visits = Math.max(1, (data.dayVisits || []).length);
             const remaining = Math.max(0, BRIEF_UNLOCK - visits);
+            // Yesterday-incomplete placeholder beats the visits gate
+            // because once the user has any history at all, the issue
+            // they need to fix is the unreviewed habits, not days-of-use.
+            if (!briefIsWelcomeStage && !briefGateOpen) {
+              return /*#__PURE__*/React.createElement("div", {
+                style: { textAlign: "center", padding: "20px 6px", color: "var(--c-text-faint, #9ca3af)", fontSize: 13, lineHeight: 1.5 }
+              },
+                /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+                  "Mark yesterday's habits done or missed to generate today's briefing."
+                ),
+                /*#__PURE__*/React.createElement("button", {
+                  type: "button",
+                  onClick: () => {
+                    // Route to yesterday in the Habits tab \u2014 same target
+                    // the Yesterday-reviewed pill uses after completion.
+                    setSelDate(yest);
+                    setTab("habits");
+                  },
+                  style: {
+                    background: "transparent",
+                    border: "1px solid var(--c-border, #e5e7eb)",
+                    color: "var(--c-text-strong, #374151)",
+                    fontSize: 12, fontWeight: 600,
+                    padding: "6px 12px", borderRadius: 8, cursor: "pointer"
+                  }
+                }, "Review yesterday")
+              );
+            }
             const msg = remaining > 0
               ? `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`
               : "Add a goal or habit to see your first briefing.";
@@ -14482,7 +14818,14 @@ function App() {
     // due within 3 days qualifies as urgent.
     const urgentTodos = (() => {
       const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-      const all = (data.todos || []).filter(t => t && !t.completedDate && t.dueDate);
+      // Mirror the To-Dos tab's `pending` filter (line 10575:
+      // `!t.done && !t.archived`) so the Home widget can't fall out of
+      // sync with the canonical list. Completed todos are removed from
+      // data.todos entirely by chkTodo() so `!t.done` is effectively a
+      // no-op, but archiveTodo() leaves the todo in data.todos with
+      // archived:true — without this guard, an archived todo with a
+      // dueDate would linger on Home after disappearing from To-Dos.
+      const all = (data.todos || []).filter(t => t && !t.done && !t.archived && t.dueDate);
       const annotated = all.map(t => {
         const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t.dueDate);
         if (!m) return null;
@@ -23969,9 +24312,225 @@ function App() {
       if (days < 7) return days + "d ago";
       return new Date(ms).toLocaleDateString();
     };
+    // §VersionTimeline — build the per-habit version timeline for the
+    // currently-expanded habit (historyDrillHabitId). Walks h.history
+    // chronologically, diffing each entry against the NEXT entry so
+    // each node shows what changed FROM the previous version. The
+    // oldest snapshot is the "Initial state" node. Returns null when
+    // no habit is selected or the habit can't be found.
+    const renderHabitVersionTimeline = () => {
+      if (!historyDrillHabitId) return null;
+      const habit = (data.habits || []).find(h => String(h.id) === String(historyDrillHabitId));
+      if (!habit) return null;
+      // Each `h.history[i]` is the OLD state at the time snapshot ts.
+      // Sort ascending so the oldest snapshot lives at the bottom and
+      // newer snapshots accumulate upward (most-recent edit at top).
+      const snaps = Array.isArray(habit.history)
+        ? habit.history.filter(s => s && typeof s.ts === "number").slice().sort((a, b) => a.ts - b.ts)
+        : [];
+      // Compose the full version sequence:
+      //   snaps[0] (oldest old-state) ← snaps[1] ← … ← snaps[last] ← currentLiveState
+      // Each version's `nextStateAfterThis` is the version that came
+      // AFTER it (i.e. either the next snapshot's OLD-state, or the
+      // current live state for the latest snapshot). We diff each
+      // version against its successor to show "what changed here".
+      const liveState = {
+        text: habit.text,
+        duration: habit.duration || null,
+        type: habit.type || null,
+        importance: habit.importance || "Important",
+        section: habit.section || "morning",
+        slotSections: Array.isArray(habit.slotSections) ? habit.slotSections : [],
+        notes: habit.notes || null,
+        frequency: habit.frequency || null,
+        target: typeof habit.target === "number" ? habit.target : null,
+        targetOp: habit.targetOp || ">=",
+        unitLabel: habit.unitLabel || null,
+        increment: typeof habit.increment === "number" ? habit.increment : null
+      };
+      // versions[] reverse-chrono: current live first, then snapshots
+      // newest→oldest. The "Initial state" label attaches to the LAST
+      // (oldest) item in the array.
+      const versions = [];
+      versions.push({ ts: snaps.length > 0 ? snaps[snaps.length - 1].ts : (habit.id || 0), state: liveState, isCurrent: true, isInitial: snaps.length === 0 });
+      for (let i = snaps.length - 1; i >= 0; i--) {
+        versions.push({ ts: snaps[i].ts, state: snaps[i], isCurrent: false, isInitial: i === 0 });
+      }
+      // Diff helper — fields the user would recognize as "what changed".
+      const labelOf = (key, val) => {
+        if (val == null || val === "") return "—";
+        if (key === "frequency") {
+          const t = val && val.type;
+          if (!t) return "—";
+          if (t === "daily") return "Daily";
+          if (t === "weekdays") return "Weekdays" + (Array.isArray(val.days) && val.days.length ? " (" + val.days.length + " days)" : "");
+          if (t === "weekly") return "Weekly";
+          if (t === "monthly") return "Monthly";
+          if (t === "quarterly") return "Quarterly";
+          if (t === "annual") return "Annual";
+          return String(t);
+        }
+        if (key === "slotSections") {
+          if (!Array.isArray(val) || val.length === 0) return "single slot";
+          return val.length + " slots (" + val.join(", ") + ")";
+        }
+        return String(val);
+      };
+      const diffVersion = (cur, nextVer) => {
+        // Comparison target: the version AFTER this one (chronologically).
+        // versions is reverse-chrono so `nextVer` is the index-1 item
+        // toward the front, which is chronologically NEWER. We want to
+        // know what changed AT THIS edit, so we compare this version's
+        // OLD state with the state it transitioned INTO — which is the
+        // version above it in reverse-chrono (nextVer).
+        if (!nextVer) return [];
+        const a = cur.state;
+        const b = nextVer.state;
+        const fields = [
+          ["text",        "Name"],
+          ["section",     "Section"],
+          ["slotSections","Slots"],
+          ["importance",  "Importance"],
+          ["duration",    "Duration"],
+          ["target",      "Target"],
+          ["targetOp",    "Target op"],
+          ["unitLabel",   "Unit"],
+          ["frequency",   "Frequency"]
+        ];
+        const out = [];
+        for (const [k, lbl] of fields) {
+          const av = a ? a[k] : null;
+          const bv = b ? b[k] : null;
+          const aKey = JSON.stringify(av == null ? null : av);
+          const bKey = JSON.stringify(bv == null ? null : bv);
+          if (aKey !== bKey) {
+            out.push({ label: lbl, before: labelOf(k, av), after: labelOf(k, bv) });
+          }
+        }
+        return out;
+      };
+      const headerName = habit.text || "Untitled habit";
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          background: "var(--c-surface-muted)",
+          border: "1px solid var(--c-border)",
+          borderRadius: 12,
+          padding: "12px 14px",
+          marginTop: 10,
+          marginBottom: 4
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }
+        },
+          /*#__PURE__*/React.createElement("div", null,
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", letterSpacing: 0.3, textTransform: "uppercase" }
+            }, "Edits to"),
+            /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", wordBreak: "break-word" }
+            }, "“", headerName, "”"),
+            habit.archived ? /*#__PURE__*/React.createElement("div", {
+              style: { fontSize: 10, color: "var(--c-text-faint)", fontStyle: "italic", marginTop: 2 }
+            }, "Archived — superseded by a newer habit") : null
+          ),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            onClick: () => setHistoryDrillHabitId(null),
+            style: {
+              background: "var(--c-surface-raised)",
+              border: "1px solid var(--c-border)",
+              borderRadius: 8,
+              padding: "6px 10px",
+              fontSize: 11, fontWeight: 600, color: "var(--c-text-soft)",
+              cursor: "pointer"
+            }
+          }, "Close")
+        ),
+        /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 8 }
+        }, versions.map((v, idx) => {
+          // For current-live (idx=0) there is no "after" — render the
+          // live state as-is. For older snapshots, diff against the
+          // version above this one in reverse-chrono order, which is
+          // the chronologically NEWER state this version transitioned
+          // into.
+          const changes = v.isCurrent ? [] : diffVersion(v, versions[idx - 1] || null);
+          const isOldest = v.isInitial;
+          const tsLabel = v.isCurrent ? "Current" : fmtEventWhen(v.ts);
+          return /*#__PURE__*/React.createElement("div", {
+            key: "ver-" + idx + "-" + v.ts,
+            style: {
+              display: "flex", gap: 10, alignItems: "stretch",
+              padding: "8px 10px",
+              background: "var(--c-surface-raised)",
+              border: "1px solid var(--c-border)",
+              borderRadius: 10
+            }
+          },
+            // Left rail: dot + dashed connector down to the next node.
+            /*#__PURE__*/React.createElement("div", {
+              style: { display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: 4 }
+            },
+              /*#__PURE__*/React.createElement("div", {
+                style: {
+                  width: 10, height: 10, borderRadius: "50%",
+                  background: v.isCurrent ? "var(--c-tint-success-fg)" : (isOldest ? "var(--c-text-faint)" : "var(--c-tint-purple-fg)"),
+                  flexShrink: 0
+                }
+              }),
+              idx < versions.length - 1 ? /*#__PURE__*/React.createElement("div", {
+                style: { flex: 1, width: 2, background: "var(--c-border)", marginTop: 2, minHeight: 14 }
+              }) : null
+            ),
+            /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+              /*#__PURE__*/React.createElement("div", {
+                style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }
+              },
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase", color: v.isCurrent ? "var(--c-tint-success-fg)" : "var(--c-text-soft)" }
+                }, v.isCurrent ? "Current state" : (isOldest ? "Initial state" : "Version")),
+                /*#__PURE__*/React.createElement("span", {
+                  style: { fontSize: 10, color: "var(--c-text-faint)", marginLeft: "auto", fontVariantNumeric: "tabular-nums" }
+                }, tsLabel)
+              ),
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", wordBreak: "break-word", lineHeight: 1.3 }
+              }, v.state.text || "Untitled"),
+              // Show changed fields when this version transitioned into
+              // the next. For current-live (no successor) and the
+              // initial state with no successor, render a compact
+              // summary of the absolute fields instead.
+              v.isCurrent || changes.length === 0
+                ? /*#__PURE__*/React.createElement("div", {
+                    style: { fontSize: 11, color: "var(--c-text-soft)", marginTop: 4, lineHeight: 1.5 }
+                  },
+                    "Section: ", labelOf("section", v.state.section), " · ",
+                    "Importance: ", labelOf("importance", v.state.importance),
+                    v.state.target != null ? " · Target: " + labelOf("targetOp", v.state.targetOp) + " " + labelOf("target", v.state.target) + (v.state.unitLabel ? " " + v.state.unitLabel : "") : "",
+                    Array.isArray(v.state.slotSections) && v.state.slotSections.length >= 2 ? " · " + labelOf("slotSections", v.state.slotSections) : ""
+                  )
+                : /*#__PURE__*/React.createElement("div", {
+                    style: { marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }
+                  },
+                    changes.map((c, ci) => /*#__PURE__*/React.createElement("div", {
+                      key: "ch-" + ci,
+                      style: { fontSize: 11, color: "var(--c-text-soft)", lineHeight: 1.4 }
+                    },
+                      /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, c.label, ": "),
+                      /*#__PURE__*/React.createElement("span", { style: { fontStyle: "italic" } }, c.before),
+                      " → ",
+                      /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, c.after)
+                    ))
+                  )
+            )
+          );
+        }))
+      );
+    };
     const historyPanel = /*#__PURE__*/React.createElement("div", null,
       sectionTitle("History"),
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", marginBottom: 12 } }, "Completed goals, plus every edit you've made to a goal or habit. Newest first."),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", marginBottom: 12 } }, "Completed goals, plus every edit you've made to a goal or habit. Tap any “Habit edited” row to see the full version timeline. Newest first."),
       historyEvents.length === 0 ? /*#__PURE__*/React.createElement("div", {
         style: { textAlign: "center", color: "#d1d5db", fontSize: 13, padding: "40px 0" }
       }, "No history yet — keep using the app and edits will land here.") : /*#__PURE__*/React.createElement("div", {
@@ -23980,6 +24539,7 @@ function App() {
         const ht = HT.find(t => t.value === ev.type);
         const isCompleted = ev.kind === "goal-completed";
         const isGoalEdit = ev.kind === "goal-edited";
+        const isHabitEdit = ev.kind === "habit-edited";
         // §dark-mode — bare hex codes for dot/label render harshly on
         // the dark surface. Pipe through CSS vars so light + dark
         // themes both get a readable accent. #2d5a2d is the verrocchio
@@ -23988,9 +24548,28 @@ function App() {
         // dark mode lightens it to the legible green token.
         const dotColor = isCompleted ? "var(--c-tint-success-fg)" : isGoalEdit ? "var(--c-tint-brand-fg)" : "var(--c-tint-purple-fg)";
         const kindLabel = isCompleted ? "Goal completed" : isGoalEdit ? "Goal edited" : "Habit edited";
-        return /*#__PURE__*/React.createElement("div", {
+        // §VersionTimeline — habit-edited rows are clickable and toggle
+        // an inline per-habit timeline. Goal-edited / goal-completed
+        // rows remain passive.
+        const isExpanded = isHabitEdit && historyDrillHabitId != null && String(historyDrillHabitId) === String(ev.habitId);
+        const rowEl = /*#__PURE__*/React.createElement("div", {
           key: ev.id,
-          style: { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px" }
+          onClick: isHabitEdit ? () => setHistoryDrillHabitId(isExpanded ? null : ev.habitId) : undefined,
+          role: isHabitEdit ? "button" : undefined,
+          tabIndex: isHabitEdit ? 0 : undefined,
+          onKeyDown: isHabitEdit ? (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setHistoryDrillHabitId(isExpanded ? null : ev.habitId);
+            }
+          } : undefined,
+          style: {
+            background: "var(--c-surface-raised)",
+            border: "1px solid " + (isExpanded ? "var(--c-tint-purple-fg)" : "#e5e7eb"),
+            borderRadius: 10,
+            padding: "10px 12px",
+            cursor: isHabitEdit ? "pointer" : "default"
+          }
         },
           /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: ev.prevText || ev.nextGoal ? 6 : 0 } },
             /*#__PURE__*/React.createElement("div", {
@@ -24000,7 +24579,14 @@ function App() {
             ht && /*#__PURE__*/React.createElement("span", {
               style: { fontSize: 9, fontWeight: 700, color: ht.color, background: ht.bg, border: "1px solid " + ht.border, borderRadius: 8, padding: "1px 6px" }
             }, ht.value),
-            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", marginLeft: "auto", fontVariantNumeric: "tabular-nums" } }, fmtEventWhen(ev.ts))
+            isHabitEdit && ev.archived ? /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 9, fontWeight: 700, color: "var(--c-text-soft)", background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "1px 6px" }
+            }, "ARCHIVED") : null,
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#9ca3af", marginLeft: "auto", fontVariantNumeric: "tabular-nums" } }, fmtEventWhen(ev.ts)),
+            isHabitEdit ? /*#__PURE__*/React.createElement("span", {
+              "aria-hidden": true,
+              style: { fontSize: 12, color: "var(--c-text-faint)", marginLeft: 4 }
+            }, isExpanded ? "▴" : "▾") : null
           ),
           /*#__PURE__*/React.createElement("div", {
             style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)", wordBreak: "break-word", overflowWrap: "anywhere", lineHeight: 1.3 }
@@ -24013,6 +24599,13 @@ function App() {
           }, /*#__PURE__*/React.createElement("svg", { width: "12", height: "12", viewBox: "0 0 24 24", fill: "none", stroke: "#2d5a2d", strokeWidth: "2" }, /*#__PURE__*/React.createElement("polyline", { points: "9 18 15 12 9 6" })),
              /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#2d5a2d", fontWeight: 500 } }, "Next: ", ev.nextGoal.text)) : null
         );
+        // When this row is expanded, append the version-timeline panel
+        // immediately below. Wrapping in a fragment with a unique key
+        // keeps React reconciliation stable.
+        if (isExpanded) {
+          return /*#__PURE__*/React.createElement(React.Fragment, { key: ev.id + "-frag" }, rowEl, renderHabitVersionTimeline());
+        }
+        return rowEl;
       }))
     );
     // §6 Future Habits — parked habits hide from the Reports panel.
@@ -28254,6 +28847,198 @@ function App() {
       minHeight: 56
     }
   }),
+  // §EditHabitCompletionList — "View completion history" disclosure.
+  // Hidden in create mode (a brand-new habit has no completions yet).
+  // When open, lists every dateKey that has a `completions` (or
+  // `slotCompletions`) entry, reverse-chrono, with per-row editable
+  // <input type="time"> tied to completionTimes / slotCompletionTimes.
+  // Writing a time uses the existing save() debounce so changes
+  // mirror to localStorage + Firestore.
+  editHabitModal && editHabitModal.id !== "__new__" && (() => {
+    const habit = (data.habits || []).find(x => String(x.id) === String(editHabitModal.id));
+    if (!habit) return null;
+    const isMultiSlot = Array.isArray(habit.slotSections) && habit.slotSections.length >= 2;
+    // Collect every dateKey with a completion (single-slot: completions
+    // map; multi-slot: slotCompletions map). Sort reverse-chronologically.
+    const keysSet = new Set();
+    const comps = (habit.completions && typeof habit.completions === "object") ? habit.completions : {};
+    const slotComps = (habit.slotCompletions && typeof habit.slotCompletions === "object") ? habit.slotCompletions : {};
+    Object.keys(comps).forEach(k => keysSet.add(k));
+    Object.keys(slotComps).forEach(k => keysSet.add(k));
+    const keys = Array.from(keysSet).sort((a, b) => a < b ? 1 : a > b ? -1 : 0);
+    const writeTime = (key, slot, val) => {
+      // Sanitize HH:MM only; empty string or invalid clears the entry.
+      const valid = typeof val === "string" && /^\d{2}:\d{2}$/.test(val);
+      const cur = latestData.current || data;
+      const habits = (cur.habits || []).map(h => {
+        if (String(h.id) !== String(habit.id)) return h;
+        if (slot) {
+          // Multi-slot per-slot time write. Day entry pruned when
+          // empty so the dictionary doesn't grow stale.
+          const slct = { ...(h.slotCompletionTimes || {}) };
+          const dayTimes = { ...(slct[key] || {}) };
+          if (valid) dayTimes[slot] = val;
+          else delete dayTimes[slot];
+          if (Object.keys(dayTimes).length === 0) delete slct[key];
+          else slct[key] = dayTimes;
+          return { ...h, slotCompletionTimes: slct };
+        }
+        const ct = { ...(h.completionTimes || {}) };
+        if (valid) ct[key] = val;
+        else delete ct[key];
+        return { ...h, completionTimes: ct };
+      });
+      save({ ...cur, habits });
+    };
+    // Long-form date label. Mirrors the format used elsewhere in the
+    // modal (Added / Edited line).
+    const fmtLong = (key) => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+      if (!m) return key;
+      const d = new Date(+m[1], +m[2] - 1, +m[3]);
+      return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    };
+    return /*#__PURE__*/React.createElement("div", {
+      style: { marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--c-border)" }
+    },
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => setEditHabitCompletionsOpen(v => !v),
+        style: {
+          width: "100%",
+          background: "var(--c-surface-raised)",
+          border: "1px solid var(--c-border)",
+          borderRadius: 10,
+          padding: "10px 12px",
+          fontSize: 13, fontWeight: 600,
+          color: "var(--c-text)",
+          cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "space-between"
+        }
+      },
+        /*#__PURE__*/React.createElement("span", null, "View completion history",
+          keys.length > 0 ? /*#__PURE__*/React.createElement("span", {
+            style: { marginLeft: 6, fontSize: 11, color: "var(--c-text-faint)", fontWeight: 500 }
+          }, "(", keys.length, ")") : null
+        ),
+        /*#__PURE__*/React.createElement("span", { "aria-hidden": true, style: { fontSize: 12, color: "var(--c-text-faint)" } }, editHabitCompletionsOpen ? "▴" : "▾")
+      ),
+      editHabitCompletionsOpen ? /*#__PURE__*/React.createElement("div", {
+        style: {
+          marginTop: 8,
+          padding: "10px 12px",
+          background: "var(--c-surface-muted)",
+          border: "1px solid var(--c-border)",
+          borderRadius: 10
+        }
+      },
+        /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 11, color: "var(--c-text-soft)", marginBottom: 10, lineHeight: 1.5 }
+        }, "Adjust past completions — the AI uses these timestamps to suggest a better routine. Tap any time to change it."),
+        keys.length === 0 ? /*#__PURE__*/React.createElement("div", {
+          style: { fontSize: 12, color: "var(--c-text-faint)", textAlign: "center", padding: "16px 0" }
+        }, "No completions logged yet.") : /*#__PURE__*/React.createElement("div", {
+          style: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }
+        }, keys.map(key => {
+          // Per-row state badge:
+          //   single-slot → look up comps[key] ("done" | "missed").
+          //   multi-slot  → render one sub-row per slot, each with its
+          //                 own state + time input.
+          const slotMap = slotComps[key] || null;
+          const rowBase = {
+            background: "var(--c-surface-raised)",
+            border: "1px solid var(--c-border)",
+            borderRadius: 8,
+            padding: "8px 10px"
+          };
+          const stateBadge = (state) => {
+            const isDone = state === "done" || state === true;
+            const isMissed = state === "missed";
+            const bg = isDone ? "var(--c-tint-success-bg)" : isMissed ? "var(--c-tint-danger-bg, #fef2f2)" : "var(--c-surface-muted)";
+            const fg = isDone ? "var(--c-tint-success-fg)" : isMissed ? "#dc2626" : "var(--c-text-faint)";
+            const lbl = isDone ? "Done" : isMissed ? "Missed" : "—";
+            return /*#__PURE__*/React.createElement("span", {
+              style: {
+                fontSize: 10, fontWeight: 700, letterSpacing: 0.3, textTransform: "uppercase",
+                background: bg, color: fg, border: "1px solid var(--c-border)",
+                borderRadius: 8, padding: "2px 8px", whiteSpace: "nowrap"
+              }
+            }, lbl);
+          };
+          if (isMultiSlot && slotMap && typeof slotMap === "object" && Object.keys(slotMap).length > 0) {
+            const slotTimes = (habit.slotCompletionTimes && habit.slotCompletionTimes[key]) || {};
+            return /*#__PURE__*/React.createElement("div", {
+              key: "row-" + key,
+              style: { ...rowBase, display: "flex", flexDirection: "column", gap: 6 }
+            },
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 12, fontWeight: 600, color: "var(--c-text)" }
+              }, fmtLong(key)),
+              habit.slotSections.map(slot => {
+                const state = slotMap[slot];
+                if (!state) return null;
+                const time = slotTimes[slot] || "";
+                return /*#__PURE__*/React.createElement("div", {
+                  key: "slot-" + key + "-" + slot,
+                  style: { display: "flex", alignItems: "center", gap: 8, paddingLeft: 8 }
+                },
+                  /*#__PURE__*/React.createElement("span", {
+                    style: { fontSize: 11, color: "var(--c-text-soft)", fontWeight: 600, minWidth: 64, textTransform: "capitalize" }
+                  }, slot),
+                  stateBadge(state),
+                  /*#__PURE__*/React.createElement("input", {
+                    type: "time",
+                    "aria-label": "Completion time for " + slot + " on " + key,
+                    value: time,
+                    onChange: e => writeTime(key, slot, e.target.value),
+                    style: {
+                      marginLeft: "auto",
+                      border: "1px solid var(--c-border)",
+                      background: "var(--c-surface-raised)",
+                      color: "var(--c-text)",
+                      borderRadius: 6,
+                      padding: "4px 8px",
+                      fontSize: 12,
+                      fontVariantNumeric: "tabular-nums",
+                      width: 110
+                    }
+                  })
+                );
+              })
+            );
+          }
+          const state = comps[key];
+          if (!state) return null;
+          const time = (habit.completionTimes && habit.completionTimes[key]) || "";
+          return /*#__PURE__*/React.createElement("div", {
+            key: "row-" + key,
+            style: { ...rowBase, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 12, fontWeight: 600, color: "var(--c-text)", flex: 1, minWidth: 0 }
+            }, fmtLong(key)),
+            stateBadge(state),
+            /*#__PURE__*/React.createElement("input", {
+              type: "time",
+              "aria-label": "Completion time on " + key,
+              value: time,
+              onChange: e => writeTime(key, null, e.target.value),
+              style: {
+                border: "1px solid var(--c-border)",
+                background: "var(--c-surface-raised)",
+                color: "var(--c-text)",
+                borderRadius: 6,
+                padding: "4px 8px",
+                fontSize: 12,
+                fontVariantNumeric: "tabular-nums",
+                width: 110
+              }
+            })
+          );
+        }))
+      ) : null
+    );
+  })(),
   // (Starts row was here; moved into the modal header as a
   // compact pill so the form is one viewport shorter.)
   /*#__PURE__*/React.createElement("div", {
@@ -28327,7 +29112,134 @@ function App() {
       padding: "10px"
     }
   }, editHabitModal && editHabitModal.id === "__new__" ? "Add Habit" : "Save Changes"))
-  )), /*#__PURE__*/React.createElement("div", {
+  )),
+  // §StreakChoice — "What about the streak?" prompt. Layered above the
+  // Edit Habit modal (zIndex 400 > 300) so it visually replaces it
+  // while the user picks Keep / Reset / New-habit. Cancel returns
+  // them to the still-open edit form so they can revise or close it
+  // without persisting.
+  streakChoicePending ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.55)",
+      zIndex: 400,
+      display: "flex",
+      alignItems: "flex-end",
+      justifyContent: "center"
+    },
+    onClick: e => { if (e.target === e.currentTarget) cancelStreakChoice(); }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "fade-in",
+    style: {
+      background: "var(--c-surface, #fff)",
+      borderRadius: "20px 20px 0 0",
+      padding: "22px 20px 18px",
+      width: "100%",
+      maxWidth: 480,
+      boxShadow: "0 -8px 40px rgba(0,0,0,.25)"
+    }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6 }
+    }, "What about the streak?"),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 12, color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 14 }
+    },
+      "You changed: ",
+      /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600, color: "var(--c-text)" } },
+        (streakChoicePending.draft.changedFields || []).join(", ")
+      ),
+      ". Pick what should happen to this habit's streak."
+    ),
+    // Recommended option — Keep the streak going.
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: commitStreakKeep,
+      style: {
+        display: "block", width: "100%", textAlign: "left",
+        background: "var(--c-tint-success-bg)",
+        border: "2px solid var(--c-tint-success-fg)",
+        borderRadius: 12,
+        padding: "12px 14px",
+        marginBottom: 8,
+        cursor: "pointer",
+        color: "var(--c-text)"
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }
+      },
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 13, fontWeight: 700, color: "var(--c-tint-success-fg)" }
+        }, "Keep the streak going"),
+        /*#__PURE__*/React.createElement("span", {
+          style: { fontSize: 9, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "var(--c-tint-success-fg)", border: "1px solid var(--c-tint-success-fg)", borderRadius: 8, padding: "1px 6px" }
+        }, "Recommended")
+      ),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "var(--c-text-soft)", lineHeight: 1.5 }
+      }, "Save the edit. Your current streak stays intact and history records what changed.")
+    ),
+    // Reset the streak.
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: commitStreakReset,
+      style: {
+        display: "block", width: "100%", textAlign: "left",
+        background: "var(--c-surface-raised)",
+        border: "1px solid var(--c-border)",
+        borderRadius: 12,
+        padding: "12px 14px",
+        marginBottom: 8,
+        cursor: "pointer",
+        color: "var(--c-text)"
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 2 }
+      }, "Reset the streak"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "var(--c-text-soft)", lineHeight: 1.5 }
+      }, "Save the edit and start the streak fresh from today.")
+    ),
+    // This is a new habit — archive old and create new.
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: commitStreakArchiveAndCreate,
+      style: {
+        display: "block", width: "100%", textAlign: "left",
+        background: "var(--c-surface-raised)",
+        border: "1px solid var(--c-border)",
+        borderRadius: 12,
+        padding: "12px 14px",
+        marginBottom: 14,
+        cursor: "pointer",
+        color: "var(--c-text)"
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 2 }
+      }, "This is a new habit"),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "var(--c-text-soft)", lineHeight: 1.5 }
+      }, "Archive the old habit (its history is preserved) and create a brand-new one with the edited definition. Fresh streak, fresh completions.")
+    ),
+    /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      onClick: cancelStreakChoice,
+      style: {
+        display: "block", width: "100%",
+        background: "transparent",
+        border: "none",
+        padding: "8px 0",
+        fontSize: 12, fontWeight: 600,
+        color: "var(--c-text-soft)",
+        cursor: "pointer"
+      }
+    }, "Cancel")
+  )) : null,
+  /*#__PURE__*/React.createElement("div", {
     // Liquid-glass bottom nav — matches the header treatment. The top
     // highlight is inverted (inset top border) so the bar reads as
     // floating above the content rather than pressed into it.
