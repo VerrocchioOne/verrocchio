@@ -17101,22 +17101,36 @@ function App() {
             zIndex: 2
           }
         }, "✕"),
-        // §13.3 — Reorder-mode drag handle. Rendered only when the
-        // user has entered reorder mode (long-press anywhere on a
-        // habit card) AND this row represents a top-level habit
-        // (sub-habits / multi-slot rows piggyback on the parent).
-        // Pointerdown on the handle starts an absolute drag; the
-        // global pointermove/up listeners installed by the
-        // reorder-mode effect handle the rest (cards under the
-        // pointer get re-stamped on drop). The handle is the ONLY
-        // pointer-active element in reorder mode — the rest of the
-        // card body is gated by the reorderMode-aware handlers
-        // above. Note: the desktop-only ▲▼ nudge buttons that used
-        // to live here were removed when reorder-mode landed; the
-        // long-press + drag flow now covers both touch and mouse
-        // via Pointer Events.
+        // §13.3 — Visual-only ≡ indicator on the right edge of the
+        // card when in reorder mode. SortableJS makes the WHOLE .hrow
+        // draggable (see the useEffect that creates Sortable instances
+        // on each .habit-grid), so no pointer handlers are needed
+        // here. The old hand-rolled drag handle that lived here had
+        // onPointerDown with stopPropagation/preventDefault covering
+        // the entire card — which intercepted touch events before
+        // Sortable could see them, leaving Sortable inert. Stripped
+        // to a pure visual cue. pointerEvents: none so taps fall
+        // through to Sortable's automatic .hrow draggable detection.
         (reorderMode && isTopLevelForReorder) && /*#__PURE__*/React.createElement("div", {
           className: "hrow-drag-handle",
+          "aria-hidden": true,
+          style: {
+            position: "absolute",
+            top: 0, right: 0, bottom: 0,
+            width: 32,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--c-text-faint)",
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: 1,
+            background: "transparent",
+            pointerEvents: "none",
+            userSelect: "none",
+            zIndex: 3
+          }
+        }, "≡"),
+        false && (reorderMode && isTopLevelForReorder) && /*#__PURE__*/React.createElement("div", {
+          className: "hrow-drag-handle-LEGACY-DEAD",
           "aria-label": "Drag to reorder",
           role: "button",
           onPointerDown: (e) => {
