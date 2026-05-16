@@ -17,6 +17,8 @@
 //   npx wrangler deploy
 //   # copy the deployed *.workers.dev URL into index.html's AI_BACKEND_URL
 
+import { jwtVerify, createRemoteJWKSet } from "jose";
+
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 // Only models the app actually uses. Keeps an authenticated user from
 // asking for 200k tokens of an expensive model on our bill.
@@ -113,65 +115,32 @@ function json(obj, status, env, requestOrigin) {
 }
 
 // ─── Firebase ID token verification ────────────────────────────────
-// Verifies the three standard claims (exp, iss, aud) and the RSA
-// signature using Google's published JWK set. Cached in memory per
-// isolate so we don't refetch the key set on every request.
-const keyCache = new Map();
+// Delegates JWT signature + claim validation to `jose`. The library
+// handles JWKS fetching + caching (`createRemoteJWKSet`), kid lookup,
+// RS256 signature check, and exp/iat/iss/aud claim enforcement.
+// The third `jwksUrl` arg is for tests — production calls default to
+// Google's published Firebase JWKS endpoint.
+const GOOGLE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+const jwksCache = new Map();
 
-async function verifyFirebaseToken(idToken, projectId) {
+function getJWKS(jwksUrl) {
+  const key = jwksUrl || GOOGLE_JWKS_URL;
+  let jwks = jwksCache.get(key);
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(key));
+    jwksCache.set(key, jwks);
+  }
+  return jwks;
+}
+
+async function verifyFirebaseToken(idToken, projectId, jwksUrl) {
   if (!projectId) throw new Error("FIREBASE_PROJECT_ID not configured");
-  const parts = idToken.split(".");
-  if (parts.length !== 3) throw new Error("malformed_token");
-  const [headerB64, payloadB64, sigB64] = parts;
-  const header = JSON.parse(b64UrlDecode(headerB64));
-  const payload = JSON.parse(b64UrlDecode(payloadB64));
-
-  const now = Math.floor(Date.now() / 1000);
-  if (typeof payload.exp !== "number" || payload.exp <= now) throw new Error("expired");
-  if (typeof payload.iat !== "number" || payload.iat > now + 60) throw new Error("issued_in_future");
-  if (payload.aud !== projectId) throw new Error("wrong_audience");
-  if (payload.iss !== `https://securetoken.google.com/${projectId}`) throw new Error("wrong_issuer");
-  if (!payload.sub || typeof payload.sub !== "string") throw new Error("missing_subject");
-  if (header.alg !== "RS256") throw new Error("unexpected_alg");
-
-  const key = await getGoogleSigningKey(header.kid);
-  const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-  const sig = b64UrlToBytes(sigB64);
-  const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sig, data);
-  if (!ok) throw new Error("bad_signature");
+  const { payload } = await jwtVerify(idToken, getJWKS(jwksUrl), {
+    issuer: `https://securetoken.google.com/${projectId}`,
+    audience: projectId,
+    algorithms: ["RS256"]
+  });
   return payload;
 }
 
-async function getGoogleSigningKey(kid) {
-  const cached = keyCache.get(kid);
-  if (cached && cached.expires > Date.now()) return cached.key;
-  // JWK endpoint (not the x509 one) — Web Crypto's importKey accepts
-  // JWK directly; x509 certs need extra decoding.
-  const resp = await fetch(
-    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"
-  );
-  if (!resp.ok) throw new Error("jwks_fetch_failed");
-  const { keys } = await resp.json();
-  const jwk = keys.find(k => k.kid === kid);
-  if (!jwk) throw new Error("unknown_kid");
-  const key = await crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-  keyCache.set(kid, { key, expires: Date.now() + 60 * 60 * 1000 });
-  return key;
-}
-
-function b64UrlDecode(s) {
-  return atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
-}
-
-function b64UrlToBytes(s) {
-  const bin = b64UrlDecode(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
+export { verifyFirebaseToken };

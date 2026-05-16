@@ -3,11 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "description": "Cloudflare Worker proxy for Anthropic API calls from the Verrocchio client.",
+  "type": "module",
   "scripts": {
     "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "test": "node --test tests/"
   },
   "devDependencies": {
     "wrangler": "^3.80.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.3"
   }
 }
