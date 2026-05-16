@@ -5439,6 +5439,13 @@ function App() {
   };
   const exitReorderMode = () => {
     cancelReorderLongPress();
+    // §13.3f — If a drag is in flight, also remove the window-level
+    // pointermove/pointerup listeners installed by onPointerDown.
+    // Otherwise they'd leak past exit and re-populate reorderDragRef
+    // on the next stray pointer event from a phantom drag.
+    if (reorderDragRef.current && typeof reorderDragRef.current._cleanupWin === "function") {
+      try { reorderDragRef.current._cleanupWin(); } catch (_) {}
+    }
     reorderDragRef.current = null;
     reorderDropPreviewRef.current = null;
     stopReorderAutoScroll();
@@ -17300,144 +17307,128 @@ function App() {
           onPointerDown: (e) => {
             e.stopPropagation();
             e.preventDefault();
-            // Find the card root (the .hrow element) by walking up
-            // from the handle. Used by global pointermove to compute
-            // drop targets via getBoundingClientRect, and so the
-            // handle's drag tracks a stable element.
             let cardEl = e.currentTarget;
             while (cardEl && !(cardEl.classList && cardEl.classList.contains("hrow"))) {
               cardEl = cardEl.parentElement;
             }
             if (!cardEl) return;
-            // Pointer capture: any pointermove/pointerup after this
-            // point is routed back to the handle regardless of where
-            // the pointer is over the page. Without capture, fast
-            // drags off the card edge would lose the event stream.
-            try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
-            // §5.8c — Multi-slot drag context. When the dragged card
-            // represents one slot of a multi-slot habit, capture the
-            // slot ID + arrayIdx so resolveReorderDrop can filter
-            // sibling slots out of the peer list AND the drop commit
-            // can rewrite slotSections[arrayIdx] without touching the
-            // habit's primary `section`/`_order`. slotId stays null for
-            // single-slot habits (legacy whole-habit reorder path).
+            const _pointerId = e.pointerId;
             const _slotMeta = habit._renderSlotMeta || null;
             const _slotId = habit._renderSlot || null;
             const _origSection = _slotMeta && _slotMeta.section
               ? _slotMeta.section
               : (habit.section || "morning");
-            reorderDragRef.current = {
-              habitId: reorderHabitId,
-              slotId: _slotId,
-              slotArrayIdx: _slotMeta ? _slotMeta.arrayIdx : -1,
-              pointerId: e.pointerId,
-              startY: e.clientY,
-              currentY: e.clientY,
-              currentX: e.clientX,
-              // §13.3e — Track viewport scroll at drag start so dragOffsetY
-              // can compensate for auto-scroll. clientY stays viewport-
-              // relative as the page scrolls under the pointer; without
-              // this delta the dragged card appears to lag behind the
-              // finger during auto-scroll (was the iOS "glitchy" symptom).
-              startScrollY: window.scrollY || window.pageYOffset || 0,
-              currentScrollY: window.scrollY || window.pageYOffset || 0,
-              originalSection: _origSection,
-              cardEl
+            // §13.3f — Window-level pointermove/pointerup listeners
+            // replace setPointerCapture + element-level handlers. iOS
+            // Safari/Capacitor silently drop pointer capture when a
+            // captured element's ancestor receives a CSS transform
+            // mid-gesture (our card gets translateY + scale on the
+            // first pointermove). Capture-dropped → element handlers
+            // stop firing → drag freezes. Window listeners receive
+            // every pointer event regardless of where the pointer is
+            // over the page, with no capture primitive needed.
+            const _onWinMove = (ev) => {
+              if (ev.pointerId !== _pointerId) return;
+              const r = reorderDragRef.current;
+              if (!r || r.pointerId !== _pointerId) return;
+              r.currentY = ev.clientY;
+              r.currentX = ev.clientX;
+              r.currentScrollY = window.scrollY || window.pageYOffset || 0;
+              if (!r._rafScheduled) {
+                r._rafScheduled = true;
+                requestAnimationFrame(() => {
+                  r._rafScheduled = false;
+                  const cur = reorderDragRef.current;
+                  if (cur) {
+                    reorderDropPreviewRef.current = resolveReorderDrop(cur, cur.currentX, cur.currentY);
+                  } else {
+                    reorderDropPreviewRef.current = null;
+                  }
+                  setReorderDragTick(t => t + 1);
+                });
+              }
             };
-            // §13.3c — Start the auto-scroll rAF loop so the page
-            // follows the pointer when it nears the top/bottom of
-            // the viewport. Stops on pointerup / pointercancel.
-            startReorderAutoScroll();
-            setReorderDragTick(t => t + 1);
-          },
-          onPointerMove: (e) => {
-            const r = reorderDragRef.current;
-            if (!r || r.pointerId !== e.pointerId) return;
-            r.currentY = e.clientY;
-            r.currentX = e.clientX;
-            r.currentScrollY = window.scrollY || window.pageYOffset || 0;
-            // Throttle the visual update to rAF so the card transform
-            // doesn't update faster than the browser can paint.
-            if (!r._rafScheduled) {
-              r._rafScheduled = true;
-              requestAnimationFrame(() => {
-                r._rafScheduled = false;
-                // §13.3d — Live drop-preview resolution. Same
-                // algorithm that runs on pointerup, called from
-                // inside the rAF tick so it runs at most once per
-                // animation frame. The resolver does
-                // getBoundingClientRect on a small set of section
-                // containers + per-section reorderable cards (well
-                // under 100 reads on a populated page); cheap
-                // compared to the React re-render the setReorderDragTick
-                // already triggers. Result is stored in a ref so the
-                // indicator overlay can read it during the upcoming
-                // render without forcing a second pass.
-                const cur = reorderDragRef.current;
-                if (cur) {
-                  reorderDropPreviewRef.current = resolveReorderDrop(cur, cur.currentX, cur.currentY);
-                } else {
-                  reorderDropPreviewRef.current = null;
-                }
+            const _onWinEnd = (ev, isCancel) => {
+              if (ev.pointerId !== _pointerId) return;
+              const r = reorderDragRef.current;
+              _cleanupWin();
+              if (!r || r.pointerId !== _pointerId) {
+                reorderDragRef.current = null;
+                reorderDropPreviewRef.current = null;
+                stopReorderAutoScroll();
                 setReorderDragTick(t => t + 1);
-              });
-            }
-          },
-          onPointerUp: (e) => {
-            const r = reorderDragRef.current;
-            if (!r || r.pointerId !== e.pointerId) {
+                return;
+              }
+              const resolved = isCancel ? null : resolveReorderDrop(r, ev.clientX, ev.clientY);
               reorderDragRef.current = null;
               reorderDropPreviewRef.current = null;
               stopReorderAutoScroll();
               setReorderDragTick(t => t + 1);
-              return;
-            }
-            // §13.3d — Drop resolution is shared with the live
-            // pointermove preview. resolveReorderDrop returns null if
-            // no valid drop target could be computed (no sections on
-            // the page); in that case we snap back (no commit).
-            const resolved = resolveReorderDrop(r, e.clientX, e.clientY);
-            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
-            reorderDragRef.current = null;
-            reorderDropPreviewRef.current = null;
-            stopReorderAutoScroll();
-            setReorderDragTick(t => t + 1);
-            if (resolved && resolved.targetIndexInSection >= 0) {
-              // §5.8c — Slot drags rewrite slotSections, not the
-              // habit-level section/_order. Same-section moves are
-              // no-ops for now (slot order within a section drives the
-              // "(Part N/M)" label, which would shuffle confusingly if
-              // we let same-section drops reorder); cross-section
-              // moves rewrite slotSections[arrayIdx] and rekey
-              // completion history. Layered drops are treated as
-              // cross-section moves — "concurrent cohort" is a
-              // whole-habit-level concept that doesn't apply to one
-              // slot of a multi-slot habit.
-              if (r.slotId != null && r.slotArrayIdx >= 0) {
-                if (resolved.targetSection && resolved.targetSection !== r.originalSection) {
-                  commitSlotReorderDrop(r.habitId, r.slotArrayIdx, resolved.targetSection);
+              if (resolved && resolved.targetIndexInSection >= 0) {
+                // §5.8c — Slot drags rewrite slotSections only on
+                // cross-section moves; same-section slot drops are
+                // no-ops (renumbering "(Part N/M)" labels mid-drag is
+                // confusing). Layered drops on multi-slot drags fall
+                // through to cross-section moves — "concurrent cohort"
+                // is a whole-habit-level concept, not a per-slot one.
+                if (r.slotId != null && r.slotArrayIdx >= 0) {
+                  if (resolved.targetSection && resolved.targetSection !== r.originalSection) {
+                    commitSlotReorderDrop(r.habitId, r.slotArrayIdx, resolved.targetSection);
+                  }
+                } else {
+                  commitHabitReorderDrop(r.habitId, resolved.targetSection, resolved.targetIndexInSection, {
+                    targetConcurrent: resolved.targetConcurrent,
+                    layeredPeerId: resolved.layeredPeerId,
+                    layeredSide: resolved.layeredSide
+                  });
                 }
-                // Same-section drop on a multi-slot card: intentionally
-                // no-op. The user dragged one slot card within its own
-                // section; renumbering "(Part N/M)" labels mid-drag is
-                // more confusing than helpful. A future iteration can
-                // add same-section slot reorder if requested.
-              } else {
-                commitHabitReorderDrop(r.habitId, resolved.targetSection, resolved.targetIndexInSection, {
-                  targetConcurrent: resolved.targetConcurrent,
-                  layeredPeerId: resolved.layeredPeerId,
-                  layeredSide: resolved.layeredSide
-                });
               }
-            }
-          },
-          onPointerCancel: (e) => {
-            try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
-            reorderDragRef.current = null;
-            reorderDropPreviewRef.current = null;
-            stopReorderAutoScroll();
+            };
+            const _onWinUp = (ev) => _onWinEnd(ev, false);
+            const _onWinCancel = (ev) => _onWinEnd(ev, true);
+            const _cleanupWin = () => {
+              try { window.removeEventListener("pointermove", _onWinMove); } catch (_) {}
+              try { window.removeEventListener("pointerup", _onWinUp); } catch (_) {}
+              try { window.removeEventListener("pointercancel", _onWinCancel); } catch (_) {}
+            };
+            window.addEventListener("pointermove", _onWinMove, { passive: true });
+            window.addEventListener("pointerup", _onWinUp, { passive: true });
+            window.addEventListener("pointercancel", _onWinCancel, { passive: true });
+            reorderDragRef.current = {
+              habitId: reorderHabitId,
+              slotId: _slotId,
+              slotArrayIdx: _slotMeta ? _slotMeta.arrayIdx : -1,
+              pointerId: _pointerId,
+              startY: e.clientY,
+              currentY: e.clientY,
+              currentX: e.clientX,
+              startScrollY: window.scrollY || window.pageYOffset || 0,
+              currentScrollY: window.scrollY || window.pageYOffset || 0,
+              originalSection: _origSection,
+              cardEl,
+              // §13.3f — Cleanup callable stored on the ref so
+              // exitReorderMode can also remove the window listeners
+              // if the user exits mode mid-drag via some other path.
+              _cleanupWin
+            };
+            startReorderAutoScroll();
             setReorderDragTick(t => t + 1);
           },
+          // §13.3f — Pointer events handled via window-level listeners,
+          // not element-level handlers. iOS Safari + Capacitor are
+          // known to silently drop setPointerCapture when a captured
+          // element's ancestor receives a CSS transform mid-gesture
+          // (the dragged card gets translateY + scale(1.02) on the
+          // first pointermove, immediately invalidating capture).
+          // Symptom seen on production: card lags far behind finger,
+          // drop preview decouples from card position. Window-level
+          // listeners receive pointermove/pointerup regardless of
+          // where the pointer is over the page, with no capture
+          // primitive needed. The listener references live on the
+          // dragRef so exitReorderMode can clean them up too.
+          // onPointerMove / onPointerUp / onPointerCancel handlers
+          // intentionally OMITTED here — see onPointerDown above which
+          // installs window listeners for those events.
           // Block tap/double-tap propagation while in reorder mode so
           // touching the handle doesn't bubble up to the card-level
           // gated handlers.
