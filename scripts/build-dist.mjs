@@ -8,6 +8,7 @@ const FILES = [
   'index.html',
   'home.html',
   'utils.js',
+  'lib/hydration.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',
@@ -32,7 +33,10 @@ await mkdir(DIST, { recursive: true });
 for (const f of FILES) {
   const src = path.join(SRC, f);
   if (!existsSync(src)) { console.warn('[build-dist] skip missing:', f); continue; }
-  await copyFile(src, path.join(DIST, f));
+  const dest = path.join(DIST, f);
+  // Ensure parent dir exists (matters for nested paths like lib/hydration.js).
+  await mkdir(path.dirname(dest), { recursive: true });
+  await copyFile(src, dest);
 }
 
 // Demo password env substitution (W1-T7)
