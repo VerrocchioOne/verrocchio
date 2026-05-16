@@ -12,26 +12,49 @@
 //   • Everything else (Firebase data, AI proxy) → no SW route, default
 //     network behaviour applies.
 //
-// Bump CACHE_NAME (via setCacheNameDetails suffix) whenever the precache
-// list meaningfully changes so old caches get purged on next activation.
+// Bumping SHELL_VERSION below is the SINGLE point of truth for cache
+// versioning. It feeds setCacheNameDetails (Workbox auto-named caches),
+// every precache revision, every runtime-cache name, AND the legacy-
+// purge predicate in the activate handler. Bumping it on the next
+// deploy is sufficient to invalidate every cache this SW owns.
 
 importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox-sw.js");
 
 const { precaching, routing, strategies, core } = workbox;
 
-core.setCacheNameDetails({ prefix: "verrocchio", suffix: "v64" });
+const SHELL_VERSION = "v64";
+
+core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
 core.clientsClaim();
 
-// App shell — precached on install. Revision strings are tied to the
-// suffix above; bumping the suffix forces re-fetch on activation.
+// App shell — precached on install. Revision strings share SHELL_VERSION
+// so a single bump forces re-fetch.
 precaching.precacheAndRoute([
-  { url: "./index.html",                revision: "v64" },
-  { url: "./utils.js",                  revision: "v64" },
-  { url: "./lib/hydration.js",          revision: "v64" },
-  { url: "./manifest.json",             revision: "v64" },
-  { url: "./apple-touch-icon-1024.png", revision: "v64" }
+  { url: "./index.html",                revision: SHELL_VERSION },
+  { url: "./utils.js",                  revision: SHELL_VERSION },
+  { url: "./lib/hydration.js",          revision: SHELL_VERSION },
+  { url: "./manifest.json",             revision: SHELL_VERSION },
+  { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);
+
+// Workbox's own outdated-precache sweep + a one-time migration that
+// deletes legacy `verrocchio-shell-vNN` caches created by the pre-v64
+// hand-rolled SW. cleanupOutdatedCaches() only sweeps Workbox-managed
+// precaches, so we also iterate caches.keys() and delete anything under
+// our prefix whose name does NOT end with the current SHELL_VERSION.
+precaching.cleanupOutdatedCaches();
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.map(k => {
+        if (!k.startsWith("verrocchio-")) return null;
+        if (k.endsWith(SHELL_VERSION)) return null;
+        return caches.delete(k);
+      }))
+    )
+  );
+});
 
 // Same-origin navigations → network-first. Excludes apex "/" so the
 // Firebase Hosting 302 to /home reaches the browser uninterrupted —
@@ -43,7 +66,7 @@ routing.registerRoute(
     url.pathname !== "/" &&
     (request.mode === "navigate" || (request.headers.get("accept") || "").includes("text/html")),
   new strategies.NetworkFirst({
-    cacheName: "verrocchio-navigations-v64",
+    cacheName: `verrocchio-navigations-${SHELL_VERSION}`,
     networkTimeoutSeconds: 4
   })
 );
@@ -56,7 +79,7 @@ routing.registerRoute(
     url.origin === self.location.origin &&
     url.pathname !== "/" &&
     request.method === "GET",
-  new strategies.CacheFirst({ cacheName: "verrocchio-static-v64" })
+  new strategies.CacheFirst({ cacheName: `verrocchio-static-${SHELL_VERSION}` })
 );
 
 // Cross-origin static CDN hosts → stale-while-revalidate. Firebase auth
@@ -74,5 +97,5 @@ routing.registerRoute(
   ({ url, request }) =>
     RUNTIME_CACHEABLE_HOSTS.includes(url.hostname) &&
     request.method === "GET",
-  new strategies.StaleWhileRevalidate({ cacheName: "verrocchio-cdn-v64" })
+  new strategies.StaleWhileRevalidate({ cacheName: `verrocchio-cdn-${SHELL_VERSION}` })
 );
