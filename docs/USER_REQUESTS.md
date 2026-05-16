@@ -33,6 +33,38 @@ These are not feature requests — they are process directives that govern HOW w
 
 ## 2026-05-15 — Today's session
 
+### #57 — Shift habit cards left in reorder mode for scrollbar space — SHIPPED v55
+
+**Verbatim:** "when organizing the habit cards, they should shift to the left that way the scroll bar has more space on the right"
+
+**Contextualized summary:** Added `paddingRight: reorderMode ? 28 : 0` (+ 0.18s transition) to the `.habit-sections-grid` wrapper. All section columns slide left as a unit when entering reorder mode, leaving a 28px gutter on the right for the scrollbar / thumb scroll on iOS.
+
+**Cross-references:** commit `fcff142`.
+
+---
+
+### #56 — Deploy 3 bots to fix the issues — RESOLVED (3 bots dispatched)
+
+**Verbatim:** "deploye 3 bot to fix this issues"
+
+**Contextualized summary:** Dispatch 3 parallel subagents to fix the drag-doesn't-work bug + shift-cards-left feature. Split: Bot 1 (diagnose + fix drag bug), Bot 2 (implement shift-left), Bot 3 (independent second-opinion audit on Bot 1's fix).
+
+**Action:** All 3 returned. Bot 1 found H1 root cause (render storm). Bot 2 shipped shift-left. Bot 3 confused Bot 1 vs Bot 2 attribution but flagged useful edge cases (filter-disabled-Organize-button, indicator pointerEvents, iOS pointer capture flakiness).
+
+---
+
+### #55 — Drag-and-drop still doesn't work for organize feature — SHIPPED v55
+
+**Verbatim:** "drag and drop still doesn't work for the organize feature."
+
+**Contextualized summary:** After v54's dragOffsetY auto-scroll fix, the drag completely stopped working on iOS. **Root cause (Bot 1's diagnosis):** the v54 fix added `setReorderDragTick(t => t + 1)` inside the auto-scroll rAF loop, which forced a full App re-reconciliation every 16ms during auto-scroll. On iOS the App component is ~25k lines and exceeds 16ms render budget, so the main thread saturated and queued pointermove/pointerup events never reached the drag handle — drag appeared frozen. Secondary issue: the scroll-to-top exit listener fired during auto-scroll-induced scrolls, killing reorderDragRef mid-drag.
+
+**Fix:** (1) replace direct `setReorderDragTick` with the same `_rafScheduled` coalescing pattern pointermove already uses (at most one App re-render per animation frame regardless of how many rAF sources fire); (2) skip scroll-to-top exit when `reorderDragRef.current` is truthy.
+
+**Cross-references:** commit `fcff142`, SW v55. Supersedes the v54 dragOffsetY-only fix.
+
+---
+
 ### #54 — Maintain a running requests log (this file) — IN-PROGRESS
 
 **Verbatim:** "when i make a request / type a message - create a running file of all requests and layered into it your contextualized reworded summary of my request, that way you will have one location to efficient reference when debugging and for developing new features in the context of other requests"
