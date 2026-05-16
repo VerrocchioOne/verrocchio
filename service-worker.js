@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v67";
+const SHELL_VERSION = "v68";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -36,6 +36,7 @@ precaching.precacheAndRoute([
   { url: "./lib/hydration.js",          revision: SHELL_VERSION },
   { url: "./lib/dialog.js",             revision: SHELL_VERSION },
   { url: "./lib/icalendar.js",          revision: SHELL_VERSION },
+  { url: "./lib/auth.js",               revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);

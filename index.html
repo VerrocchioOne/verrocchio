@@ -81,6 +81,17 @@
      Looks up window.ICAL lazily at call time so the ESM bootstrap above
      has resolved before the user clicks "Export to Calendar". -->
 <script src="./lib/icalendar.js"></script>
+<!-- Firebase auth helpers. Phase 2 OSS-port Port #2 — pinned-behavior
+     extraction (no qualifying UMD library; see
+     docs/oss-port/research/batch-D-infrastructure.md). Exposes
+     window.verrocchioAuth + leaks each helper into Script scope so the
+     inline app code below can call them by name. Loaded AFTER the
+     Firebase compat SDK is loaded later in <body> only conceptually:
+     these helpers don't touch `firebase` or `auth` themselves at import
+     time, they only take pre-resolved Firebase objects via DI when
+     called. So load order beyond "before the inline app script" doesn't
+     matter. -->
+<script src="./lib/auth.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -3747,18 +3758,9 @@ function App() {
     });
     return unsub;
   }, []);
-  const publicAuthErr = (e) => {
-    const code = (e && e.code) || "";
-    if (code === "auth/weak-password") return "Password must be at least 8 characters.";
-    if (code === "auth/email-already-in-use") return "An account with that email already exists.";
-    if (code === "auth/invalid-email") return "Enter a valid email address.";
-    if (code === "auth/invalid-credential") return "Email or password is incorrect.";
-    if (code === "auth/wrong-password") return "Email or password is incorrect.";
-    if (code === "auth/user-not-found") return "Email or password is incorrect.";
-    if (code === "auth/too-many-requests") return "Too many attempts. Please wait a minute and try again.";
-    if (code === "auth/network-request-failed") return "Network error. Check your connection and try again.";
-    return "Authentication failed. Please try again.";
-  };
+  // Firebase auth error -> user-facing string. Extracted to lib/auth.js
+  // (Phase 2 OSS-port Port #2); pinned by tests/auth.test.mjs.
+  const publicAuthErr = mapAuthErrorToMessage;
   const doAuth = async () => {
     setAuthErr("");
     if (!authEmail.trim() || !authPass) { setAuthErr("Email and password required."); return; }
@@ -4252,8 +4254,9 @@ function App() {
     if (demoMode) setDemoMode(false);
     // Allowlist guard: reject any email that isn't one of our seeded
     // demo personas. Prevents an attacker who finds DEMO_PASSWORD from
-    // pivoting to arbitrary accounts via this code path.
-    if (!Object.prototype.hasOwnProperty.call(DEMO_PERSONAS, email)) {
+    // pivoting to arbitrary accounts via this code path. Logic in
+    // lib/auth.js#isDemoPersonaEmail.
+    if (!isDemoPersonaEmail(email, DEMO_PERSONAS)) {
       try { console.warn("[verrocchio demo] unknown persona email rejected:", email); } catch (_) {}
       setAuthBusy(false);
       return;
@@ -4266,19 +4269,16 @@ function App() {
       // create a real account.
       await seedDemoPersona(email);
     } catch (e) {
-      const msg = String(e && e.message || "");
-      const code = String(e && e.code || "");
       // Firebase Auth v10+ collapsed "user-not-found" and "wrong-password"
       // into the unified "auth/invalid-credential" error for enumeration
       // hardening. Treat every credential-failure code as "try to create
       // the demo account" — the password is controlled by us, so a
       // wrong-password false positive can only happen if someone
       // externally changed the persona's password, which we'd want to
-      // recover from by recreating the account anyway.
-      const notFound =
-        /user-not-found|invalid-login-credentials|INVALID_LOGIN_CREDENTIALS|invalid-credential/i.test(msg) ||
-        /user-not-found|invalid-login-credentials|invalid-credential/i.test(code);
-      if (!notFound) {
+      // recover from by recreating the account anyway. Logic in
+      // lib/auth.js#isInvalidCredentialError.
+      if (!isInvalidCredentialError(e)) {
+        const msg = String(e && e.message || "");
         setAuthErr(msg.replace("Firebase: ", "") || "Sign-in failed.");
         setAuthBusy(false);
         return;
@@ -4294,72 +4294,26 @@ function App() {
   };
   const doSignOut = async () => {
     if (demoMode) { exitDemo(); return; }
-    // Sign-out data-preservation flow (data-loss bug fix).
-    //
-    // Old order: auth.signOut() → db.terminate() → db.clearPersistence()
-    // killed every in-flight save. save() is fire-and-forget: localStorage
-    // commits synchronously, then `userDoc(uid).set()` queues a network
-    // write via Firestore's offline mutation queue and returns immediately.
-    // If the user signed out within that ack window (typical: hundreds of
-    // ms on a phone connection), three things compounded:
-    //   1. auth.signOut() invalidated the auth token, so the still-queued
-    //      mutation would be rejected by security rules on retry.
-    //   2. db.terminate() froze the mutation in IndexedDB.
-    //   3. db.clearPersistence() DELETED IndexedDB — including the
-    //      pending mutation — so the write never reached the server.
-    // Result: today's morning ritual flip, "tips reviewed" dismissal, app
-    // streak day-visit append, and habit-card completions made shortly
-    // before sign-out were silently dropped from the cloud. localStorage
-    // retained them, but on iOS Capacitor (shared persistence layer) the
-    // local copy could also be disturbed — and on web the cloud-side
-    // gap meant any sign-in on another device showed yesterday's state.
-    //
-    // New order: flush pending writes WHILE auth is still valid, then
-    // signOut, then navigate. clearPersistence() is dropped — the full
-    // page reload below creates a fresh Firestore SDK with its own cache
-    // anyway, and the user's own doc is not a privacy leak to themselves.
-    // terminate() is dropped for the same reason.
+    // Data-loss-safe sign-out: flush pending Firestore writes WHILE the
+    // auth token is still valid, then sign out, then navigate. Full
+    // history of the original data-loss bug lives in
+    // lib/auth.js#flushPendingWritesAndSignOut.
     try {
-      // Step 1: explicitly re-push the latest in-memory snapshot. This is
-      // a belt to the suspenders of waitForPendingWrites — if a save()
-      // call was in-flight, its set() is already in the mutation queue
-      // and waitForPendingWrites will catch it; if no save() was in
-      // flight but `latestData.current` is somehow ahead of what reached
-      // cloud (e.g. a save() that failed and parked on lastSaveRef),
-      // this explicit set() catches that case.
-      if (uid && latestData.current) {
-        try {
-          await userDoc(uid).set(sanitizeForFirestore(latestData.current));
-        } catch (e) {
-          try { console.warn("[verrocchio signOut] final flush set() failed:", e && e.code, e && e.message); } catch (_) {}
-        }
-      }
-      // Step 2: wait for Firestore to ack every queued mutation. Caps at
-      // 4s so a flaky network at sign-out time doesn't trap the user on
-      // a half-disabled UI. If the cap fires, localStorage still has
-      // the latest snapshot — sign-in's conflict resolution (localTs >
-      // remoteTs branch in the load useEffect) will push the missing
-      // writes up on next session.
-      try {
-        if (typeof db.waitForPendingWrites === "function") {
-          await Promise.race([
-            db.waitForPendingWrites(),
-            new Promise(resolve => setTimeout(resolve, 4000))
-          ]);
-        }
-      } catch (e) {
-        try { console.warn("[verrocchio signOut] waitForPendingWrites failed:", e && e.code, e && e.message); } catch (_) {}
-      }
-      // Step 3: drop the auth token. Any further Firestore reads/writes
-      // from this page lifetime would now fail rules, but we navigate
-      // away below before that matters.
-      await auth.signOut();
-    } catch (e) { /* non-fatal */ }
-    // Route to /login (not reload). location.reload() lands on "/"
-    // because the path-aware-entry useEffect rewrites the URL to "/"
-    // on mount — and "/" 302-redirects to /home (the landing page).
-    // Signed-out users want the auth portal, not the marketing page.
-    finally { window.location.replace("/login"); }
+      await flushPendingWritesAndSignOut({
+        auth,
+        db,
+        userDoc,
+        uid,
+        latestData: latestData.current,
+        sanitizeForFirestore
+      });
+    } finally {
+      // Route to /login (not reload). location.reload() lands on "/"
+      // because the path-aware-entry useEffect rewrites the URL to "/"
+      // on mount — and "/" 302-redirects to /home (the landing page).
+      // Signed-out users want the auth portal, not the marketing page.
+      window.location.replace("/login");
+    }
   };
   // ── Account management ──
   // Each sensitive action (email change, password change, delete)
@@ -4367,10 +4321,9 @@ function App() {
   // Firebase's security model. We bundle the reauth + operation into
   // one helper so callers don't have to orchestrate it. acctFeedback
   // is set on both success and failure for inline confirmation.
-  const firebaseErrMsg = e => {
-    const raw = (e && (e.message || String(e))) || "Something went wrong.";
-    return raw.replace(/^Firebase:\s*/, "").replace(/\s*\(auth\/[^)]+\)\.?\s*$/, ".");
-  };
+  // Strips the "Firebase: " prefix + "(auth/code)." suffix from an SDK
+  // error message. Extracted to lib/auth.js#stripFirebasePrefix.
+  const firebaseErrMsg = stripFirebasePrefix;
   const reauthenticate = async (currentPassword) => {
     if (!auth.currentUser || !auth.currentUser.email) throw new Error("Not signed in.");
     if (!currentPassword) throw new Error("Current password required.");
@@ -4420,21 +4373,9 @@ function App() {
     try {
       await reauthenticate(acctCurrentPw);
       const uidToNuke = auth.currentUser.uid;
-      // Storage cleanup — runs while user is still authenticated
-      try {
-        const listResult = await storage.ref("users/" + uidToNuke + "/content").listAll();
-        await Promise.all(listResult.items.map(r => r.delete().catch(() => {})));
-      } catch (e) {
-        try { console.warn("[verrocchio delete] storage cleanup failed:", e && e.code); } catch (_) {}
-      }
-      // Best-effort Firestore doc delete BEFORE the auth user is
-      // nuked — once the user is deleted, the security rules will
-      // reject any further writes to their doc.
-      // Best-effort, but log on failure — orphaned Firestore docs are
-      // unrecoverable once the auth user is gone.
-      try { await userDoc(uidToNuke).delete(); }
-      catch (e) { try { console.warn("[verrocchio delete] Firestore doc delete failed:", e && e.code, e && e.message); } catch (_) {} }
-      await auth.currentUser.delete();
+      // Storage + Firestore doc + auth user — best-effort cascade. See
+      // lib/auth.js#deleteAccountData for the ordering rationale.
+      await deleteAccountData({ auth, storage, userDoc, uid: uidToNuke });
       try { localStorage.removeItem(`${SK}-${uidToNuke}`); } catch (e) {}
       setAcctCurrentPw("");
       setConfirmDeleteAcct(false);
