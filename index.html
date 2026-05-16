@@ -7085,7 +7085,30 @@ function App() {
           fn(dropArgs.habitId, dropArgs.section, dropArgs.idx, dropArgs.opts);
         }
         return (latestData && latestData.current && latestData.current.habits) || [];
-      }
+      },
+      // Port #11 (calendar month grid) — atomic seed+open. Mirrors the
+      // shape rationale of runReorderTestScenario: the modal-open path
+      // depends on data.habits + data.goals being populated AND on
+      // calendarView/calendarFocus being set BEFORE the modal renders,
+      // and splitting these across page.evaluate round-trips would race
+      // React commits. One synchronous call seeds state, switches the
+      // view, sets the focus date, and opens the modal so the test can
+      // observe DOM in a follow-up step.
+      openCalendarMonthForTest: (seedHabits, seedGoals, focusKey) => {
+        const cur = (latestData && latestData.current) || {};
+        const stamped = {
+          ...cur,
+          habits: Array.isArray(seedHabits) ? seedHabits : [],
+          goals:  Array.isArray(seedGoals)  ? seedGoals  : [],
+          _updatedAt: Date.now()
+        };
+        setData(stamped);
+        latestData.current = stamped;
+        setCalendarView("month");
+        if (focusKey) setCalendarFocus(focusKey);
+        setCalendarModalOpen(true);
+      },
+      closeCalendarForTest: () => setCalendarModalOpen(false)
     };
     return () => { try { delete window.__verrocchioTestHooks; } catch (_) {} };
   }, []);

@@ -15,7 +15,7 @@ This document records what actually happened during Phase 2 execution, with hone
 | #14 | jose | `21ead1b`, `bbba095` | −45 LOC | **−30 LOC on `ai-proxy/worker.js`** | **SHIPPED**. Hand-rolled JWT verifier replaced with `jose.jwtVerify` + `createRemoteJWKSet`. 7 security tests added (rejects wrong-audience, expired, wrong-issuer, malformed, wrong-key signature, alg:none, accepts valid). All 3 critical pins (algorithm/audience/issuer) explicit. |
 | #5 | workbox-sw | `82e77ba`, `acdde7e` | −102 LOC | **−74 LOC on `service-worker.js`** | **SHIPPED + follow-up**. Initial port APPROVED after two HIGH-issue fixes: (1) extracted `SHELL_VERSION` constant as single point of truth, (2) added custom activate handler to purge legacy `verrocchio-shell-vNN` caches (Workbox's `cleanupOutdatedCaches()` only sweeps its own metadata, not hand-rolled caches). New `sw-migration.spec.js` E2E test proves legacy cache purge works. |
 | #6 + #9 | a11y-dialog | `67fe575`, `562176a`, `fb4407b` | −950 LOC | **+278 LOC net** (5 modals migrated, break-even per modal) | **HYPOTHESIS DISCONFIRMED**. Projection assumed every modal had 60-100 LOC of hand-rolled focus-trap/keydown logic to delete. Reality: zero of the 5 migrated modals had ANY hand-rolled focus management. Pilot/batch 1 confirmation modals saved ~2 LOC each. voiceCapture (`fb4407b`) — the "heavy modal" test case — was break-even (~10 LOC swapped in scaffolding, ZERO focus/keydown logic deleted). Pre-dispatch triage of debriefStep + reorderCtx confirmed neither has hand-rolled focus management either. **Real wins delivered:** library-quality focus-trap, role/aria-modal/aria-labelledby, Escape-closes, focus-returns-to-trigger on every migrated modal (voiceCapture in particular had no Escape handler before — users were stuck unless they tapped X or backdrop). The a11y improvements are substantial; the LOC savings projection was wishful thinking. |
-| #11 | vanilla-calendar-pro | — | −70 LOC | TBD | Not yet attempted. |
+| #11 | vanilla-calendar-pro | — | −70 LOC | **+38 LOC projected (not committed)** | **KEEP**. The library has no inline-cell decoration primitive — `popups` are hover-only and `onCreateDateEls` is a pure-DOM injection callback that ends up replicating the chip rendering in vanilla JS (no React, no shared style logic). To match the existing month grid we'd add ~148 lines of glue (loader + React wrapper + chip-injection callback + custom `layouts.default` template to suppress the library's redundant header + dark-mode CSS overrides) against ~110 deleted from `renderMonth` — net **+38 LOC**, plus a ~17 KB lazy-loaded dependency and a DOM-meets-React boundary in a hot user-facing path. Same pattern as Ports #1, #6+#9, #10. **Real deliverable shipped: 7 pinned-behavior E2E tests** (`tests/e2e/calendar-month-grid.spec.js`) + a debug-only `openCalendarMonthForTest` / `closeCalendarForTest` hook on `window.__verrocchioTestHooks` — the month grid had ZERO E2E coverage before this. |
 | #7 | emoji-picker-element | — | −110 LOC | **DROPPED** | **DROPPED — no port target**. Pilot Port #6+#9 discovered `showIconPicker` is dead state in `index.html:6972`: declared but no `createElement` block consumes it. No modal currently renders an icon picker. To execute this port we'd have to BUILD the missing feature, which is outside the rebuild's scope. Cleanup todo: remove the dead `useState` declaration. |
 | #4 | ical.js via esm.sh | `f23013c` | −200 LOC | **−135 LOC on index.html** | **SHIPPED**. Gross deletions 164, additions 29. 24 new pinned-behavior tests cover every RRULE branch, PRIORITY mapping, VALARM, DESCRIPTION format, CATEGORIES, DTSTART/DTEND with TZID, CRLF wire format. ical.js v2 ESM via esm.sh works cleanly; `window.ICAL` lookup is lazy so export still works during ESM bootstrap. |
 | #2 | custom `lib/auth.js` | `d07f046` | −180 LOC | **−59 LOC on index.html + 31 tests** | **EXTRACTION (same pattern as Port #3)**. Honest analysis: SYNTHESIS projected 300+ LOC out, but realistic inspection found only ~80 lines of auth code extractable as pure/semi-pure helpers — `doAuth`, `doForgotPassword`, `signInAsDemoUser`, `doChangeEmail`, `doChangePassword`, `doDeleteAccount`, `onAuthStateChanged` callback, and `reauthenticate` all have 3+ React `setState` calls woven in, so extracting them would grow the code. Six helpers shipped: `mapAuthErrorToMessage`, `stripFirebasePrefix`, `isDemoPersonaEmail`, `isInvalidCredentialError` (pure), `flushPendingWritesAndSignOut`, `deleteAccountData` (semi-pure via DI). 31 pinned-behavior tests on previously-untested auth boilerplate. |
@@ -45,8 +45,9 @@ Tests on previously-untested production code paths:
 - `tests/e2e/dialog-real-app.spec.js` — **3 tests** (Port #6+#9 batch 1, real app)
 - `tests/icalendar.test.mjs` — **24 tests** (Port #4)
 - `tests/auth.test.mjs` — **31 tests** (Port #2)
+- `tests/e2e/calendar-month-grid.spec.js` — **7 tests** (Port #11 attempt — pinned-behavior coverage shipped even though library swap reverted)
 
-**Total: 105 new tests** on production code that previously had zero test coverage.
+**Total: 112 new tests** on production code that previously had zero test coverage.
 
 ## Discipline outcomes
 
@@ -57,15 +58,16 @@ Tests on previously-untested production code paths:
 ## What's left
 
 **Active ports remaining:**
-- Port #11 vanilla-calendar-pro — projected ~−70 LOC (highest risk; based on UI-primitive pattern may flip to KEEP)
 - Port #6+#9 scale-out remaining modals (debriefStep, reorderCtx, plus 8 smaller candidates) — confirmed via pre-dispatch grep that NONE have hand-rolled focus management. Any further migrations deliver a11y wins (real) but ZERO LOC savings. Worth doing if a11y compliance matters; not worth dispatching for code-reduction.
+
+(Port #11 vanilla-calendar-pro resolved as KEEP on 2026-05-16 per the pattern — see outcomes table above.)
 
 **Cleanup todos:**
 - Remove dead `showIconPicker` state (`index.html:6972`)
 - Mutation in `hydrateCloudDoc` (pre-existing tech debt, per CLAUDE.md immutability rule)
 - Consider `A11yDialogCentered` variant for centered confirmation modals (~3 LOC savings per migration)
 
-## Strategic pattern (after 9 attempted ports)
+## Strategic pattern (after 10 attempted ports)
 
 A clear pattern has emerged from the execution data. Ports fall into four categories:
 
@@ -81,6 +83,7 @@ A clear pattern has emerged from the execution data. Ports fall into four catego
 - Port #1 simple-statistics — array-oriented library, but the code is Set-oriented domain logic.
 - Port #10 toastify-js — library doesn't support custom interactive children inside React render.
 - Port #6+#9 a11y-dialog confirmation modals — saved ~2 LOC per migration (not the projected 60-100); only heavier modals will pay back the infrastructure investment.
+- Port #11 vanilla-calendar-pro — no inline-cell decoration primitive (popups are hover-only; `onCreateDateEls` is pure-DOM injection outside React). Re-renders chips in vanilla JS at every nav change. Projected −70 LOC; measured +38 LOC after honest glue accounting.
 
 **Targets that turned out to be vapor:**
 - Port #7 emoji picker — `showIconPicker` state hook exists but no modal renders it. Nothing to replace.
