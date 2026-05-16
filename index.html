@@ -17863,7 +17863,7 @@ function App() {
         // visually cover this badge even with z-index. Hiding the
         // badge while editing is the cleanest fix — the user already
         // sees the target value inside the edit form itself.
-        !isE && (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
+        !isE && !reorderMode && (typeof habit.target !== "number" && d) && /*#__PURE__*/React.createElement("span", {
           style: {
             flexShrink: 0,
             display: "flex",
@@ -17891,7 +17891,7 @@ function App() {
             zIndex: 2
           }
         }, habit.section === "avoid" ? "No" : "Yes"),
-        !isE && (typeof habit.target === "number") && (() => {
+        !isE && !reorderMode && (typeof habit.target === "number") && (() => {
           const op = habit.targetOp === "<=" ? "≤" : "≥";
           const units = (habit.completionUnits && Number(habit.completionUnits[selDate])) || 0;
           const shown = op === "≤" ? units : Math.min(habit.target, units);
