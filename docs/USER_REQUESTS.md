@@ -33,6 +33,28 @@ These are not feature requests — they are process directives that govern HOW w
 
 ## 2026-05-15 — Today's session
 
+### #59 — Use SortableJS for drag-and-drop — SHIPPED v57
+
+**Verbatim:** "https://github.com/sortablejs/Sortable use this"
+
+**Contextualized summary:** After 4 iterative hand-rolled drag fixes still failed on iOS Safari, user directed to use SortableJS (battle-tested library with proven iOS touch handling). Refactor: loaded `sortablejs@1.15.6` from unpkg CDN (already in service worker's `RUNTIME_CACHEABLE_HOSTS`); deleted the entire hand-rolled drag pipeline (~322 lines: `reorderDragRef`, `reorderDropPreviewRef`, `reorderDragTick`, `startReorderAutoScroll`, `resolveReorderDrop`, the window-level pointer listener installation, the drop-preview indicator overlay); replaced with a single `useEffect` keyed on `[reorderMode, data.habits]` that instantiates `new Sortable(gridEl, { group: "habits", forceFallback: true, scroll: true, ... })` on each `[data-sec] .habit-grid` container. `onEnd` callback reads `evt.item.data-habit-id`, `evt.item.data-slot-id`, walks up to find `data-sec` for the target section, and calls the existing `commitHabitReorderDrop` / `commitSlotReorderDrop` helpers. The data-model side is unchanged — only the gesture pipeline swapped. Inert `useRef(null)` declarations kept for `reorderDragRef` + `reorderDropPreviewRef` + `reorderDragTick` because the render code still references them in short-circuit-protected positions; cleanup is a follow-up.
+
+**Trade-off accepted:** Layered/concurrent cohorts via drag-edge detection is GONE. Drop = sequential insertion only. If user wants layering back, we'll add a modal/button-based path.
+
+**Cross-references:** commit `a236d66`, SW v57. Supersedes the v54/v55/v56 hand-rolled-drag fix attempts.
+
+---
+
+### #58 — Window pointer listeners replace setPointerCapture — SHIPPED v56 then SUPERSEDED by #59
+
+**Verbatim:** "still doesn't work"
+
+**Contextualized summary:** Replaced `setPointerCapture` with window-level `pointermove`/`pointerup`/`pointercancel` listeners installed at pointerdown. Theory: iOS Safari silently drops pointer capture when captured element's ancestor receives a CSS transform mid-gesture. Fix shipped as v56 but didn't fully resolve the issue — superseded by the SortableJS swap (#59).
+
+**Cross-references:** commit `066fa71`, SW v56.
+
+---
+
 ### #57 — Shift habit cards left in reorder mode for scrollbar space — SHIPPED v55
 
 **Verbatim:** "when organizing the habit cards, they should shift to the left that way the scroll bar has more space on the right"
