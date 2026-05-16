@@ -66,6 +66,21 @@
      with createDialog(rootEl) → { show, hide, on, off, destroy }. Loaded
      AFTER a11y-dialog so window.A11yDialog is defined when this runs. -->
 <script src="./lib/dialog.js"></script>
+<!-- ical.js@2.2.1 (Mozilla, MIT). Powers lib/icalendar.js (Phase 2 OSS-port
+     Port #4). v2 is ESM-only, so we pull from esm.sh and pin the version.
+     The tiny module below resolves the import and assigns ICAL to
+     window.ICAL so lib/icalendar.js (a classic script that runs after this)
+     can pick it up lazily at user-click time. esm.sh is registered as a
+     RUNTIME_CACHEABLE_HOSTS entry in service-worker.js so the SW caches
+     the bundle after first load. -->
+<script type="module">
+  import * as ICAL from "https://esm.sh/ical.js@2.2.1";
+  window.ICAL = ICAL.default || ICAL;
+</script>
+<!-- iCalendar export builder. Exposes window.buildICS(habitTimes, {tzid}).
+     Looks up window.ICAL lazily at call time so the ESM bootstrap above
+     has resolved before the user clicks "Export to Calendar". -->
+<script src="./lib/icalendar.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -4580,22 +4595,14 @@ function App() {
   //               stacking by duration).
   //   afternoon → starts 12:00, same stacking rule.
   //   evening   → starts 18:00, same stacking rule.
-  //   all-day   → all-day VEVENT (VALUE=DATE), no clock time.
   //   avoid     → skipped — calendar reminders to NOT do something
   //               are noise the user didn't ask for.
   //
-  // Recurrence (RRULE) derives directly from habit.frequency:
-  //   daily      → FREQ=DAILY
-  //   weekdays   → FREQ=WEEKLY;BYDAY=MO,WE,FR…
-  //   weekly     → FREQ=WEEKLY;BYDAY=<one day>
-  //   monthly    → FREQ=MONTHLY;BYMONTHDAY=<n>
-  //   quarterly  → FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=<n>
-  //   annual     → FREQ=YEARLY;BYMONTH=<m>;BYMONTHDAY=<n>
-  //
-  // DTSTART is aligned to the first date that matches the RRULE so
-  // calendar apps (Apple in particular) anchor the recurrence
-  // correctly. Each event also carries a 5-minute reminder VALARM for
-  // timed events, or a 0-minute morning-of alarm for all-day events.
+  // The actual VCALENDAR/VEVENT/RRULE/VALARM/PRIORITY/CATEGORIES
+  // construction lives in lib/icalendar.js (Phase 2 OSS-port Port #4 —
+  // built on ical.js@2.2.1). This wrapper only prepares the inputs
+  // (filter, sort, time-cursor stacking, parent/child collapsing) and
+  // hands the resulting habitTimes array to buildICS().
   const exportHabitsICS = () => {
     // Skip avoid habits AND all-day "Daily Completion" habits — neither
     // sits on a clock-time slot, and their inclusion in a time-of-day
@@ -4627,78 +4634,6 @@ function App() {
       morning:   (ranges.morning   && ranges.morning.start   != null ? ranges.morning.start   : 6)  * 60,
       afternoon: (ranges.afternoon && ranges.afternoon.start != null ? ranges.afternoon.start : 12) * 60,
       evening:   (ranges.evening   && ranges.evening.start   != null ? ranges.evening.start   : 18) * 60
-    };
-    const DOW_ICS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
-    const pad = n => String(n).padStart(2, "0");
-    const escapeICS = s => String(s == null ? "" : s)
-      .replace(/\\/g, "\\\\")
-      .replace(/;/g, "\\;")
-      .replace(/,/g, "\\,")
-      .replace(/\r?\n/g, "\\n");
-    const localStamp = d =>
-      d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate())
-      + "T" + pad(d.getHours()) + pad(d.getMinutes()) + "00";
-    const dateStamp = d =>
-      d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
-    const utcStamp = d => {
-      const z = new Date(d.getTime());
-      return z.getUTCFullYear() + pad(z.getUTCMonth() + 1) + pad(z.getUTCDate())
-        + "T" + pad(z.getUTCHours()) + pad(z.getUTCMinutes()) + pad(z.getUTCSeconds()) + "Z";
-    };
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    // First date matching the RRULE — calendar apps key off this.
-    const firstOccurrence = freq => {
-      if (!freq || freq.type === "daily") return new Date(today);
-      if (freq.type === "weekdays" || freq.type === "weekly") {
-        const targets = freq.type === "weekdays"
-          ? (Array.isArray(freq.days) ? freq.days : [])
-          : (typeof freq.day === "number" ? [freq.day] : []);
-        if (!targets.length) return new Date(today);
-        for (let i = 0; i < 14; i++) {
-          const c = new Date(today);
-          c.setDate(today.getDate() + i);
-          if (targets.includes(c.getDay())) return c;
-        }
-        return new Date(today);
-      }
-      if (freq.type === "monthly") {
-        const md = freq.monthDay || 1;
-        const c = new Date(today.getFullYear(), today.getMonth(), md);
-        if (c < today) c.setMonth(c.getMonth() + 1);
-        return c;
-      }
-      if (freq.type === "quarterly") {
-        const md = freq.monthDay || 1;
-        const m  = typeof freq.month === "number" ? freq.month : today.getMonth();
-        let c = new Date(today.getFullYear(), m, md);
-        while (c < today) c.setMonth(c.getMonth() + 3);
-        return c;
-      }
-      if (freq.type === "annual") {
-        const md = freq.monthDay || 1;
-        const m  = typeof freq.month === "number" ? freq.month : 0;
-        let c = new Date(today.getFullYear(), m, md);
-        if (c < today) c = new Date(today.getFullYear() + 1, m, md);
-        return c;
-      }
-      return new Date(today);
-    };
-    const buildRRULE = freq => {
-      if (!freq || freq.type === "daily") return "FREQ=DAILY";
-      if (freq.type === "weekdays") {
-        const days = (freq.days || []).map(d => DOW_ICS[d]).filter(Boolean).join(",");
-        return days ? "FREQ=WEEKLY;BYDAY=" + days : "FREQ=DAILY";
-      }
-      if (freq.type === "weekly") {
-        return typeof freq.day === "number"
-          ? "FREQ=WEEKLY;BYDAY=" + DOW_ICS[freq.day]
-          : "FREQ=WEEKLY";
-      }
-      if (freq.type === "monthly")   return "FREQ=MONTHLY;BYMONTHDAY=" + (freq.monthDay || 1);
-      if (freq.type === "quarterly") return "FREQ=MONTHLY;INTERVAL=3;BYMONTHDAY=" + (freq.monthDay || 1);
-      if (freq.type === "annual")    return "FREQ=YEARLY;BYMONTH=" + ((freq.month || 0) + 1) + ";BYMONTHDAY=" + (freq.monthDay || 1);
-      return "FREQ=DAILY";
     };
     // Compute each habit's start time within its section by stacking
     // sequentially in the user's manual order. Sort by _order then
@@ -4744,92 +4679,22 @@ function App() {
       const kids = (data.habits || [])
         .filter(c => c.parentId != null && String(c.parentId) === String(h.id))
         .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+      // Hand the habit object to buildICS with its frequency already
+      // normalised by getFreq (collapses "weekly-day" → "weekly" and
+      // backfills missing fields with safe defaults). buildICS reads
+      // h.frequency, h.text, h.id, h.importance, h.type, h.duration —
+      // everything else (sub-habit kids, section cursor) is carried in
+      // the wrapping habitTime record.
       return {
-        habit: h,
+        habit: { ...h, frequency: getFreq(h) },
         members: kids.length > 0 ? kids.slice() : [h],
         durationMin: dur,
         startMin,
         allDay: false
       };
     });
-    const dtstamp = utcStamp(new Date());
-    const lines = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Verrocchio//Habits//EN",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-      "X-WR-CALNAME:Verrocchio Habits",
-      "X-WR-TIMEZONE:" + tzid
-    ];
-    // Importance → iCalendar PRIORITY mapping. RFC 5545 priority is
-    // 0–9 where 1 is highest, 5 is normal, 9 is lowest. Most
-    // calendar apps surface this as a flag/icon on the event.
-    const priorityFor = imp => imp === "Non-Negotiable" ? 1
-                              : imp === "Additive"      ? 7
-                                                        : 5;
-    for (const ht of habitTimes) {
-      const h = ht.habit;
-      const freq = getFreq(h);
-      const first = firstOccurrence(freq);
-      // Has-children check: members holds either the children (when
-      // present) or just [parent], so length > 1 means this is a
-      // parent with sub-habits — render its sub-habit names in the
-      // VEVENT DESCRIPTION as a bullet list.
-      const hasChildren = ht.members && ht.members.length > 1;
-      const uid = (h.id || ("h-" + Math.random().toString(36).slice(2, 10))) + "@verrocchio.app";
-      const summary = escapeICS(h.text || "Habit");
-      const descParts = [];
-      if (hasChildren) {
-        // Parent with sub-habits: SUMMARY is the parent name, the
-        // DESCRIPTION lists each sub-habit on its own line so the
-        // calendar app shows e.g. "Morning routine" with "• Brush
-        // teeth · • Comb hair · • Stretch" inside the event body.
-        descParts.push(ht.members.map(m => {
-          const min = parseInt(m.duration, 10);
-          return "• " + m.text + (isFinite(min) && min > 0 ? " (" + min + " min)" : "");
-        }).join("\n"));
-        descParts.push(ht.durationMin + " min total · " + ht.members.length + " sub-habits");
-      } else {
-        if (h.importance) descParts.push(h.importance);
-        if (h.type)       descParts.push(h.type);
-        if (h.duration)   descParts.push(h.duration + " min");
-      }
-      const description = escapeICS(descParts.join(hasChildren ? "\n\n" : " · "));
-      // CATEGORIES tags the event so calendar apps can filter or
-      // colour-code by area-of-life and importance tier.
-      const categories = [];
-      if (h.type)       categories.push(h.type);
-      if (h.importance) categories.push(h.importance);
-      lines.push("BEGIN:VEVENT");
-      lines.push("UID:" + uid);
-      lines.push("DTSTAMP:" + dtstamp);
-      lines.push("SUMMARY:" + summary);
-      if (description) lines.push("DESCRIPTION:" + description);
-      lines.push("PRIORITY:" + priorityFor(h.importance));
-      if (categories.length) lines.push("CATEGORIES:" + categories.map(escapeICS).join(","));
-      lines.push("RRULE:" + buildRRULE(freq));
-      {
-        // All habits exported now have a clock-time slot — the all-day
-        // (Daily Completion) and avoid sections were filtered out
-        // upstream. So every event takes the same DTSTART/DTEND form.
-        const start = new Date(first);
-        start.setHours(0, 0, 0, 0);
-        start.setMinutes(ht.startMin);
-        const end = new Date(start.getTime() + ht.durationMin * 60000);
-        lines.push("DTSTART;TZID=" + tzid + ":" + localStamp(start));
-        lines.push("DTEND;TZID="   + tzid + ":" + localStamp(end));
-        lines.push("BEGIN:VALARM");
-        lines.push("ACTION:DISPLAY");
-        lines.push("DESCRIPTION:" + summary);
-        lines.push("TRIGGER:-PT5M");
-        lines.push("END:VALARM");
-      }
-      lines.push("END:VEVENT");
-    }
-    lines.push("END:VCALENDAR");
-    // ICS spec mandates CRLF line endings.
-    const blob = new Blob([lines.join("\r\n") + "\r\n"], { type: "text/calendar;charset=utf-8" });
+    const ics = buildICS(habitTimes, { tzid });
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

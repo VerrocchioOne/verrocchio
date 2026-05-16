@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v66";
+const SHELL_VERSION = "v67";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -35,6 +35,7 @@ precaching.precacheAndRoute([
   { url: "./utils.js",                  revision: SHELL_VERSION },
   { url: "./lib/hydration.js",          revision: SHELL_VERSION },
   { url: "./lib/dialog.js",             revision: SHELL_VERSION },
+  { url: "./lib/icalendar.js",          revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);
@@ -92,7 +93,11 @@ const RUNTIME_CACHEABLE_HOSTS = [
   "www.gstatic.com",
   "fonts.googleapis.com",
   "fonts.gstatic.com",
-  "cdn.jsdelivr.net"
+  "cdn.jsdelivr.net",
+  // esm.sh hosts the ical.js@2.2.1 ESM bundle pulled by index.html for
+  // lib/icalendar.js. Adding it here lets the SW stale-while-revalidate
+  // the bundle so the export-to-calendar button works offline.
+  "esm.sh"
 ];
 routing.registerRoute(
   ({ url, request }) =>
