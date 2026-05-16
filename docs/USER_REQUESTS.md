@@ -33,6 +33,34 @@ These are not feature requests — they are process directives that govern HOW w
 
 ## 2026-05-15 — Today's session
 
+### #62 — Hide target/unit badges in reorder mode — SHIPPED v59
+
+**Verbatim:** "when in sortable / organizer mode there shouldn't be badges showing unit and target counts"
+
+**Contextualized summary:** The Yes/No completion pill (e.g. "Yes") and the target+count chip (e.g. "≥ 0/30 min", "≥ 0/8 cups") cluttered habit cards during reorder. Added `!reorderMode &&` gates to both render conditions at `index.html:17866` and `:17894`. Cleaner drag surface.
+
+**Cross-references:** commit `f65881d`, SW v59.
+
+---
+
+### #61 — Strip dead drag handle blocking Sortable — SHIPPED v58
+
+**Verbatim:** "its still fucked up"
+
+**Contextualized summary:** Root cause of post-Sortable-swap drag still failing: the subagent that did the swap added the library + useEffect but **left the entire 158-line `hrow-drag-handle` element intact** — `position: absolute; inset: 0` covering the whole card with `onPointerDown` calling `stopPropagation()` + `preventDefault()`. Sortable was instantiated and listening, but never received a single touch event because the dead hand-rolled handle ate them all first. Two drag systems fighting; the broken one won. Fix: stripped the handle's event handlers + handler body; kept a tiny visual-only ≡ glyph (32px wide, right edge, `pointerEvents: none`).
+
+**Cross-references:** commit `70537ce`, SW v58.
+
+---
+
+### #60 — Diagnostic clarifying question (drag refresh + symptom + screenshot) — RESOLVED
+
+**Verbatim:** (Asked the user via AskUserQuestion after multiple iterative fixes failed; user replied: refreshed to v57, drag still lags/jumps, layered habits broken.)
+
+**Contextualized summary:** Used AskUserQuestion to get specific symptom info instead of guessing. Result: led to discovering #61 (dead handle).
+
+---
+
 ### #59 — Use SortableJS for drag-and-drop — SHIPPED v57
 
 **Verbatim:** "https://github.com/sortablejs/Sortable use this"
