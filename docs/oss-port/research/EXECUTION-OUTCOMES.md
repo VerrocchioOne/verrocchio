@@ -19,7 +19,7 @@ This document records what actually happened during Phase 2 execution, with hone
 | #7 | emoji-picker-element | — | −110 LOC | **DROPPED** | **DROPPED — no port target**. Pilot Port #6+#9 discovered `showIconPicker` is dead state in `index.html:6972`: declared but no `createElement` block consumes it. No modal currently renders an icon picker. To execute this port we'd have to BUILD the missing feature, which is outside the rebuild's scope. Cleanup todo: remove the dead `useState` declaration. |
 | #4 | ical.js via esm.sh | `f23013c` | −200 LOC | **−135 LOC on index.html** | **SHIPPED**. Gross deletions 164, additions 29. 24 new pinned-behavior tests cover every RRULE branch, PRIORITY mapping, VALARM, DESCRIPTION format, CATEGORIES, DTSTART/DTEND with TZID, CRLF wire format. ical.js v2 ESM via esm.sh works cleanly; `window.ICAL` lookup is lazy so export still works during ESM bootstrap. |
 | #2 | custom `lib/auth.js` | — | −180 LOC | TBD | Not yet attempted. |
-| #10 | toastify-js | — | −65 LOC | TBD | Not yet attempted. |
+| #10 | toastify-js | — | −65 LOC | **0** | **KEEP**. Honest analysis: `undoToast` has custom interactive Undo button (toastify-js doesn't cleanly support interactive children inside React render); `xpToast` has three styled children with per-call gradient — net-zero replication; `swipeFeedback` is center-of-viewport overlay (no center gravity in toastify). Project dark-mode uses inline-`rgb()` substring matching that doesn't apply to class-based library styles. Net result of migration: **+18 LOC and +8.3 KB transferred** for zero functional gain. Reverted before commit. |
 | #8 | (long-press) | — | KEEP | KEEP | As projected — no qualifying library. |
 | #12 | (sparkline) | — | KEEP | KEEP | As projected — hand-rolled is smaller than glue. |
 | #13 | (year heatmap) | — | KEEP | KEEP | As projected — cal-heatmap brings 200KB of d3+popper transitively. |
@@ -66,9 +66,32 @@ Tests on previously-untested production code paths:
 - Mutation in `hydrateCloudDoc` (pre-existing tech debt, per CLAUDE.md immutability rule)
 - Consider `A11yDialogCentered` variant for centered confirmation modals (~3 LOC savings per migration)
 
+## Strategic pattern (after 9 attempted ports)
+
+A clear pattern has emerged from the execution data. Ports fall into four categories:
+
+**Big wins — replacement of complex/standardized work:**
+- Port #14 jose — JWT verification is a standardized spec that handles many edge cases. Library worth its weight.
+- Port #5 Workbox — service worker caching has well-understood strategy patterns. Library is exactly the right abstraction.
+- Port #4 ical.js — iCalendar RFC 5545 is a standard with many RRULE edge cases. Library worth its weight.
+
+**Big wins — extraction without library swap:**
+- Port #3 hydration — moving 240 lines out of `index.html` into a testable `lib/` module + 36 pinned-behavior tests was the win. The library (`superstruct`) didn't fit the imperative multi-step migration semantics, but the EXTRACTION delivered the value alone.
+
+**Net-neutral or worse — UI primitive ports:**
+- Port #1 simple-statistics — array-oriented library, but the code is Set-oriented domain logic.
+- Port #10 toastify-js — library doesn't support custom interactive children inside React render.
+- Port #6+#9 a11y-dialog confirmation modals — saved ~2 LOC per migration (not the projected 60-100); only heavier modals will pay back the infrastructure investment.
+
+**Targets that turned out to be vapor:**
+- Port #7 emoji picker — `showIconPicker` state hook exists but no modal renders it. Nothing to replace.
+
+**Generalization:** The rebuild's biggest wins came from (a) replacing standardized spec implementations with battle-tested libraries (JWT, iCal, SW caching), and (b) extracting inline modules into testable `lib/` files. The smallest wins came from trying to replace small, idiomatic React-createElement UI surfaces with libraries — those surfaces are already at minimum complexity for the project's strict no-build/no-JSX style.
+
 ## Honest takeaways
 
-1. **Projections were optimistic on Port #6+#9.** The −950 LOC figure assumed all 15+ modals had complex focus-trap useEffect blocks. They don't — confirmation modals are simpler than expected. The real per-modal saving on confirmations is ~2 LOC; the wins will come on heavier modals.
-2. **Two ports flipped to KEEP after honest attempts.** That's the discipline working — we don't ship code worse than what we replaced.
-3. **Test coverage delta is the underrated win.** 74 new tests on previously-untested production code is real bug-prevention infrastructure. The auth boundary and hydration logic in particular now have rigorous coverage they lacked.
-4. **The remaining ports (#2, #10, #11) are all well-scoped, isolated, and high-yield.** They should deliver further reductions cleanly when next dispatched.
+1. **Projections were optimistic on every UI-primitive port.** The −950 LOC for #6+#9 and −65 LOC for #10 both assumed structural complexity in hand-rolled UI that didn't actually exist. Real numbers: #6+#9 confirmations save ~2 LOC each; #10 would have ADDED 18 LOC.
+2. **Three ports flipped to KEEP after honest attempts.** The discipline is working — implementers refuse to ship code that's worse than what they replace.
+3. **The extraction pattern is the underused win.** Port #3 extracted hydration into `lib/hydration.js` and added 36 tests on previously-untested code. Port #2 (auth wrapper extraction, ~−180 LOC projected) is likely to follow the same pattern.
+4. **Test coverage delta is the underrated win.** 74 new tests on previously-untested production code is real bug-prevention infrastructure. The auth boundary and hydration logic in particular now have rigorous coverage they lacked.
+5. **Remaining work prioritization:** Port #2 (auth extraction) is highest-confidence remaining. Port #11 (calendar grid) is the highest-risk — based on the UI-primitive pattern, may flip to KEEP. Port #6+#9 scale-out to heavier modals (debriefStep, voiceCapture, reorderCtx) should deliver the projected savings.
