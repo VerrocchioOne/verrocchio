@@ -3391,13 +3391,33 @@ function mergeRemoteWithLocalToday(remote, local, todayK) {
     if (!lh) return h;
     // Pull today's cells from local if local has them.
     let next = h;
-    const cellFields = ["completions", "completionTimes", "completionUnits", "slotCompletions", "slotCompletionTimes"];
-    for (const f of cellFields) {
+    // §audit-P1 — `completions`, `completionTimes`, `completionUnits`
+    // are keyed by date with PRIMITIVE values ("done", "HH:MM", number).
+    // Whole-value replace at [todayK] is correct: local's snapshot wins.
+    const primitiveCellFields = ["completions", "completionTimes", "completionUnits"];
+    for (const f of primitiveCellFields) {
       const localField = lh[f];
       if (!localField || typeof localField !== "object") continue;
       if (!(todayK in localField)) continue;
       const cloudField = (next[f] && typeof next[f] === "object") ? next[f] : {};
       next = { ...next, [f]: { ...cloudField, [todayK]: localField[todayK] } };
+    }
+    // §audit-P1 — `slotCompletions[todayK]` and `slotCompletionTimes[todayK]`
+    // are OBJECTS keyed by slot ID. Whole-map replace LOSES non-overlapping
+    // cross-device slot updates (e.g., local marked morning:0 done on this
+    // device, cloud has evening:0 done from another device — whole-map
+    // replace would drop evening:0). Per-key merge inside [todayK] preserves
+    // both: cloud's keys are kept; local's keys win on overlap.
+    const objectCellFields = ["slotCompletions", "slotCompletionTimes"];
+    for (const f of objectCellFields) {
+      const localField = lh[f];
+      if (!localField || typeof localField !== "object") continue;
+      if (!(todayK in localField)) continue;
+      const cloudField = (next[f] && typeof next[f] === "object") ? next[f] : {};
+      const cloudInner = (cloudField[todayK] && typeof cloudField[todayK] === "object") ? cloudField[todayK] : {};
+      const localInner = (localField[todayK] && typeof localField[todayK] === "object") ? localField[todayK] : {};
+      const mergedInner = { ...cloudInner, ...localInner };
+      next = { ...next, [f]: { ...cloudField, [todayK]: mergedInner } };
     }
     return next;
   });
@@ -5369,6 +5389,15 @@ function App() {
       }
       if (dy !== 0) {
         window.scrollBy({ top: dy, left: 0, behavior: "auto" });
+        // §13.3e — Refresh the drag ref's currentScrollY and bump the
+        // render tick so the dragged card's translateY recomputes to
+        // include the scroll delta. Without this the card visually
+        // lags behind the pointer as the page scrolls (was the iOS
+        // "glitchy" drag symptom). Pull from window.scrollY after the
+        // scrollBy so the value reflects the actually-applied scroll
+        // (which may be clamped at page boundaries).
+        r.currentScrollY = window.scrollY || window.pageYOffset || 0;
+        setReorderDragTick(t => t + 1);
       }
       reorderAutoScrollRafRef.current = requestAnimationFrame(step);
     };
@@ -9199,6 +9228,14 @@ function App() {
       ...data,
       habits: (data.habits || []).map(h => String(h.id) === String(id) ? archivedOld : h).concat([newHabit])
     });
+    // §audit-P3 — Telemetry parity with addHabitFromEdit + applyHabitEdit.
+    // The archive-and-create path was missing these touchFeature calls,
+    // so the create-counter + sub-unit-tier counters never ticked for
+    // streak-reset-via-archive. Now matches the new-habit path.
+    try { touchFeature("habit.create"); } catch (_) {}
+    if (typeof draft.nextTarget === "number" && draft.nextTarget >= 0) {
+      try { touchFeature("habit.subunits"); } catch (_) {}
+    }
     setStreakChoicePending(null);
     setEditHabitModal(null);
   };
@@ -10697,6 +10734,17 @@ function App() {
       if (!h) return false;
       if (isFutureHabit(h)) return false;
       if (h.section === "avoid") return false;
+      // §audit-P1 — Exclude sub-habits (parentId set). The parent's
+      // rollup is "done iff all children done", so children would
+      // double-count alongside the parent and could keep the gate
+      // closed even when the parent looks reviewed.
+      if (h.parentId != null) return false;
+      // §audit-P1 — Exclude habits that did not yet exist yesterday.
+      // A habit created today (startDate >= today) gets checked
+      // against yesterday's empty completions and the gate would
+      // stay permanently closed. dk-format ISO strings compare
+      // lexicographically.
+      if (h.startDate && h.startDate > yKey) return false;
       return isHabitDueOn(h, yKey);
     });
     return dueYesterday.every(h => {
@@ -16855,7 +16903,16 @@ function App() {
         const isBeingDragged = reorderMode && _draggedRef
           && String(_draggedRef.habitId) === String(reorderHabitId)
           && (_draggedRef.slotId == null || _draggedRef.slotId === (habit._renderSlot || null));
-        const dragOffsetY = isBeingDragged ? (_draggedRef.currentY - _draggedRef.startY) : 0;
+        // §13.3e — Auto-scroll compensation. clientY is viewport-relative;
+        // as the page auto-scrolls during a drag, the pointer's clientY
+        // stays constant while the page slides underneath. Without the
+        // scrollY delta the card's translateY appears glued to the
+        // viewport (lags behind the finger). Adding the scroll delta
+        // re-anchors the card to the pointer's DOCUMENT position.
+        const dragOffsetY = isBeingDragged
+          ? ((_draggedRef.currentY - _draggedRef.startY)
+             + ((_draggedRef.currentScrollY || 0) - (_draggedRef.startScrollY || 0)))
+          : 0;
         // Avoid habits used to take a separate, simpler render branch
         // (different action button, fewer pills, "Strong willpower!"
         // swipe copy). They now share this exact same render with
@@ -17233,6 +17290,13 @@ function App() {
               startY: e.clientY,
               currentY: e.clientY,
               currentX: e.clientX,
+              // §13.3e — Track viewport scroll at drag start so dragOffsetY
+              // can compensate for auto-scroll. clientY stays viewport-
+              // relative as the page scrolls under the pointer; without
+              // this delta the dragged card appears to lag behind the
+              // finger during auto-scroll (was the iOS "glitchy" symptom).
+              startScrollY: window.scrollY || window.pageYOffset || 0,
+              currentScrollY: window.scrollY || window.pageYOffset || 0,
               originalSection: _origSection,
               cardEl
             };
@@ -17247,6 +17311,7 @@ function App() {
             if (!r || r.pointerId !== e.pointerId) return;
             r.currentY = e.clientY;
             r.currentX = e.clientX;
+            r.currentScrollY = window.scrollY || window.pageYOffset || 0;
             // Throttle the visual update to rAF so the card transform
             // doesn't update faster than the browser can paint.
             if (!r._rafScheduled) {
