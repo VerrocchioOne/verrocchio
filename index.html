@@ -5423,6 +5423,7 @@ function App() {
     }
     const Sortable = window.Sortable;
     const grids = Array.from(document.querySelectorAll('[data-sec] .habit-grid'));
+    try { console.log("[verrocchio:sortable] init — grids found:", grids.length, "Sortable:", typeof Sortable); } catch (_) {}
     const instances = grids.map(gridEl => {
       try {
         return new Sortable(gridEl, {
@@ -5492,8 +5493,17 @@ function App() {
     return () => {
       instances.forEach(s => { try { s.destroy(); } catch (_) {} });
     };
+  // §13.3 — Deps: `reorderMode` + `collapsedSections`. We do NOT depend
+  // on `data.habits` because that ref changes on every save() and would
+  // tear down + rebuild Sortable instances mid-drag if auto-save fires.
+  // SortableJS uses container-level event delegation, so newly-rendered
+  // .hrow children automatically become draggable without re-init.
+  // BUT — on phone the `.habit-grid` element only renders when the
+  // section is `!collapsed`, so toggling section collapse adds/removes
+  // entire grid containers. We must re-run when those toggle to attach
+  // Sortable to the newly-rendered grids.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reorderMode, data.habits]);
+  }, [reorderMode, collapsedSections]);
   const [saved, setSaved] = useState(false);
   // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
