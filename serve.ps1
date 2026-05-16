@@ -1,4 +1,5 @@
-$port = 8765
+param([int]$Port = 8080)
+$port = $Port
 $root = $PSScriptRoot
 Add-Type -AssemblyName System.Web
 $listener = New-Object System.Net.HttpListener

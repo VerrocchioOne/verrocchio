@@ -56,6 +56,11 @@ android/local.properties
 # patched dist outputs. Never committed; kept for fast re-runs during dev.
 .verify-tmp/
 
+# Playwright test runner output
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Private business / legal / formation docs. NEVER commit these.
 private/
 
