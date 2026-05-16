@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>dialog fixture</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  /* a11y-dialog v8 toggles aria-hidden between "true" and absent
+     (the attribute is REMOVED on show, not set to "false"). Hide
+     when aria-hidden is present, show when it's not. */
+  [role="dialog"][aria-hidden] { display: none; }
+  [role="dialog"]:not([aria-hidden]) {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dialog-card { background: #fff; padding: 20px; border-radius: 8px; min-width: 300px; }
+</style>
+</head>
+<body>
+  <!-- Fixture page: exercises lib/dialog.js + a11y-dialog focus-trap contract.
+       Loaded by tests/e2e/dialog.spec.js. Deliberately does NOT depend on
+       index.html (which requires Firebase auth in E2E). -->
+  <button id="open-trigger" data-testid="open-trigger">Open dialog</button>
+
+  <div id="test-dialog" role="dialog" aria-modal="true" aria-labelledby="td-title" aria-hidden="true">
+    <div class="dialog-card">
+      <h2 id="td-title">Test dialog</h2>
+      <p>Body content</p>
+      <button data-testid="dialog-first-btn">First</button>
+      <button data-testid="dialog-second-btn">Second</button>
+      <button data-a11y-dialog-hide data-testid="dialog-close-btn">Close</button>
+    </div>
+  </div>
+
+  <button id="after-trigger">After-trigger control</button>
+
+  <script src="https://cdn.jsdelivr.net/npm/a11y-dialog@8.1.5/dist/a11y-dialog.min.js"></script>
+  <script src="/lib/dialog.js"></script>
+  <script>
+    var dialog = window.verrocchioDialog.createDialog(document.getElementById("test-dialog"));
+    document.getElementById("open-trigger").addEventListener("click", function () {
+      dialog.show();
+    });
+    window.__dialogReady = true;
+  </script>
+</body>
+</html>

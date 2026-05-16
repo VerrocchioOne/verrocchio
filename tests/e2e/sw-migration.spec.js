@@ -3,18 +3,18 @@ const { test, expect } = require("@playwright/test");
 // Legacy-cache migration contract: prior to v64, the hand-rolled SW
 // created caches named `verrocchio-shell-vNN` via caches.open(). Workbox's
 // own cleanupOutdatedCaches() does NOT delete those — it only sweeps
-// Workbox-managed precaches. The v64 SW must include a custom activate
-// handler that purges any `verrocchio-*` cache whose name does not end
-// with the current SHELL_VERSION suffix.
+// Workbox-managed precaches. The current SW must include a custom
+// activate handler that purges any `verrocchio-*` cache whose name does
+// not end with the current SHELL_VERSION suffix.
 //
 // We exercise that handler end-to-end:
-//   1. First load registers the v64 SW; wait for control.
+//   1. First load registers the current SW; wait for control.
 //   2. From the page context, manually write a dummy entry into a fake
 //      legacy `verrocchio-shell-v63` cache.
 //   3. Unregister the SW and reload — fresh install + activate fires the
 //      migration handler.
 //   4. Assert: legacy v63 cache is gone, at least one current
-//      `verrocchio-...-v64` cache survives.
+//      `verrocchio-...-v65` cache survives.
 //
 // Same Chromium-only constraint as offline.spec.js — WebKit on Windows is
 // flaky around SW re-registration.
@@ -43,7 +43,7 @@ test("activate handler purges legacy verrocchio-shell-vNN caches", async ({ page
   // Sanity check: both legacy and current caches exist before re-activation.
   const before = await page.evaluate(() => caches.keys());
   expect(before).toContain("verrocchio-shell-v63");
-  expect(before.some(k => k.endsWith("v64"))).toBe(true);
+  expect(before.some(k => k.endsWith("v65"))).toBe(true);
 
   // Force a fresh install + activate cycle: unregister the current SW,
   // reload, and wait for the new registration to take control. The new
@@ -65,5 +65,5 @@ test("activate handler purges legacy verrocchio-shell-vNN caches", async ({ page
 
   const after = await page.evaluate(() => caches.keys());
   expect(after).not.toContain("verrocchio-shell-v63");
-  expect(after.some(k => k.endsWith("v64"))).toBe(true);
+  expect(after.some(k => k.endsWith("v65"))).toBe(true);
 });

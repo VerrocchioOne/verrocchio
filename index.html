@@ -57,6 +57,15 @@
      utils.js — both go in Script scope and hydration is referenced
      by the inline app code below. -->
 <script src="./lib/hydration.js"></script>
+<!-- a11y-dialog: focus-trap + escape-to-close + return-focus primitive.
+     Phase 2 OSS-port Port #6 pilot — replaces hand-rolled modal focus
+     management. Pinned to 8.1.5; jsDelivr already in
+     RUNTIME_CACHEABLE_HOSTS so the SW caches it after first load. -->
+<script src="https://cdn.jsdelivr.net/npm/a11y-dialog@8.1.5/dist/a11y-dialog.min.js" crossorigin="anonymous"></script>
+<!-- Verrocchio wrapper around a11y-dialog. Exposes window.verrocchioDialog
+     with createDialog(rootEl) → { show, hide, on, off, destroy }. Loaded
+     AFTER a11y-dialog so window.A11yDialog is defined when this runs. -->
+<script src="./lib/dialog.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -2638,6 +2647,102 @@ const fmtD = iso => new Date(iso).toLocaleDateString("en-US", {
    from anywhere renderable. */
 
 // 14-day sparkline — tiny green-on-grey bar+line chart representing
+// A11yDialog — generic React wrapper around lib/dialog.js (which wraps
+// the a11y-dialog library). Phase 2 OSS-port Port #6 pilot. Renders a
+// [role="dialog"][aria-modal="true"] element, drives show()/destroy()
+// on mount/unmount, and surfaces an `onHide` callback so the parent
+// can clear its open-state when the user dismisses via Escape, the
+// backdrop, or a button tagged with `data-a11y-dialog-hide`.
+//
+// Usage:
+//   open && React.createElement(A11yDialog, {
+//     onHide: () => setOpen(false),
+//     overlayStyle: { ... }     // optional — outer overlay element
+//     cardStyle:    { ... }     // optional — inner card element
+//     dialogProps:  { ... }     // optional — extra attrs on outer
+//   }, ...children)
+//
+// IMPORTANT: caller drives mount/unmount via a truthy state value (the
+// usual `state && createElement(A11yDialog, …)` pattern). The wrapper's
+// own lifecycle is: mount → createDialog → show(). Unmount → destroy().
+// We intentionally do NOT call hide() then destroy() on unmount because
+// React removes the DOM before our cleanup runs anyway — a11y-dialog's
+// destroy() handles the focus-return path even when the node has
+// already been detached.
+const A11yDialog = function A11yDialog({ onHide, overlayStyle, cardStyle, dialogProps, children, ariaLabelledby }) {
+  const elRef = React.useRef(null);
+  const dlgRef = React.useRef(null);
+  const onHideRef = React.useRef(onHide);
+  React.useEffect(() => { onHideRef.current = onHide; }, [onHide]);
+
+  React.useEffect(() => {
+    if (!elRef.current) return;
+    const dlg = (window.verrocchioDialog && window.verrocchioDialog.createDialog(elRef.current));
+    if (!dlg) return;
+    dlgRef.current = dlg;
+    // Bridge a11y-dialog's "hide" event back to React state via onHide.
+    // Without this, an Escape press or data-a11y-dialog-hide click would
+    // close the underlying dialog visually but leave React's open-state
+    // truthy — next render would re-mount and re-show the modal,
+    // creating a stuck-open feel.
+    const handleHide = () => { if (onHideRef.current) onHideRef.current(); };
+    dlg.on("hide", handleHide);
+    dlg.show();
+    return () => {
+      try { dlg.off("hide", handleHide); } catch (_) {}
+      try { dlg.destroy(); } catch (_) {}
+    };
+  }, []);
+
+  // Backdrop click → hide. a11y-dialog's `data-a11y-dialog-hide` selector
+  // only matches descendants; the outer overlay element itself needs an
+  // explicit handler so clicking the dim outside the card still closes.
+  const onBackdropClick = (e) => {
+    if (e.target === e.currentTarget && dlgRef.current) {
+      dlgRef.current.hide();
+    }
+  };
+
+  // Outer wrapper holds role/aria; inner element is the visual card.
+  // Caller-supplied styles merge over defaults.
+  const baseOverlay = {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.5)",
+    zIndex: 350,
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center"
+  };
+  const baseCard = {
+    background: "var(--c-surface, #fff)",
+    borderRadius: "20px 20px 0 0",
+    padding: "24px 20px",
+    width: "100%",
+    maxWidth: 640,
+    maxHeight: "85vh",
+    overflowY: "auto",
+    boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+  };
+
+  return React.createElement("div", Object.assign({
+    ref: elRef,
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": ariaLabelledby,
+    onClick: onBackdropClick,
+    style: Object.assign({}, baseOverlay, overlayStyle || {})
+  }, dialogProps || {}),
+    React.createElement("div", {
+      className: "fade-in",
+      // Stop click propagation so a backdrop-close handler on the outer
+      // wrapper doesn't fire when the user interacts with card contents.
+      onClick: (e) => e.stopPropagation(),
+      style: Object.assign({}, baseCard, cardStyle || {})
+    }, children)
+  );
+};
+
 // the last two weeks. Done days draw a 2px bar + a connecting line
 // through the tops; missed/empty days leave a faint tick. Width is
 // configurable because it sits next to other card chrome and may
@@ -23104,135 +23209,140 @@ function App() {
         }, "Got it \u2014 exit demo")
       )
   ),
-  completeGoalModal && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.5)",
-      zIndex: 350,
-      display: "flex",
-      alignItems: "flex-end",
-      justifyContent: "center"
+  // Complete-goal confirmation modal \u2014 Phase 2 OSS-port Port #6 pilot.
+  // Migrated from a hand-rolled overlay+card with no role/aria/focus
+  // trap to A11yDialog, which wraps a11y-dialog and provides:
+  //   - role="dialog" + aria-modal="true" on the overlay
+  //   - aria-labelledby pointing at our title
+  //   - focus-on-open (first tabbable inside; "Close" X button here)
+  //   - Tab/Shift+Tab trapped within the dialog
+  //   - Escape closes
+  //   - focus returns to the trigger that opened the modal
+  // Buttons tagged with `data-a11y-dialog-hide` close the dialog via
+  // the library's own delegated click handler; the rendered onClick
+  // still runs first (synchronously) so completeGoal() commits its
+  // side effect before the dialog tears down.
+  completeGoalModal && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setCompleteGoalModal(null),
+    ariaLabelledby: "complete-goal-title",
+    cardStyle: { background: "var(--c-surface, #fff)" }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 16
+      }
     },
-    onClick: e => {
-      if (e.target === e.currentTarget) setCompleteGoalModal(null);
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "fade-in",
-    style: {
-      background: "#fff",
-      borderRadius: "20px 20px 0 0",
-      padding: "24px 20px",
-      width: "100%",
-      maxWidth: 640,
-      maxHeight: "85vh",
-      overflowY: "auto",
-      boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontFamily: "'Lora',serif",
-      fontSize: 17,
-      fontWeight: 700,
-      color: "var(--c-text-strong)"
-    }
-  }, "Complete Goal \uD83C\uDF89"), /*#__PURE__*/React.createElement("button", { "aria-label": "Close",
-    onClick: () => setCompleteGoalModal(null),
-    style: {
-      background: "var(--c-surface-muted)",
-      border: "none",
-      borderRadius: "50%",
-      width: 30,
-      height: 30,
-      cursor: "pointer",
-      fontSize: 16,
-      color: "#6b7280",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center"
-    }
-  }, "\xD7")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "var(--c-tint-success-bg)",
-      border: "1px solid var(--c-tint-success-border)",
-      borderRadius: 10,
-      padding: "12px",
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 10,
-      fontWeight: 700,
-      color: "#2d5a2d",
-      textTransform: "uppercase",
-      marginBottom: 4
-    }
-  }, "Goal Achieved"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 14,
-      fontWeight: 600,
-      color: "var(--c-text)"
-    }
-  }, completeGoalModal.text)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 16
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 12,
-      fontWeight: 600,
-      color: "var(--c-text-soft)",
-      marginBottom: 8
-    }
-  }, "What's your next goal? (optional)"), /*#__PURE__*/React.createElement("input", {
-    value: nextGoalTxt,
-    onChange: e => setNextGoalTxt(e.target.value),
-    placeholder: `e.g., Build on "${completeGoalModal.text.slice(0, 30)}..."`,
-    style: {
-      ...IS,
-      width: "100%",
-      marginBottom: 8
-    }
-  }), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#9ca3af"
-    }
-  }, "This will be linked to the completed goal so you can track your progression.")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    onClick: () => completeGoal(completeGoalModal.id, "", ""),
-    style: {
-      flex: 1,
-      background: "var(--c-surface-muted)",
-      border: "none",
-      borderRadius: 10,
-      padding: "12px",
-      fontSize: 13,
-      fontWeight: 600,
-      color: "var(--c-text-soft)",
-      cursor: "pointer"
-    }
-  }, "Complete Only"), /*#__PURE__*/React.createElement("button", {
-    onClick: () => completeGoal(completeGoalModal.id, nextGoalTxt, completeGoalModal.type),
-    style: {
-      flex: 1,
-      ...AB,
-      borderRadius: 10,
-      padding: "12px",
-      fontSize: 13
-    }
-  }, "Complete & Create Next")))), showGoalArchive && /*#__PURE__*/React.createElement("div", {
+      /*#__PURE__*/React.createElement("div", {
+        id: "complete-goal-title",
+        style: {
+          fontFamily: "'Lora',serif",
+          fontSize: 17,
+          fontWeight: 700,
+          color: "var(--c-text-strong)"
+        }
+      }, "Complete Goal \uD83C\uDF89"),
+      /*#__PURE__*/React.createElement("button", {
+        "aria-label": "Close",
+        type: "button",
+        // a11y-dialog's delegated click handler reads this attribute and
+        // calls hide() automatically \u2014 no inline state setter needed.
+        "data-a11y-dialog-hide": true,
+        style: {
+          background: "var(--c-surface-muted)",
+          border: "none",
+          borderRadius: "50%",
+          width: 30,
+          height: 30,
+          cursor: "pointer",
+          fontSize: 16,
+          color: "#6b7280",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }
+      }, "\xD7")
+    ),
+    /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "var(--c-tint-success-bg)",
+        border: "1px solid var(--c-tint-success-border)",
+        borderRadius: 10,
+        padding: "12px",
+        marginBottom: 16
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          fontWeight: 700,
+          color: "#2d5a2d",
+          textTransform: "uppercase",
+          marginBottom: 4
+        }
+      }, "Goal Achieved"),
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 14,
+          fontWeight: 600,
+          color: "var(--c-text)"
+        }
+      }, completeGoalModal.text)
+    ),
+    /*#__PURE__*/React.createElement("div", {
+      style: { marginBottom: 16 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--c-text-soft)",
+          marginBottom: 8
+        }
+      }, "What's your next goal? (optional)"),
+      /*#__PURE__*/React.createElement("input", {
+        value: nextGoalTxt,
+        onChange: e => setNextGoalTxt(e.target.value),
+        placeholder: `e.g., Build on "${completeGoalModal.text.slice(0, 30)}..."`,
+        style: { ...IS, width: "100%", marginBottom: 8 }
+      }),
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: "#9ca3af" }
+      }, "This will be linked to the completed goal so you can track your progression.")
+    ),
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 10 }
+    },
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => completeGoal(completeGoalModal.id, "", ""),
+        style: {
+          flex: 1,
+          background: "var(--c-surface-muted)",
+          border: "none",
+          borderRadius: 10,
+          padding: "12px",
+          fontSize: 13,
+          fontWeight: 600,
+          color: "var(--c-text-soft)",
+          cursor: "pointer"
+        }
+      }, "Complete Only"),
+      /*#__PURE__*/React.createElement("button", {
+        type: "button",
+        onClick: () => completeGoal(completeGoalModal.id, nextGoalTxt, completeGoalModal.type),
+        style: {
+          flex: 1,
+          ...AB,
+          borderRadius: 10,
+          padding: "12px",
+          fontSize: 13
+        }
+      }, "Complete & Create Next")
+    )
+  ), showGoalArchive && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
