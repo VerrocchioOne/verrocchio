@@ -5070,7 +5070,13 @@ function App() {
   // keeping them as no-ops is the surgical fix.
   const reorderDragRef = useRef(null);
   const reorderDropPreviewRef = useRef(null);
-  const [reorderDragTick] = useState(0);
+  // §13.3f — Setter now exposed. The rAF-throttled pointermove handler
+  // inside the SortableJS useEffect calls setReorderDragTick(t => t + 1)
+  // after mutating reorderDragRef.current / reorderDropPreviewRef.current
+  // so the drop-preview indicator (rendered ~10k lines below) re-renders
+  // with the new viewport rect. Without a re-render the indicator would
+  // stay frozen at its first-detected position even as the pointer moves.
+  const [reorderDragTick, setReorderDragTick] = useState(0);
   const exitReorderMode = () => {
     // Sortable instances are owned by the useEffect below and torn down
     // in its cleanup; flipping reorderMode false drops the effect and
@@ -5097,7 +5103,7 @@ function App() {
   // > 0 but last stays "null" when user touches a card, Sortable's
   // listeners aren't receiving touchstart (CSS / DOM issue between
   // touch target and the library's document-level handler).
-  const [sortableDiag, setSortableDiag] = useState({ grids: 0, last: null, ts: null });
+  const [sortableDiag, setSortableDiag] = useState({ grids: 0, last: null, ts: null, layer: null });
   // §13.3 — SortableJS lifecycle. When reorder mode flips ON, find each
   // section's .habit-grid container and instantiate a Sortable with
   // group="habits" so cross-section drags work. Cleanup destroys the
@@ -5113,14 +5119,138 @@ function App() {
     const Sortable = window.Sortable;
     const grids = Array.from(document.querySelectorAll('[data-sec] .habit-grid'));
     try { console.log("[verrocchio:sortable] init — grids found:", grids.length, "Sortable:", typeof Sortable); } catch (_) {}
-    setSortableDiag({ grids: grids.length, last: null, ts: null });
+    setSortableDiag({ grids: grids.length, last: null, ts: null, layer: null });
     const stampDiag = (eventName) => {
       const now = new Date();
       const hh = String(now.getHours()).padStart(2, "0");
       const mm = String(now.getMinutes()).padStart(2, "0");
       const ss = String(now.getSeconds()).padStart(2, "0");
-      setSortableDiag(prev => ({ grids: prev.grids, last: eventName, ts: hh + ":" + mm + ":" + ss }));
+      // Preserve `layer` across stamps — only the pointermove handler owns it.
+      setSortableDiag(prev => ({ grids: prev.grids, last: eventName, ts: hh + ":" + mm + ":" + ss, layer: prev.layer }));
     };
+
+    // §13.3f — Layered-drop detection. SortableJS only reports `newIndex`
+    // (a sequential insertion point). To recover the layering gesture the
+    // hand-rolled pipeline had (drop on a peer's left/right edge =
+    // concurrent-cohort join), we attach a document-level pointermove
+    // during the drag and hit-test the pointer against visible peer .hrow
+    // rects. When the pointer is inside a peer's outer-edge zone
+    // (min(40px, 25% of width) on either left or right side) we stash the
+    // peer + side in reorderDragRef.current and populate
+    // reorderDropPreviewRef.current.indicatorRect so the existing
+    // drop-preview pill renders. onEnd reads those refs and passes them
+    // through to commitHabitReorderDrop, which already supports the
+    // layeredPeerId / layeredSide / targetConcurrent options.
+    //
+    // forceFallback:true keeps SortableJS in its CSS-transform fallback
+    // mode for iOS Safari reliability; the standard PointerEvent stream
+    // on `document` continues to fire during the drag (the user's
+    // finger/cursor is still moving, the browser still dispatches).
+    // rAF coalesces multiple pointermoves per frame so we don't render-
+    // storm during fast drags.
+    let pointermoveAttached = false;
+    let rafPending = false;
+    const updateLayerTarget = (clientX, clientY) => {
+      let targetGrid = null;
+      for (const g of grids) {
+        const r = g.getBoundingClientRect();
+        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+          targetGrid = g;
+          break;
+        }
+      }
+      let nextDrag = { active: true };
+      let nextPreview = null;
+      if (targetGrid) {
+        const peers = Array.from(targetGrid.querySelectorAll('.hrow[data-reorderable="1"]'));
+        for (const p of peers) {
+          // Skip the dragged card's placeholder, the original "chosen"
+          // element, and any in-flight clone — we only want stable peer
+          // rects so the edge zone matches what the user sees.
+          if (p.classList.contains('hrow-sortable-ghost')) continue;
+          if (p.classList.contains('hrow-sortable-chosen')) continue;
+          if (p.classList.contains('hrow-sortable-drag')) continue;
+          const r = p.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) continue;
+          if (clientY < r.top || clientY > r.bottom) continue;
+          // Edge zone: outer min(40px, 25%) on each side. Mobile fingers
+          // are imprecise, so a generous zone matters more than a
+          // pixel-perfect one.
+          const edge = Math.min(40, r.width * 0.25);
+          const pillW = 4;
+          if (clientX >= r.left && clientX <= r.left + edge) {
+            nextDrag = {
+              active: true,
+              layeredPeerId: p.getAttribute("data-habit-id"),
+              layeredSide: "left"
+            };
+            nextPreview = {
+              indicatorRect: {
+                x: r.left - pillW / 2,
+                y: r.top + 6,
+                width: pillW,
+                height: Math.max(0, r.height - 12),
+                kind: "vertical"
+              }
+            };
+            break;
+          }
+          if (clientX <= r.right && clientX >= r.right - edge) {
+            nextDrag = {
+              active: true,
+              layeredPeerId: p.getAttribute("data-habit-id"),
+              layeredSide: "right"
+            };
+            nextPreview = {
+              indicatorRect: {
+                x: r.right - pillW / 2,
+                y: r.top + 6,
+                width: pillW,
+                height: Math.max(0, r.height - 12),
+                kind: "vertical"
+              }
+            };
+            break;
+          }
+        }
+      }
+      reorderDragRef.current = nextDrag;
+      reorderDropPreviewRef.current = nextPreview;
+      // Reflect the layer target in the diag bar so the user (and any
+      // screenshot we take during verification) can SEE detection working
+      // before they release. Trailing 4 chars of the peer id is enough
+      // to identify the row without leaking the full Date.now() id.
+      const layerLabel = nextDrag.layeredPeerId
+        ? (String(nextDrag.layeredPeerId).slice(-4) + "/" + nextDrag.layeredSide)
+        : null;
+      setSortableDiag(prev => prev.layer === layerLabel ? prev : ({ ...prev, layer: layerLabel }));
+      setReorderDragTick(t => t + 1);
+    };
+    const onPointerMove = (e) => {
+      if (rafPending) return;
+      rafPending = true;
+      const cx = e.clientX;
+      const cy = e.clientY;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        updateLayerTarget(cx, cy);
+      });
+    };
+    const attachPointerMove = () => {
+      if (pointermoveAttached) return;
+      document.addEventListener('pointermove', onPointerMove, { passive: true });
+      pointermoveAttached = true;
+    };
+    const detachPointerMove = () => {
+      if (!pointermoveAttached) return;
+      document.removeEventListener('pointermove', onPointerMove);
+      pointermoveAttached = false;
+      reorderDragRef.current = null;
+      reorderDropPreviewRef.current = null;
+      setSortableDiag(prev => prev.layer == null ? prev : ({ ...prev, layer: null }));
+      setReorderDragTick(t => t + 1);
+    };
+
     const instances = grids.map(gridEl => {
       try {
         return new Sortable(gridEl, {
@@ -5144,10 +5274,21 @@ function App() {
           // movement exceeds touchStartThreshold; onMove on every
           // pointer move during drag; onEnd on release.
           onChoose: () => stampDiag("choose"),
-          onStart: () => stampDiag("start"),
+          onStart: () => {
+            stampDiag("start");
+            attachPointerMove();
+          },
           onMove: () => { stampDiag("move"); return true; },
           onEnd: (evt) => {
             stampDiag("end");
+            // Capture layered-drop intent BEFORE detachPointerMove clears
+            // the refs. If the user released the finger outside any peer
+            // edge zone, dragRef is { active: true } and layeredPeerId is
+            // undefined → falls back to plain sequential reorder.
+            const dragRef = reorderDragRef.current || {};
+            const layeredPeerId = dragRef.layeredPeerId || null;
+            const layeredSide = dragRef.layeredSide || null;
+            detachPointerMove();
             const item = evt && evt.item;
             if (!item) return;
             const habitId = item.getAttribute("data-habit-id");
@@ -5168,7 +5309,10 @@ function App() {
             // for cross-section moves. Same-section is a no-op (slot
             // order within a section is rendered from the array, so
             // SortableJS's DOM reorder would desync from data on the
-            // next render).
+            // next render). Layered drops don't apply to slot cards —
+            // their concurrency model is "multiple completions per day",
+            // not "share a row with another habit" — so layeredPeerId
+            // is intentionally ignored on the slot path.
             const slotMatch = slotId ? /^(.+):(\d+)$/.exec(slotId) : null;
             if (slotMatch) {
               const originalSection = slotMatch[1];
@@ -5180,10 +5324,18 @@ function App() {
               }
             } else {
               if (typeof commitHabitReorderDrop === "function") {
+                // Pass the layered intent captured from the pointermove
+                // hit-test. The peer id may belong to a row in a DIFFERENT
+                // section than the SortableJS-reported targetSection (the
+                // user crossed a section boundary while inside a peer's
+                // edge zone) — commitHabitReorderDrop handles cross-section
+                // layered drops correctly: the moved habit's section
+                // becomes the destination section, and the cohort linkage
+                // is set against the peer wherever it lives.
                 commitHabitReorderDrop(habitId, targetSection, targetIndex, {
-                  targetConcurrent: false,
-                  layeredPeerId: null,
-                  layeredSide: null
+                  targetConcurrent: !!layeredPeerId,
+                  layeredPeerId,
+                  layeredSide
                 });
               }
             }
@@ -5195,6 +5347,7 @@ function App() {
       }
     }).filter(Boolean);
     return () => {
+      detachPointerMove();
       instances.forEach(s => { try { s.destroy(); } catch (_) {} });
     };
   // §13.3 — Dep on `reorderMode` ONLY. `collapsedSections` is declared
@@ -15536,7 +15689,7 @@ function App() {
             }, "Organize habits"),
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.2, marginTop: 2 }
-            }, "Drag any card to reorder. Tap Done when finished."),
+            }, "Drag to reorder. Drop on a card's left/right edge to layer them as concurrent. Tap Done when finished."),
             // §13.3 diagnostic — visible status of the Sortable drag
             // pipeline. Lets the user (and me, via screenshot) see
             // exactly where the drag breaks on iOS Safari without
@@ -15548,9 +15701,10 @@ function App() {
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
               }
             },
-              "v62 • grids: " + sortableDiag.grids
+              "v63 • grids: " + sortableDiag.grids
               + " • last: " + (sortableDiag.last || "—")
               + (sortableDiag.ts ? " @" + sortableDiag.ts : "")
+              + (sortableDiag.layer ? " • layer: " + sortableDiag.layer : "")
             )
           )
         ),
