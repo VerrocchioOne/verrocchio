@@ -18,7 +18,7 @@ This document records what actually happened during Phase 2 execution, with hone
 | #11 | vanilla-calendar-pro | — | −70 LOC | TBD | Not yet attempted. |
 | #7 | emoji-picker-element | — | −110 LOC | **DROPPED** | **DROPPED — no port target**. Pilot Port #6+#9 discovered `showIconPicker` is dead state in `index.html:6972`: declared but no `createElement` block consumes it. No modal currently renders an icon picker. To execute this port we'd have to BUILD the missing feature, which is outside the rebuild's scope. Cleanup todo: remove the dead `useState` declaration. |
 | #4 | ical.js via esm.sh | `f23013c` | −200 LOC | **−135 LOC on index.html** | **SHIPPED**. Gross deletions 164, additions 29. 24 new pinned-behavior tests cover every RRULE branch, PRIORITY mapping, VALARM, DESCRIPTION format, CATEGORIES, DTSTART/DTEND with TZID, CRLF wire format. ical.js v2 ESM via esm.sh works cleanly; `window.ICAL` lookup is lazy so export still works during ESM bootstrap. |
-| #2 | custom `lib/auth.js` | — | −180 LOC | TBD | Not yet attempted. |
+| #2 | custom `lib/auth.js` | `d07f046` | −180 LOC | **−59 LOC on index.html + 31 tests** | **EXTRACTION (same pattern as Port #3)**. Honest analysis: SYNTHESIS projected 300+ LOC out, but realistic inspection found only ~80 lines of auth code extractable as pure/semi-pure helpers — `doAuth`, `doForgotPassword`, `signInAsDemoUser`, `doChangeEmail`, `doChangePassword`, `doDeleteAccount`, `onAuthStateChanged` callback, and `reauthenticate` all have 3+ React `setState` calls woven in, so extracting them would grow the code. Six helpers shipped: `mapAuthErrorToMessage`, `stripFirebasePrefix`, `isDemoPersonaEmail`, `isInvalidCredentialError` (pure), `flushPendingWritesAndSignOut`, `deleteAccountData` (semi-pure via DI). 31 pinned-behavior tests on previously-untested auth boilerplate. |
 | #10 | toastify-js | — | −65 LOC | **0** | **KEEP**. Honest analysis: `undoToast` has custom interactive Undo button (toastify-js doesn't cleanly support interactive children inside React render); `xpToast` has three styled children with per-call gradient — net-zero replication; `swipeFeedback` is center-of-viewport overlay (no center gravity in toastify). Project dark-mode uses inline-`rgb()` substring matching that doesn't apply to class-based library styles. Net result of migration: **+18 LOC and +8.3 KB transferred** for zero functional gain. Reverted before commit. |
 | #8 | (long-press) | — | KEEP | KEEP | As projected — no qualifying library. |
 | #12 | (sparkline) | — | KEEP | KEEP | As projected — hand-rolled is smaller than glue. |
@@ -28,8 +28,8 @@ This document records what actually happened during Phase 2 execution, with hone
 
 - `ai-proxy/worker.js`: **−30** (Port #14)
 - `service-worker.js`: **−74** (Port #5)
-- `index.html`: **−238 (#3) + 278 (#6+#9 partial) − 135 (#4)** = **−95 net**
-- **Total production reduction so far: −199 LOC**
+- `index.html`: **−238 (#3) + 278 (#6+#9 partial) − 135 (#4) − 59 (#2)** = **−154 net**
+- **Total production reduction: −258 LOC**
 
 This includes the +278 from the dialog port's infrastructure investment; that figure will invert as heavier modals migrate.
 
@@ -44,8 +44,9 @@ Tests on previously-untested production code paths:
 - `tests/e2e/dialog.spec.js` — **2 tests** (Port #6+#9 pilot, fixture-based)
 - `tests/e2e/dialog-real-app.spec.js` — **3 tests** (Port #6+#9 batch 1, real app)
 - `tests/icalendar.test.mjs` — **24 tests** (Port #4)
+- `tests/auth.test.mjs` — **31 tests** (Port #2)
 
-**Total: 74 new tests** on production code that previously had zero test coverage.
+**Total: 105 new tests** on production code that previously had zero test coverage.
 
 ## Discipline outcomes
 
@@ -56,10 +57,8 @@ Tests on previously-untested production code paths:
 ## What's left
 
 **Active ports remaining:**
-- Port #2 custom `lib/auth.js` wrapper — projected ~−180 LOC
-- Port #10 toastify-js — projected ~−65 LOC
-- Port #11 vanilla-calendar-pro — projected ~−70 LOC
-- Port #6+#9 scale-out — remaining 11+ heavier modal candidates
+- Port #11 vanilla-calendar-pro — projected ~−70 LOC (highest risk; based on UI-primitive pattern may flip to KEEP)
+- Port #6+#9 scale-out — remaining 11+ heavier modal candidates (debriefStep, voiceCapture, reorderCtx — these likely DO have complex hand-rolled focus logic to delete)
 
 **Cleanup todos:**
 - Remove dead `showIconPicker` state (`index.html:6972`)
