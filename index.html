@@ -1192,7 +1192,32 @@ const storage = firebase.storage();
 //   file with Cache-Control: max-age=600, which would otherwise delay
 //   SW updates by up to 10 minutes after a deploy. With "none" the
 //   check is fresh on every navigation.
-if ("serviceWorker" in navigator
+// Localhost dev-loop bypass. Past sessions repeatedly hit "I see nothing
+// that improved" / "file looks stale" because a Workbox SW from a prior
+// dev session was still serving the precached old shell on reload. Fix:
+// on plain localhost (NOT webdriver-controlled — i.e. NOT Playwright),
+// skip SW registration entirely and proactively unregister any prior SW
+// + purge its caches. Playwright tests set navigator.webdriver === true,
+// so they bypass this branch and exercise the real SW like a prod user
+// (offline.spec.js, sw-migration.spec.js depend on that). Production
+// (https) never matches because hostname !== localhost.
+const __vSwIsLocalDevSkip =
+  (location.hostname === "localhost"
+    || location.hostname === "127.0.0.1"
+    || location.hostname === "0.0.0.0")
+  && navigator.webdriver !== true;
+
+if (__vSwIsLocalDevSkip && "serviceWorker" in navigator) {
+  try { console.log("[verrocchio:sw] localhost dev (no webdriver) — skipping SW + purging stale caches"); } catch (_) {}
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => { try { r.unregister(); } catch (e) {} });
+  }).catch(() => {});
+  try {
+    caches.keys().then(keys => {
+      keys.forEach(k => { if (k.startsWith("verrocchio-")) caches.delete(k).catch(() => {}); });
+    }).catch(() => {});
+  } catch (e) {}
+} else if ("serviceWorker" in navigator
     && location.protocol !== "capacitor:"
     && location.protocol !== "file:"
     && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
@@ -6984,6 +7009,14 @@ function App() {
   const __dbgConfirmDeleteAcctRef = React.useRef(false);
   const __dbgShowJournalDisclaimerRef = React.useRef(false);
   const __dbgVoiceCaptureOpenRef = React.useRef(false);
+  // §13.3f — commitHabitReorderDrop is a regular function recreated on
+  // every render, so we mirror it into a ref that updates per-render
+  // (no deps array). The reorder-layered-drop spec calls the latest
+  // closure via __verrocchioTestHooks.commitHabitReorderDropForTest,
+  // which dereferences this ref at invocation time. Without the ref,
+  // the test would close over the first-render version and miss state
+  // captured by intervening renders (seeded habits).
+  const __dbgCommitHabitReorderDropRef = React.useRef(null);
   React.useEffect(() => { __dbgConfirmWipeRef.current = confirmWipe; }, [confirmWipe]);
   React.useEffect(() => { __dbgConfirmDeleteAcctRef.current = confirmDeleteAcct; }, [confirmDeleteAcct]);
   React.useEffect(() => { __dbgShowJournalDisclaimerRef.current = showJournalDisclaimer; }, [showJournalDisclaimer]);
@@ -7002,14 +7035,24 @@ function App() {
       setDemoMode(true);
       setTourDone(true);
       setTourStep(0);
-      setData({
+      // §13.3f — Sync latestData.current alongside setData so downstream
+      // test hooks (seedHabitsForTest, commitHabitReorderDropForTest) see
+      // a populated baseline instead of the null left by the signed-out
+      // useEffect at L7214. Without this, seedHabitsForTest spreads from
+      // {} and produces a habits-only doc that breaks the render tree
+      // (no onboardingComplete, no tourDone, etc.) on the next render —
+      // which in turn defers re-renders and makes subsequent reads of
+      // latestData.current race with React's commit phase.
+      const fixture = {
         habits: [], goals: [], todos: [], customGoalTypes: [],
         customImportance: [], customSections: [], dayVisits: [],
         bestStreaks: {}, achievementsUnlocked: {}, xp: 0,
         journal: [], quotes: [], archive: [], travelDays: [],
         homeLocation: "", onboardingComplete: true, tourDone: true,
-        journalDisclaimerAcked: true
-      });
+        journalDisclaimerAcked: true, _updatedAt: Date.now()
+      };
+      setData(fixture);
+      latestData.current = fixture;
     };
     window.__verrocchioTestHooks = {
       primeForDialogTests,
@@ -7020,7 +7063,29 @@ function App() {
       setShowJournalDisclaimer: (v) => setShowJournalDisclaimer(v),
       getShowJournalDisclaimer: () => __dbgShowJournalDisclaimerRef.current,
       setVoiceCaptureOpen: (v) => setVoiceCaptureOpen(v),
-      getVoiceCaptureOpen: () => __dbgVoiceCaptureOpenRef.current
+      getVoiceCaptureOpen: () => __dbgVoiceCaptureOpenRef.current,
+      // §13.3f — reorder regression coverage. runReorderTestScenario is
+      // ATOMIC: it seeds habits, invokes the commit, and returns the
+      // post-commit habits array — all inside one synchronous JS call.
+      // The earlier split-API approach (seedHabitsForTest +
+      // commitHabitReorderDropForTest + getHabitsForTest as three
+      // separate page.evaluate round-trips) flaked because React
+      // re-renders fired between rounds and occasionally repointed
+      // __dbgCommitHabitReorderDropRef at a stale closure that read
+      // pre-seed state. Combining into one call removes that window —
+      // nothing else runs between seed mutation, commit invocation,
+      // and the result read.
+      runReorderTestScenario: (seedHabits, dropArgs) => {
+        const cur = (latestData && latestData.current) || {};
+        const stamped = { ...cur, habits: seedHabits, _updatedAt: Date.now() };
+        setData(stamped);
+        latestData.current = stamped;
+        const fn = __dbgCommitHabitReorderDropRef.current;
+        if (typeof fn === "function") {
+          fn(dropArgs.habitId, dropArgs.section, dropArgs.idx, dropArgs.opts);
+        }
+        return (latestData && latestData.current && latestData.current.habits) || [];
+      }
     };
     return () => { try { delete window.__verrocchioTestHooks; } catch (_) {} };
   }, []);
@@ -9181,6 +9246,12 @@ function App() {
       sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" }
     });
   };
+  // §13.3f — Mirror commitHabitReorderDrop into the test-hook ref every
+  // render so the layered-drop regression spec (tests/e2e/habit-reorder-
+  // layered-drop.spec.js) always invokes the latest closure (which
+  // captures the latest `data` / `save` / etc.). No deps array = runs
+  // on every render; cheap, idempotent.
+  React.useEffect(() => { __dbgCommitHabitReorderDropRef.current = commitHabitReorderDrop; });
   // §5.8c — Slot-level reorder commit for multi-slot habits.
   // Rewrites slotSections[slotArrayIdx] to a new section without
   // touching the habit's primary `section`/`_order`. Completion
