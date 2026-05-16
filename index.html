@@ -5493,17 +5493,19 @@ function App() {
     return () => {
       instances.forEach(s => { try { s.destroy(); } catch (_) {} });
     };
-  // §13.3 — Deps: `reorderMode` + `collapsedSections`. We do NOT depend
-  // on `data.habits` because that ref changes on every save() and would
-  // tear down + rebuild Sortable instances mid-drag if auto-save fires.
+  // §13.3 — Dep on `reorderMode` ONLY. `collapsedSections` is declared
+  // ~1500 lines below this useEffect; using it in the dep array caused
+  // a TDZ ReferenceError that crashed the entire App on first render.
+  // `data.habits` is also excluded because that ref changes on every
+  // save() and would tear down + rebuild Sortable instances mid-drag.
   // SortableJS uses container-level event delegation, so newly-rendered
   // .hrow children automatically become draggable without re-init.
-  // BUT — on phone the `.habit-grid` element only renders when the
-  // section is `!collapsed`, so toggling section collapse adds/removes
-  // entire grid containers. We must re-run when those toggle to attach
-  // Sortable to the newly-rendered grids.
+  // If a user enters reorder mode while a section is collapsed and then
+  // expands it, Sortable won't auto-attach to the new grid — but they
+  // can exit+re-enter reorder mode to re-run this effect against the
+  // expanded section.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reorderMode, collapsedSections]);
+  }, [reorderMode]);
   const [saved, setSaved] = useState(false);
   // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
