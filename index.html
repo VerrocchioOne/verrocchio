@@ -5389,15 +5389,36 @@ function App() {
       }
       if (dy !== 0) {
         window.scrollBy({ top: dy, left: 0, behavior: "auto" });
-        // §13.3e — Refresh the drag ref's currentScrollY and bump the
-        // render tick so the dragged card's translateY recomputes to
-        // include the scroll delta. Without this the card visually
+        // §13.3e — Refresh the drag ref's currentScrollY so the
+        // dragged card's translateY recomputes to include the scroll
+        // delta on the next render. Without this the card visually
         // lags behind the pointer as the page scrolls (was the iOS
-        // "glitchy" drag symptom). Pull from window.scrollY after the
+        // "glitchy" drag symptom). Pull from window.scrollY AFTER the
         // scrollBy so the value reflects the actually-applied scroll
         // (which may be clamped at page boundaries).
+        //
+        // §13.3e-fix-v55 — Coalesce the React render tick with the
+        // pointermove rAF via the shared `_rafScheduled` flag. The
+        // earlier v54 version called setReorderDragTick directly from
+        // inside this rAF, which (on iOS Safari + Capacitor with a
+        // 25k-line App component) caused a render-storm: every 16ms
+        // the entire habit list re-reconciled, the main thread
+        // saturated, and queued pointermove / pointerup events never
+        // reached the drag handle — drag appeared completely frozen.
+        // Routing through the same `_rafScheduled` gate the
+        // pointermove handler already uses guarantees at most ONE
+        // App re-render per animation frame, regardless of how many
+        // rAF sources fire. The scroll-anchor ref write is free
+        // (synchronous, no React work) and happens every frame;
+        // the render is throttled to the shared rAF.
         r.currentScrollY = window.scrollY || window.pageYOffset || 0;
-        setReorderDragTick(t => t + 1);
+        if (!r._rafScheduled) {
+          r._rafScheduled = true;
+          requestAnimationFrame(() => {
+            r._rafScheduled = false;
+            setReorderDragTick(t => t + 1);
+          });
+        }
       }
       reorderAutoScrollRafRef.current = requestAnimationFrame(step);
     };
@@ -5623,6 +5644,16 @@ function App() {
   // §13.3 — Scroll-to-top gesture exits reorder mode. Listens on
   // window so any upward scroll past 0 dismisses the mode. Throttled
   // by the browser's native scroll cadence; no extra rAF needed.
+  //
+  // §13.3e-fix-v55 — Skip the exit when a drag is currently in
+  // progress. Without this guard, the §13.3c auto-scroll loop
+  // would kill its own drag the moment its scroll reached y=0
+  // (e.g., user drags toward the top of the viewport, auto-scroll
+  // walks the page up to the apex, scroll listener sees y<=0
+  // after lastY>24 and calls exitReorderMode → reorderDragRef
+  // is nulled, drag silently dies). The user-initiated
+  // scroll-to-top-to-exit gesture only happens between drags,
+  // when reorderDragRef.current is null.
   useEffect(() => {
     if (!reorderMode) return;
     let lastY = window.scrollY || window.pageYOffset || 0;
@@ -5630,7 +5661,9 @@ function App() {
       const y = window.scrollY || window.pageYOffset || 0;
       // Only exit on a clear scroll-to-top — reached top after being
       // somewhere below. Filters out tiny rubber-band noise on iOS.
-      if (y <= 0 && lastY > 24) {
+      // Also skip while a drag is active so auto-scroll can't kill
+      // its own drag at the page apex.
+      if (y <= 0 && lastY > 24 && !reorderDragRef.current) {
         exitReorderMode();
       }
       lastY = y;
@@ -16783,7 +16816,18 @@ function App() {
         fontSize: 12
       }
     }, "Add")))), /*#__PURE__*/React.createElement("div", {
-      className: "habit-sections-grid"
+      className: "habit-sections-grid",
+      // §13.3 — In reorder mode, shift the entire section grid LEFT by
+      // reserving right padding on the wrapper. This frees up space on
+      // the right edge of the viewport so the page scrollbar (and the
+      // user's thumb on iOS while scrolling along that edge) doesn't
+      // sit on top of, or visually crowd, the habit cards. Mirrors the
+      // existing `paddingBottom: reorderMode ? 60 : 0` pattern on each
+      // section column below. Animated for smooth in/out on toggle.
+      style: {
+        paddingRight: reorderMode ? 28 : 0,
+        transition: "padding 0.18s ease"
+      }
     }, groupedH.map(group => {
       const isAvoid = group.value === "avoid";
       const doneCount = group.habits.filter(h => isDone(h, selDate)).length;
