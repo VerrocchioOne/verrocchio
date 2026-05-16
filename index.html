@@ -6830,9 +6830,11 @@ function App() {
   const __dbgConfirmWipeRef = React.useRef(null);
   const __dbgConfirmDeleteAcctRef = React.useRef(false);
   const __dbgShowJournalDisclaimerRef = React.useRef(false);
+  const __dbgVoiceCaptureOpenRef = React.useRef(false);
   React.useEffect(() => { __dbgConfirmWipeRef.current = confirmWipe; }, [confirmWipe]);
   React.useEffect(() => { __dbgConfirmDeleteAcctRef.current = confirmDeleteAcct; }, [confirmDeleteAcct]);
   React.useEffect(() => { __dbgShowJournalDisclaimerRef.current = showJournalDisclaimer; }, [showJournalDisclaimer]);
+  React.useEffect(() => { __dbgVoiceCaptureOpenRef.current = voiceCaptureOpen; }, [voiceCaptureOpen]);
   React.useEffect(() => {
     if (!SHOW_DEBUG_UI) return;
     // primeForDialogTests bypasses the login + splash + onboarding
@@ -6863,7 +6865,9 @@ function App() {
       setConfirmDeleteAcct: (v) => setConfirmDeleteAcct(v),
       getConfirmDeleteAcct: () => __dbgConfirmDeleteAcctRef.current,
       setShowJournalDisclaimer: (v) => setShowJournalDisclaimer(v),
-      getShowJournalDisclaimer: () => __dbgShowJournalDisclaimerRef.current
+      getShowJournalDisclaimer: () => __dbgShowJournalDisclaimerRef.current,
+      setVoiceCaptureOpen: (v) => setVoiceCaptureOpen(v),
+      getVoiceCaptureOpen: () => __dbgVoiceCaptureOpenRef.current
     };
     return () => { try { delete window.__verrocchioTestHooks; } catch (_) {} };
   }, []);
@@ -27809,34 +27813,33 @@ function App() {
       setTab("reflection");
     };
     const previewText = (finalText + (voiceInterim ? " " + voiceInterim : "")).trim();
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog", "aria-modal": "true",
-      style: {
-        position: "fixed", inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        zIndex: 320,
-        display: "flex", alignItems: "flex-end", justifyContent: "center"
-      },
-      onClick: e => { if (e.target === e.currentTarget) closeModal(); }
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: {
-        background: "var(--c-surface, #fff)",
-        borderRadius: "20px 20px 0 0",
+    // Migrated to A11yDialog (Port #6+#9 batch 2): role/aria-modal/
+    // focus-trap/Escape/backdrop-click are all handled by the wrapper.
+    // onHide routes to closeModal() so dismissal via Escape, backdrop,
+    // or data-a11y-dialog-hide stops the recognizer, releases the wake
+    // lock, and clears transcript state — a behavior the pre-migration
+    // modal didn't honor on Escape (no Esc handler existed at all).
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: closeModal,
+      ariaLabelledby: "voice-capture-title",
+      overlayStyle: { zIndex: 320 },
+      cardStyle: {
         padding: "20px 18px 22px",
-        width: "100%", maxWidth: 520,
-        maxHeight: "85vh", overflowY: "auto",
-        boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
+        maxWidth: 520
       }
     },
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
       },
         /*#__PURE__*/React.createElement("div", {
+          id: "voice-capture-title",
           style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
         }, "Voice Capture"),
         /*#__PURE__*/React.createElement("button", {
-          type: "button", onClick: closeModal, "aria-label": "Close",
+          // data-a11y-dialog-hide so the library closes the modal; the
+          // onHide handler above runs closeModal() to tear down the
+          // recognizer + wake lock + transcript state.
+          type: "button", "data-a11y-dialog-hide": true, "aria-label": "Close",
           style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 28, height: 28, fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
         }, "×")
       ),
@@ -27922,7 +27925,7 @@ function App() {
           cursor: "pointer", padding: 4, width: "100%"
         }
       }, "Clear and start over")
-    ));
+    );
   })(),
   // §13.3 — The section-picker bottom sheet was retired. The three-line
   // Organize button now enters inline reorder mode directly (no

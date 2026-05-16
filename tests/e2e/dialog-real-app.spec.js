@@ -131,4 +131,42 @@ test.describe("a11y-dialog: real-app modal wiring (Port #6+#9 batch 1)", () => {
       { timeout: 2000 }
     ).toBe(false);
   });
+
+  test("voiceCapture: opens, traps focus, Esc closes and clears state", async ({ page }) => {
+    await page.evaluate(() => window.__verrocchioTestHooks.setVoiceCaptureOpen(true));
+
+    const dialog = page.locator('[role="dialog"][aria-labelledby="voice-capture-title"]:not([aria-hidden])');
+    await expect(dialog).toBeVisible({ timeout: 1000 });
+    await expect(page.locator("#voice-capture-title")).toHaveText("Voice Capture");
+
+    // Focus must land inside the dialog.
+    const focusedInside = await page.evaluate(() => {
+      const dlgs = document.querySelectorAll('[aria-labelledby="voice-capture-title"]');
+      for (const d of dlgs) {
+        if (d.contains(document.activeElement)) return true;
+      }
+      return false;
+    });
+    expect(focusedInside).toBe(true);
+
+    // Tab repeatedly — focus must stay inside the dialog.
+    for (let i = 0; i < 8; i++) await page.keyboard.press("Tab");
+    const stillInside = await page.evaluate(() => {
+      const dlgs = document.querySelectorAll('[aria-labelledby="voice-capture-title"]');
+      for (const d of dlgs) {
+        if (d.contains(document.activeElement)) return true;
+      }
+      return false;
+    });
+    expect(stillInside).toBe(true);
+
+    // Escape closes — AND the React state clears so the dialog unmounts.
+    await page.keyboard.press("Escape");
+    await expect(page.locator('[aria-labelledby="voice-capture-title"]')).toHaveCount(0, { timeout: 1000 });
+
+    await expect.poll(
+      () => page.evaluate(() => window.__verrocchioTestHooks.getVoiceCaptureOpen()),
+      { timeout: 2000 }
+    ).toBe(false);
+  });
 });
