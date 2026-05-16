@@ -5409,6 +5409,16 @@ function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+  // §13.3 — Diagnostic state shown inline in the reorder-mode top bar.
+  // Lets the user (and me) SEE whether Sortable is wired up correctly
+  // without needing Safari Web Inspector. Format:
+  //   "v61 • grids: N • last: choose/start/move/end/null @HH:MM:SS"
+  // If grids = 0, the useEffect didn't find any .habit-grid containers
+  // (sections collapsed / never on Habits tab when it ran). If grids
+  // > 0 but last stays "null" when user touches a card, Sortable's
+  // listeners aren't receiving touchstart (CSS / DOM issue between
+  // touch target and the library's document-level handler).
+  const [sortableDiag, setSortableDiag] = useState({ grids: 0, last: null, ts: null });
   // §13.3 — SortableJS lifecycle. When reorder mode flips ON, find each
   // section's .habit-grid container and instantiate a Sortable with
   // group="habits" so cross-section drags work. Cleanup destroys the
@@ -5424,6 +5434,14 @@ function App() {
     const Sortable = window.Sortable;
     const grids = Array.from(document.querySelectorAll('[data-sec] .habit-grid'));
     try { console.log("[verrocchio:sortable] init — grids found:", grids.length, "Sortable:", typeof Sortable); } catch (_) {}
+    setSortableDiag({ grids: grids.length, last: null, ts: null });
+    const stampDiag = (eventName) => {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
+      setSortableDiag(prev => ({ grids: prev.grids, last: eventName, ts: hh + ":" + mm + ":" + ss }));
+    };
     const instances = grids.map(gridEl => {
       try {
         return new Sortable(gridEl, {
@@ -5434,8 +5452,6 @@ function App() {
           chosenClass: "hrow-sortable-chosen",
           dragClass: "hrow-sortable-drag",
           fallbackOnBody: true,
-          // forceFallback gives a consistent dragged-clone on iOS
-          // Safari where native HTML5 drag is unsupported on touch.
           forceFallback: true,
           scroll: true,
           scrollSensitivity: 80,
@@ -5443,7 +5459,16 @@ function App() {
           bubbleScroll: true,
           delay: 0,
           touchStartThreshold: 4,
+          // §13.3 diagnostic — stamp each event so the top bar shows
+          // the user which phase the drag pipeline reached. onChoose
+          // fires when Sortable selects the touched card; onStart when
+          // movement exceeds touchStartThreshold; onMove on every
+          // pointer move during drag; onEnd on release.
+          onChoose: () => stampDiag("choose"),
+          onStart: () => stampDiag("start"),
+          onMove: () => { stampDiag("move"); return true; },
           onEnd: (evt) => {
+            stampDiag("end");
             const item = evt && evt.item;
             if (!item) return;
             const habitId = item.getAttribute("data-habit-id");
@@ -15779,7 +15804,22 @@ function App() {
             }, "Organize habits"),
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.2, marginTop: 2 }
-            }, "Drag any card to reorder. Tap Done when finished.")
+            }, "Drag any card to reorder. Tap Done when finished."),
+            // §13.3 diagnostic — visible status of the Sortable drag
+            // pipeline. Lets the user (and me, via screenshot) see
+            // exactly where the drag breaks on iOS Safari without
+            // needing Web Inspector. "v61 • grids: N • last: …"
+            /*#__PURE__*/React.createElement("div", {
+              style: {
+                fontSize: 9, color: "var(--c-text-faint)", lineHeight: 1.2,
+                marginTop: 2, fontVariantNumeric: "tabular-nums",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+              }
+            },
+              "v62 • grids: " + sortableDiag.grids
+              + " • last: " + (sortableDiag.last || "—")
+              + (sortableDiag.ts ? " @" + sortableDiag.ts : "")
+            )
           )
         ),
         /*#__PURE__*/React.createElement("button", {
