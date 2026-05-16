@@ -7013,6 +7013,58 @@ function App() {
   // tripId). A single tap (anchor === hover) still produces a one-day trip.
   const [tripDrag, setTripDrag] = useState(null); // null | { start, end }
 
+  // Test-only hook surface — exposes a handful of modal setters on
+  // window.__verrocchioTestHooks so the Playwright real-app dialog
+  // suite (tests/e2e/dialog-real-app.spec.js) can open the
+  // confirmWipe / confirmDeleteAcct / showJournalDisclaimer modals
+  // without driving the full auth + nav flow (confirmWipe's trigger
+  // is gated behind !demoMode and the others sit several screens
+  // deep). Gated on SHOW_DEBUG_UI (localhost or ?debug=1) so the
+  // hook never appears on the public site. Reads of getXxx() return
+  // a snapshot of state at the time of the call — React state is
+  // closed over via refs that mirror the latest values, so the test
+  // can always observe the most recent state.
+  const __dbgConfirmWipeRef = React.useRef(null);
+  const __dbgConfirmDeleteAcctRef = React.useRef(false);
+  const __dbgShowJournalDisclaimerRef = React.useRef(false);
+  React.useEffect(() => { __dbgConfirmWipeRef.current = confirmWipe; }, [confirmWipe]);
+  React.useEffect(() => { __dbgConfirmDeleteAcctRef.current = confirmDeleteAcct; }, [confirmDeleteAcct]);
+  React.useEffect(() => { __dbgShowJournalDisclaimerRef.current = showJournalDisclaimer; }, [showJournalDisclaimer]);
+  React.useEffect(() => {
+    if (!SHOW_DEBUG_UI) return;
+    // primeForDialogTests bypasses the login + splash + onboarding
+    // early-returns so the modal-rendering branch of the App actually
+    // runs. We use demoMode + a seeded data object with
+    // onboardingComplete: true; tourDone: true so neither the welcome
+    // splash nor the auto-tour starts. setHasSeenWelcome(true) clears
+    // the splash gate.
+    const primeForDialogTests = () => {
+      setHasSeenWelcome(true);
+      setSplashPhase(null);
+      setDemoMode(true);
+      setTourDone(true);
+      setTourStep(0);
+      setData({
+        habits: [], goals: [], todos: [], customGoalTypes: [],
+        customImportance: [], customSections: [], dayVisits: [],
+        bestStreaks: {}, achievementsUnlocked: {}, xp: 0,
+        journal: [], quotes: [], archive: [], travelDays: [],
+        homeLocation: "", onboardingComplete: true, tourDone: true,
+        journalDisclaimerAcked: true
+      });
+    };
+    window.__verrocchioTestHooks = {
+      primeForDialogTests,
+      setConfirmWipe: (v) => setConfirmWipe(v),
+      getConfirmWipe: () => __dbgConfirmWipeRef.current,
+      setConfirmDeleteAcct: (v) => setConfirmDeleteAcct(v),
+      getConfirmDeleteAcct: () => __dbgConfirmDeleteAcctRef.current,
+      setShowJournalDisclaimer: (v) => setShowJournalDisclaimer(v),
+      getShowJournalDisclaimer: () => __dbgShowJournalDisclaimerRef.current
+    };
+    return () => { try { delete window.__verrocchioTestHooks; } catch (_) {} };
+  }, []);
+
   /* GOAL EXPANDED HABITS */
   const [expGoalHabits, setExpGoalHabits] = useState({});
   const [expHabitGoals, setExpHabitGoals] = useState({});
@@ -26542,18 +26594,15 @@ function App() {
   // Cancel / Continue. Stage "2" is a typed-DELETE confirmation —
   // only the literal uppercase word DELETE enables the final button.
   // Reaching this modal is intentionally deliberate; both stages can
-  // be backed out by tapping Cancel or the dim.
-  confirmWipe && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "wipe-title",
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 330, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
-    onClick: e => { if (e.target === e.currentTarget) { setConfirmWipe(null); setConfirmWipeTyped(""); } }
+  // be backed out by tapping Cancel, the backdrop, or Escape.
+  // Migrated to A11yDialog (Port #6+#9 batch 1): role/aria-modal/
+  // focus-trap/Escape/backdrop-click are all handled by the wrapper.
+  confirmWipe && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => { setConfirmWipe(null); setConfirmWipeTyped(""); },
+    ariaLabelledby: "wipe-title",
+    overlayStyle: { background: "rgba(0,0,0,0.6)", zIndex: 330, alignItems: "center", padding: 20 },
+    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
   },
-    /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", width: "100%", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-    },
       /*#__PURE__*/React.createElement("div", {
         id: "wipe-title",
         style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "#b91c1c", marginBottom: 8 }
@@ -26588,7 +26637,9 @@ function App() {
         style: { display: "flex", gap: 8, justifyContent: "flex-end" }
       },
         /*#__PURE__*/React.createElement("button", {
-          onClick: () => { setConfirmWipe(null); setConfirmWipeTyped(""); },
+          // data-a11y-dialog-hide so the library closes the modal; the
+          // onHide handler above also clears the typed-text state.
+          "data-a11y-dialog-hide": true,
           style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
         }, "Cancel"),
         confirmWipe === "1"
@@ -26610,19 +26661,18 @@ function App() {
               }, "Delete All Data");
             })()
       )
-    )
   ),
-  confirmDeleteAcct && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "del-acct-title",
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 320, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 },
-    onClick: e => { if (e.target === e.currentTarget) { setConfirmDeleteAcct(false); setDeleteConfirmText(""); } }
+  // Delete-account confirmation modal. Migrated to A11yDialog
+  // (Port #6+#9 batch 1): role/aria-modal/focus-trap/Escape/backdrop-
+  // click are all handled by the wrapper. Cancel button uses
+  // data-a11y-dialog-hide so the library closes the modal; the onHide
+  // handler also clears the typed confirmation text.
+  confirmDeleteAcct && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => { setConfirmDeleteAcct(false); setDeleteConfirmText(""); },
+    ariaLabelledby: "del-acct-title",
+    overlayStyle: { background: "rgba(0,0,0,0.6)", zIndex: 320, alignItems: "center", padding: 20 },
+    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
   },
-    /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", width: "100%", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-    },
       /*#__PURE__*/React.createElement("div", {
         id: "del-acct-title",
         style: { fontFamily: "'Lora',serif", fontSize: 17, fontWeight: 700, color: "#991b1b", marginBottom: 8 }
@@ -26664,7 +26714,7 @@ function App() {
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
         /*#__PURE__*/React.createElement("button", {
           type: "button",
-          onClick: () => { setConfirmDeleteAcct(false); setDeleteConfirmText(""); },
+          "data-a11y-dialog-hide": true,
           disabled: acctBusy,
           style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: acctBusy ? "default" : "pointer" }
         }, "Cancel"),
@@ -26675,7 +26725,6 @@ function App() {
           style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "none", background: "#991b1b", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? "default" : "pointer", opacity: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? 0.5 : 1 }
         }, acctBusy ? "Deleting…" : "Delete forever")
       )
-    )
   ),
   // ── §9.1: Calendar day-detail snapshot — opened when the user taps
   //    a day cell in the Calendar modal's month grid. Shows that day's
@@ -26817,16 +26866,16 @@ function App() {
   // ── W3-T11: Journal / health disclaimer — surfaces once after the
   //    user's first journal save. Non-blocking; the entry was already
   //    committed in addJ() above.
-  showJournalDisclaimer && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "journal-disclaimer-title",
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }
+  // Migrated to A11yDialog (Port #6+#9 batch 1): role/aria-modal/
+  // focus-trap/Escape are handled by the wrapper. "Got it" button keeps
+  // its inline onClick because it has a side effect (writes the acked
+  // flag to data); onHide also clears the open-state for the Esc path.
+  showJournalDisclaimer && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setShowJournalDisclaimer(false),
+    ariaLabelledby: "journal-disclaimer-title",
+    overlayStyle: { background: "rgba(0,0,0,0.5)", padding: 16, zIndex: 1000, alignItems: "center" },
+    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
   },
-    /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-    },
       /*#__PURE__*/React.createElement("h2", {
         id: "journal-disclaimer-title",
         style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
@@ -26839,7 +26888,6 @@ function App() {
         onClick: () => { save({ ...data, journalDisclaimerAcked: true }); setShowJournalDisclaimer(false); },
         style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14 }
       }, "Got it")
-    )
   ),
   // ── W3-T12: AI consent gate — deferred activation. AI_ENABLED is
   //    false in v1.0 so this modal is reachable only via the wired AI
