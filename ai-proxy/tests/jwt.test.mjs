@@ -6,6 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { SignJWT, generateKeyPair } from "jose";
 import { signTestToken, getMockJwksUrl } from "./helpers/sign.js";
 import { verifyFirebaseToken } from "../worker.js";
 
@@ -67,4 +68,39 @@ test("accepts a valid token and returns the payload", async () => {
   const payload = await verifyFirebaseToken(token, PROJECT, JWKS_URL);
   assert.equal(payload.aud, PROJECT);
   assert.equal(payload.sub, "user-123");
+});
+
+test("rejects token signed with a different key", async () => {
+  // Generate a throwaway key pair — its public key is NOT in the mock JWKS.
+  const { privateKey: otherKey } = await generateKeyPair("RS256");
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: "RS256", kid: "test-key-1" })
+    .setIssuer(`https://securetoken.google.com/${PROJECT}`)
+    .setAudience(PROJECT)
+    .setSubject("attacker")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(otherKey);
+  await assert.rejects(
+    () => verifyFirebaseToken(token, PROJECT, JWKS_URL),
+    /signature|invalid/i
+  );
+});
+
+test("rejects alg:none token", async () => {
+  // Craft a header+payload with alg:none; third segment empty.
+  const header = Buffer.from(JSON.stringify({ alg: "none", kid: "test-key-1" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({
+    iss: `https://securetoken.google.com/${PROJECT}`,
+    aud: PROJECT,
+    sub: "attacker",
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  })).toString("base64url");
+  const token = `${header}.${payload}.`;
+  await assert.rejects(
+    () => verifyFirebaseToken(token, PROJECT, JWKS_URL),
+    /algorithm|alg/i
+  );
 });
