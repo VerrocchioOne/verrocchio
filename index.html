@@ -40,6 +40,16 @@
      don't fit in a Firestore doc (1 MB hard limit), so we upload up
      to 10 MB to Storage and store the download URL in Firestore. -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js" integrity="sha384-oze9siCpFoiDBZ37lLp99ZmOMO+je1s/xtvwtbNv3NXQXLpbpfPSzZSpbT3xV9da" crossorigin="anonymous"></script>
+<!-- SortableJS — production-grade drag-and-drop with iOS Safari touch
+     handling. Replaced the hand-rolled Pointer-Events drag pipeline in
+     reorder mode (§13.3) after multiple iOS regressions (capture-drop on
+     transforms, render-storm coalescing, scroll-vs-drag conflicts). The
+     library is loaded from unpkg, which is already in the service
+     worker's RUNTIME_CACHEABLE_HOSTS so first fetch warms the cache for
+     offline sessions. No SRI here because the library is queried via
+     CDN's mutable version path — pinning bytes would force a manual
+     rotation on every patch release. unpkg.com is HTTPS-only. -->
+<script src="https://unpkg.com/sortablejs@1.15.6/Sortable.min.js" crossorigin="anonymous"></script>
 <script src="utils.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -286,6 +296,26 @@ body.dark[data-device="desktop-wide"] .habit-miss-x:hover {
     gap: 10px;
     align-items: start;
   }
+}
+/* §13.3 SortableJS visual states — applied by the library to .hrow cards
+   while a reorder drag is active. The library handles the touch event
+   stream and CSS class lifecycle; these rules just style what each
+   state looks like.
+   • ghost  — placeholder element shown where the dragged card will land
+   • chosen — the source card the user grabbed (cursor only here; the
+              real drag visual is on the clone via dragClass)
+   • drag   — the floating clone that follows the pointer/finger */
+.hrow-sortable-ghost {
+  opacity: 0.4;
+  background: var(--c-surface-muted) !important;
+}
+.hrow-sortable-chosen {
+  cursor: grabbing;
+}
+.hrow-sortable-drag {
+  box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  opacity: 0.94;
+  transform: scale(1.02);
 }
 /* Habits tab — section-level layout. The five sections (Morning,
    Afternoon, Evening, Daily Completion, Avoid) are routinely walked
@@ -5344,299 +5374,30 @@ function App() {
   // crashes the App component on first render with a temporal
   // dead-zone ReferenceError.
   const [reorderMode, setReorderMode] = useState(false);
-  const reorderLongPressRef = useRef({ timer: null, habitId: null, startX: 0, startY: 0, pointerId: null });
-  const reorderDragRef = useRef(null);
-  // §13.3d — Live drop-preview indicator. While a reorder drag is
-  // active, every rAF-throttled pointermove also resolves the
-  // prospective drop target and stashes a viewport-coordinate rect
-  // describing where the insertion line should be drawn. Render path
-  // reads this ref + the same reorderDragTick used by drag transforms,
-  // so the indicator moves in lock-step with the dragged card.
-  // Cleared (set to null) on pointerup/pointercancel/exit.
-  const reorderDropPreviewRef = useRef(null);
-  const [reorderDragTick, setReorderDragTick] = useState(0);
-  // §13.3c — Auto-scroll while a reorder drag is active. A single
-  // rAF loop reads reorderDragRef.current.currentY and scrolls the
-  // window when the pointer is within EDGE_PX of the viewport top or
-  // bottom. Rate falls off linearly: at the very edge the page moves
-  // by MAX_RATE px/frame, easing to 0 as the pointer leaves the
-  // edge zone. Started on pointerdown, stopped on pointerup /
-  // pointercancel. Using "auto" (instant) scroll behavior — smooth
-  // scroll would fight the drag's translateY transform which is
-  // driven by clientY (a viewport coordinate that stays constant
-  // as the page scrolls underneath the pointer).
-  const reorderAutoScrollRafRef = useRef(0);
-  const startReorderAutoScroll = () => {
-    if (reorderAutoScrollRafRef.current) return; // already running
-    const EDGE_PX = 80;
-    const MAX_RATE = 8; // px per frame at the very edge
-    const step = () => {
-      const r = reorderDragRef.current;
-      if (!r) {
-        reorderAutoScrollRafRef.current = 0;
-        return;
-      }
-      const y = r.currentY;
-      const vh = window.innerHeight || 0;
-      let dy = 0;
-      if (y < EDGE_PX) {
-        // Falloff: y = 0  → 1.0, y = EDGE_PX → 0.0
-        const ratio = Math.max(0, Math.min(1, (EDGE_PX - y) / EDGE_PX));
-        dy = -Math.ceil(MAX_RATE * ratio);
-      } else if (y > vh - EDGE_PX) {
-        const ratio = Math.max(0, Math.min(1, (y - (vh - EDGE_PX)) / EDGE_PX));
-        dy = Math.ceil(MAX_RATE * ratio);
-      }
-      if (dy !== 0) {
-        window.scrollBy({ top: dy, left: 0, behavior: "auto" });
-        // §13.3e — Refresh the drag ref's currentScrollY so the
-        // dragged card's translateY recomputes to include the scroll
-        // delta on the next render. Without this the card visually
-        // lags behind the pointer as the page scrolls (was the iOS
-        // "glitchy" drag symptom). Pull from window.scrollY AFTER the
-        // scrollBy so the value reflects the actually-applied scroll
-        // (which may be clamped at page boundaries).
-        //
-        // §13.3e-fix-v55 — Coalesce the React render tick with the
-        // pointermove rAF via the shared `_rafScheduled` flag. The
-        // earlier v54 version called setReorderDragTick directly from
-        // inside this rAF, which (on iOS Safari + Capacitor with a
-        // 25k-line App component) caused a render-storm: every 16ms
-        // the entire habit list re-reconciled, the main thread
-        // saturated, and queued pointermove / pointerup events never
-        // reached the drag handle — drag appeared completely frozen.
-        // Routing through the same `_rafScheduled` gate the
-        // pointermove handler already uses guarantees at most ONE
-        // App re-render per animation frame, regardless of how many
-        // rAF sources fire. The scroll-anchor ref write is free
-        // (synchronous, no React work) and happens every frame;
-        // the render is throttled to the shared rAF.
-        r.currentScrollY = window.scrollY || window.pageYOffset || 0;
-        if (!r._rafScheduled) {
-          r._rafScheduled = true;
-          requestAnimationFrame(() => {
-            r._rafScheduled = false;
-            setReorderDragTick(t => t + 1);
-          });
-        }
-      }
-      reorderAutoScrollRafRef.current = requestAnimationFrame(step);
-    };
-    reorderAutoScrollRafRef.current = requestAnimationFrame(step);
-  };
-  const stopReorderAutoScroll = () => {
-    if (reorderAutoScrollRafRef.current) {
-      cancelAnimationFrame(reorderAutoScrollRafRef.current);
-      reorderAutoScrollRafRef.current = 0;
-    }
-  };
-  const cancelReorderLongPress = () => {
-    const r = reorderLongPressRef.current;
-    if (r && r.timer) {
-      clearTimeout(r.timer);
-    }
-    reorderLongPressRef.current = { timer: null, habitId: null, startX: 0, startY: 0, pointerId: null };
-  };
-  const exitReorderMode = () => {
-    cancelReorderLongPress();
-    // §13.3f — If a drag is in flight, also remove the window-level
-    // pointermove/pointerup listeners installed by onPointerDown.
-    // Otherwise they'd leak past exit and re-populate reorderDragRef
-    // on the next stray pointer event from a phantom drag.
-    if (reorderDragRef.current && typeof reorderDragRef.current._cleanupWin === "function") {
-      try { reorderDragRef.current._cleanupWin(); } catch (_) {}
-    }
-    reorderDragRef.current = null;
-    reorderDropPreviewRef.current = null;
-    stopReorderAutoScroll();
-    setReorderMode(false);
-  };
-  // §13.3d — Resolve the prospective drop target from a viewport
-  // (clientX, clientY) point during an active drag. Same algorithm
-  // as the original onPointerUp resolver (section hit-test, peer
-  // mid-point counting, layered-edge detection at ±25% of the peer's
-  // width) — extracted so both pointermove (live preview) and
-  // pointerup (commit) share one source of truth.
+  // §13.3 — SortableJS (loaded via CDN) owns the entire drag lifecycle
+  // now. The hand-rolled pipeline was removed after iOS Safari +
+  // Capacitor produced repeated regressions around pointer-capture
+  // invalidation on CSS transforms, render-storm coalescing, and
+  // scroll-vs-drag conflict.
   //
-  // Returns null when the drag isn't active. Otherwise returns
-  // { targetSection, targetIndexInSection, targetConcurrent,
-  //   layeredPeerId, layeredSide, indicatorRect } where indicatorRect
-  // describes WHERE to draw the insertion-line indicator in viewport
-  // (position:fixed) coordinates:
-  //   { kind: "horizontal", x, y, width, height }  — between rows /
-  //       top of section / bottom of section
-  //   { kind: "vertical",   x, y, width, height }  — adjacent to a
-  //       peer's left or right edge (layered drop)
-  // The renderer translates this directly into a position:fixed
-  // overlay element. indicatorRect is null when the drop can't be
-  // resolved (no chosen section, no peers and pointer outside any
-  // section) — in that case no indicator is shown.
-  const resolveReorderDrop = (dragRef, dropX, dropY) => {
-    const r = dragRef;
-    if (!r) return null;
-    const sectionEls = Array.from(document.querySelectorAll('[data-sec]'));
-    let targetSection = r.originalSection;
-    let targetIndexInSection = -1;
-    let layeredPeerId = null;
-    let layeredSide = null;
-    let chosenEl = null;
-    for (const el of sectionEls) {
-      const rect = el.getBoundingClientRect();
-      const horizontalHit = dropX >= rect.left && dropX <= rect.right;
-      const verticalHit = dropY >= rect.top && dropY <= rect.bottom;
-      if (horizontalHit && verticalHit) { chosenEl = el; break; }
-    }
-    if (!chosenEl && sectionEls.length > 0) {
-      let bestDist = Infinity;
-      for (const el of sectionEls) {
-        const rect = el.getBoundingClientRect();
-        const cx = (rect.left + rect.right) / 2;
-        const cy = (rect.top + rect.bottom) / 2;
-        const dist = Math.hypot(dropX - cx, dropY - cy);
-        if (dist < bestDist) { bestDist = dist; chosenEl = el; }
-      }
-    }
-    let indicatorRect = null;
-    if (chosenEl) {
-      targetSection = chosenEl.getAttribute("data-sec") || r.originalSection;
-      // §5.8c — Slot-aware peer filter. For multi-slot drags, only the
-      // ACTUAL dragged card (matching habitId + slotId) is excluded
-      // from the peer list — sibling slot cards of the same habit are
-      // legitimate drop neighbors. For single-slot drags (r.slotId
-      // null), any card with the same habitId is excluded (legacy
-      // behavior: a habit can't be its own peer).
-      const _isMultiSlot = r.slotId != null;
-      const peers = Array.from(chosenEl.querySelectorAll('.hrow[data-habit-id][data-reorderable="1"]'))
-        .filter(el => {
-          const elHabit = String(el.getAttribute("data-habit-id"));
-          if (elHabit !== String(r.habitId)) return true;
-          if (!_isMultiSlot) return false;
-          const elSlot = el.getAttribute("data-slot-id") || null;
-          // Same habitId — exclude only the exact slot being dragged.
-          return elSlot !== r.slotId;
-        })
-        .map(el => {
-          const rc = el.getBoundingClientRect();
-          return {
-            id: el.getAttribute("data-habit-id"),
-            mid: rc.top + rc.height / 2,
-            top: rc.top,
-            bottom: rc.bottom,
-            left: rc.left,
-            right: rc.right,
-            width: rc.width,
-            height: rc.height
-          };
-        })
-        .sort((a, b) => a.mid - b.mid);
-      const EDGE_RATIO = 0.25;
-      let layeredPeer = null;
-      // §5.8c — Multi-slot drags ignore layered-edge detection. A
-      // "layered cohort" (two habits sharing one row) is a whole-habit
-      // concept; one SLOT of a multi-slot habit can't layer into a
-      // peer's cohort. Treating layered drops as cross-section moves
-      // for multi-slot drags falls through to the horizontal-insertion
-      // path below.
-      if (!_isMultiSlot) {
-        for (const p of peers) {
-          if (dropY < p.top || dropY > p.bottom) continue;
-          const leftEdgeMax = p.left + p.width * EDGE_RATIO;
-          const rightEdgeMin = p.right - p.width * EDGE_RATIO;
-          if (dropX <= leftEdgeMax) {
-            layeredPeer = p; layeredSide = "left"; break;
-          }
-          if (dropX >= rightEdgeMin) {
-            layeredPeer = p; layeredSide = "right"; break;
-          }
-        }
-      }
-      let idx = 0;
-      for (const p of peers) {
-        if (dropY > p.mid) idx++;
-        else break;
-      }
-      if (layeredPeer) {
-        const peerIndex = peers.indexOf(layeredPeer);
-        targetIndexInSection = peerIndex + (layeredSide === "right" ? 1 : 0);
-        layeredPeerId = layeredPeer.id;
-        // Vertical bar flush with the peer's chosen edge. ~3px wide,
-        // sits on the edge itself (centered on the edge line so half
-        // overlaps the peer card and half overlaps the gap next to it).
-        const BAR_W = 3;
-        const edgeX = layeredSide === "left" ? layeredPeer.left : layeredPeer.right;
-        indicatorRect = {
-          kind: "vertical",
-          x: edgeX - BAR_W / 2,
-          y: layeredPeer.top,
-          width: BAR_W,
-          height: layeredPeer.height
-        };
-      } else {
-        targetIndexInSection = idx;
-        // Horizontal line at the insertion gap. Width matches the
-        // chosen section column (so the line visually spans the
-        // column the card will live in). Three cases:
-        //   - no peers in section: line at top of section's card area
-        //   - drop above the first peer: line just above peers[0]
-        //   - drop below the last peer: line just below last peer
-        //   - between two peers: line midway between them
-        const sectionRect = chosenEl.getBoundingClientRect();
-        const LINE_H = 3;
-        let lineX = sectionRect.left;
-        let lineW = sectionRect.width;
-        // Prefer the .habit-grid child's width when present so the
-        // line aligns with the actual card column rather than the
-        // section's outer padding. Falls back to the section rect.
-        const grid = chosenEl.querySelector('.habit-grid');
-        if (grid) {
-          const gr = grid.getBoundingClientRect();
-          if (gr.width > 0) {
-            lineX = gr.left;
-            lineW = gr.width;
-          }
-        }
-        let lineY;
-        if (peers.length === 0) {
-          // Empty section — draw the line near the top of the
-          // section's grid (just below the header) so dropping
-          // anywhere in the empty column shows a sensible target.
-          if (grid) {
-            const gr = grid.getBoundingClientRect();
-            lineY = gr.top + 4;
-          } else {
-            lineY = sectionRect.top + 36;
-          }
-        } else if (idx <= 0) {
-          // Above the first peer.
-          lineY = peers[0].top - 4;
-        } else if (idx >= peers.length) {
-          // Below the last peer.
-          lineY = peers[peers.length - 1].bottom + 1;
-        } else {
-          // Between peers[idx-1] and peers[idx]. Midpoint of the
-          // gap between them.
-          const above = peers[idx - 1];
-          const below = peers[idx];
-          lineY = (above.bottom + below.top) / 2 - LINE_H / 2;
-        }
-        indicatorRect = {
-          kind: "horizontal",
-          x: lineX,
-          y: lineY,
-          width: lineW,
-          height: LINE_H
-        };
-      }
-    }
-    if (targetIndexInSection < 0) return null;
-    return {
-      targetSection,
-      targetIndexInSection,
-      targetConcurrent: !!layeredPeerId,
-      layeredPeerId,
-      layeredSide,
-      indicatorRect
-    };
+  // The refs/state below are kept as INERT NO-OPS because the renderCard
+  // body + sig calculation still reference reorderDragRef.current /
+  // reorderDropPreviewRef.current / reorderDragTick at a handful of
+  // call-sites. Re-declaring them as useRef(null) / useState(0) makes
+  // those references benign: short-circuits like `reorderDragRef.current &&
+  // ...` always short-circuit, dragOffsetY = 0, isBeingDragged = false,
+  // and Sortable's own ghost/drag classes handle the actual drag visuals.
+  // Removing the lingering references entirely is a follow-up cleanup;
+  // keeping them as no-ops is the surgical fix.
+  const reorderDragRef = useRef(null);
+  const reorderDropPreviewRef = useRef(null);
+  const [reorderDragTick] = useState(0);
+  const exitReorderMode = () => {
+    // Sortable instances are owned by the useEffect below and torn down
+    // in its cleanup; flipping reorderMode false drops the effect and
+    // its cleanup fires automatically. No imperative cleanup needed
+    // here.
+    setReorderMode(false);
   };
   // §13.3 — Exit habit reorder mode whenever the user navigates away
   // from the Habits tab (bottom-tab tap). Tap-Home, tap-Goals etc.
@@ -5648,37 +5409,91 @@ function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
-  // §13.3 — Scroll-to-top gesture exits reorder mode. Listens on
-  // window so any upward scroll past 0 dismisses the mode. Throttled
-  // by the browser's native scroll cadence; no extra rAF needed.
-  //
-  // §13.3e-fix-v55 — Skip the exit when a drag is currently in
-  // progress. Without this guard, the §13.3c auto-scroll loop
-  // would kill its own drag the moment its scroll reached y=0
-  // (e.g., user drags toward the top of the viewport, auto-scroll
-  // walks the page up to the apex, scroll listener sees y<=0
-  // after lastY>24 and calls exitReorderMode → reorderDragRef
-  // is nulled, drag silently dies). The user-initiated
-  // scroll-to-top-to-exit gesture only happens between drags,
-  // when reorderDragRef.current is null.
+  // §13.3 — SortableJS lifecycle. When reorder mode flips ON, find each
+  // section's .habit-grid container and instantiate a Sortable with
+  // group="habits" so cross-section drags work. Cleanup destroys the
+  // instances on mode exit (or unmount). The library handles touch +
+  // mouse pointer events, auto-scroll, ghost/drag visuals, and iOS
+  // touch quirks that our hand-rolled pipeline kept regressing on.
   useEffect(() => {
     if (!reorderMode) return;
-    let lastY = window.scrollY || window.pageYOffset || 0;
-    const onScroll = () => {
-      const y = window.scrollY || window.pageYOffset || 0;
-      // Only exit on a clear scroll-to-top — reached top after being
-      // somewhere below. Filters out tiny rubber-band noise on iOS.
-      // Also skip while a drag is active so auto-scroll can't kill
-      // its own drag at the page apex.
-      if (y <= 0 && lastY > 24 && !reorderDragRef.current) {
-        exitReorderMode();
+    if (typeof window.Sortable === "undefined") {
+      try { console.warn("[verrocchio] Sortable not loaded yet — drag disabled"); } catch (_) {}
+      return;
+    }
+    const Sortable = window.Sortable;
+    const grids = Array.from(document.querySelectorAll('[data-sec] .habit-grid'));
+    const instances = grids.map(gridEl => {
+      try {
+        return new Sortable(gridEl, {
+          group: "habits",
+          animation: 180,
+          draggable: '.hrow[data-reorderable="1"]',
+          ghostClass: "hrow-sortable-ghost",
+          chosenClass: "hrow-sortable-chosen",
+          dragClass: "hrow-sortable-drag",
+          fallbackOnBody: true,
+          // forceFallback gives a consistent dragged-clone on iOS
+          // Safari where native HTML5 drag is unsupported on touch.
+          forceFallback: true,
+          scroll: true,
+          scrollSensitivity: 80,
+          scrollSpeed: 12,
+          bubbleScroll: true,
+          delay: 0,
+          touchStartThreshold: 4,
+          onEnd: (evt) => {
+            const item = evt && evt.item;
+            if (!item) return;
+            const habitId = item.getAttribute("data-habit-id");
+            const slotId = item.getAttribute("data-slot-id") || null;
+            const toGrid = evt.to;
+            let targetSection = null;
+            let n = toGrid;
+            while (n && n !== document.body) {
+              if (n.getAttribute && n.getAttribute("data-sec")) {
+                targetSection = n.getAttribute("data-sec");
+                break;
+              }
+              n = n.parentElement;
+            }
+            if (!targetSection || !habitId) return;
+            const targetIndex = typeof evt.newIndex === "number" ? evt.newIndex : 0;
+            // Multi-slot slot card: rewrite slotSections[arrayIdx] only
+            // for cross-section moves. Same-section is a no-op (slot
+            // order within a section is rendered from the array, so
+            // SortableJS's DOM reorder would desync from data on the
+            // next render).
+            const slotMatch = slotId ? /^(.+):(\d+)$/.exec(slotId) : null;
+            if (slotMatch) {
+              const originalSection = slotMatch[1];
+              const arrayIdx = parseInt(slotMatch[2], 10);
+              if (Number.isFinite(arrayIdx) && targetSection !== originalSection) {
+                if (typeof commitSlotReorderDrop === "function") {
+                  commitSlotReorderDrop(habitId, arrayIdx, targetSection);
+                }
+              }
+            } else {
+              if (typeof commitHabitReorderDrop === "function") {
+                commitHabitReorderDrop(habitId, targetSection, targetIndex, {
+                  targetConcurrent: false,
+                  layeredPeerId: null,
+                  layeredSide: null
+                });
+              }
+            }
+          }
+        });
+      } catch (e) {
+        try { console.warn("[verrocchio] Sortable init failed:", e && e.message); } catch (_) {}
+        return null;
       }
-      lastY = y;
+    }).filter(Boolean);
+    return () => {
+      instances.forEach(s => { try { s.destroy(); } catch (_) {} });
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reorderMode]);
+  }, [reorderMode, data.habits]);
   const [saved, setSaved] = useState(false);
   // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
