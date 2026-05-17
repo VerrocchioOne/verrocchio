@@ -25998,12 +25998,15 @@ function App() {
       );
     })();
     const panels = { account: accountPanel, scorecard: scorecardPanel, inspiration: inspirationPanel, content: myContentPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
-    return /*#__PURE__*/React.createElement("div", {
-      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-      onClick: e => { if (e.target === e.currentTarget) setShowProfile(false); }
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 720, height: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden" }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus. Multi-panel modal; the header section label drives
+    // ariaLabelledby. Close X uses data-a11y-dialog-hide; backdrop and
+    // Escape route through onHide.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: () => setShowProfile(false),
+      ariaLabelledby: "profile-section-title",
+      overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300 },
+      cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", maxWidth: 720, height: "88vh", maxHeight: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }
     },
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", flexShrink: 0 }
@@ -26016,10 +26019,10 @@ function App() {
           /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } }),
           /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } }),
           /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } })),
-        /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 14, fontWeight: 700, color: "#6b7280", textTransform: "capitalize" } },
+        /*#__PURE__*/React.createElement("div", { id: "profile-section-title", style: { fontFamily: "'Lora',serif", fontSize: 14, fontWeight: 700, color: "#6b7280", textTransform: "capitalize" } },
           (NAV_ITEMS.find(n => n.val === profileSection) || {}).label || "Profile"),
         /*#__PURE__*/React.createElement("button", { "aria-label": "Close",
-          onClick: () => setShowProfile(false),
+          "data-a11y-dialog-hide": true,
           style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 16, color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center" }
         }, "\xD7")),
       /*#__PURE__*/React.createElement("div", {
@@ -26035,38 +26038,46 @@ function App() {
         /*#__PURE__*/React.createElement("div", {
           style: { flex: 1, minWidth: 0, padding: "12px 14px 18px", overflowY: "auto" }
         }, panels[profileSection] || panels.account))
-    ));
+    );
   })(), goalMoreMenu && (() => {
     const _g = data.goals.find(g => g.id === goalMoreMenu);
     if (!_g) return null;
     const _btnStyle = (color, first) => ({width:"100%",display:"flex",alignItems:"center",padding:"15px 4px",background:"none",border:"none",cursor:"pointer",fontSize:15,color:color,textAlign:"left",fontWeight:500,borderTop:first?"none":"1px solid #f3f4f6"});
-    return /*#__PURE__*/React.createElement("div", {
-      style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"},
-      onClick:e=>{if(e.target===e.currentTarget)setGoalMoreMenu(null);}
-    }, /*#__PURE__*/React.createElement("div", {
-      className:"fade-in",
-      style:{background:"#fff",borderRadius:"20px 20px 0 0",padding:"24px 20px",width:"100%",maxWidth:640,boxShadow:"0 -8px 40px rgba(0,0,0,.2)"}
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus. Each action button preserves its own state-change
+    // chain (setGoalMoreMenu(null) clears this modal AND may open a
+    // sibling); the React state change unmounts the wrapper cleanly.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: () => setGoalMoreMenu(null),
+      ariaLabelledby: "goal-more-title",
+      overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300 },
+      cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", padding: "24px 20px", maxWidth: 640, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
     },
       /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-        /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, _g.text),
-        /*#__PURE__*/React.createElement("button", { "aria-label": "Close",onClick:()=>setGoalMoreMenu(null),style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
+        /*#__PURE__*/React.createElement("div", {id:"goal-more-title",style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, _g.text),
+        /*#__PURE__*/React.createElement("button", { "aria-label": "Close","data-a11y-dialog-hide":true,style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
       ),
       /*#__PURE__*/React.createElement("div", {style:{height:1,background:"var(--c-surface-muted)",margin:"14px 0"}}),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{setGoalJournal({id:_g.id, text:_g.text}); setGoalJournalTxt(""); setGoalMoreMenu(null);},style:_btnStyle("#0891b2",true)}, "\uD83D\uDCDD\u2002Add Journal Entry"),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{sEGoal(_g);setGoalMoreMenu(null);},style:_btnStyle("var(--c-text)",false)}, "\u270E\u2002Edit Goal"),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{setCompleteGoalModal(_g);setGoalMoreMenu(null);},style:_btnStyle("#16a34a",false)}, "\u2713\u2002Mark Complete"),
       /*#__PURE__*/React.createElement("button", {onClick:()=>{delGoal(_g.id);setGoalMoreMenu(null);},style:_btnStyle("#dc2626",false)}, "\uD83D\uDDD1\u2002Delete Goal")
-    ));
-  })(), goalJournal && /*#__PURE__*/React.createElement("div", {
-    style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"flex-end",justifyContent:"center"},
-    onClick:e=>{if(e.target===e.currentTarget)setGoalJournal(null);}
-  }, /*#__PURE__*/React.createElement("div", {
-    className:"fade-in",
-    style:{background:"#fff",borderRadius:"20px 20px 0 0",padding:"24px 20px",width:"100%",maxWidth:640,boxShadow:"0 -8px 40px rgba(0,0,0,.2)"}
+    );
+  })(),
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus. autoFocus on the textarea moves keyboard cursor into
+  // the textarea on open; a11y-dialog's focus-trap respects autofocus
+  // when present and tabs cycle within the dialog. Save button keeps
+  // its own state-clear; close X uses data-a11y-dialog-hide.
+  goalJournal && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setGoalJournal(null),
+    ariaLabelledby: "goal-journal-title",
+    overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300 },
+    cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", padding: "24px 20px", maxWidth: 640, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
   },
     /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
-      /*#__PURE__*/React.createElement("div", {style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, "Journal: ", goalJournal.text),
-      /*#__PURE__*/React.createElement("button", { "aria-label": "Close",onClick:()=>setGoalJournal(null),style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
+      /*#__PURE__*/React.createElement("div", {id:"goal-journal-title",style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, "Journal: ", goalJournal.text),
+      /*#__PURE__*/React.createElement("button", { "aria-label": "Close","data-a11y-dialog-hide":true,style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
     ),
     /*#__PURE__*/React.createElement("textarea", {
       value: goalJournalTxt,
@@ -26085,7 +26096,7 @@ function App() {
       },
       style:{marginTop:12,width:"100%",background:"#2d5a2d",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:600,cursor:"pointer"}
     }, "Save Entry")
-  )), showXpChart && (() => {
+  ), showXpChart && (() => {
     // XP-per-day map derived from habit completions. XP rules mirror
     // togHabit: Non-Negotiable = 30, Important = 20, Additive = 10.
     // Done only — missed/none contribute nothing. To-dos aren't XP-
@@ -26193,22 +26204,24 @@ function App() {
       }
     }, label);
     const CHART_H = 180;
-    return /*#__PURE__*/React.createElement("div", {
-      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 320, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-      onClick: e => { if (e.target === e.currentTarget) setShowXpChart(false); }
-    }, /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 720, maxHeight: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden" }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus. onHide clears both showXpChart and selectedXpBar so
+    // backdrop/Escape behave the same as the explicit X.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: () => { setShowXpChart(false); setSelectedXpBar(null); },
+      ariaLabelledby: "xp-history-title",
+      overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 320 },
+      cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", maxWidth: 720, maxHeight: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }
     },
       /*#__PURE__*/React.createElement("div", {
         style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6" }
       },
         /*#__PURE__*/React.createElement("div", null,
-          /*#__PURE__*/React.createElement("div", { className: "card-title", style: { fontSize: 18, color: "var(--c-text-strong)" } }, "XP history"),
+          /*#__PURE__*/React.createElement("div", { id: "xp-history-title", className: "card-title", style: { fontSize: 18, color: "var(--c-text-strong)" } }, "XP history"),
           /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, totalInRange.toLocaleString() + " XP in range · avg " + avg.toLocaleString() + "/" + xpChartGrain)
         ),
         /*#__PURE__*/React.createElement("button", {
-          type: "button", onClick: () => { setShowXpChart(false); setSelectedXpBar(null); }, "aria-label": "Close",
+          type: "button", "data-a11y-dialog-hide": true, "aria-label": "Close",
           style: { background: "transparent", border: "none", fontSize: 22, color: "#6b7280", cursor: "pointer", padding: 4, lineHeight: 1 }
         }, "\u00d7")
       ),
@@ -26478,7 +26491,7 @@ function App() {
       /*#__PURE__*/React.createElement("div", {
         style: { fontSize: 11, color: "var(--c-text-soft)", textAlign: "center", padding: "10px 18px 16px" }
       }, "Tap a bar to see which habits earned that XP. Hold the XP bar in the header to open achievements.")
-    ));
+    );
   })(),
   // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
   // return-focus from the wrapper. The header title gets an id for
@@ -26607,14 +26620,18 @@ function App() {
         );
       })
     )
-  ), addCatModal && /*#__PURE__*/React.createElement("div", {
-    style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24},
-    onClick:e=>{if(e.target===e.currentTarget)setAddCatModal(false);}
-  }, /*#__PURE__*/React.createElement("div", {
-    className:"fade-in",
-    style:{background:"#fff",borderRadius:16,padding:"24px 20px",width:"100%",maxWidth:360,boxShadow:"0 8px 40px rgba(0,0,0,.2)"}
+  ),
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus. autoFocus on the input keeps the keyboard cursor
+  // there. Cancel uses data-a11y-dialog-hide; Create still does the
+  // save+state-flip work and the wrapper unmounts on next render.
+  addCatModal && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setAddCatModal(false),
+    ariaLabelledby: "add-cat-title",
+    overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300, alignItems: "center", padding: 24 },
+    cardStyle: { background: "#fff", borderRadius: 16, padding: "24px 20px", maxWidth: 360, boxShadow: "0 8px 40px rgba(0,0,0,.2)" }
   },
-    /*#__PURE__*/React.createElement("div", {className:"card-title",style:{fontSize:16,color:"var(--c-text-strong)",marginBottom:16}}, "New Goal Category"),
+    /*#__PURE__*/React.createElement("div", {id:"add-cat-title",className:"card-title",style:{fontSize:16,color:"var(--c-text-strong)",marginBottom:16}}, "New Goal Category"),
     /*#__PURE__*/React.createElement("input", {
       value: newCatName, onChange: e => setNewCatName(e.target.value),
       placeholder: "Category name (e.g. Health, Family...)",
@@ -26630,7 +26647,7 @@ function App() {
       )
     ),
     /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8}},
-      /*#__PURE__*/React.createElement("button", {onClick:()=>setAddCatModal(false),style:{flex:1,background:"var(--c-surface-muted)",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#6b7280",cursor:"pointer"}}, "Cancel"),
+      /*#__PURE__*/React.createElement("button", {"data-a11y-dialog-hide":true,style:{flex:1,background:"var(--c-surface-muted)",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#6b7280",cursor:"pointer"}}, "Cancel"),
       /*#__PURE__*/React.createElement("button", {
         onClick: () => {
           const name = newCatName.trim();
@@ -26649,7 +26666,7 @@ function App() {
         style:{flex:2,background:"#2d5a2d",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer"}
       }, "Create Category")
     )
-  )),
+  ),
   // ── Delete-account confirmation modal ──
   //    Double-check for the destructive account-delete action. Re-
   //    uses the acctCurrentPw input the user already typed in the
