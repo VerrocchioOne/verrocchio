@@ -27609,17 +27609,15 @@ function App() {
       h = h % 12; if (h === 0) h = 12;
       return h + ":" + mins + " " + ampm;
     };
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "te-title",
-      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 315, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-      onClick: e => { if (e.target === e.currentTarget) close(); }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus. commit() invokes setSwipeFb / closes via internal
+    // setTimeEntry(null) — same close path as Cancel.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: close,
+      ariaLabelledby: "te-title",
+      overlayStyle: { zIndex: 315 },
+      cardStyle: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "20px 18px 22px", maxWidth: 480, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
     },
-      /*#__PURE__*/React.createElement("div", {
-        className: "fade-in",
-        style: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "20px 18px 22px", width: "100%", maxWidth: 480, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
-      },
         /*#__PURE__*/React.createElement("div", {
           id: "te-title",
           style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.3 }
@@ -27655,10 +27653,9 @@ function App() {
         ),
         /*#__PURE__*/React.createElement("button", {
           type: "button",
-          onClick: close,
+          "data-a11y-dialog-hide": true,
           style: { width: "100%", minHeight: 44, padding: "10px 14px", borderRadius: 10, border: "none", background: "var(--c-surface-muted)", color: "#6b7280", fontSize: 13, fontWeight: 600, cursor: "pointer" }
         }, "Cancel")
-      )
     );
   })(),
   // ── Custom-order reorder modal — opened by long-press on a Habits
@@ -28183,34 +28180,18 @@ function App() {
       : ctx.kind === "goalAreas" ? HT.map(t => ({ id: t.value, text: t.value }))
       : (data.habits || []);
     const itemsById = new Map(pool.map(x => [String(x.id), x]));
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "reorder-title",
-      style: {
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        zIndex: 310,
-        display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "center"
-      },
-      onClick: e => { if (e.target === e.currentTarget) { setReorderCtx(null); setReorderDraft([]); setOrganizeOverrides({}); setOrganizeSelection([]); } }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus. All close paths (X, Cancel, backdrop, Escape) route
+    // through onHide which clears the four staging state vars together.
+    // Save calls saveReorder which clears state internally; the wrapper
+    // unmounts cleanly on the next render.
+    const closeReorderCtx = () => { setReorderCtx(null); setReorderDraft([]); setOrganizeOverrides({}); setOrganizeSelection([]); };
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: closeReorderCtx,
+      ariaLabelledby: "reorder-title",
+      overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 310 },
+      cardStyle: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "20px 18px 22px", maxWidth: 520, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
     },
-      /*#__PURE__*/React.createElement("div", {
-        className: "fade-in",
-        style: {
-          background: "var(--c-surface, #fff)",
-          borderRadius: "20px 20px 0 0",
-          padding: "20px 18px 22px",
-          width: "100%",
-          maxWidth: 520,
-          maxHeight: "80vh",
-          overflowY: "auto",
-          boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
-        }
-      },
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }
         },
@@ -28225,7 +28206,7 @@ function App() {
           /*#__PURE__*/React.createElement("button", {
             type: "button",
             "aria-label": "Close organize modal",
-            onClick: () => { setReorderCtx(null); setReorderDraft([]); setOrganizeOverrides({}); setOrganizeSelection([]); },
+            "data-a11y-dialog-hide": true,
             style: {
               background: "var(--c-surface-muted)",
               border: "none",
@@ -28619,7 +28600,7 @@ function App() {
         },
           /*#__PURE__*/React.createElement("button", {
             type: "button",
-            onClick: () => { setReorderCtx(null); setReorderDraft([]); setOrganizeOverrides({}); setOrganizeSelection([]); },
+            "data-a11y-dialog-hide": true,
             style: { flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#6b7280", cursor: "pointer" }
           }, "Cancel"),
           /*#__PURE__*/React.createElement("button", {
@@ -28629,7 +28610,6 @@ function App() {
             style: { flex: 2, background: "#2d5a2d", border: "none", borderRadius: 8, padding: 11, fontSize: 13, fontWeight: 600, color: "#fff", cursor: reorderDraft.length === 0 ? "default" : "pointer", opacity: reorderDraft.length === 0 ? 0.5 : 1 }
           }, ctx.kind === "habitSection" ? "Save & close" : "Save order")
         )
-      )
     );
   })(),
   editHabitModal && /*#__PURE__*/React.createElement("div", {
