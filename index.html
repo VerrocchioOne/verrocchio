@@ -10179,17 +10179,17 @@ function App() {
         )
       );
     };
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-label": "Sort options",
-      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 305, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-      onClick: e => { if (e.target === e.currentTarget) close(); }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus from the wrapper. close() is invoked programmatically
+    // by pick() and openReorder() (clearing openSortMenu state); the
+    // wrapper unmounts in turn and the library's destroy() handles focus
+    // return. Backdrop click + Escape route through onHide.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: close,
+      dialogProps: { "aria-label": "Sort options" },
+      overlayStyle: { zIndex: 305 },
+      cardStyle: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "18px 16px 22px", maxWidth: 520, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
     },
-      /*#__PURE__*/React.createElement("div", {
-        className: "fade-in",
-        style: { background: "var(--c-surface, #fff)", borderRadius: "20px 20px 0 0", padding: "18px 16px 22px", width: "100%", maxWidth: 520, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
-      },
         /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.3 }
         }, "Sort"),
@@ -10215,7 +10215,6 @@ function App() {
         page === "habits" && /*#__PURE__*/React.createElement("div", {
           style: { marginTop: 8, padding: "8px 10px", fontSize: 11, color: "#6b7280", textAlign: "center" }
         }, "Press and hold a habit card to drag it into a new position.")
-      )
     );
   };
 
@@ -14863,30 +14862,33 @@ function App() {
     }
 
     // Bottom-sheet modal for long-press actions.
-    const sheet = pillSheet ? /*#__PURE__*/React.createElement("div", {
-      onClick: () => setPillSheet(null),
-      style: { position: "fixed", inset: 0, background: "rgba(17,24,39,.45)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus from the wrapper. Each action button still calls its
+    // own onClick (which performs the action) plus carries
+    // data-a11y-dialog-hide so the wrapper closes after.
+    const sheet = pillSheet ? /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: () => setPillSheet(null),
+      ariaLabelledby: "pillsheet-title",
+      overlayStyle: { background: "rgba(17,24,39,.45)", zIndex: 200 },
+      cardStyle: { maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", boxShadow: "0 -4px 20px rgba(0,0,0,.2)" }
     },
-      /*#__PURE__*/React.createElement("div", {
-        onClick: e => e.stopPropagation(),
-        style: { width: "100%", maxWidth: 480, background: "#fff", borderRadius: "20px 20px 0 0", padding: "14px 16px 22px", boxShadow: "0 -4px 20px rgba(0,0,0,.2)" }
-      },
         /*#__PURE__*/React.createElement("div", {
           style: { width: 40, height: 4, background: "#d1d5db", borderRadius: 2, margin: "0 auto 14px" }
         }),
         /*#__PURE__*/React.createElement("div", {
+          id: "pillsheet-title",
           style: { fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, textAlign: "center", marginBottom: 12 }
         }, pillSheet.title),
         pillSheet.actions.map((a, i) => /*#__PURE__*/React.createElement("button", {
           key: "act" + i,
-          onClick: () => { a.onClick(); setPillSheet(null); },
+          "data-a11y-dialog-hide": true,
+          onClick: () => a.onClick(),
           style: { width: "100%", background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 600, color: "var(--c-text)", marginBottom: 8, cursor: "pointer", textAlign: "center" }
         }, a.label)),
         /*#__PURE__*/React.createElement("button", {
-          onClick: () => setPillSheet(null),
+          "data-a11y-dialog-hide": true,
           style: { width: "100%", background: "transparent", border: "none", padding: "10px", fontSize: 13, color: "#6b7280", cursor: "pointer", marginTop: 4 }
         }, "Cancel")
-      )
     ) : null;
 
     const pillsSection = bottomPills.length > 0 ? /*#__PURE__*/React.createElement("div", {
@@ -23225,15 +23227,18 @@ function App() {
                           unauthenticated viewer back to the login
                           screen, which would unmount any toast
                           rendered after the fact. */
-  confirmExitDemo && /*#__PURE__*/React.createElement("div", {
-    style: {
-      position: "fixed", inset: 0,
-      background: "rgba(0,0,0,0.55)",
-      zIndex: 10100,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: 20
-    },
-    onClick: e => { if (e.target === e.currentTarget) setConfirmExitDemo(null); }
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus from the wrapper. Two phases ("confirm" | "hint")
+  // render different cards inside the SAME wrapper instance so the
+  // phase transition doesn't tear down the dialog. Transparent cardStyle
+  // lets each phase's glassmorphism tour-tip div be the visible card.
+  // "Exit Demo" intentionally does NOT carry data-a11y-dialog-hide \u2014
+  // it transitions phase, doesn't close.
+  confirmExitDemo && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setConfirmExitDemo(null),
+    ariaLabelledby: "exit-demo-title",
+    overlayStyle: { background: "rgba(0,0,0,0.55)", zIndex: 10100, alignItems: "center", padding: 20 },
+    cardStyle: { background: "transparent", boxShadow: "none", padding: 0, borderRadius: 0, maxWidth: 400, maxHeight: "85vh", overflowY: "auto" }
   }, confirmExitDemo === "confirm"
     ? /*#__PURE__*/React.createElement("div", {
         className: "fade-in lg tour-tip",
@@ -23247,6 +23252,7 @@ function App() {
       },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 28, textAlign: "center", marginBottom: 12 } }, "\u{1F44B}"),
         /*#__PURE__*/React.createElement("div", {
+          id: "exit-demo-title",
           className: "tour-tip-title card-title",
           style: { fontSize: 16, textAlign: "center", marginBottom: 8 }
         }, "Exit the demo?"),
@@ -23256,7 +23262,7 @@ function App() {
         }, "You'll leave the guided tour and go back to the sign-in screen. You can replay the tour anytime from Settings."),
         /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 10 } },
           /*#__PURE__*/React.createElement("button", {
-            onClick: () => setConfirmExitDemo(null),
+            "data-a11y-dialog-hide": true,
             style: {
               flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 10,
               padding: "12px", fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer"
@@ -23284,6 +23290,7 @@ function App() {
       },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 28, textAlign: "center", marginBottom: 12 } }, "\u{1F9ED}"),
         /*#__PURE__*/React.createElement("div", {
+          id: "exit-demo-title",
           className: "tour-tip-title card-title",
           style: { fontSize: 16, textAlign: "center", marginBottom: 10 }
         }, "Want to replay the tour later?"),
@@ -26472,25 +26479,28 @@ function App() {
         style: { fontSize: 11, color: "var(--c-text-soft)", textAlign: "center", padding: "10px 18px 16px" }
       }, "Tap a bar to see which habits earned that XP. Hold the XP bar in the header to open achievements.")
     ));
-  })(), showAchievements && /*#__PURE__*/React.createElement("div", {
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 320, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-    onClick: e => { if (e.target === e.currentTarget) setShowAchievements(false); }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "fade-in",
-    style: { background: "#fff", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 720, height: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden" }
+  })(),
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus from the wrapper. The header title gets an id for
+  // ariaLabelledby; the close X uses data-a11y-dialog-hide.
+  showAchievements && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setShowAchievements(false),
+    ariaLabelledby: "achievements-title",
+    overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 320 },
+    cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", maxWidth: 720, height: "88vh", maxHeight: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }
   },
     /*#__PURE__*/React.createElement("div", {
       style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", flexShrink: 0 }
     },
       /*#__PURE__*/React.createElement("div", null,
-        /*#__PURE__*/React.createElement("div", { className: "card-title", style: { fontSize: 18, color: "var(--c-text-strong)" } }, "Achievements"),
+        /*#__PURE__*/React.createElement("div", { id: "achievements-title", className: "card-title", style: { fontSize: 18, color: "var(--c-text-strong)" } }, "Achievements"),
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, (() => {
           const earned = ACHIEVEMENTS.filter(a => (achievementStats[a.stat] || 0) >= a.threshold).length;
           return earned + " of " + ACHIEVEMENTS.length + " unlocked";
         })())
       ),
       /*#__PURE__*/React.createElement("button", {
-        onClick: () => setShowAchievements(false),
+        "data-a11y-dialog-hide": true,
         "aria-label": "Close",
         style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 16, color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center" }
       }, "\xD7")
@@ -26597,7 +26607,7 @@ function App() {
         );
       })
     )
-  )), addCatModal && /*#__PURE__*/React.createElement("div", {
+  ), addCatModal && /*#__PURE__*/React.createElement("div", {
     style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24},
     onClick:e=>{if(e.target===e.currentTarget)setAddCatModal(false);}
   }, /*#__PURE__*/React.createElement("div", {
@@ -26787,18 +26797,18 @@ function App() {
   //    timebound window), due/done todos, and journal entries. Read-
   //    only summary; tapping the backdrop closes the modal. Sits at
   //    zIndex 1100 so it stacks over the Calendar modal (zIndex 300).
-  calendarDetailDate && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1100 },
-    onClick: () => setCalendarDetailDate(null)
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus from the wrapper. Close button uses data-a11y-dialog-
+  // hide; backdrop click and Escape both route through onHide.
+  // calendar-month-grid.spec.js click-test exercises this modal.
+  calendarDetailDate && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setCalendarDetailDate(null),
+    ariaLabelledby: "calendar-detail-title",
+    overlayStyle: { padding: 16, zIndex: 1100, alignItems: "center" },
+    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 20, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
   },
-    /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 20, maxWidth: 480, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" },
-      onClick: e => e.stopPropagation()
-    },
       /*#__PURE__*/React.createElement("h2", {
+        id: "calendar-detail-title",
         style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 16, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
       }, "Snapshot — " + new Date(calendarDetailDate + "T12:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })),
       // ── Habits ────────────────────────────────────────────────
@@ -26868,25 +26878,25 @@ function App() {
       })(),
       /*#__PURE__*/React.createElement("button", {
         type: "button",
-        onClick: () => setCalendarDetailDate(null),
+        "data-a11y-dialog-hide": true,
         style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--c-surface-muted)", color: "var(--c-text-soft)", fontWeight: 500, cursor: "pointer", marginTop: 8, fontSize: 14 }
       }, "Close")
-    )
   ),
   // ── W3-T9: Welcome modal — first-time signed-in render only.
   //    Gated on welcomeModalSeen=false AND no habits yet, so any user
   //    who's already added a habit (or whose hydrateCloudDoc marked
   //    them as returning) never sees it.
-  data && !data.welcomeModalSeen && !(data.habits || []).length && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "welcome-title",
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus from the wrapper. Both buttons save() the seen flag
+  // (which drops the conditional next render) AND data-a11y-dialog-hide
+  // the dialog. Escape (a new affordance) routes through onHide, which
+  // saves the seen flag too so users aren't shown the welcome again.
+  data && !data.welcomeModalSeen && !(data.habits || []).length && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => save({ ...data, welcomeModalSeen: true }),
+    ariaLabelledby: "welcome-title",
+    overlayStyle: { padding: 16, zIndex: 1000, alignItems: "center" },
+    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", textAlign: "center", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
   },
-    /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", textAlign: "center", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-    },
       /*#__PURE__*/React.createElement("h2", {
         id: "welcome-title",
         style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 22 }
@@ -26905,18 +26915,15 @@ function App() {
       }, "A calm place for the habits, goals, and reflections that compound into who you become."),
       /*#__PURE__*/React.createElement("button", {
         type: "button",
-        onClick: () => {
-          save({ ...data, welcomeModalSeen: true });
-          setTab("habits");
-        },
+        "data-a11y-dialog-hide": true,
+        onClick: () => { save({ ...data, welcomeModalSeen: true }); setTab("habits"); },
         style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, marginBottom: 8, cursor: "pointer", fontSize: 14 }
       }, "Add my first habit"),
       /*#__PURE__*/React.createElement("button", {
         type: "button",
-        onClick: () => save({ ...data, welcomeModalSeen: true }),
+        "data-a11y-dialog-hide": true,
         style: { display: "block", width: "100%", padding: "8px 16px", borderRadius: 10, border: "none", background: "transparent", color: "var(--c-text-faint)", fontSize: 13, cursor: "pointer" }
       }, "Skip for now")
-    )
   ),
   // ── W3-T11: Journal / health disclaimer — surfaces once after the
   //    user's first journal save. Non-blocking; the entry was already
@@ -26947,16 +26954,16 @@ function App() {
   // ── W3-T12: AI consent gate — deferred activation. AI_ENABLED is
   //    false in v1.0 so this modal is reachable only via the wired AI
   //    call sites once the constant flips in v1.1.
-  showAiConsent && /*#__PURE__*/React.createElement("div", {
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": "ai-consent-title",
-    style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 1000 }
+  // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+  // return-focus from the wrapper. Cancel uses data-a11y-dialog-hide;
+  // "I agree" keeps its onClick (which writes aiConsentAt) and adds the
+  // hide attribute so the wrapper closes after the save lands.
+  showAiConsent && /*#__PURE__*/React.createElement(A11yDialog, {
+    onHide: () => setShowAiConsent(false),
+    ariaLabelledby: "ai-consent-title",
+    overlayStyle: { padding: 16, zIndex: 1000, alignItems: "center" },
+    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 380, width: "100%", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
   },
-    /*#__PURE__*/React.createElement("div", {
-      className: "fade-in",
-      style: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-    },
       /*#__PURE__*/React.createElement("h2", {
         id: "ai-consent-title",
         style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
@@ -26976,16 +26983,16 @@ function App() {
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
         /*#__PURE__*/React.createElement("button", {
           type: "button",
-          onClick: () => setShowAiConsent(false),
+          "data-a11y-dialog-hide": true,
           style: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--c-border)", background: "transparent", color: "var(--c-text-soft)", cursor: "pointer", fontSize: 13 }
         }, "Cancel"),
         /*#__PURE__*/React.createElement("button", {
           type: "button",
-          onClick: () => { save({ ...data, aiConsentAt: Date.now() }); setShowAiConsent(false); },
+          "data-a11y-dialog-hide": true,
+          onClick: () => { save({ ...data, aiConsentAt: Date.now() }); },
           style: { flex: 1, padding: "10px 12px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 13 }
         }, "I agree")
       )
-    )
   ),
   // ── R-2: Morning Debrief 4-step modal flow.
   //    Driven by `debriefStep`. Each step renders a different body; the
@@ -27759,17 +27766,17 @@ function App() {
         )
       );
     };
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-label": "My Coach",
-      onClick: close,
-      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 9999, padding: 16 }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus from the wrapper. Body buttons that call close() (e.g.
+    // "Edit goal" → close() + sEGoal()) still work — close() clears
+    // myCoach state, the wrapper unmounts, and destroy() handles focus
+    // return.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: close,
+      dialogProps: { "aria-label": "My Coach" },
+      overlayStyle: { background: "rgba(0,0,0,.55)", zIndex: 9999, padding: 16 },
+      cardStyle: { background: "var(--c-surface)", borderRadius: "20px 20px 0 0", padding: 20, maxWidth: 560, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(0,0,0,.35)" }
     },
-      /*#__PURE__*/React.createElement("div", {
-        onClick: (e) => e.stopPropagation(),
-        style: { background: "var(--c-surface)", borderRadius: "20px 20px 0 0", padding: 20, maxWidth: 560, width: "100%", maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(0,0,0,.35)" }
-      },
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }
         },
@@ -27779,7 +27786,7 @@ function App() {
           ),
           /*#__PURE__*/React.createElement("button", {
             "aria-label": "Close",
-            onClick: close,
+            "data-a11y-dialog-hide": true,
             style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", color: "var(--c-text-faint)", fontSize: 16 }
           }, "×")
         ),
@@ -27792,7 +27799,6 @@ function App() {
         ctx.kind === "habit-batch"  && (ctx.habits || []).length > 5 && /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "8px 0" }
         }, "+ " + ((ctx.habits || []).length - 5) + " more — open Habits to see all.")
-      )
     );
   })(),
   linkedMediaPlayer && (() => {
@@ -27827,26 +27833,16 @@ function App() {
       // update + the React unmount-during-pending-state warning).
       linkedMediaTimerRef.current = setTimeout(close, 800);
     };
-    return /*#__PURE__*/React.createElement("div", {
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-label": (kind === "habit" ? "Habit linked audio" : "Goal linked audio"),
-      onClick: close,
-      style: {
-        position: "fixed", inset: 0,
-        background: "rgba(0,0,0,.55)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        zIndex: 9999, padding: 16
-      }
+    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
+    // return-focus. close() also clears the onEnded auto-close timer.
+    // The wrapper's onHide → close() ensures the timer is cleared on
+    // Escape and backdrop click too.
+    return /*#__PURE__*/React.createElement(A11yDialog, {
+      onHide: close,
+      dialogProps: { "aria-label": (kind === "habit" ? "Habit linked audio" : "Goal linked audio") },
+      overlayStyle: { background: "rgba(0,0,0,.55)", alignItems: "center", zIndex: 9999, padding: 16 },
+      cardStyle: { background: "#fff", borderRadius: 16, padding: 18, maxWidth: 420, boxShadow: "0 24px 60px rgba(0,0,0,.35)" }
     },
-      /*#__PURE__*/React.createElement("div", {
-        onClick: (e) => e.stopPropagation(),
-        style: {
-          background: "#fff", borderRadius: 16, padding: 18,
-          maxWidth: 420, width: "100%",
-          boxShadow: "0 24px 60px rgba(0,0,0,.35)"
-        }
-      },
         /*#__PURE__*/React.createElement("div", {
           style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }
         },
@@ -27855,7 +27851,7 @@ function App() {
           }, kind === "habit" ? "Linked to habit" : "Linked to goal"),
           /*#__PURE__*/React.createElement("button", {
             "aria-label": "Close",
-            onClick: close,
+            "data-a11y-dialog-hide": true,
             style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", color: "#6b7280", fontSize: 16 }
           }, "×")
         ),
@@ -27878,7 +27874,6 @@ function App() {
         kind === "habit" && isAudio && /*#__PURE__*/React.createElement("div", {
           style: { fontSize: 11, color: "#6b7280", marginTop: 10, lineHeight: 1.45 }
         }, "Habit auto-completes when this audio finishes.")
-      )
     );
   })(),
   // Voice-capture modal. Opened from the header mic. Listens via
