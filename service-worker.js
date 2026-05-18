@@ -34,6 +34,7 @@ precaching.precacheAndRoute([
   { url: "./index.html",                revision: SHELL_VERSION },
   { url: "./utils.js",                  revision: SHELL_VERSION },
   { url: "./lib/hydration.js",          revision: SHELL_VERSION },
+  { url: "./lib/merge.js",              revision: SHELL_VERSION },
   { url: "./lib/dialog.js",             revision: SHELL_VERSION },
   { url: "./lib/icalendar.js",          revision: SHELL_VERSION },
   { url: "./lib/auth.js",               revision: SHELL_VERSION },
