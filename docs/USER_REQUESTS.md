@@ -31,6 +31,14 @@ These are not feature requests — they are process directives that govern HOW w
 
 ---
 
+## 2026-05-18 — Weekly debug pass
+
+### Weekly debug pass — 2026-05-18
+
+5 investigations completed. Investigated: (1) icalendar.test.mjs MODULE_NOT_FOUND — **fixed** (npm install; ical.js was in devDependencies but node_modules missing; 24 tests now green); (2) mergeRemoteWithLocalToday §audit-P1 slot-loss fix — **fixed** + regression tests added (extracted to lib/merge.js, 14 pinned-behaviour tests, commit `48b156e`); (3) allYesterdayHabitsReviewed gate §audit-P1 fixes — **triaged** (code fix confirmed, regression test blocked by App() closure coupling, defer to OSS-port extraction); (4) §5.2 same-section multi-slot reorder no-op — **triaged** (active bug confirmed, same-section slot drag snaps back on re-render, fix requires superpowers:writing-plans session); (5) §7.1 Reflect past entries not surfaced — **triaged** (already fixed 2026-05-15, code confirmed at index.html:19303).
+
+---
+
 ## 2026-05-15 — Today's session
 
 ### #62 — Hide target/unit badges in reorder mode — SHIPPED v59
