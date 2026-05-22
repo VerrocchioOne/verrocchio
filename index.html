@@ -4996,14 +4996,20 @@ function App() {
   // crashes the App component on first render with a temporal
   // dead-zone ReferenceError.
   const [reorderMode, setReorderMode] = useState(false);
-  // §13.3g (v71) — Button-based reorder. Drag-and-drop was structurally
-  // removed; the reorder UI is now three always-visible buttons per
-  // habit card (▲/▼ to move, ⇶ to layer with previous as a concurrent
-  // cohort). The button handlers call moveHabitWithinSection and
-  // toggleConcurrentForHabit (defined ~3500 lines below alongside
-  // moveItemByDelta + commitHabitReorderDrop), which mutate data via
-  // save() with no DOM/pointer/library involvement.
+  // §13.3i (v72) — Select-then-act reorder. Tap a habit card to select
+  // it (visually highlighted); use the sticky toolbar at the top of
+  // the Habits view for ▲ move-up, ▼ move-down, ⇶ toggle-concurrent.
+  // Tap targets stay STABLE while cards move underneath them — user
+  // can hit "up up up up" without re-finding the button after each
+  // animation. Replaces the per-card button rows from v71, which the
+  // user reported as too visually noisy and inefficient for repeated
+  // moves.
   //
+  // For multi-slot habits, selecting any slot card selects the WHOLE
+  // habit (slot cards share habit.id). The toolbar then operates on
+  // habit.id — consistent with the v72 button model that treats
+  // multi-slot habits as one reorderable unit.
+  const [reorderSelectedId, setReorderSelectedId] = useState(null);
   // Kept inert for backward compatibility with the LEGACY DEAD drag-
   // handle block at ~L17166 (gated by `false &&` so never renders, but
   // its parsed source still references these refs by name; declaring
@@ -5011,7 +5017,10 @@ function App() {
   // block. Real cleanup of that block is a follow-up).
   const reorderDragRef = useRef(null);
   const reorderDropPreviewRef = useRef(null);
-  const exitReorderMode = () => { setReorderMode(false); };
+  const exitReorderMode = () => {
+    setReorderMode(false);
+    setReorderSelectedId(null);
+  };
   // §13.3 — Exit habit reorder mode whenever the user navigates away
   // from the Habits tab (bottom-tab tap). Tap-Home, tap-Goals etc.
   // implicitly mean "done reordering" — no need to make the user hit
@@ -15468,69 +15477,124 @@ function App() {
       className: "fade-in"
     },
       returnBanner,
-      // §13.3 — Reorder-mode top bar. Pinned at the top of the
-      // viewport (position:fixed) so the user can always see the
-      // "Done" exit affordance even after scrolling down a long list
-      // of habits. Renders only when reorderMode is true; otherwise
-      // null collapses out of the tree entirely. Bar height (~44px)
-      // is reserved by a spacer below so the first habit section
-      // header isn't visually clipped by the bar.
-      reorderMode && /*#__PURE__*/React.createElement("div", {
-        style: {
-          position: "fixed",
-          top: 0, left: 0, right: 0,
-          zIndex: 50,
-          background: "var(--c-surface-raised)",
-          borderBottom: "1px solid var(--c-border)",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "10px 14px",
-          gap: 12
-        }
-      },
-        /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "center", gap: 8, minWidth: 0 }
+      // §13.3i (v72) — Reorder-mode top bar. Two-row sticky toolbar
+      // pinned to the viewport top so action buttons stay in a STABLE
+      // position while cards animate underneath. Row 1: selection
+      // label + Done. Row 2: ▲ Up, ▼ Down, ⇶ Layer — each disabled
+      // when no card is selected OR the action wouldn't move
+      // anything (▲ at first, ▼ at last, ⇶ at first).
+      reorderMode && (() => {
+        // Pull the currently-selected habit's position info once per
+        // render. Recomputed every render so "tap ▲ until disabled"
+        // updates the disabled state after each move without needing
+        // a manual re-select.
+        const selPos = reorderSelectedId
+          ? habitPositionInSection(reorderSelectedId)
+          : null;
+        const selHabit = reorderSelectedId
+          ? (data.habits || []).find(h => String(h.id) === String(reorderSelectedId))
+          : null;
+        const selLabel = selHabit
+          ? selHabit.text
+          : "Tap a card to select";
+        const selConcurrent = !!(selHabit && selHabit.concurrent);
+        const canUp    = !!selPos && !selPos.isFirst;
+        const canDown  = !!selPos && !selPos.isLast;
+        const canLayer = !!selPos && !selPos.isFirst;
+        const btnStyle = (enabled, isLayerActive) => ({
+          flex: 1,
+          minHeight: 44,
+          padding: "8px 0",
+          border: "1px solid " + (isLayerActive ? "#93c5fd" : "var(--c-border)"),
+          borderRadius: 8,
+          background: isLayerActive
+            ? "#dbeafe"
+            : (enabled ? "var(--c-surface, #fff)" : "var(--c-surface-muted)"),
+          color: isLayerActive
+            ? "#1d4ed8"
+            : (enabled ? "var(--c-text)" : "var(--c-text-faint)"),
+          fontSize: 14, fontWeight: 700,
+          cursor: enabled ? "pointer" : "default",
+          opacity: enabled ? 1 : 0.5,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6
+        });
+        return /*#__PURE__*/React.createElement("div", {
+          style: {
+            position: "fixed",
+            top: 0, left: 0, right: 0,
+            zIndex: 50,
+            background: "var(--c-surface-raised)",
+            borderBottom: "1px solid var(--c-border)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            display: "flex", flexDirection: "column",
+            padding: "8px 12px 10px"
+          }
         },
-          /*#__PURE__*/React.createElement("span", {
-            "aria-hidden": true,
-            style: { fontSize: 16, lineHeight: 1, color: "var(--c-text-soft)", flexShrink: 0 }
-          }, "≡"),
+          // Row 1: title (+ selection state) + Done
           /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", flexDirection: "column", minWidth: 0 }
+            style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 8 }
           },
             /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 12, fontWeight: 700, color: "var(--c-text)", lineHeight: 1.2 }
-            }, "Organize habits"),
-            /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.2, marginTop: 2 }
-            }, "Tap ▲▼ to move a card. Tap ⇶ to layer with the card above. Tap Done when finished.")
+              style: { display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }
+            },
+              /*#__PURE__*/React.createElement("div", {
+                style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-soft)", textTransform: "uppercase", letterSpacing: 0.4, lineHeight: 1.2 }
+              }, "Organize"),
+              /*#__PURE__*/React.createElement("div", {
+                style: {
+                  fontSize: 13, fontWeight: 600,
+                  color: selHabit ? "var(--c-text-strong)" : "var(--c-text-faint)",
+                  lineHeight: 1.2, marginTop: 2,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                }
+              }, selLabel)
+            ),
+            /*#__PURE__*/React.createElement("button", {
+              type: "button",
+              onClick: () => exitReorderMode(),
+              style: {
+                background: "#2d5a2d", color: "#fff", border: "none",
+                borderRadius: 999, padding: "8px 18px",
+                fontSize: 13, fontWeight: 700, cursor: "pointer", flexShrink: 0
+              }
+            }, "Done")
+          ),
+          // Row 2: stable action buttons. Tapping these moves the
+          // SELECTED card; the buttons themselves stay put. Disabled
+          // until a card is selected.
+          /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", gap: 8 }
+          },
+            /*#__PURE__*/React.createElement("button", {
+              type: "button",
+              "aria-label": "Move selected habit up",
+              disabled: !canUp,
+              onClick: () => { if (canUp) moveHabitWithinSection(reorderSelectedId, -1); },
+              style: btnStyle(canUp, false)
+            }, "▲ Up"),
+            /*#__PURE__*/React.createElement("button", {
+              type: "button",
+              "aria-label": "Move selected habit down",
+              disabled: !canDown,
+              onClick: () => { if (canDown) moveHabitWithinSection(reorderSelectedId, 1); },
+              style: btnStyle(canDown, false)
+            }, "▼ Down"),
+            /*#__PURE__*/React.createElement("button", {
+              type: "button",
+              "aria-label": selConcurrent ? "Stop layering selected habit" : "Layer selected habit with the one above",
+              disabled: !canLayer,
+              onClick: () => { if (canLayer) toggleConcurrentForHabit(reorderSelectedId); },
+              style: btnStyle(canLayer, selConcurrent && canLayer)
+            }, "⇶ " + (selConcurrent ? "Unlayer" : "Layer"))
           )
-        ),
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: () => exitReorderMode(),
-          style: {
-            background: "#2d5a2d",
-            color: "#fff",
-            border: "none",
-            borderRadius: 999,
-            padding: "8px 18px",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            flexShrink: 0
-          }
-        }, "Done")
-      ),
-      // Spacer to push content below the fixed reorder bar so the
-      // first section header isn't visually trapped under it. Sized
-      // to roughly match the bar's height (10px padding + ~32px
-      // content row = ~52px; round up to 56 for a touch of breathing
-      // room).
+        );
+      })(),
+      // Spacer to push content below the fixed reorder toolbar so the
+      // first habit section header isn't visually clipped by the bar.
+      // Two-row toolbar (~108px including padding) needs more room than
+      // the v71 single-row bar did.
       reorderMode && /*#__PURE__*/React.createElement("div", {
-        style: { height: 56, flexShrink: 0 }
+        style: { height: 112, flexShrink: 0 }
       }),
       // §13.3g (v71) — Drop-preview indicator was deleted alongside
       // SortableJS. Button-based reorder has no drag preview to render.
@@ -16468,19 +16532,16 @@ function App() {
         // dragging" state needs to flow into the card's CSS.
         const isBeingDragged = false;
         const dragOffsetY = 0;
-        // Position info for the reorder buttons (used to disable ▲ at
-        // first-in-section, ▼ at last-in-section, ⇶ at first-in-section
-        // since position 0 can't be concurrent).
-        // §13.3h (v72) — On multi-slot habits, only the FIRST slot card
-        // shows the reorder buttons. The buttons operate on the whole
-        // habit (because slot[0..N] all share habit.id), so showing
-        // them N times would be visual noise — and tapping any of them
-        // moves the whole habit together. Render once on slot[0] only.
-        const _slotMeta = habit._renderSlotMeta || null;
-        const isFirstSlotOfHabit = !_slotMeta || _slotMeta.arrayIdx === 0;
-        const reorderPos = reorderMode && isTopLevelForReorder && isFirstSlotOfHabit
-          ? habitPositionInSection(reorderHabitId)
-          : null;
+        // §13.3i (v72) — Selection state for the sticky reorder
+        // toolbar. The toolbar (rendered ~12k lines below) reads
+        // reorderSelectedId; the card render only needs to know
+        // whether THIS card is the selected one so it can highlight.
+        // For multi-slot habits, selecting any slot card highlights
+        // ALL the habit's slot cards (since reorderHabitId is shared).
+        const isSelectedForReorder = reorderMode
+          && isTopLevelForReorder
+          && reorderSelectedId
+          && String(reorderSelectedId) === String(reorderHabitId);
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
           className: "hrow" + (reorderMode ? " hrow-reorder" : ""),
@@ -16506,7 +16567,18 @@ function App() {
           // double-tap-to-edit, and horizontal swipe-to-mark, all gated
           // off when `reorderMode` is true.
           onClick: e => {
-            if (reorderMode) return;
+            // §13.3i (v72) — In reorder mode, tap selects the card
+            // (the sticky toolbar at the top then operates on the
+            // selected habit). Sub-habits (parentId set) are not
+            // independently reorderable, so tapping them does nothing.
+            // Tapping the already-selected card de-selects it.
+            if (reorderMode) {
+              if (!isTopLevelForReorder) return;
+              setReorderSelectedId(prev =>
+                String(prev) === String(reorderHabitId) ? null : reorderHabitId
+              );
+              return;
+            }
             // Defer the expand-toggle by ~250ms so a follow-up second
             // click cancels it and goes straight to the edit modal.
             // Without the delay, the row grew on click 1, shifted
@@ -16654,22 +16726,31 @@ function App() {
             rowGap: compact ? 4 : 0,
             flex: compact ? "1 0 auto" : undefined,
             alignContent: compact ? "flex-start" : undefined,
-            background: animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : animState === "reset" ? "var(--c-surface-muted)" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff",
+            // §13.3i (v72) — Selected-card highlight in reorder mode:
+            // pale green background + 2px solid accent border so the
+            // user always knows which card the toolbar is operating on.
+            // Overrides done/missed coloring because in reorder mode
+            // the only thing that matters is which card is staged.
+            background: isSelectedForReorder
+              ? "var(--c-tint-success-bg, #dcfce7)"
+              : (animState === "done" ? "#f0fdf4" : animState === "missed" ? "#fff1f1" : animState === "reset" ? "var(--c-surface-muted)" : d ? "#f0fdf4" : missed ? "#fff1f1" : "#fff"),
             // Persistently-resisted habits wear a dotted red outline
             // so they pop out of the list — a quiet "you keep
             // avoiding this one" signal that survives day-to-day
             // until the user breaks the pattern. Done / missed /
             // animation states still win the border treatment so
             // the resistance flag never hides today's status.
-            border: (d || animState === "done")
-              ? "1px solid #86efac"
-              : (missed || animState === "missed")
-                ? "1px solid #fca5a5"
-                : (animState === "reset")
-                  ? "1px solid var(--c-border)"
-                  : isPersistentlyResisted
-                    ? "1px dashed #b91c1c"
-                    : "1px solid var(--c-border)",
+            border: isSelectedForReorder
+              ? "2px solid #2d5a2d"
+              : (d || animState === "done")
+                ? "1px solid #86efac"
+                : (missed || animState === "missed")
+                  ? "1px solid #fca5a5"
+                  : (animState === "reset")
+                    ? "1px solid var(--c-border)"
+                    : isPersistentlyResisted
+                      ? "1px dashed #b91c1c"
+                      : "1px solid var(--c-border)",
             borderRadius: 12,
             // Compact height by default (matches goal-card density);
             // when the user taps to expand, vertical padding grows so
@@ -16679,15 +16760,11 @@ function App() {
             padding: compact
               ? (expHabitGoals[habit.id] ? "8px 8px" : "6px 8px")
               : (expHabitGoals[habit.id] ? "10px 12px" : "7px 12px"),
-            // §13.3g (v71) — Reserve right-edge room for the inline
-            // reorder button row (▲/▼/⇶ at ~28px each + 4px gap = ~96px).
-            // §13.3h (v72) — Only the FIRST slot card of a multi-slot
-            // habit renders the buttons, so only that card reserves the
-            // right-edge space. Slot[1+] keeps the original padding so
-            // it doesn't get a confusing empty gap on the right.
-            paddingRight: reorderMode && isTopLevelForReorder && isFirstSlotOfHabit
-              ? 100
-              : (compact ? 8 : (ht ? "30px" : "12px")),
+            // §13.3i (v72) — Reorder action buttons moved from per-card
+            // to the sticky top toolbar (the buttons stay in a STABLE
+            // position while cards animate underneath). Card itself no
+            // longer needs to reserve right-edge space for buttons.
+            paddingRight: compact ? 8 : (ht ? "30px" : "12px"),
             transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
             transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s, box-shadow 0.15s",
             boxShadow: reorderMode && isTopLevelForReorder
@@ -16777,83 +16854,11 @@ function App() {
         // Sortable could see them, leaving Sortable inert. Stripped
         // to a pure visual cue. pointerEvents: none so taps fall
         // through to Sortable's automatic .hrow draggable detection.
-        // §13.3g (v71) — Inline reorder button row. Replaces the
-        // SortableJS-driven drag handle. Three buttons stacked
-        // horizontally on the right edge of the card:
-        //   ▲  move up one position within the section
-        //   ▼  move down one position within the section
-        //   ⇶  toggle "concurrent with previous" (layered cohort row)
-        // Disabled state per-button uses habitPositionInSection so the
-        // user never taps a button that does nothing surprising.
-        // stopPropagation on each click so the underlying card tap
-        // (which is a no-op in reorder mode anyway) doesn't fire too.
-        (reorderMode && isTopLevelForReorder) && reorderPos && /*#__PURE__*/React.createElement("div", {
-          className: "hrow-reorder-actions",
-          style: {
-            position: "absolute",
-            top: 0, right: 4, bottom: 0,
-            display: "flex", alignItems: "center", gap: 4,
-            zIndex: 3
-          }
-        },
-          /*#__PURE__*/React.createElement("button", {
-            type: "button",
-            "aria-label": "Move up",
-            title: "Move up",
-            disabled: reorderPos.isFirst,
-            onClick: (e) => { e.stopPropagation(); moveHabitWithinSection(reorderHabitId, -1); },
-            style: {
-              background: reorderPos.isFirst ? "var(--c-surface-muted)" : "var(--c-surface, #fff)",
-              border: "1px solid var(--c-border)",
-              borderRadius: 6,
-              width: 28, height: 28,
-              padding: 0,
-              cursor: reorderPos.isFirst ? "default" : "pointer",
-              opacity: reorderPos.isFirst ? 0.35 : 1,
-              color: "var(--c-text-soft)",
-              fontSize: 12, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }
-          }, "▲"),
-          /*#__PURE__*/React.createElement("button", {
-            type: "button",
-            "aria-label": "Move down",
-            title: "Move down",
-            disabled: reorderPos.isLast,
-            onClick: (e) => { e.stopPropagation(); moveHabitWithinSection(reorderHabitId, 1); },
-            style: {
-              background: reorderPos.isLast ? "var(--c-surface-muted)" : "var(--c-surface, #fff)",
-              border: "1px solid var(--c-border)",
-              borderRadius: 6,
-              width: 28, height: 28,
-              padding: 0,
-              cursor: reorderPos.isLast ? "default" : "pointer",
-              opacity: reorderPos.isLast ? 0.35 : 1,
-              color: "var(--c-text-soft)",
-              fontSize: 12, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }
-          }, "▼"),
-          /*#__PURE__*/React.createElement("button", {
-            type: "button",
-            "aria-label": habit.concurrent ? "Stop layering with above" : "Layer with above",
-            title: habit.concurrent ? "Stop layering — start own row" : (reorderPos.isFirst ? "First in section: nothing above to layer with" : "Run at the same time as the habit above"),
-            disabled: reorderPos.isFirst,
-            onClick: (e) => { e.stopPropagation(); toggleConcurrentForHabit(reorderHabitId); },
-            style: {
-              background: habit.concurrent ? "#dbeafe" : (reorderPos.isFirst ? "var(--c-surface-muted)" : "var(--c-surface, #fff)"),
-              border: "1px solid " + (habit.concurrent ? "#93c5fd" : "var(--c-border)"),
-              borderRadius: 6,
-              width: 28, height: 28,
-              padding: 0,
-              cursor: reorderPos.isFirst ? "default" : "pointer",
-              opacity: reorderPos.isFirst ? 0.35 : 1,
-              color: habit.concurrent ? "#1d4ed8" : "var(--c-text-soft)",
-              fontSize: 12, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }
-          }, "⇶")
-        ),
+        // §13.3i (v72) — Per-card reorder buttons removed. Selection
+        // happens via tap on the card body (see card-level onClick
+        // which routes to setReorderSelectedId when reorderMode is on);
+        // the ▲/▼/⇶ action buttons live in the sticky top toolbar so
+        // their tap targets stay stable while cards animate underneath.
         false && (reorderMode && isTopLevelForReorder) && /*#__PURE__*/React.createElement("div", {
           className: "hrow-drag-handle-LEGACY-DEAD",
           "aria-label": "Drag to reorder",
@@ -17989,8 +17994,17 @@ function App() {
         const isThisDragged = draggedId
           && draggedId === String(h.parentId || h.id)
           && (draggedSlotId == null || draggedSlotId === (h._renderSlot || null));
+        // §13.3i (v72) — Include reorderSelectedId in the sig so the
+        // memoized HabitCardShell re-renders when this card is selected
+        // or deselected (drives the green border + tinted background).
+        // Match on top-level habit id (sub-habits don't participate in
+        // selection; multi-slot cards all share habit.id so all of a
+        // habit's slot cards re-render together when selected).
+        const _selRH = h.parentId || h.id;
+        const isSelectedSig = (reorderMode && reorderSelectedId
+          && String(reorderSelectedId) === String(_selRH)) ? 1 : 0;
         const reorderSig = (reorderMode ? "r1" : "r0")
-          + "|d" + (isThisDragged ? reorderDragTick : "0")
+          + "|sel" + isSelectedSig
           + "|s" + (h.section || "");
         const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + slotSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig + "|p" + (h.parked ? 1 : 0) + "|" + reorderSig;
         const out = [
