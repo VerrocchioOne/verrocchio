@@ -49,12 +49,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Playwright needs the browser binary on the CI runner. We only
-      # exercise chromium in the spec suite (the iOS WebKit specs are
-      # skipped on Linux per existing test-config policy), so install
-      # only that one to keep CI fast.
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      # Playwright needs browser binaries on the CI runner. The Chromium
+      # "desktop" project carries the bulk of the suite; the WebKit "ios"
+      # project runs smoke + a few specs that have test.skip guards on
+      # non-WebKit (the rest skip naturally). Installing both keeps the
+      # "ios" smoke spec passing — without WebKit it errors at launch.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
 
       # Tests gate the deploy — a red suite never reaches verrocchio.app.
       # Suite = 124 unit (node --test over utils.js + lib/*) + 21
