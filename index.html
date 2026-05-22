@@ -16471,7 +16471,14 @@ function App() {
         // Position info for the reorder buttons (used to disable ▲ at
         // first-in-section, ▼ at last-in-section, ⇶ at first-in-section
         // since position 0 can't be concurrent).
-        const reorderPos = reorderMode && isTopLevelForReorder
+        // §13.3h (v72) — On multi-slot habits, only the FIRST slot card
+        // shows the reorder buttons. The buttons operate on the whole
+        // habit (because slot[0..N] all share habit.id), so showing
+        // them N times would be visual noise — and tapping any of them
+        // moves the whole habit together. Render once on slot[0] only.
+        const _slotMeta = habit._renderSlotMeta || null;
+        const isFirstSlotOfHabit = !_slotMeta || _slotMeta.arrayIdx === 0;
+        const reorderPos = reorderMode && isTopLevelForReorder && isFirstSlotOfHabit
           ? habitPositionInSection(reorderHabitId)
           : null;
         return /*#__PURE__*/React.createElement("div", {
@@ -16674,8 +16681,11 @@ function App() {
               : (expHabitGoals[habit.id] ? "10px 12px" : "7px 12px"),
             // §13.3g (v71) — Reserve right-edge room for the inline
             // reorder button row (▲/▼/⇶ at ~28px each + 4px gap = ~96px).
-            // Outside reorder mode the original padding rules apply.
-            paddingRight: reorderMode && isTopLevelForReorder
+            // §13.3h (v72) — Only the FIRST slot card of a multi-slot
+            // habit renders the buttons, so only that card reserves the
+            // right-edge space. Slot[1+] keeps the original padding so
+            // it doesn't get a confusing empty gap on the right.
+            paddingRight: reorderMode && isTopLevelForReorder && isFirstSlotOfHabit
               ? 100
               : (compact ? 8 : (ht ? "30px" : "12px")),
             transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
@@ -17984,7 +17994,17 @@ function App() {
           + "|s" + (h.section || "");
         const sig = selDate + "|" + (eHId === h.id ? 1 : 0) + "|" + (swipeAnim[sigAnimKey] || "") + "|" + (expHabitGoals[h.id] ? 1 : 0) + "|" + targetSig + "|" + goalText + "|" + childSig + "|" + slotSig + "|" + (isCompact ? "c" : "") + "|r" + resistSig + "|p" + (h.parked ? 1 : 0) + "|" + reorderSig;
         const out = [
-          /*#__PURE__*/React.createElement(HabitCardShell, { key: h.id, habit: h, sig, renderImpl: renderCard, compact: isCompact })
+          // §13.3h (v72) — Multi-slot fix: include _renderSlot in the
+          // React key so each slot card of a multi-slot habit gets its
+          // own reconciliation identity. Previously all N slot cards
+          // shared `key: h.id`, which React reported as duplicate keys
+          // and could coalesce in ways that looked like "cards multiply
+          // on interaction" (a state-change re-render would shuffle
+          // DOM nodes between the duplicate-keyed siblings).
+          /*#__PURE__*/React.createElement(HabitCardShell, {
+            key: h._renderSlot ? h.id + ":" + h._renderSlot : h.id,
+            habit: h, sig, renderImpl: renderCard, compact: isCompact
+          })
         ];
         // Sub-habit chevron + count chip — shown only when the
         // parent has children. Tapping it toggles the children's
