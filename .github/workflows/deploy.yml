@@ -1,0 +1,79 @@
+name: Build, test, and deploy to verrocchio.app
+
+# Auto-deploy contract: every push to `main` (and every manual
+# Run-workflow trigger) installs dependencies, runs the full test
+# suite (utils + Playwright E2E), builds `dist/` via the
+# `scripts/build-dist.mjs` + `scripts/render-docs.mjs` pipeline,
+# and ships to Firebase Hosting (project `verrocchio-1b116`,
+# channel `live`).
+#
+# Setup notes (one-time, per docs/DEPLOY.md):
+#   1. In Firebase Console → Project settings → Service accounts →
+#      "Generate new private key" → download JSON.
+#   2. In GitHub repo → Settings → Secrets and variables → Actions →
+#      New repository secret:
+#        Name:  FIREBASE_SERVICE_ACCOUNT_VERROCCHIO_1B116
+#        Value: full contents of the downloaded JSON
+#   3. Push this workflow to main. Subsequent pushes auto-deploy.
+#
+# DevMoses structural fix (2026-05-18): before this workflow existed,
+# every "I pushed but verrocchio.app didn't update" complaint had the
+# same root cause — the manual `npm run build && firebase deploy` step
+# was being skipped. Push-to-main now means actually-deployed-live.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cancel any in-flight deploy when a newer push to main lands.
+# A 4-minute deploy racing a fresh push could ship stale code.
+concurrency:
+  group: deploy-live
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Playwright needs the browser binary on the CI runner. We only
+      # exercise chromium in the spec suite (the iOS WebKit specs are
+      # skipped on Linux per existing test-config policy), so install
+      # only that one to keep CI fast.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Tests gate the deploy — a red suite never reaches verrocchio.app.
+      # Suite = 124 unit (node --test over utils.js + lib/*) + 21
+      # Chromium E2E (smoke, dialog, dialog-real-app, offline,
+      # sw-migration, calendar-month-grid, habit-reorder-layered-drop).
+      - name: Run tests
+        run: npm test
+
+      # Builds dist/ from current root files + renders privacy/support
+      # markdown to dist/*.html. DEMO_PASSWORD intentionally not set —
+      # demo personas are gated by SHOW_DEMO_UI=false in production, so
+      # the %%DEMO_PASSWORD%% placeholder never reaches a code path.
+      - name: Build dist/
+        run: npm run build
+
+      - name: Deploy to Firebase Hosting (live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_VERROCCHIO_1B116 }}
+          channelId: live
+          projectId: verrocchio-1b116
