@@ -15484,18 +15484,55 @@ function App() {
       // when no card is selected OR the action wouldn't move
       // anything (▲ at first, ▼ at last, ⇶ at first).
       reorderMode && (() => {
-        // Pull the currently-selected habit's position info once per
-        // render. Recomputed every render so "tap ▲ until disabled"
-        // updates the disabled state after each move without needing
-        // a manual re-select.
-        const selPos = reorderSelectedId
-          ? habitPositionInSection(reorderSelectedId)
+        // §13.3j (v73) — Parse the slot-aware selection id. Format:
+        //   "habitId"            → single-slot habit selected
+        //   "habitId@slotId"     → specific slot of multi-slot habit
+        //                          selected (slotId looks like
+        //                          "morning:0", "afternoon:1", etc.)
+        const _selParts = reorderSelectedId
+          ? String(reorderSelectedId).split("@")
+          : [];
+        const selHabitId = _selParts[0] || null;
+        const selSlotId  = _selParts[1] || null;
+        const selHabit = selHabitId
+          ? (data.habits || []).find(h => String(h.id) === String(selHabitId))
           : null;
-        const selHabit = reorderSelectedId
-          ? (data.habits || []).find(h => String(h.id) === String(reorderSelectedId))
+        // For the slot picker row: find the arrayIdx of the selected
+        // slot in the habit's slotSections so we can call
+        // commitSlotReorderDrop with the right index. slotId encodes
+        // section + per-section local index (e.g., "morning:0"); we
+        // need to map that back to the global arrayIdx in slotSections.
+        const selIsSlot = !!(selSlotId && selHabit && Array.isArray(selHabit.slotSections) && selHabit.slotSections.length >= 2);
+        const selSlotArrayIdx = (() => {
+          if (!selIsSlot) return -1;
+          // slotId = "section:localIdx" — find the Nth occurrence of
+          // `section` in slotSections (where N = localIdx).
+          const colon = selSlotId.lastIndexOf(":");
+          if (colon < 0) return -1;
+          const sec = selSlotId.slice(0, colon);
+          const localIdx = parseInt(selSlotId.slice(colon + 1), 10);
+          if (!Number.isFinite(localIdx)) return -1;
+          let seen = 0;
+          for (let i = 0; i < selHabit.slotSections.length; i++) {
+            if (selHabit.slotSections[i] === sec) {
+              if (seen === localIdx) return i;
+              seen += 1;
+            }
+          }
+          return -1;
+        })();
+        const selSlotCurrentSection = selIsSlot && selSlotArrayIdx >= 0
+          ? selHabit.slotSections[selSlotArrayIdx]
+          : null;
+        // Habit-level position info (for ▲/▼/⇶ — they always operate
+        // on the whole habit, even when a slot card was selected).
+        const selPos = selHabitId
+          ? habitPositionInSection(selHabitId)
           : null;
         const selLabel = selHabit
-          ? selHabit.text
+          ? (selIsSlot
+              ? selHabit.text + "  · slot in " + selSlotCurrentSection
+              : selHabit.text)
           : "Tap a card to select";
         const selConcurrent = !!(selHabit && selHabit.concurrent);
         const canUp    = !!selPos && !selPos.isFirst;
@@ -15569,32 +15606,79 @@ function App() {
               type: "button",
               "aria-label": "Move selected habit up",
               disabled: !canUp,
-              onClick: () => { if (canUp) moveHabitWithinSection(reorderSelectedId, -1); },
+              onClick: () => { if (canUp) moveHabitWithinSection(selHabitId, -1); },
               style: btnStyle(canUp, false)
             }, "▲ Up"),
             /*#__PURE__*/React.createElement("button", {
               type: "button",
               "aria-label": "Move selected habit down",
               disabled: !canDown,
-              onClick: () => { if (canDown) moveHabitWithinSection(reorderSelectedId, 1); },
+              onClick: () => { if (canDown) moveHabitWithinSection(selHabitId, 1); },
               style: btnStyle(canDown, false)
             }, "▼ Down"),
             /*#__PURE__*/React.createElement("button", {
               type: "button",
               "aria-label": selConcurrent ? "Stop layering selected habit" : "Layer selected habit with the one above",
               disabled: !canLayer,
-              onClick: () => { if (canLayer) toggleConcurrentForHabit(reorderSelectedId); },
+              onClick: () => { if (canLayer) toggleConcurrentForHabit(selHabitId); },
               style: btnStyle(canLayer, selConcurrent && canLayer)
             }, "⇶ " + (selConcurrent ? "Unlayer" : "Layer"))
+          ),
+          // §13.3j (v73) — Row 3: per-slot section picker, only when a
+          // multi-slot SLOT card is selected. Lets the user move THIS
+          // slot to a different section without touching the others.
+          // Calls commitSlotReorderDrop which rewrites slotSections[i]
+          // and rekeys slot completion history correctly. After the
+          // move the slot's _renderSlot changes (slotId is derived
+          // from section + per-section index), so the old selection id
+          // is stale — we clear it.
+          selIsSlot && /*#__PURE__*/React.createElement("div", {
+            style: { display: "flex", gap: 6, marginTop: 8, alignItems: "center" }
+          },
+            /*#__PURE__*/React.createElement("span", {
+              style: { fontSize: 11, color: "var(--c-text-soft)", marginRight: 4, flexShrink: 0 }
+            }, "Move slot to:"),
+            ...["morning", "afternoon", "evening"].map(sec => {
+              const isCurrent = sec === selSlotCurrentSection;
+              return /*#__PURE__*/React.createElement("button", {
+                key: "slot-sec-" + sec,
+                type: "button",
+                "aria-label": "Move slot to " + sec,
+                disabled: isCurrent || selSlotArrayIdx < 0,
+                onClick: () => {
+                  if (isCurrent || selSlotArrayIdx < 0) return;
+                  commitSlotReorderDrop(selHabitId, selSlotArrayIdx, sec);
+                  // The slot's _renderSlot id changes after the move
+                  // (it's section-relative), so clear selection.
+                  setReorderSelectedId(null);
+                },
+                style: {
+                  flex: 1, minHeight: 36, padding: "6px 8px",
+                  border: "1px solid " + (isCurrent ? "#2d5a2d" : "var(--c-border)"),
+                  borderRadius: 8,
+                  background: isCurrent ? "var(--c-tint-success-bg)" : "var(--c-surface, #fff)",
+                  color: isCurrent ? "#2d5a2d" : "var(--c-text)",
+                  fontSize: 12, fontWeight: 600,
+                  cursor: isCurrent ? "default" : "pointer",
+                  opacity: isCurrent ? 0.85 : 1,
+                  textTransform: "capitalize"
+                }
+              }, sec);
+            })
           )
         );
       })(),
       // Spacer to push content below the fixed reorder toolbar so the
       // first habit section header isn't visually clipped by the bar.
-      // Two-row toolbar (~108px including padding) needs more room than
-      // the v71 single-row bar did.
+      // Bar is 2 rows (~108px) baseline; with a multi-slot slot
+      // selected, a 3rd row (section picker) appears (+44px). Detect
+      // the slot-row case here so the spacer matches actual bar height.
       reorderMode && /*#__PURE__*/React.createElement("div", {
-        style: { height: 112, flexShrink: 0 }
+        style: { height: (() => {
+          if (!reorderSelectedId || !String(reorderSelectedId).includes("@")) return 112;
+          // Slot selected → 3-row toolbar (~156px).
+          return 156;
+        })(), flexShrink: 0 }
       }),
       // §13.3g (v71) — Drop-preview indicator was deleted alongside
       // SortableJS. Button-based reorder has no drag preview to render.
@@ -16532,16 +16616,20 @@ function App() {
         // dragging" state needs to flow into the card's CSS.
         const isBeingDragged = false;
         const dragOffsetY = 0;
-        // §13.3i (v72) — Selection state for the sticky reorder
-        // toolbar. The toolbar (rendered ~12k lines below) reads
-        // reorderSelectedId; the card render only needs to know
-        // whether THIS card is the selected one so it can highlight.
-        // For multi-slot habits, selecting any slot card highlights
-        // ALL the habit's slot cards (since reorderHabitId is shared).
+        // §13.3j (v73) — Per-slot selection. Each slot card has its
+        // own unique selection id: `habit.id + "@" + _renderSlot` for
+        // multi-slot cards, just `habit.id` for single-slot. Selecting
+        // one slot card of a multi-slot habit now highlights ONLY that
+        // card (not all sibling slots). Lets the user move a specific
+        // slot to a different section via the toolbar's section picker
+        // (rendered when a multi-slot slot is selected).
+        const cardSelectionId = habit._renderSlot
+          ? habit.id + "@" + habit._renderSlot
+          : String(habit.id);
         const isSelectedForReorder = reorderMode
           && isTopLevelForReorder
           && reorderSelectedId
-          && String(reorderSelectedId) === String(reorderHabitId);
+          && String(reorderSelectedId) === cardSelectionId;
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
           className: "hrow" + (reorderMode ? " hrow-reorder" : ""),
@@ -16567,15 +16655,17 @@ function App() {
           // double-tap-to-edit, and horizontal swipe-to-mark, all gated
           // off when `reorderMode` is true.
           onClick: e => {
-            // §13.3i (v72) — In reorder mode, tap selects the card
-            // (the sticky toolbar at the top then operates on the
-            // selected habit). Sub-habits (parentId set) are not
-            // independently reorderable, so tapping them does nothing.
-            // Tapping the already-selected card de-selects it.
+            // §13.3j (v73) — In reorder mode, tap selects THIS slot
+            // card uniquely (single-slot habits use habit.id; multi-
+            // slot cards use habit.id + "@" + _renderSlot so each of a
+            // habit's slot cards selects independently). Sub-habits
+            // (parentId set) are not independently reorderable; tapping
+            // them does nothing. Tapping the already-selected card
+            // de-selects it.
             if (reorderMode) {
               if (!isTopLevelForReorder) return;
               setReorderSelectedId(prev =>
-                String(prev) === String(reorderHabitId) ? null : reorderHabitId
+                String(prev) === cardSelectionId ? null : cardSelectionId
               );
               return;
             }
@@ -17994,15 +18084,14 @@ function App() {
         const isThisDragged = draggedId
           && draggedId === String(h.parentId || h.id)
           && (draggedSlotId == null || draggedSlotId === (h._renderSlot || null));
-        // §13.3i (v72) — Include reorderSelectedId in the sig so the
-        // memoized HabitCardShell re-renders when this card is selected
-        // or deselected (drives the green border + tinted background).
-        // Match on top-level habit id (sub-habits don't participate in
-        // selection; multi-slot cards all share habit.id so all of a
-        // habit's slot cards re-render together when selected).
-        const _selRH = h.parentId || h.id;
+        // §13.3j (v73) — Include this card's unique selection id in
+        // the sig so the memoized HabitCardShell re-renders when this
+        // specific slot card is selected or deselected. Multi-slot
+        // cards now select INDEPENDENTLY (each card has its own slot
+        // id appended after "@"); single-slot habits use bare habit.id.
+        const _selCardId = h._renderSlot ? h.id + "@" + h._renderSlot : String(h.id);
         const isSelectedSig = (reorderMode && reorderSelectedId
-          && String(reorderSelectedId) === String(_selRH)) ? 1 : 0;
+          && String(reorderSelectedId) === _selCardId) ? 1 : 0;
         const reorderSig = (reorderMode ? "r1" : "r0")
           + "|sel" + isSelectedSig
           + "|s" + (h.section || "");
