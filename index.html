@@ -40,16 +40,13 @@
      don't fit in a Firestore doc (1 MB hard limit), so we upload up
      to 10 MB to Storage and store the download URL in Firestore. -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js" integrity="sha384-oze9siCpFoiDBZ37lLp99ZmOMO+je1s/xtvwtbNv3NXQXLpbpfPSzZSpbT3xV9da" crossorigin="anonymous"></script>
-<!-- SortableJS — production-grade drag-and-drop with iOS Safari touch
-     handling. Replaced the hand-rolled Pointer-Events drag pipeline in
-     reorder mode (§13.3) after multiple iOS regressions (capture-drop on
-     transforms, render-storm coalescing, scroll-vs-drag conflicts). The
-     library is loaded from unpkg, which is already in the service
-     worker's RUNTIME_CACHEABLE_HOSTS so first fetch warms the cache for
-     offline sessions. No SRI here because the library is queried via
-     CDN's mutable version path — pinning bytes would force a manual
-     rotation on every patch release. unpkg.com is HTTPS-only. -->
-<script src="https://unpkg.com/sortablejs@1.15.6/Sortable.min.js" crossorigin="anonymous"></script>
+<!-- SortableJS was removed in v71 (Port #13.3g — button-based reorder).
+     Drag-and-drop on the Habits tab kept regressing across hand-rolled
+     pointer pipelines and SortableJS-backed pipelines. Replaced with
+     always-visible ▲/▼/⇶ buttons on each habit card in reorder mode.
+     Pure data-level click handlers — no DOM coordinates, no pointer
+     events, no library state, no iOS Safari quirks. The drag library
+     stays out of the bundle entirely. -->
 <script src="utils.js"></script>
 <!-- Cloud-doc hydration: extracted from inline app code so the same
      pinned-behavior function is exercised by Node tests
@@ -5078,37 +5075,22 @@ function App() {
   // crashes the App component on first render with a temporal
   // dead-zone ReferenceError.
   const [reorderMode, setReorderMode] = useState(false);
-  // §13.3 — SortableJS (loaded via CDN) owns the entire drag lifecycle
-  // now. The hand-rolled pipeline was removed after iOS Safari +
-  // Capacitor produced repeated regressions around pointer-capture
-  // invalidation on CSS transforms, render-storm coalescing, and
-  // scroll-vs-drag conflict.
+  // §13.3g (v71) — Button-based reorder. Drag-and-drop was structurally
+  // removed; the reorder UI is now three always-visible buttons per
+  // habit card (▲/▼ to move, ⇶ to layer with previous as a concurrent
+  // cohort). The button handlers call moveHabitWithinSection and
+  // toggleConcurrentForHabit (defined ~3500 lines below alongside
+  // moveItemByDelta + commitHabitReorderDrop), which mutate data via
+  // save() with no DOM/pointer/library involvement.
   //
-  // The refs/state below are kept as INERT NO-OPS because the renderCard
-  // body + sig calculation still reference reorderDragRef.current /
-  // reorderDropPreviewRef.current / reorderDragTick at a handful of
-  // call-sites. Re-declaring them as useRef(null) / useState(0) makes
-  // those references benign: short-circuits like `reorderDragRef.current &&
-  // ...` always short-circuit, dragOffsetY = 0, isBeingDragged = false,
-  // and Sortable's own ghost/drag classes handle the actual drag visuals.
-  // Removing the lingering references entirely is a follow-up cleanup;
-  // keeping them as no-ops is the surgical fix.
+  // Kept inert for backward compatibility with the LEGACY DEAD drag-
+  // handle block at ~L17166 (gated by `false &&` so never renders, but
+  // its parsed source still references these refs by name; declaring
+  // them as null keeps the file parseable without rewriting the dead
+  // block. Real cleanup of that block is a follow-up).
   const reorderDragRef = useRef(null);
   const reorderDropPreviewRef = useRef(null);
-  // §13.3f — Setter now exposed. The rAF-throttled pointermove handler
-  // inside the SortableJS useEffect calls setReorderDragTick(t => t + 1)
-  // after mutating reorderDragRef.current / reorderDropPreviewRef.current
-  // so the drop-preview indicator (rendered ~10k lines below) re-renders
-  // with the new viewport rect. Without a re-render the indicator would
-  // stay frozen at its first-detected position even as the pointer moves.
-  const [reorderDragTick, setReorderDragTick] = useState(0);
-  const exitReorderMode = () => {
-    // Sortable instances are owned by the useEffect below and torn down
-    // in its cleanup; flipping reorderMode false drops the effect and
-    // its cleanup fires automatically. No imperative cleanup needed
-    // here.
-    setReorderMode(false);
-  };
+  const exitReorderMode = () => { setReorderMode(false); };
   // §13.3 — Exit habit reorder mode whenever the user navigates away
   // from the Habits tab (bottom-tab tap). Tap-Home, tap-Goals etc.
   // implicitly mean "done reordering" — no need to make the user hit
@@ -5119,275 +5101,11 @@ function App() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
-  // §13.3 — Diagnostic state shown inline in the reorder-mode top bar.
-  // Lets the user (and me) SEE whether Sortable is wired up correctly
-  // without needing Safari Web Inspector. Format:
-  //   "v61 • grids: N • last: choose/start/move/end/null @HH:MM:SS"
-  // If grids = 0, the useEffect didn't find any .habit-grid containers
-  // (sections collapsed / never on Habits tab when it ran). If grids
-  // > 0 but last stays "null" when user touches a card, Sortable's
-  // listeners aren't receiving touchstart (CSS / DOM issue between
-  // touch target and the library's document-level handler).
-  const [sortableDiag, setSortableDiag] = useState({ grids: 0, last: null, ts: null, layer: null });
-  // §13.3 — SortableJS lifecycle. When reorder mode flips ON, find each
-  // section's .habit-grid container and instantiate a Sortable with
-  // group="habits" so cross-section drags work. Cleanup destroys the
-  // instances on mode exit (or unmount). The library handles touch +
-  // mouse pointer events, auto-scroll, ghost/drag visuals, and iOS
-  // touch quirks that our hand-rolled pipeline kept regressing on.
-  useEffect(() => {
-    if (!reorderMode) return;
-    if (typeof window.Sortable === "undefined") {
-      try { console.warn("[verrocchio] Sortable not loaded yet — drag disabled"); } catch (_) {}
-      return;
-    }
-    const Sortable = window.Sortable;
-    const grids = Array.from(document.querySelectorAll('[data-sec] .habit-grid'));
-    try { console.log("[verrocchio:sortable] init — grids found:", grids.length, "Sortable:", typeof Sortable); } catch (_) {}
-    setSortableDiag({ grids: grids.length, last: null, ts: null, layer: null });
-    const stampDiag = (eventName) => {
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      // Preserve `layer` across stamps — only the pointermove handler owns it.
-      setSortableDiag(prev => ({ grids: prev.grids, last: eventName, ts: hh + ":" + mm + ":" + ss, layer: prev.layer }));
-    };
-
-    // §13.3f — Layered-drop detection. SortableJS only reports `newIndex`
-    // (a sequential insertion point). To recover the layering gesture the
-    // hand-rolled pipeline had (drop on a peer's left/right edge =
-    // concurrent-cohort join), we attach a document-level pointermove
-    // during the drag and hit-test the pointer against visible peer .hrow
-    // rects. When the pointer is inside a peer's outer-edge zone
-    // (min(40px, 25% of width) on either left or right side) we stash the
-    // peer + side in reorderDragRef.current and populate
-    // reorderDropPreviewRef.current.indicatorRect so the existing
-    // drop-preview pill renders. onEnd reads those refs and passes them
-    // through to commitHabitReorderDrop, which already supports the
-    // layeredPeerId / layeredSide / targetConcurrent options.
-    //
-    // forceFallback:true keeps SortableJS in its CSS-transform fallback
-    // mode for iOS Safari reliability; the standard PointerEvent stream
-    // on `document` continues to fire during the drag (the user's
-    // finger/cursor is still moving, the browser still dispatches).
-    // rAF coalesces multiple pointermoves per frame so we don't render-
-    // storm during fast drags.
-    let pointermoveAttached = false;
-    let rafPending = false;
-    const updateLayerTarget = (clientX, clientY) => {
-      let targetGrid = null;
-      for (const g of grids) {
-        const r = g.getBoundingClientRect();
-        if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-          targetGrid = g;
-          break;
-        }
-      }
-      let nextDrag = { active: true };
-      let nextPreview = null;
-      if (targetGrid) {
-        const peers = Array.from(targetGrid.querySelectorAll('.hrow[data-reorderable="1"]'));
-        for (const p of peers) {
-          // Skip the dragged card's placeholder, the original "chosen"
-          // element, and any in-flight clone — we only want stable peer
-          // rects so the edge zone matches what the user sees.
-          if (p.classList.contains('hrow-sortable-ghost')) continue;
-          if (p.classList.contains('hrow-sortable-chosen')) continue;
-          if (p.classList.contains('hrow-sortable-drag')) continue;
-          const r = p.getBoundingClientRect();
-          if (r.width <= 0 || r.height <= 0) continue;
-          if (clientY < r.top || clientY > r.bottom) continue;
-          // Edge zone: outer min(40px, 25%) on each side. Mobile fingers
-          // are imprecise, so a generous zone matters more than a
-          // pixel-perfect one.
-          const edge = Math.min(40, r.width * 0.25);
-          const pillW = 4;
-          if (clientX >= r.left && clientX <= r.left + edge) {
-            nextDrag = {
-              active: true,
-              layeredPeerId: p.getAttribute("data-habit-id"),
-              layeredSide: "left"
-            };
-            nextPreview = {
-              indicatorRect: {
-                x: r.left - pillW / 2,
-                y: r.top + 6,
-                width: pillW,
-                height: Math.max(0, r.height - 12),
-                kind: "vertical"
-              }
-            };
-            break;
-          }
-          if (clientX <= r.right && clientX >= r.right - edge) {
-            nextDrag = {
-              active: true,
-              layeredPeerId: p.getAttribute("data-habit-id"),
-              layeredSide: "right"
-            };
-            nextPreview = {
-              indicatorRect: {
-                x: r.right - pillW / 2,
-                y: r.top + 6,
-                width: pillW,
-                height: Math.max(0, r.height - 12),
-                kind: "vertical"
-              }
-            };
-            break;
-          }
-        }
-      }
-      reorderDragRef.current = nextDrag;
-      reorderDropPreviewRef.current = nextPreview;
-      // Reflect the layer target in the diag bar so the user (and any
-      // screenshot we take during verification) can SEE detection working
-      // before they release. Trailing 4 chars of the peer id is enough
-      // to identify the row without leaking the full Date.now() id.
-      const layerLabel = nextDrag.layeredPeerId
-        ? (String(nextDrag.layeredPeerId).slice(-4) + "/" + nextDrag.layeredSide)
-        : null;
-      setSortableDiag(prev => prev.layer === layerLabel ? prev : ({ ...prev, layer: layerLabel }));
-      setReorderDragTick(t => t + 1);
-    };
-    const onPointerMove = (e) => {
-      if (rafPending) return;
-      rafPending = true;
-      const cx = e.clientX;
-      const cy = e.clientY;
-      requestAnimationFrame(() => {
-        rafPending = false;
-        updateLayerTarget(cx, cy);
-      });
-    };
-    const attachPointerMove = () => {
-      if (pointermoveAttached) return;
-      document.addEventListener('pointermove', onPointerMove, { passive: true });
-      pointermoveAttached = true;
-    };
-    const detachPointerMove = () => {
-      if (!pointermoveAttached) return;
-      document.removeEventListener('pointermove', onPointerMove);
-      pointermoveAttached = false;
-      reorderDragRef.current = null;
-      reorderDropPreviewRef.current = null;
-      setSortableDiag(prev => prev.layer == null ? prev : ({ ...prev, layer: null }));
-      setReorderDragTick(t => t + 1);
-    };
-
-    const instances = grids.map(gridEl => {
-      try {
-        return new Sortable(gridEl, {
-          group: "habits",
-          animation: 180,
-          draggable: '.hrow[data-reorderable="1"]',
-          ghostClass: "hrow-sortable-ghost",
-          chosenClass: "hrow-sortable-chosen",
-          dragClass: "hrow-sortable-drag",
-          fallbackOnBody: true,
-          forceFallback: true,
-          scroll: true,
-          scrollSensitivity: 80,
-          scrollSpeed: 12,
-          bubbleScroll: true,
-          delay: 0,
-          touchStartThreshold: 4,
-          // §13.3 diagnostic — stamp each event so the top bar shows
-          // the user which phase the drag pipeline reached. onChoose
-          // fires when Sortable selects the touched card; onStart when
-          // movement exceeds touchStartThreshold; onMove on every
-          // pointer move during drag; onEnd on release.
-          onChoose: () => stampDiag("choose"),
-          onStart: () => {
-            stampDiag("start");
-            attachPointerMove();
-          },
-          onMove: () => { stampDiag("move"); return true; },
-          onEnd: (evt) => {
-            stampDiag("end");
-            // Capture layered-drop intent BEFORE detachPointerMove clears
-            // the refs. If the user released the finger outside any peer
-            // edge zone, dragRef is { active: true } and layeredPeerId is
-            // undefined → falls back to plain sequential reorder.
-            const dragRef = reorderDragRef.current || {};
-            const layeredPeerId = dragRef.layeredPeerId || null;
-            const layeredSide = dragRef.layeredSide || null;
-            detachPointerMove();
-            const item = evt && evt.item;
-            if (!item) return;
-            const habitId = item.getAttribute("data-habit-id");
-            const slotId = item.getAttribute("data-slot-id") || null;
-            const toGrid = evt.to;
-            let targetSection = null;
-            let n = toGrid;
-            while (n && n !== document.body) {
-              if (n.getAttribute && n.getAttribute("data-sec")) {
-                targetSection = n.getAttribute("data-sec");
-                break;
-              }
-              n = n.parentElement;
-            }
-            if (!targetSection || !habitId) return;
-            const targetIndex = typeof evt.newIndex === "number" ? evt.newIndex : 0;
-            // Multi-slot slot card: rewrite slotSections[arrayIdx] only
-            // for cross-section moves. Same-section is a no-op (slot
-            // order within a section is rendered from the array, so
-            // SortableJS's DOM reorder would desync from data on the
-            // next render). Layered drops don't apply to slot cards —
-            // their concurrency model is "multiple completions per day",
-            // not "share a row with another habit" — so layeredPeerId
-            // is intentionally ignored on the slot path.
-            const slotMatch = slotId ? /^(.+):(\d+)$/.exec(slotId) : null;
-            if (slotMatch) {
-              const originalSection = slotMatch[1];
-              const arrayIdx = parseInt(slotMatch[2], 10);
-              if (Number.isFinite(arrayIdx) && targetSection !== originalSection) {
-                if (typeof commitSlotReorderDrop === "function") {
-                  commitSlotReorderDrop(habitId, arrayIdx, targetSection);
-                }
-              }
-            } else {
-              if (typeof commitHabitReorderDrop === "function") {
-                // Pass the layered intent captured from the pointermove
-                // hit-test. The peer id may belong to a row in a DIFFERENT
-                // section than the SortableJS-reported targetSection (the
-                // user crossed a section boundary while inside a peer's
-                // edge zone) — commitHabitReorderDrop handles cross-section
-                // layered drops correctly: the moved habit's section
-                // becomes the destination section, and the cohort linkage
-                // is set against the peer wherever it lives.
-                commitHabitReorderDrop(habitId, targetSection, targetIndex, {
-                  targetConcurrent: !!layeredPeerId,
-                  layeredPeerId,
-                  layeredSide
-                });
-              }
-            }
-          }
-        });
-      } catch (e) {
-        try { console.warn("[verrocchio] Sortable init failed:", e && e.message); } catch (_) {}
-        return null;
-      }
-    }).filter(Boolean);
-    return () => {
-      detachPointerMove();
-      instances.forEach(s => { try { s.destroy(); } catch (_) {} });
-    };
-  // §13.3 — Dep on `reorderMode` ONLY. `collapsedSections` is declared
-  // ~1500 lines below this useEffect; using it in the dep array caused
-  // a TDZ ReferenceError that crashed the entire App on first render.
-  // `data.habits` is also excluded because that ref changes on every
-  // save() and would tear down + rebuild Sortable instances mid-drag.
-  // SortableJS uses container-level event delegation, so newly-rendered
-  // .hrow children automatically become draggable without re-init.
-  // If a user enters reorder mode while a section is collapsed and then
-  // expands it, Sortable won't auto-attach to the new grid — but they
-  // can exit+re-enter reorder mode to re-run this effect against the
-  // expanded section.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reorderMode]);
+  // §13.3g (v71) — SortableJS useEffect was deleted. The replacement is
+  // the per-card ▲/▼/⇶ button row rendered ~12k lines below; the click
+  // handlers call moveHabitWithinSection / toggleConcurrentForHabit
+  // (defined alongside commitHabitReorderDrop ~3500 lines below). No
+  // useEffect needed — button onClicks fire on render directly.
   const [saved, setSaved] = useState(false);
   // Manual-save flash for the header Today button. Value transitions:
   //   null      → idle (nothing rendered)
@@ -9130,6 +8848,87 @@ function App() {
     arr.splice(target, 0, moved);
     const stamped = arr.map((x, i) => ({ ...x, _order: i }));
     save({ ...data, [arrName]: stamped });
+  };
+  // §13.3g (v71) — Per-section habit position math. Used by:
+  //   • The render code below to compute disabled state for the ▲/▼/⇶
+  //     buttons (▲ disabled at idx=0, ▼ at idx=last, ⇶ at idx=0).
+  //   • moveHabitWithinSection to find the habit's current index inside
+  //     its section's top-level peer list before swapping with neighbour.
+  // Pure read: scans latestData.current (fall back to data) without
+  // mutating anything. Top-level only — sub-habits (parentId set) are
+  // never reorderable individually; their parent moves them as a unit.
+  const habitPositionInSection = (habitId) => {
+    const cur = latestData.current || data;
+    const all = (cur && cur.habits) || [];
+    const h = all.find(x => String(x.id) === String(habitId));
+    if (!h) return { isFirst: true, isLast: true, atIndex: -1, total: 0, section: null };
+    const sec = h.section || "morning";
+    const peers = all
+      .filter(x => x.section === sec && !x.parentId)
+      .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
+    const idx = peers.findIndex(x => String(x.id) === String(habitId));
+    return {
+      isFirst: idx <= 0,
+      isLast: idx < 0 || idx >= peers.length - 1,
+      atIndex: idx,
+      total: peers.length,
+      section: sec,
+      prevId: idx > 0 ? peers[idx - 1].id : null
+    };
+  };
+  // §13.3g (v71) — ▲/▼ implementation. Swaps the habit with its
+  // immediate neighbour (idx+delta) inside its section's top-level peer
+  // list, preserving the habit's existing `concurrent` flag. Routes
+  // through commitHabitReorderDrop so the same cohort-starter detection,
+  // position-0 invariant, and orphan-flip logic the drag pipeline used
+  // applies to button moves too — keeps the rendered grouping coherent
+  // when a cohort member is moved across cohort boundaries.
+  const moveHabitWithinSection = (habitId, delta) => {
+    const pos = habitPositionInSection(habitId);
+    if (pos.atIndex < 0) return;
+    const newIdx = pos.atIndex + delta;
+    if (newIdx < 0 || newIdx >= pos.total) return;
+    if (typeof commitHabitReorderDrop !== "function") return;
+    // Pass targetConcurrent:false / layeredPeerId:null — a plain move
+    // doesn't change the cohort linkage. If the user wants to layer
+    // they tap ⇶ afterward.
+    commitHabitReorderDrop(habitId, pos.section, newIdx, {
+      targetConcurrent: false,
+      layeredPeerId: null,
+      layeredSide: null
+    });
+  };
+  // §13.3g (v71) — ⇶ implementation. Toggles whether the habit shares
+  // a row with the habit immediately above it (concurrent cohort).
+  //   • concurrent:false → tap ⇶ → concurrent:true (join previous's cohort)
+  //   • concurrent:true  → tap ⇶ → concurrent:false (start own cohort)
+  // Implemented as a position-preserving call into commitHabitReorderDrop
+  // with the previous habit as layeredPeerId — same code path the drag
+  // pipeline used for "drop on the right edge of the habit above."
+  const toggleConcurrentForHabit = (habitId) => {
+    const pos = habitPositionInSection(habitId);
+    if (pos.atIndex <= 0) return; // position-0 can never be concurrent
+    if (typeof commitHabitReorderDrop !== "function") return;
+    const cur = latestData.current || data;
+    const h = (cur.habits || []).find(x => String(x.id) === String(habitId));
+    if (!h) return;
+    const currentlyConcurrent = !!h.concurrent;
+    if (currentlyConcurrent) {
+      // Un-layer: same position, drop concurrent flag.
+      commitHabitReorderDrop(habitId, pos.section, pos.atIndex, {
+        targetConcurrent: false,
+        layeredPeerId: null,
+        layeredSide: null
+      });
+    } else {
+      // Layer: join previous habit's cohort from the right (so previous
+      // stays the starter and this habit becomes concurrent:true).
+      commitHabitReorderDrop(habitId, pos.section, pos.atIndex, {
+        targetConcurrent: true,
+        layeredPeerId: pos.prevId,
+        layeredSide: "right"
+      });
+    }
   };
   // §13.3 — Reorder-mode drop commit. Moves the habit identified by
   // `habitId` to position `targetIndexInSection` inside `targetSection`
@@ -15785,23 +15584,7 @@ function App() {
             }, "Organize habits"),
             /*#__PURE__*/React.createElement("div", {
               style: { fontSize: 10, color: "var(--c-text-soft)", lineHeight: 1.2, marginTop: 2 }
-            }, "Drag to reorder. Drop on a card's left/right edge to layer them as concurrent. Tap Done when finished."),
-            // §13.3 diagnostic — visible status of the Sortable drag
-            // pipeline. Lets the user (and me, via screenshot) see
-            // exactly where the drag breaks on iOS Safari without
-            // needing Web Inspector. "v61 • grids: N • last: …"
-            /*#__PURE__*/React.createElement("div", {
-              style: {
-                fontSize: 9, color: "var(--c-text-faint)", lineHeight: 1.2,
-                marginTop: 2, fontVariantNumeric: "tabular-nums",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
-              }
-            },
-              "v63 • grids: " + sortableDiag.grids
-              + " • last: " + (sortableDiag.last || "—")
-              + (sortableDiag.ts ? " @" + sortableDiag.ts : "")
-              + (sortableDiag.layer ? " • layer: " + sortableDiag.layer : "")
-            )
+            }, "Tap ▲▼ to move a card. Tap ⇶ to layer with the card above. Tap Done when finished.")
           )
         ),
         /*#__PURE__*/React.createElement("button", {
@@ -15828,44 +15611,8 @@ function App() {
       reorderMode && /*#__PURE__*/React.createElement("div", {
         style: { height: 56, flexShrink: 0 }
       }),
-      // §13.3d — Drop-preview indicator. While a reorder drag is
-      // active, the rAF-throttled pointermove handler stashes a
-      // viewport-coordinate rect describing where the dragged card
-      // will land. Two visual variants:
-      //   horizontal: thin pill spanning the destination column's
-      //     width, drawn at the insertion gap (between two rows,
-      //     above the first row, or below the last row)
-      //   vertical:   thin pill on a peer's left or right edge,
-      //     marking a layered drop (the dragged card will share the
-      //     row with that peer)
-      // position:fixed + viewport coords + transition: all 0.12s
-      // ease-out so the indicator slides smoothly between candidates
-      // as the user moves the pointer. zIndex 45 sits above the
-      // dragged card translateY (which uses the default stacking
-      // context) but below the reorder-mode top bar (zIndex 50).
-      // pointerEvents: none so the overlay never intercepts the
-      // pointermove/pointerup stream feeding the drag.
-      reorderMode && reorderDragRef.current && reorderDropPreviewRef.current && reorderDropPreviewRef.current.indicatorRect && /*#__PURE__*/React.createElement("div", {
-        // Keyed so we don't get a CSS transition between completely
-        // disjoint indicator types (a horizontal line morphing into
-        // a vertical bar across the screen would look wrong). Within
-        // the same kind, position transitions smoothly.
-        key: "reorder-drop-indicator-" + reorderDropPreviewRef.current.indicatorRect.kind,
-        "aria-hidden": true,
-        style: {
-          position: "fixed",
-          left: reorderDropPreviewRef.current.indicatorRect.x,
-          top: reorderDropPreviewRef.current.indicatorRect.y,
-          width: reorderDropPreviewRef.current.indicatorRect.width,
-          height: reorderDropPreviewRef.current.indicatorRect.height,
-          background: "var(--c-tint-brand-fg)",
-          borderRadius: 999,
-          pointerEvents: "none",
-          zIndex: 45,
-          boxShadow: "0 0 10px rgba(45,90,45,0.45)",
-          transition: "left 0.12s ease-out, top 0.12s ease-out, width 0.12s ease-out, height 0.12s ease-out"
-        }
-      }),
+      // §13.3g (v71) — Drop-preview indicator was deleted alongside
+      // SortableJS. Button-based reorder has no drag preview to render.
       // W3-T10: framing sentence for new users. The add-habit affordance
       // (the [+] button + the inline "No habits yet — add one above"
       // empty state below) is already prominent on this tab, so we just
@@ -16793,51 +16540,23 @@ function App() {
         // parent's expanded block and aren't reorderable individually.
         const reorderHabitId = habit.parentId || habit.id;
         const isTopLevelForReorder = !habit.parentId;
-        // §5.8c — Multi-slot drag isolation. Each slot card of a multi-slot
-        // habit shares the same habit.id but carries its own _renderSlot.
-        // Single-slot drags leave draggedRef.slotId === null and match by
-        // habitId only (legacy behavior). Multi-slot drags require the
-        // slotId to match so only the actual dragged slot card receives
-        // the translateY transform — its sibling slot cards stay still.
-        const _draggedRef = reorderDragRef.current;
-        const isBeingDragged = reorderMode && _draggedRef
-          && String(_draggedRef.habitId) === String(reorderHabitId)
-          && (_draggedRef.slotId == null || _draggedRef.slotId === (habit._renderSlot || null));
-        // §13.3e — Auto-scroll compensation. clientY is viewport-relative;
-        // as the page auto-scrolls during a drag, the pointer's clientY
-        // stays constant while the page slides underneath. Without the
-        // scrollY delta the card's translateY appears glued to the
-        // viewport (lags behind the finger). Adding the scroll delta
-        // re-anchors the card to the pointer's DOCUMENT position.
-        const dragOffsetY = isBeingDragged
-          ? ((_draggedRef.currentY - _draggedRef.startY)
-             + ((_draggedRef.currentScrollY || 0) - (_draggedRef.startScrollY || 0)))
-          : 0;
-        // Avoid habits used to take a separate, simpler render branch
-        // (different action button, fewer pills, "Strong willpower!"
-        // swipe copy). They now share this exact same render with
-        // every other habit — the only thing that distinguishes them
-        // is which section they're sorted into. Section assignment
-        // is handled upstream by groupedH, so this branch had no
-        // reason to exist.
+        // §13.3g (v71) — Drag-only locals (isBeingDragged, dragOffsetY)
+        // were removed alongside SortableJS. The reorder buttons live
+        // inside the card render below; they call helper functions that
+        // mutate `data` directly, so no transform / translateY / "is
+        // dragging" state needs to flow into the card's CSS.
+        const isBeingDragged = false;
+        const dragOffsetY = 0;
+        // Position info for the reorder buttons (used to disable ▲ at
+        // first-in-section, ▼ at last-in-section, ⇶ at first-in-section
+        // since position 0 can't be concurrent).
+        const reorderPos = reorderMode && isTopLevelForReorder
+          ? habitPositionInSection(reorderHabitId)
+          : null;
         return /*#__PURE__*/React.createElement("div", {
           key: habit.id,
-          className: "hrow" + (reorderMode ? " hrow-reorder" : "") + (isBeingDragged ? " hrow-dragging" : ""),
+          className: "hrow" + (reorderMode ? " hrow-reorder" : ""),
           "data-habit-id": habit.id,
-          // §5.8c — Slot-aware reorder. Multi-slot habits render one card
-          // per slot; each carries its own slot ID so resolveReorderDrop
-          // can distinguish them when filtering peer lists. Empty string
-          // for single-slot habits (no behavior change for the legacy
-          // path).
-          "data-slot-id": habit._renderSlot || "",
-          "data-habit-section": habit.section || "",
-          // Identify drop-target eligibility from CSS attributes alone:
-          // a sub-habit row (parentId set) cannot be reordered as a
-          // standalone — the parent moves the whole group. We stamp
-          // an explicit "data-reorderable" so the drop resolver in
-          // the drag handle can filter out non-targets without
-          // re-reading habit objects from React state.
-          "data-reorderable": isTopLevelForReorder ? "1" : "0",
           // Tap          = toggle expanded metadata row.
           // Double-tap   = open the edit-habit modal (where the user
           //                can change the habit's position via the
@@ -17032,44 +16751,26 @@ function App() {
             padding: compact
               ? (expHabitGoals[habit.id] ? "8px 8px" : "6px 8px")
               : (expHabitGoals[habit.id] ? "10px 12px" : "7px 12px"),
-            // Reserve room for the drag handle on the right when in
-            // reorder mode so it doesn't overlap the area-of-life chip.
+            // §13.3g (v71) — Reserve right-edge room for the inline
+            // reorder button row (▲/▼/⇶ at ~28px each + 4px gap = ~96px).
+            // Outside reorder mode the original padding rules apply.
             paddingRight: reorderMode && isTopLevelForReorder
-              ? 36
+              ? 100
               : (compact ? 8 : (ht ? "30px" : "12px")),
-            transform: isBeingDragged
-              ? `translateY(${dragOffsetY}px) scale(1.02)`
-              : (animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)"),
-            // While being dragged, drop the animation transition so the
-            // card tracks the pointer instantly. Otherwise keep the
-            // existing 0.32s ease that powers the swipe-out animation.
-            transition: isBeingDragged
-              ? "transform 0s, box-shadow 0.15s"
-              : "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s, box-shadow 0.15s",
-            boxShadow: isBeingDragged
-              ? "0 12px 28px rgba(0,0,0,0.18)"
-              : (reorderMode && isTopLevelForReorder
-                ? "0 4px 14px rgba(0,0,0,0.10)"
-                : (d || animState === "done"
-                  ? "0 1px 3px rgba(22,163,74,.1)"
-                  : missed || animState === "missed"
-                    ? "0 1px 3px rgba(220,38,38,.08)"
-                    : "0 1px 2px rgba(0,0,0,.04)")),
+            transform: animState === "done" ? "translateX(110%)" : (animState === "missed" || animState === "reset") ? "translateX(-110%)" : "translateX(0)",
+            transition: "transform 0.32s ease, background 0.2s, border-color 0.2s, padding 0.15s, box-shadow 0.15s",
+            boxShadow: reorderMode && isTopLevelForReorder
+              ? "0 4px 14px rgba(0,0,0,0.10)"
+              : (d || animState === "done"
+                ? "0 1px 3px rgba(22,163,74,.1)"
+                : missed || animState === "missed"
+                  ? "0 1px 3px rgba(220,38,38,.08)"
+                  : "0 1px 2px rgba(0,0,0,.04)"),
             position: "relative",
-            // Drag-out-of-bounds: lift overflow clipping during a drag
-            // so a card translated >half its height is fully visible.
-            overflow: isBeingDragged ? "visible" : "hidden",
-            zIndex: isBeingDragged ? 10 : undefined,
-            opacity: isBeingDragged ? 0.94 : 1,
+            overflow: "hidden",
             marginBottom: 8,
-            cursor: reorderMode && isTopLevelForReorder ? "grab" : "pointer",
+            cursor: "pointer",
             userSelect: "none",
-            // touchAction: none on the card while in reorder mode so
-            // the browser doesn't try to scroll the page when the user
-            // drags vertically on the card body. Outside reorder mode
-            // we leave touch-action at the browser default so vertical
-            // scrolling and horizontal swipe both work as today.
-            touchAction: reorderMode && isTopLevelForReorder ? "none" : undefined,
             WebkitTapHighlightColor: "transparent"
           }
         },
@@ -17145,24 +16846,83 @@ function App() {
         // Sortable could see them, leaving Sortable inert. Stripped
         // to a pure visual cue. pointerEvents: none so taps fall
         // through to Sortable's automatic .hrow draggable detection.
-        (reorderMode && isTopLevelForReorder) && /*#__PURE__*/React.createElement("div", {
-          className: "hrow-drag-handle",
-          "aria-hidden": true,
+        // §13.3g (v71) — Inline reorder button row. Replaces the
+        // SortableJS-driven drag handle. Three buttons stacked
+        // horizontally on the right edge of the card:
+        //   ▲  move up one position within the section
+        //   ▼  move down one position within the section
+        //   ⇶  toggle "concurrent with previous" (layered cohort row)
+        // Disabled state per-button uses habitPositionInSection so the
+        // user never taps a button that does nothing surprising.
+        // stopPropagation on each click so the underlying card tap
+        // (which is a no-op in reorder mode anyway) doesn't fire too.
+        (reorderMode && isTopLevelForReorder) && reorderPos && /*#__PURE__*/React.createElement("div", {
+          className: "hrow-reorder-actions",
           style: {
             position: "absolute",
-            top: 0, right: 0, bottom: 0,
-            width: 32,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: "var(--c-text-faint)",
-            fontSize: 18,
-            fontWeight: 700,
-            lineHeight: 1,
-            background: "transparent",
-            pointerEvents: "none",
-            userSelect: "none",
+            top: 0, right: 4, bottom: 0,
+            display: "flex", alignItems: "center", gap: 4,
             zIndex: 3
           }
-        }, "≡"),
+        },
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            "aria-label": "Move up",
+            title: "Move up",
+            disabled: reorderPos.isFirst,
+            onClick: (e) => { e.stopPropagation(); moveHabitWithinSection(reorderHabitId, -1); },
+            style: {
+              background: reorderPos.isFirst ? "var(--c-surface-muted)" : "var(--c-surface, #fff)",
+              border: "1px solid var(--c-border)",
+              borderRadius: 6,
+              width: 28, height: 28,
+              padding: 0,
+              cursor: reorderPos.isFirst ? "default" : "pointer",
+              opacity: reorderPos.isFirst ? 0.35 : 1,
+              color: "var(--c-text-soft)",
+              fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }
+          }, "▲"),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            "aria-label": "Move down",
+            title: "Move down",
+            disabled: reorderPos.isLast,
+            onClick: (e) => { e.stopPropagation(); moveHabitWithinSection(reorderHabitId, 1); },
+            style: {
+              background: reorderPos.isLast ? "var(--c-surface-muted)" : "var(--c-surface, #fff)",
+              border: "1px solid var(--c-border)",
+              borderRadius: 6,
+              width: 28, height: 28,
+              padding: 0,
+              cursor: reorderPos.isLast ? "default" : "pointer",
+              opacity: reorderPos.isLast ? 0.35 : 1,
+              color: "var(--c-text-soft)",
+              fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }
+          }, "▼"),
+          /*#__PURE__*/React.createElement("button", {
+            type: "button",
+            "aria-label": habit.concurrent ? "Stop layering with above" : "Layer with above",
+            title: habit.concurrent ? "Stop layering — start own row" : (reorderPos.isFirst ? "First in section: nothing above to layer with" : "Run at the same time as the habit above"),
+            disabled: reorderPos.isFirst,
+            onClick: (e) => { e.stopPropagation(); toggleConcurrentForHabit(reorderHabitId); },
+            style: {
+              background: habit.concurrent ? "#dbeafe" : (reorderPos.isFirst ? "var(--c-surface-muted)" : "var(--c-surface, #fff)"),
+              border: "1px solid " + (habit.concurrent ? "#93c5fd" : "var(--c-border)"),
+              borderRadius: 6,
+              width: 28, height: 28,
+              padding: 0,
+              cursor: reorderPos.isFirst ? "default" : "pointer",
+              opacity: reorderPos.isFirst ? 0.35 : 1,
+              color: habit.concurrent ? "#1d4ed8" : "var(--c-text-soft)",
+              fontSize: 12, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }
+          }, "⇶")
+        ),
         false && (reorderMode && isTopLevelForReorder) && /*#__PURE__*/React.createElement("div", {
           className: "hrow-drag-handle-LEGACY-DEAD",
           "aria-label": "Drag to reorder",
