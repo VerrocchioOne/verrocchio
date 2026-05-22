@@ -8828,6 +8828,147 @@ function App() {
       layeredSide: null
     });
   };
+  // §13.3k (v74) — Row-aware ▲/▼ that handles BOTH single-slot habit
+  // rows AND individual slot rows of a multi-slot habit. The toolbar
+  // ▲/▼ buttons call this with reorderSelectedId (which encodes the
+  // selected card uniquely — "habitId" for single-slot, "habitId@slotId"
+  // for multi-slot). Each row gets its own effective order:
+  //   • single-slot habit row → habit._order
+  //   • multi-slot slot row   → habit.slotOrders[arrayIdx] if set,
+  //                             else habit._order
+  // Swapping a slot row with its neighbour re-stamps the whole section
+  // 0..N-1 and writes the new orders back to the right source field
+  // (habit._order for plain rows, slotOrders[i] for slot rows). This
+  // is the data-model change that lets the user genuinely intersperse
+  // slot[0] of CFA before "Meditate" and slot[1] of CFA after it.
+  const parseRowSourceId = (sourceId) => {
+    const [habitId, slotId] = String(sourceId || "").split("@");
+    return { habitId, slotId: slotId || null };
+  };
+  const resolveSlotArrayIdx = (habit, slotId) => {
+    if (!slotId) return -1;
+    const colon = slotId.lastIndexOf(":");
+    if (colon < 0) return -1;
+    const sec = slotId.slice(0, colon);
+    const localIdx = parseInt(slotId.slice(colon + 1), 10);
+    if (!Number.isFinite(localIdx)) return -1;
+    const sections = Array.isArray(habit.slotSections) ? habit.slotSections : [];
+    let seen = 0;
+    for (let i = 0; i < sections.length; i++) {
+      if (sections[i] === sec) {
+        if (seen === localIdx) return i;
+        seen += 1;
+      }
+    }
+    return -1;
+  };
+  const gatherSectionRowsSorted = (sectionName, allHabits) => {
+    const rows = [];
+    for (const h of allHabits) {
+      if (h.parentId) continue;
+      const sections = Array.isArray(h.slotSections) ? h.slotSections : null;
+      if (sections && sections.length > 0) {
+        for (let i = 0; i < sections.length; i++) {
+          if (sections[i] !== sectionName) continue;
+          const effOrder = (h.slotOrders && h.slotOrders[i] != null)
+            ? h.slotOrders[i]
+            : (h._order != null ? h._order : 999);
+          rows.push({ habitId: h.id, slotArrayIdx: i, effOrder });
+        }
+      } else if ((h.section || "morning") === sectionName) {
+        rows.push({ habitId: h.id, slotArrayIdx: -1, effOrder: h._order != null ? h._order : 999 });
+      }
+    }
+    rows.sort((a, b) => a.effOrder - b.effOrder);
+    return rows;
+  };
+  const rowPositionInSection = (sourceId) => {
+    const cur = latestData.current || data;
+    const all = (cur && cur.habits) || [];
+    const { habitId, slotId } = parseRowSourceId(sourceId);
+    const habit = all.find(h => String(h.id) === String(habitId));
+    if (!habit) return { isFirst: true, isLast: true, atIndex: -1, total: 0, section: null, isSlot: false };
+    let section, slotArrayIdx;
+    if (slotId) {
+      const colon = slotId.lastIndexOf(":");
+      section = colon >= 0 ? slotId.slice(0, colon) : (habit.section || "morning");
+      slotArrayIdx = resolveSlotArrayIdx(habit, slotId);
+    } else {
+      section = habit.section || "morning";
+      slotArrayIdx = -1;
+    }
+    const rows = gatherSectionRowsSorted(section, all);
+    const idx = rows.findIndex(r => String(r.habitId) === String(habitId) && r.slotArrayIdx === slotArrayIdx);
+    return {
+      isFirst: idx <= 0,
+      isLast: idx < 0 || idx >= rows.length - 1,
+      atIndex: idx,
+      total: rows.length,
+      section,
+      isSlot: slotArrayIdx >= 0
+    };
+  };
+  const moveRowWithinSection = (sourceId, delta) => {
+    const cur = latestData.current || data;
+    const all = (cur && cur.habits ? cur.habits.slice() : []);
+    const { habitId, slotId } = parseRowSourceId(sourceId);
+    const srcHabit = all.find(h => String(h.id) === String(habitId));
+    if (!srcHabit) return;
+    let section, srcSlotArrayIdx;
+    if (slotId) {
+      const colon = slotId.lastIndexOf(":");
+      if (colon < 0) return;
+      section = slotId.slice(0, colon);
+      srcSlotArrayIdx = resolveSlotArrayIdx(srcHabit, slotId);
+      if (srcSlotArrayIdx < 0) return;
+    } else {
+      section = srcHabit.section || "morning";
+      srcSlotArrayIdx = -1;
+    }
+    const rows = gatherSectionRowsSorted(section, all);
+    const idx = rows.findIndex(r => String(r.habitId) === String(habitId) && r.slotArrayIdx === srcSlotArrayIdx);
+    if (idx < 0) return;
+    const newIdx = idx + delta;
+    if (newIdx < 0 || newIdx >= rows.length) return;
+    // Splice the source out and re-insert at newIdx so neighbours
+    // shift the other direction (a simple swap would only handle
+    // delta = ±1 cleanly; the splice handles any delta).
+    const [movedRow] = rows.splice(idx, 1);
+    rows.splice(newIdx, 0, movedRow);
+    // Re-stamp 0..N-1 and aggregate per-habit updates.
+    const updates = new Map();
+    rows.forEach((r, i) => {
+      let u = updates.get(String(r.habitId));
+      if (!u) { u = { newOrder: null, slotOrderEntries: new Map() }; updates.set(String(r.habitId), u); }
+      if (r.slotArrayIdx < 0) {
+        u.newOrder = i;
+      } else {
+        u.slotOrderEntries.set(r.slotArrayIdx, i);
+      }
+    });
+    const nextHabits = all.map(h => {
+      const u = updates.get(String(h.id));
+      if (!u) return h;
+      const patch = {};
+      if (u.newOrder != null) patch._order = u.newOrder;
+      if (u.slotOrderEntries.size > 0) {
+        const sections = Array.isArray(h.slotSections) ? h.slotSections : [];
+        // Initialize / extend slotOrders to match slotSections length.
+        // Null entries fall back to h._order at render time, so existing
+        // habits without slotOrders keep their current rendering.
+        const next = (h.slotOrders && Array.isArray(h.slotOrders))
+          ? h.slotOrders.slice()
+          : [];
+        while (next.length < sections.length) next.push(null);
+        u.slotOrderEntries.forEach((order, arrayIdx) => {
+          next[arrayIdx] = order;
+        });
+        patch.slotOrders = next;
+      }
+      return { ...h, ...patch };
+    });
+    save({ ...cur, habits: nextHabits, sortPrefs: { ...(cur.sortPrefs || {}), habits: "default" } });
+  };
   // §13.3g (v71) — ⇶ implementation. Toggles whether the habit shares
   // a row with the habit immediately above it (concurrent cohort).
   //   • concurrent:false → tap ⇶ → concurrent:true (join previous's cohort)
@@ -11111,8 +11252,20 @@ function App() {
         const rows = slotRowsFor(slots);
         for (const r of rows) {
           if (r.section !== sec.value) continue;
+          // §13.3k (v74) — Per-slot effective order. Each slot row
+          // gets its own _order from h.slotOrders[arrayIdx] if set,
+          // otherwise falls back to h._order. Lets sortItems below
+          // interleave slot rows with other habits' cards in the
+          // same section — slot[0] of habit B can sit BEFORE habit
+          // A while slot[1] of habit B sits AFTER it. Without this
+          // override all slots of a habit shared h._order and
+          // rendered consecutively (the v73 limitation).
+          const effOrder = (h.slotOrders && h.slotOrders[r.arrayIdx] != null)
+            ? h.slotOrders[r.arrayIdx]
+            : (h._order != null ? h._order : 999);
           expanded.push({
             ...h,
+            _order: effOrder,
             _renderSlot: r.slotId,
             _renderSlotMeta: {
               section: r.section,
@@ -15524,9 +15677,18 @@ function App() {
         const selSlotCurrentSection = selIsSlot && selSlotArrayIdx >= 0
           ? selHabit.slotSections[selSlotArrayIdx]
           : null;
-        // Habit-level position info (for ▲/▼/⇶ — they always operate
-        // on the whole habit, even when a slot card was selected).
-        const selPos = selHabitId
+        // §13.3k (v74) — Position info now uses rowPositionInSection,
+        // which is slot-aware. For a slot row, ▲/▼ moves that slot
+        // INDEPENDENTLY of the habit's other slots (the slot card can
+        // sit before/after any other habit's card in the same section).
+        // For a single-slot habit, it works exactly like before.
+        // ⇶ still operates whole-habit because cohort linkage is a
+        // habit-level concept; we look up the habit-level position for
+        // the ⇶ disabled state.
+        const selRowPos = reorderSelectedId
+          ? rowPositionInSection(reorderSelectedId)
+          : null;
+        const selHabitPos = selHabitId
           ? habitPositionInSection(selHabitId)
           : null;
         const selLabel = selHabit
@@ -15535,9 +15697,9 @@ function App() {
               : selHabit.text)
           : "Tap a card to select";
         const selConcurrent = !!(selHabit && selHabit.concurrent);
-        const canUp    = !!selPos && !selPos.isFirst;
-        const canDown  = !!selPos && !selPos.isLast;
-        const canLayer = !!selPos && !selPos.isFirst;
+        const canUp    = !!selRowPos && !selRowPos.isFirst;
+        const canDown  = !!selRowPos && !selRowPos.isLast;
+        const canLayer = !!selHabitPos && !selHabitPos.isFirst;
         const btnStyle = (enabled, isLayerActive) => ({
           flex: 1,
           minHeight: 44,
@@ -15604,16 +15766,16 @@ function App() {
           },
             /*#__PURE__*/React.createElement("button", {
               type: "button",
-              "aria-label": "Move selected habit up",
+              "aria-label": "Move selected card up",
               disabled: !canUp,
-              onClick: () => { if (canUp) moveHabitWithinSection(selHabitId, -1); },
+              onClick: () => { if (canUp) moveRowWithinSection(reorderSelectedId, -1); },
               style: btnStyle(canUp, false)
             }, "▲ Up"),
             /*#__PURE__*/React.createElement("button", {
               type: "button",
-              "aria-label": "Move selected habit down",
+              "aria-label": "Move selected card down",
               disabled: !canDown,
-              onClick: () => { if (canDown) moveHabitWithinSection(selHabitId, 1); },
+              onClick: () => { if (canDown) moveRowWithinSection(reorderSelectedId, 1); },
               style: btnStyle(canDown, false)
             }, "▼ Down"),
             /*#__PURE__*/React.createElement("button", {
