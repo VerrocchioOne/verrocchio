@@ -20,7 +20,10 @@ module.exports = {
     }
   ],
   webServer: {
-    command: "powershell -ExecutionPolicy Bypass -File ./serve.ps1",
+    // Cross-platform Node server. serve.ps1 is kept for local Windows
+    // dev (muscle memory) but Playwright runs the same content through
+    // a Node implementation so the Linux CI runner can spin it up too.
+    command: "node scripts/serve.mjs",
     port: 8080,
     reuseExistingServer: true,
     timeout: 10000
