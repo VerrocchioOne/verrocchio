@@ -8,7 +8,18 @@ const FILES = [
   'index.html',
   'home.html',
   'utils.js',
+  // lib/* — all script-tag-loaded extractions. ANY missing entry here
+  // causes Firebase Hosting's `** → /index.html` rewrite to serve the
+  // 404'd file as text/html, and the browser refuses to execute it as
+  // a script — silently breaking the app with a generic
+  // "Something went wrong" error. Confirmed prod-break on 2026-05-18
+  // when auth.js / merge.js / dialog.js / icalendar.js were missing
+  // from this allowlist after the OSS-port extractions landed.
   'lib/hydration.js',
+  'lib/auth.js',
+  'lib/merge.js',
+  'lib/dialog.js',
+  'lib/icalendar.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',
@@ -52,3 +63,29 @@ if (!demoPw) {
 }
 
 console.log('[build-dist] dist/ built with', FILES.length, 'allowlisted files');
+
+// DevMoses step 4 — system verifies itself. Scan dist/index.html for
+// every <script src="./...">/<script src="lib/..."> tag and confirm
+// the referenced file actually exists in dist/. A missing entry in the
+// FILES allowlist above would otherwise be invisible at build time and
+// only manifest as a production "Something went wrong" page (because
+// Firebase Hosting's `** → /index.html` rewrite would serve HTML in
+// place of the missing .js, the browser would refuse to execute it as
+// a script, and any global the missing file exported would be
+// undefined). Fail the build loudly so CI catches it before deploy.
+const idxHtml = await readFile(path.join(DIST, 'index.html'), 'utf8');
+const localScripts = [...idxHtml.matchAll(/<script[^>]+src=["'](\.?\/?[^"']+\.m?js)["']/g)]
+  .map(m => m[1])
+  .filter(src => !/^https?:\/\//.test(src)); // skip CDN URLs
+const missing = [];
+for (const src of localScripts) {
+  const rel = src.replace(/^\.?\//, '');
+  if (!existsSync(path.join(DIST, rel))) missing.push(src);
+}
+if (missing.length > 0) {
+  console.error('[build-dist] FATAL: index.html references local scripts that are NOT in dist/:');
+  for (const m of missing) console.error('  - ' + m);
+  console.error('[build-dist] Add the missing files to the FILES allowlist above and re-build.');
+  process.exit(1);
+}
+console.log('[build-dist] verified', localScripts.length, 'local script references in dist/index.html');
