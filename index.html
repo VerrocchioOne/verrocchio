@@ -13801,7 +13801,96 @@ function App() {
     // breakpoint too. Inline padding/margin shorthand would defeat the
     // longhand desktop overrides — that's why this is now bare.
     className: "fade-in tab-content"
-  }, tab === "brief" && (() => {
+  }, tab === "brief" && /*#__PURE__*/React.createElement(window.BriefView, {
+    data,
+    dispatch,
+    deviceProfile: window.__deviceProfile,
+    callbacks: {
+      helpers: {
+        matchesRoutine, isHabitDueOn, isDone, isMissed,
+        isHabitIncomplete, isGoalIncomplete, isTodoIncomplete,
+        isFutureHabit, isFutureGoal, habitLinkedToGoal,
+        getStreak, getCR,
+        detectAdditiveCrowding,
+        memoedOffSchedule, memoedCorrelations,
+        aiEnabled: AI_ENABLED,
+        features: FEATURES,
+        HT, AB,
+        Glyph, A11yDialog, VoiceMicButton,
+        accentColor, settingsMode, themeLocked, demoMode,
+        pendingReviewPromptDay, completionDayCount,
+        briefing, briefTxt,
+        resistanceStep, resistanceFlagged, resistancePlanText,
+        jTxt, jMood,
+        upDateDraft
+      },
+      // ── Generic action callbacks ──
+      onUpdateRitual: (patch) => updateRitual(patch),
+      onGenBrief: () => genBrief(),
+      onClearBriefTxt: () => setBriefTxt(""),
+      onOpenTab: (t) => setTab(t),
+      onOpenCalendarModal: () => setCalendarModalOpen(true),
+      onOpenYesterdayInHabits: (yest) => { setSelDate(yest); setTab("habits"); },
+      onOpenTodayInHabits: (today) => { setSelDate(today); setTab("habits"); },
+      onOpenYesterdayReflection: (yest) => { setSelDate(yest); setTab("reflection"); },
+      onOpenWeekCalendar: (today) => { setCalendarView("week"); setCalendarFocus(today); setCalendarModalOpen(true); },
+      onOpenHeader: () => { setHeaderExpanded(true); window.scrollTo({ top: 0, behavior: "smooth" }); },
+      onCoachContext: (ctx) => setCoachContext(ctx),
+      onOpenReviewLink: (milestone) => openReviewLink(milestone),
+      onDismissReviewPrompt: (milestone) => dismissReviewPrompt(milestone),
+      onStartDebrief: () => { setDebriefStep(1); updateRitual({ debriefStartedAt: Date.now() }); },
+      onStartEveningDebrief: () => {
+        const ritD = (data.dailyRitual && data.dailyRitual[tk()]) || {};
+        setEveningDebriefStep(1);
+        if (ritD.intention) setTomorrowIntention(ritD.intention);
+      },
+      onDismissCrowdingPair: (additiveId, nonNegId) => dismissCrowdingPair(additiveId, nonNegId),
+      onReorderCrowdingPair: (nonNegId, additiveId) => reorderCrowdingPair(nonNegId, additiveId),
+      // ── Resistance flow callbacks ──
+      onToggleResistanceFlag: (id) => setResistanceFlagged(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]),
+      onSetResistanceStep: (step) => setResistanceStep(step),
+      onSetResistancePlanText: (txt) => setResistancePlanText(txt),
+      onFinishResistance: ({ skipPlan, yest } = {}) => {
+        const cur = latestData.current || data;
+        const todayKey = tk();
+        const log = { ...(cur.resistanceLog || {}) };
+        log[yest] = { ranked: resistanceFlagged.slice(), plan: (resistancePlanText || "").trim(), ts: Date.now() };
+        const nextRitual = { ...(cur.dailyRitual || {}) };
+        nextRitual[todayKey] = { ...(nextRitual[todayKey] || {}), resistanceCompletedFor: yest };
+        const journalAddition = (!skipPlan && (resistancePlanText || "").trim())
+          ? [{ id: Date.now(), text: "Restructure plan: " + resistancePlanText.trim(), mood: "", tag: "plan", timestamp: new Date().toISOString(), dateKey: todayKey }]
+          : [];
+        save({ ...cur, resistanceLog: log, dailyRitual: nextRitual, journal: [...(cur.journal || []), ...journalAddition] });
+        setResistanceStep(null);
+        setResistanceFlagged([]);
+        setResistancePlanText("");
+      },
+      onMarkYesterdayReviewed: ({ yest, hasMissed, resistanceAlreadyDone }) => {
+        updateRitual({ yesterdayReviewed: true });
+        if (hasMissed && !resistanceAlreadyDone) {
+          setResistanceFlagged([]);
+          setResistancePlanText("");
+          setResistanceStep("rank");
+        }
+      },
+      // ── Intention draft ──
+      onSetJournalDraft: (v) => sJTxt(v),
+      onAppendJournalDraft: (v) => sJTxt(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + v),
+      onSaveIntention: ({ text, mood }) => {
+        if (!text || !String(text).trim()) return;
+        const cur = latestData.current || data;
+        const txt = String(text).trim();
+        const k = tk();
+        save({
+          ...cur,
+          journal: [...(cur.journal || []), { id: Date.now(), text: txt, mood: mood || "", tag: "goals", timestamp: new Date().toISOString(), dateKey: k }],
+          dailyRitual: { ...(cur.dailyRitual || {}), [k]: { ...(cur.dailyRitual && cur.dailyRitual[k] || {}), intention: txt } }
+        });
+        touchFeature("home.intention");
+        sJTxt("");
+      }
+    }
+  }), false && (() => {
     /* ── DAILY RITUAL — morning flow on the Home tab.
        Canonical card order: briefing → yesterday review → goals review →
        intention → progress+tips. Once a step is reviewed it collapses to a
