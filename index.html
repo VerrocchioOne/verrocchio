@@ -93,6 +93,20 @@
      called. So load order beyond "before the inline app script" doesn't
      matter. -->
 <script src="./lib/auth.js"></script>
+<!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
+<script src="./lib/domains/brief.js"></script>
+<script src="./lib/domains/habits.js"></script>
+<script src="./lib/domains/goals.js"></script>
+<script src="./lib/domains/todos.js"></script>
+<script src="./lib/domains/reflect.js"></script>
+<script src="./lib/domains/calendar.js"></script>
+<!-- §13.4a (v75) — Per-view React component modules. -->
+<script src="./lib/views/BriefView.js"></script>
+<script src="./lib/views/HabitsView.js"></script>
+<script src="./lib/views/GoalsView.js"></script>
+<script src="./lib/views/TodosView.js"></script>
+<script src="./lib/views/ReflectView.js"></script>
+<script src="./lib/views/CalendarView.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -7214,6 +7228,15 @@ function App() {
       lastSaveRef.current = stamped;
     });
   }, [demoMode, uid, lsKey]);
+
+  // §13.4a (v75) — dispatch helper for extracted views. Accepts a curried
+  // domain action `(data) => newData` and runs it against the freshest
+  // data, then persists via save(). Tolerant of non-function args.
+  const dispatch = React.useCallback((transform) => {
+    const cur = latestData.current || data;
+    const next = typeof transform === "function" ? transform(cur) : transform;
+    if (next && next !== cur) save(next);
+  }, [data, save]);
 
   // The visibility/pagehide flush and 30s heartbeat were removed:
   // both existed to compensate for the old 800ms save() debounce,
