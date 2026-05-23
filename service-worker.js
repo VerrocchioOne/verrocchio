@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v71";
+const SHELL_VERSION = "v75";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -38,6 +38,19 @@ precaching.precacheAndRoute([
   { url: "./lib/dialog.js",             revision: SHELL_VERSION },
   { url: "./lib/icalendar.js",          revision: SHELL_VERSION },
   { url: "./lib/auth.js",               revision: SHELL_VERSION },
+  // §13.4a (v75) — per-view domain modules + view modules.
+  { url: "./lib/domains/brief.js",      revision: SHELL_VERSION },
+  { url: "./lib/domains/habits.js",     revision: SHELL_VERSION },
+  { url: "./lib/domains/goals.js",      revision: SHELL_VERSION },
+  { url: "./lib/domains/todos.js",      revision: SHELL_VERSION },
+  { url: "./lib/domains/reflect.js",    revision: SHELL_VERSION },
+  { url: "./lib/domains/calendar.js",   revision: SHELL_VERSION },
+  { url: "./lib/views/BriefView.js",    revision: SHELL_VERSION },
+  { url: "./lib/views/HabitsView.js",   revision: SHELL_VERSION },
+  { url: "./lib/views/GoalsView.js",    revision: SHELL_VERSION },
+  { url: "./lib/views/TodosView.js",    revision: SHELL_VERSION },
+  { url: "./lib/views/ReflectView.js",  revision: SHELL_VERSION },
+  { url: "./lib/views/CalendarView.js", revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);
