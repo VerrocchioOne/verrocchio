@@ -10885,7 +10885,7 @@ function App() {
   const quotes = data.quotes || [];
   // §8.1: archived todos are hidden from the main render. They're surfaced
   // via the "View archive" toggle below the active list, and can be restored.
-  const pending = data.todos.filter(t => !t.done && !t.archived);
+  const pending = (data.todos || []).filter(t => !t.done && !t.archived);
   // §6 Future Habits — a habit is "future" if either (a) the user
   // manually parked it (h.parked === true) OR (b) its startDate is
   // strictly after today (calendar-based future). Both states feed
