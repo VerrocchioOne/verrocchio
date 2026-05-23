@@ -19082,7 +19082,57 @@ function App() {
         flexShrink: 0
       }
     }, t.archivedAt ? fmtD(t.archivedAt) : ""))))));
-  })(), tab === "reflection" && /*#__PURE__*/React.createElement("div", {
+  })(), tab === "reflection" && /*#__PURE__*/React.createElement(window.ReflectView, {
+    data,
+    dispatch,
+    deviceProfile: window.__deviceProfile,
+    callbacks: {
+      // ── Write actions ──
+      onSaveEntry: ({ text, kind, goalId, tag, dateKey }) => {
+        if (!text || !String(text).trim()) return;
+        const cur = latestData.current || data;
+        const linkedGoal = kind === "goal" ? (cur.goals || []).find(g => String(g.id) === String(goalId)) : null;
+        save({
+          ...cur,
+          journal: [...(cur.journal || []), {
+            id: Date.now(),
+            text: String(text).trim() + (linkedGoal ? `\n\n[Goal: ${linkedGoal.text}]` : ""),
+            mood: "",
+            tag: tag || "reflection",
+            goalId: kind === "goal" ? (goalId || null) : null,
+            timestamp: new Date().toISOString(),
+            dateKey: dateKey || tk()
+          }]
+        });
+        touchFeature("journal.create");
+        if (!cur.journalDisclaimerAcked) setShowJournalDisclaimer(true);
+      },
+      onUpdateEntry: (id, { text, tag }) => {
+        if (!text || !String(text).trim()) return;
+        const cur = latestData.current || data;
+        save({
+          ...cur,
+          journal: (cur.journal || []).map(e => e.id === id ? { ...e, text: String(text).trim(), tag } : e)
+        });
+      },
+      onDeleteEntry: (id) => delJ(id),
+      onGenerateInsights: () => genIns(),
+      onDismissInsights: () => setInsV(false),
+      onNavigateToBrief: () => { setSelDate(tk()); setTab("brief"); },
+      // ── Read-only slices ──
+      goals: data.goals || [],
+      tipTokens: { S, IS, AB },
+      VoiceMicButton,
+      SC, fmtD, tk, dk,
+      HT, JTAGS,
+      AI_ENABLED,
+      insights: { text: ins, loading: insL, visible: insV },
+      ui: {
+        selDate,
+        yestJournalReviewed: !!((data.dailyRitual && data.dailyRitual[tk()] || {}).yestJournalReviewed)
+      }
+    }
+  }), false && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   },
     // "Return to home review" banner — pinned to the top of the
