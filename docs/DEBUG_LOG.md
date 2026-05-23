@@ -13,6 +13,19 @@ Append one entry per investigation. Newest first. Every bug fix in the codebase 
 
 ---
 
+### 2026-05-23 — §13.4a (v75) view-level decomposition (Brief/Goals/Todos/Reflect/Calendar); Habits view DEFERRED
+
+- **Phase 1 — Root cause:** Not a bug — a refactor for subagent parallelism. App() in index.html had grown to ~30k lines with all top-level tabs' render trees + helpers inline, making future feature work (especially iOS Chain C: Widgets / Siri / HealthKit) require loading the full file for any view edit.
+- **Phase 2 — Pattern:** Existing `lib/auth.js`, `lib/merge.js`, `lib/hydration.js`, `lib/icalendar.js` extractions established the dual-load convention (`window.X` global + CJS `module.exports.X`). This extension adds `lib/domains/` (pure READ derivations + curried writes) and `lib/views/` (React components with a FROZEN prop signature `{ data, dispatch, deviceProfile, callbacks }`).
+- **Phase 3 — Hypothesis:** "If we extract READ derivations as pure functions and keep WRITE-side helpers in App() as callbacks, six parallel subagents can decompose all 6 views without destabilizing the recently-shipped v72-v74 reorder logic." **Confirmed for 5 of 6 views.** HabitsView came back PARTIAL — its ~40 App-scope useState hooks + the load-bearing reorder UX could not be moved in one shot. Acceptable degraded outcome per spec §10: keep Habits tab rendering inline, ship the other 5 view modules + all 6 domain modules + the pattern doc.
+- **Phase 4 — Fix:** 12 new lib/ files (6 domains + 6 views) + 6 new test files (`tests/domains/*.test.mjs`, 121 new pinned-behavior tests; 259/259 total now pass). Pattern at [`docs/superpowers/patterns/view-extraction.md`](superpowers/patterns/view-extraction.md). Spec at [`docs/superpowers/specs/2026-05-23-view-extraction-all-six-design.md`](superpowers/specs/2026-05-23-view-extraction-all-six-design.md). Plan at [`docs/superpowers/plans/2026-05-23-view-extraction-all-six.md`](superpowers/plans/2026-05-23-view-extraction-all-six.md). Snapshot at `archive/index.v75.html`. Two follow-up bugs during integration:
+  - **Top-level `_dk` / `_todayKey` collision** across `lib/domains/brief.js` + `lib/domains/calendar.js` (classic browser scripts share top-level lexical scope; `let/const` dups → SyntaxError on the 2nd load). Fix: wrapped both files' bodies in IIFEs; renamed brief.js's helper to `_briefDk`. Commit `ccd42eb`.
+  - **CalendarView initial state isolated from App's `openCalendarMonthForTest` hook** (which set App-scope `setCalendarView`/`setCalendarFocus` then opened modal — view owned its own local state and ignored those). Fix: added optional `callbacks.initialView` + `callbacks.initialFocus` props; view useState reads them as initial values. Commit `ccd42eb`.
+
+SHELL_VERSION v75. Integration commits: `9f9c585` (Phase A), `0d36f10` (Phase B harvest), `2280a02` (Calendar), `1dbbc1a` (Todos), `2dc500e` (Reflect), `2cd4536` (Goals), `61f4bd2` (Brief), `2414de1` (SW+build), `ccd42eb` (Phase D fixes).
+
+---
+
 ### 2026-05-18 — icalendar.test.mjs fails with MODULE_NOT_FOUND (ical.js not installed)
 
 - **Phase 1 — Root cause:** `node --test tests/icalendar.test.mjs` crashes immediately at line 15 (`const ICAL = require("ical.js")`) with `MODULE_NOT_FOUND`. No `node_modules/` directory exists in the repo — `npm install` had never been run in this cloud container. `ical.js@^2.2.1` is correctly listed in `devDependencies`.

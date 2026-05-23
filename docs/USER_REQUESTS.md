@@ -31,6 +31,25 @@ These are not feature requests — they are process directives that govern HOW w
 
 ---
 
+## 2026-05-23 — v75 ship
+
+### §13.4a — Decompose index.html into 5 view modules + 6 domain modules — SHIPPED v75 (Habits view deferred)
+
+**Verbatim:** "do all  of them today" (in response to a Calendar-only pilot proposal for the Approach B view-extraction pattern).
+
+**Contextualized summary:** Decomposed 5 of 6 top-level views (Brief / Goals / Todos / Reflect / Calendar) from index.html's monolithic App() function into per-view modules with a fixed `{ data, dispatch, deviceProfile, callbacks }` prop signature. Created `lib/domains/*.js` (pure READ derivations + curried writes) + `lib/views/*View.js` (React components, no JSX) + `tests/domains/*.test.mjs` (121 new pinned tests; 259/259 total pass). HabitsView came back PARTIAL — the ~40 App-scope useState hooks driving the recently-shipped v72-v74 select-then-act reorder UX could not be cleanly extracted in one pass; Habits tab keeps rendering inline. All 6 domain modules ship regardless (Brief + Calendar use habits domain for `dueToday`/`groupedBySection`). Two integration bugs surfaced + fixed in Phase D: top-level `_dk`/`_todayKey` collision between brief.js and calendar.js (classic scripts share top scope) wrapped both in IIFEs; CalendarView initial state had to read from `callbacks.initialView`/`initialFocus` so App's `openCalendarMonthForTest` hook could prime it.
+
+Pattern doc at `docs/superpowers/patterns/view-extraction.md` — every future view extraction (including the deferred Habits view) follows it. Unblocks Chain C (Widgets / Siri / HealthKit) which needs clear per-view data boundaries; also unblocks any other TODO §5/6/7/9 work since each view's render tree is now hold-able in one agent's context.
+
+**Follow-up plans needed:**
+- Habits view extraction (dedicated plan; ~40 useState migration)
+- Dead-code cleanup of `false && (() => {...})()` neutralized inline view bodies in index.html (currently kept for atomic-ship safety; ~5000 lines deletable)
+- BriefView omits "Review Goals" card + bottom calendarCard peek (intentional trims; reinstate if user surfaces a regression)
+
+**Cross-references:** SW v75, snapshot `archive/index.v75.html`, spec at [docs/superpowers/specs/2026-05-23-view-extraction-all-six-design.md](../superpowers/specs/2026-05-23-view-extraction-all-six-design.md), plan at [docs/superpowers/plans/2026-05-23-view-extraction-all-six.md](../superpowers/plans/2026-05-23-view-extraction-all-six.md), DEBUG_LOG entry 2026-05-23 §13.4a. Commits: `9f9c585` (foundation), `f3007ca` (spec+plan), `0d36f10` (Phase B), `2280a02`/`1dbbc1a`/`2dc500e`/`2cd4536`/`61f4bd2` (Phase C per-view integrations), `2414de1` (SW+build allowlist), `ccd42eb` (Phase D fixes).
+
+---
+
 ## 2026-05-18 — Weekly debug pass
 
 ### Weekly debug pass — 2026-05-18
