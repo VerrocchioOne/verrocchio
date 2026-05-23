@@ -19801,7 +19801,116 @@ function App() {
         }
       }, isX ? "▲ Less" : "▼ More")));
     }));
-  })()), tab === "goals" && /*#__PURE__*/React.createElement("div", {
+  })()), tab === "goals" && /*#__PURE__*/React.createElement(window.GoalsView, {
+    data,
+    dispatch,
+    deviceProfile: window.__deviceProfile,
+    callbacks: {
+      // ── Form / wizard ──
+      onOpenAddGoal: () => { setGoalFormStep(0); setExpGForm(true); },
+      isAddGoalOpen: () => expGForm,
+      getGoalFormStep: () => goalFormStep,
+      setGoalFormStep,
+      getGoalFormDraft: () => ({
+        nGoal, nGType, nGSmart, nGFirstHabit,
+        nHSec, nHDur, nHImp, nHFreq, nHStart, nHNotes,
+        nHHasTarget, nHTarget, nHTargetOp, nHUnitLabel, nHIncrement
+      }),
+      setGoalFormField: (name, value) => {
+        switch (name) {
+          case "nGoal":          sNGoal(value); break;
+          case "nGType":         sNGType(value); break;
+          case "nGSmart":        sNGSmart(value); break;
+          case "nGFirstHabit":   sNGFirstHabit(value); break;
+          case "nHSec":          sNHSec(value); break;
+          case "nHDur":          sNHDur(value); break;
+          case "nHImp":          sNHImp(value); break;
+          case "nHFreq":         sNHFreq(value); break;
+          case "nHStart":        sNHStart(value); break;
+          case "nHNotes":        sNHNotes(value); break;
+          case "nHHasTarget":    sNHHasTarget(value); break;
+          case "nHTarget":       sNHTarget(value); break;
+          case "nHTargetOp":     sNHTargetOp(value); break;
+          case "nHUnitLabel":    sNHUnitLabel(value); break;
+          case "nHIncrement":    sNHIncrement(value); break;
+          default: break;
+        }
+      },
+      getGoalAreaErr: () => goalAreaErr,
+      setGoalAreaErr,
+      onSubmitAddGoal: () => addGoal(),
+      onCancelAddGoal: () => { setGoalAreaErr(false); setGoalFormStep(0); setExpGForm(false); },
+      // ── Area / sort / filter ──
+      isGoalPillsOpen: () => goalPillsOpen,
+      setGoalPillsOpen,
+      getGoalTypeFilter: () => goalTypeFilter,
+      setGoalTypeFilter,
+      filterPressProps,
+      renderSortButton,
+      getGoalSortMode: () => ((data.sortPrefs && data.sortPrefs.goals) || "default"),
+      getCustomGoalTypes: () => (data.customGoalTypes || []),
+      sortItems,
+      sortAreasForRender: (areas, opts) => {
+        const mode = (data.sortPrefs && data.sortPrefs.goals) || "default";
+        const isDateSortLocal = mode === "date-asc" || mode === "date-desc";
+        if (isDateSortLocal || (opts && opts.merged)) {
+          return [{ value: "__all__", color: "#9ca3af", border: "var(--c-border)", merged: true }];
+        }
+        if (mode === "custom") {
+          const order = Array.isArray(data.areaOrder) ? data.areaOrder : [];
+          const idx = v => { const i = order.indexOf(v); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
+          return areas.slice().sort((a, b) => idx(a.value) - idx(b.value));
+        }
+        return memoedAreaProgress;
+      },
+      getCollapsedGoalAreas: () => collapsedGoalAreas,
+      setCollapsedGoalAreas,
+      // ── Per-goal interactions ──
+      onEditGoal: (goal) => sEGoal(goal),
+      onArchiveGoal: (goal) => { setCompleteGoalModal(goal); sEGId(null); },
+      onDeleteGoal: (goal) => delGoal(goal.id),
+      onJournalGoal: (goal) => { setGoalJournal({ id: goal.id, text: goal.text }); setGoalJournalTxt(""); sEGId(null); },
+      onReorderGoals: (list) => reordGoals(list),
+      onMoveGoal: (goalId, delta) => moveItemByDelta("goals", goalId, delta),
+      onCheckTodo: (id) => chkTodo(id),
+      onDeleteTodo: (id) => delTodo(id),
+      onPlayLinkedAudio: (kind, entityId, item) => setLinkedMediaPlayer({ kind, entityId, item }),
+      // ── Per-goal sub-section state ──
+      isGoalSubOpen,
+      toggleGoalSub,
+      // ── Future-goals drawer ──
+      isFutureGoalsOpen: () => showFutureGoals,
+      setFutureGoalsOpen: (v) => setShowFutureGoals(v),
+      // ── Inline-edit state ──
+      getEditingGoalId: () => eGId,
+      getEditGoalDraft: () => ({ eGTxt, eGType, eGSmart }),
+      setEditGoalField: (name, value) => {
+        switch (name) {
+          case "eGTxt":   sEGTxt(value); break;
+          case "eGType":  sEGType(value); break;
+          case "eGSmart": sEGSmart(value); break;
+          default: break;
+        }
+      },
+      onSaveEditedGoal: (id) => svEGoal(id),
+      onCancelEditGoal: () => sEGId(null),
+      // ── Render helpers ──
+      renderFreqPicker,
+      renderGoalHabitQuickAdd,
+      renderGoalTodoQuickAdd,
+      renderLinkedUserContent,
+      firstLinkedAudioFor,
+      isDone,
+      isMissed,
+      freqRank,
+      freqLabel,
+      // ── Constants + style pass-through ──
+      constants: { HT, SECTIONS, SF_FIELDS, DURS, IMP, IS, S, EI, AB },
+      selDate,
+      // ── Lazy helpers ──
+      Grip, Glyph, SC
+    }
+  }), false && /*#__PURE__*/React.createElement("div", {
     className: "fade-in"
   },
     // W3-T10: framing sentence + CTA for new users. Opens the new-goal
