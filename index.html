@@ -21342,7 +21342,21 @@ function App() {
         );
       }))
     );
-  })(), calendarModalOpen && (() => {
+  })(), calendarModalOpen && /*#__PURE__*/React.createElement(window.CalendarView, {
+    data,
+    dispatch,
+    deviceProfile: window.__deviceProfile,
+    callbacks: {
+      onClose: () => setCalendarModalOpen(false),
+      onExportICS: () => exportHabitsICS(),
+      onOpenDayDetail: (dateKey) => { setCalendarDetailDate(dateKey); touchFeature("calendar.daySnapshot"); },
+      onTogHabit: (habitId) => togHabit(habitId)
+    }
+  }), false && (() => {
+    // §13.4a (v75) — dead code below. Original inline Calendar render replaced
+    // by CalendarView above. Kept in place to ship without a 870-line Edit; a
+    // follow-up cleanup commit can delete the entire `false && (() => {...})()`
+    // sequence from this point through the matching `})()` near line 22216.
     // Calendar module — day / week / month views over the user's habits.
     // Lives in a full-screen modal opened from the header calendar
     // icon. Used to render at the bottom of the Home tab; moved here
