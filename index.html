@@ -21634,7 +21634,9 @@ function App() {
       onClose: () => setCalendarModalOpen(false),
       onExportICS: () => exportHabitsICS(),
       onOpenDayDetail: (dateKey) => { setCalendarDetailDate(dateKey); touchFeature("calendar.daySnapshot"); },
-      onTogHabit: (habitId) => togHabit(habitId)
+      onTogHabit: (habitId) => togHabit(habitId),
+      initialView: calendarView,
+      initialFocus: calendarFocus
     }
   }), false && (() => {
     // §13.4a (v75) — dead code below. Original inline Calendar render replaced

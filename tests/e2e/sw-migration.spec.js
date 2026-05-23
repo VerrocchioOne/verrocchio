@@ -14,7 +14,7 @@ const { test, expect } = require("@playwright/test");
 //   3. Unregister the SW and reload — fresh install + activate fires the
 //      migration handler.
 //   4. Assert: legacy v63 cache is gone, at least one current
-//      `verrocchio-...-v71` cache survives.
+//      `verrocchio-...-v75` cache survives.
 //
 // Same Chromium-only constraint as offline.spec.js — WebKit on Windows is
 // flaky around SW re-registration.
@@ -43,7 +43,7 @@ test("activate handler purges legacy verrocchio-shell-vNN caches", async ({ page
   // Sanity check: both legacy and current caches exist before re-activation.
   const before = await page.evaluate(() => caches.keys());
   expect(before).toContain("verrocchio-shell-v63");
-  expect(before.some(k => k.endsWith("v71"))).toBe(true);
+  expect(before.some(k => k.endsWith("v75"))).toBe(true);
 
   // Force a fresh install + activate cycle: unregister the current SW,
   // reload, and wait for the new registration to take control. The new
@@ -65,5 +65,5 @@ test("activate handler purges legacy verrocchio-shell-vNN caches", async ({ page
 
   const after = await page.evaluate(() => caches.keys());
   expect(after).not.toContain("verrocchio-shell-v63");
-  expect(after.some(k => k.endsWith("v71"))).toBe(true);
+  expect(after.some(k => k.endsWith("v75"))).toBe(true);
 });
