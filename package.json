@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Verrocchio habit tracker — static single-file SPA. package.json is here only to run the tiny Node test suite over utils.js.",
   "scripts": {
-    "test:unit": "node --test tests/*.test.mjs",
+    "test:unit": "node --test tests/*.test.mjs tests/domains/*.test.mjs",
     "test:e2e": "playwright test",
     "test": "npm run test:unit && npm run test:e2e",
     "render-docs": "node scripts/render-docs.mjs",
