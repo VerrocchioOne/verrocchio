@@ -18494,7 +18494,43 @@ function App() {
         }))
       );
     })());
-  })(), tab === "todos" && (() => {
+  })(), tab === "todos" && /*#__PURE__*/React.createElement(window.TodosView, {
+    data,
+    dispatch,
+    deviceProfile: window.__deviceProfile,
+    callbacks: {
+      // ── Write actions ──
+      onAddTodo: (text, due, goalId) => {
+        if (!text || !String(text).trim()) return;
+        const cur = latestData.current || data;
+        save({ ...cur, todos: [...(cur.todos || []), { id: Date.now(), text: String(text).trim(), done: false, date: new Date().toDateString(), dueDate: due || null, goalId: goalId || null }] });
+        touchFeature("todo.create");
+      },
+      onCompleteTodo: (id) => chkTodo(id),
+      onDeleteTodo:   (id) => delTodo(id),
+      onArchiveTodo:  (id) => archiveTodo(id),
+      onRestoreTodo:  (id) => restoreTodo(id),
+      onEditTodoSave: (id, text, due) => {
+        if (!text || !String(text).trim()) return;
+        const cur = latestData.current || data;
+        save({ ...cur, todos: (cur.todos || []).map(t => String(t.id) === String(id) ? { ...t, text: String(text).trim(), dueDate: due || null } : t) });
+      },
+      reordTodos,
+      onNavigateTab: (t) => setTab(t),
+      onExpandGoal: (goalId) => setExpGoalHabits(p => ({ ...p, [goalId]: true })),
+      // ── App-scope state slices ──
+      todoSecFilter, setTodoSecFilter,
+      todoPillsOpen, setTodoPillsOpen,
+      // ── Helpers / components / constants ──
+      Glyph, SC, fmtD, tk, IS, S, AB, EI, HT,
+      dp, sortItems,
+      renderSortButton,
+      linkedContentForEntity
+    }
+  }), false && (() => {
+    // §13.4a (v75) — dead body below; original inline Todos render. Follow-up
+    // cleanup can delete this entire IIFE through its matching `})()` near
+    // line 19048. Replaced by TodosView call site above.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const eow = new Date(today);
