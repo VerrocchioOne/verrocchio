@@ -103,6 +103,8 @@
 <script src="./lib/components/YearHeatmap.js"></script>
 <script src="./lib/components/AchievementBadge.js"></script>
 <script src="./lib/components/CompletionWave.js"></script>
+<!-- Wave 3 — App-scope constants extracted to lib/constants.js -->
+<script src="./lib/constants.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -1368,58 +1370,6 @@ const {
 const SK = "verrocchio-v1"; // localStorage fallback key
 
 /* ── CONSTANTS ── */
-const IMP = [{
-  value: "Non-Negotiable",
-  color: "var(--c-tint-danger-fg)",
-  bg: "var(--c-tint-danger-bg)",
-  border: "var(--c-tint-danger-border)"
-}, {
-  value: "Important",
-  color: "var(--c-tint-warn-fg)",
-  bg: "var(--c-tint-warn-bg)",
-  border: "var(--c-tint-warn-border)"
-}, {
-  value: "Additive",
-  color: "var(--c-text-faint)",
-  bg: "var(--c-surface-raised)",
-  border: "var(--c-border)"
-}];
-const HT = [{
-  value: "Physical",
-  color: "var(--c-tint-success-fg)",
-  bg: "var(--c-tint-success-bg)",
-  border: "var(--c-tint-success-border)"
-}, {
-  value: "Mental",
-  color: "var(--c-tint-travel-fg)",
-  bg: "var(--c-tint-travel-bg)",
-  border: "var(--c-tint-travel-border)"
-}, {
-  value: "Career",
-  color: "var(--c-tint-info-fg)",
-  bg: "var(--c-tint-info-bg)",
-  border: "var(--c-tint-info-border)"
-}, {
-  value: "Spiritual",
-  color: "var(--c-tint-purple-fg)",
-  bg: "var(--c-tint-purple-bg)",
-  border: "var(--c-tint-purple-border)"
-}, {
-  value: "Social",
-  color: "var(--c-tint-pink-fg)",
-  bg: "var(--c-tint-pink-bg)",
-  border: "var(--c-tint-pink-border)"
-}, {
-  value: "Wealth",
-  color: "var(--c-tint-warn-fg)",
-  bg: "var(--c-tint-warn-bg)",
-  border: "var(--c-tint-warn-border)"
-}, {
-  value: "Creative",
-  color: "var(--c-tint-teal-fg)",
-  bg: "var(--c-tint-teal-bg)",
-  border: "var(--c-tint-teal-border)"
-}];
 // Default hour boundaries (24h) for each time-of-day block. Can be
 // overridden per-user via `data.timeRanges`. Evening wraps through
 // midnight (18..6), so `inRange` below handles the wrap case.
@@ -1450,46 +1400,6 @@ const getCurrentSection = (d, now = new Date()) => {
   // block sits closest before `h`.
   return "evening";
 };
-const SECTIONS = [{
-  value: "morning",
-  label: "Morning",
-  icon: "🌅",
-  color: "var(--c-tint-warn-fg)",
-  bg: "var(--c-tint-warn-bg)",
-  border: "var(--c-tint-warn-border)"
-}, {
-  value: "afternoon",
-  label: "Afternoon",
-  icon: "☀️",
-  color: "var(--c-tint-orange-fg)",
-  bg: "var(--c-tint-orange-bg)",
-  border: "var(--c-tint-orange-border)"
-}, {
-  value: "evening",
-  label: "Evening",
-  icon: "🌙",
-  color: "var(--c-tint-purple-fg)",
-  bg: "var(--c-tint-purple-bg)",
-  border: "var(--c-tint-purple-border)"
-}, {
-  // "Daily Completion" — habits that aren't tied to a specific time
-  // of day (water intake, posture checks, anything ambient). Sits
-  // after Evening (last time-of-day section) and before Avoid so it
-  // groups with the constructive sections in the UI.
-  value: "all-day",
-  label: "Daily Completion",
-  icon: "🔁",
-  color: "var(--c-tint-teal-fg)",
-  bg: "var(--c-tint-teal-bg)",
-  border: "var(--c-tint-teal-border)"
-}, {
-  value: "avoid",
-  label: "Avoid",
-  icon: "🚫",
-  color: "var(--c-tint-danger-fg)",
-  bg: "var(--c-tint-danger-bg)",
-  border: "var(--c-tint-danger-border)"
-}];
 /* ── Brand glyphs ─────────────────────────────────────────────────
    Replaces stock emoji icons in achievements + smart-tips with small
    monochrome line marks in brand green. 1.5px stroke at 16x16,
@@ -1646,67 +1556,6 @@ const MOODS = [{
   color: "#db2777"
 }];
 const JTAGS = ["daily-recap", "reflection", "gratitude", "wins", "challenges", "ideas", "feelings", "goals", "learning"];
-const DURS = [{
-  value: "5",
-  label: "5 min"
-}, {
-  value: "10",
-  label: "10 min"
-}, {
-  value: "15",
-  label: "15 min"
-}, {
-  value: "20",
-  label: "20 min"
-}, {
-  value: "30",
-  label: "30 min"
-}, {
-  value: "45",
-  label: "45 min"
-}, {
-  value: "60",
-  label: "1 hr"
-}, {
-  value: "90",
-  label: "1.5 hr"
-}, {
-  value: "120",
-  label: "2 hr"
-}, {
-  value: "150",
-  label: "2.5 hr"
-}, {
-  value: "180",
-  label: "3 hr"
-}, {
-  value: "240",
-  label: "4 hr"
-}, {
-  value: "300",
-  label: "5 hr"
-}, {
-  value: "360",
-  label: "6 hr"
-}, {
-  value: "420",
-  label: "7 hr"
-}, {
-  value: "480",
-  label: "8 hr"
-}, {
-  value: "540",
-  label: "9 hr"
-}, {
-  value: "600",
-  label: "10 hr"
-}, {
-  value: "660",
-  label: "11 hr"
-}, {
-  value: "720",
-  label: "12 hr"
-}];
 /* Habit frequency taxonomy. `rank` is used to order habits from "most
    often" to "least often" when a goal expands its linked habits (lower
    rank = higher frequency). `daily` is the pre-existing implicit default
@@ -1727,14 +1576,6 @@ const DURS = [{
    (no day) and `weekly-day` (with day). They've been merged into a
    single `weekly` that always carries a `day`. Legacy `weekly-day`
    habits are migrated on read by `getFreq()`. */
-const FREQ = [
-  { value: "daily",       label: "Daily",         icon: "\u{1F4C5}", rank: 1 },
-  { value: "weekdays",    label: "Select Days",   icon: "\u{1F5D3}", rank: 2 },
-  { value: "weekly",      label: "Weekly",        icon: "\u{1F5D3}", rank: 3 },
-  { value: "monthly",     label: "Monthly",       icon: "\u{1F4C6}", rank: 5 },
-  { value: "quarterly",   label: "Quarterly",     icon: "\u{1F4C6}", rank: 6 },
-  { value: "annual",      label: "Annual",        icon: "\u{1F4C6}", rank: 7 }
-];
 const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONTHS_LONG  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 // Ordinal suffix for day-of-month display (1st, 2nd, 3rd, 4th, … 21st, …).
@@ -6280,7 +6121,6 @@ function App() {
   // Duration filter is a two-thumb range [min, max] in minutes (0..120).
   // When min === 0 && max === 120 the filter is treated as "Any" (no
   // filtering). Thumbs are clamped so min <= max - 5 (slider step).
-  const DUR_MIN = 0, DUR_MAX = 720, DUR_STEP = 5;
   const [durRange, setDurRange] = useState([DUR_MIN, DUR_MAX]);
   // Master "Filter" toggle on the habits page. Collapses the
   // Priority / Goal / Freq / Duration pill buttons behind a single
@@ -10806,44 +10646,6 @@ function App() {
   const fj = filtJ();
 
   /* STYLE CONSTANTS */
-  const I = {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 8,
-    padding: "10px 14px",
-    color: "var(--c-text)",
-    fontSize: 14,
-    boxShadow: "0 1px 2px rgba(0,0,0,.04)"
-  };
-  const IS = {
-    ...I,
-    fontSize: 13,
-    padding: "9px 12px"
-  };
-  const S = {
-    background: "#fff",
-    border: "1px solid #e5e7eb",
-    borderRadius: 8,
-    padding: "10px",
-    // §5.3 — was fontSize: 12 but the adjacent `IS` input is 13, so
-    // a <select> next to an <input> in the same row produced a
-    // visible 12-vs-13 jump on iOS (where the system also inflates
-    // <select> text independently). Match the input scale.
-    fontSize: 13,
-    cursor: "pointer",
-    color: "var(--c-text-soft)",
-    boxShadow: "0 1px 2px rgba(0,0,0,.04)"
-  };
-  const AB = {
-    background: "#2d5a2d",
-    border: "none",
-    borderRadius: 8,
-    padding: "10px 18px",
-    color: "#fff",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer"
-  };
   const EI = {
     background: "var(--c-surface-raised)",
     border: "1px solid #2d5a2d",

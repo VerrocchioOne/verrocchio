@@ -61,6 +61,8 @@ precaching.precacheAndRoute([
   { url: "./lib/components/YearHeatmap.js",     revision: SHELL_VERSION },
   { url: "./lib/components/AchievementBadge.js", revision: SHELL_VERSION },
   { url: "./lib/components/CompletionWave.js",  revision: SHELL_VERSION },
+  // Wave 3 — App-scope constants extracted.
+  { url: "./lib/constants.js",                  revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);
