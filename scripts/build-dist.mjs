@@ -31,6 +31,7 @@ const FILES = [
   'lib/views/BriefTopBanners.js',
   'lib/views/HabitsView.js',
   'lib/views/HabitsReorderToolbar.js',
+  'lib/views/HabitsNewHabitForm.js',
   'lib/views/GoalsView.js',
   'lib/views/TodosView.js',
   'lib/views/ReflectView.js',

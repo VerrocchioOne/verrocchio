@@ -136,6 +136,7 @@
 <script src="./lib/views/BriefTopBanners.js"></script>
 <script src="./lib/views/HabitsView.js"></script>
 <script src="./lib/views/HabitsReorderToolbar.js"></script>
+<script src="./lib/views/HabitsNewHabitForm.js"></script>
 <script src="./lib/views/GoalsView.js"></script>
 <script src="./lib/views/TodosView.js"></script>
 <script src="./lib/views/ReflectView.js"></script>
@@ -147,6 +148,8 @@
 <script src="./lib/views/Splash.js"></script>
 <script src="./lib/views/Onboarding.js"></script>
 <script src="./lib/views/AuthSurface.js"></script>
+<script src="./lib/views/profile/AccountPanel.js"></script>
+<script src="./lib/views/profile/InspirationPanel.js"></script>
 <script src="./lib/views/profile/ScorecardPanel.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -15293,287 +15296,29 @@ function App() {
       className: "card-title",
       style: { fontSize: 18, color: "var(--c-text-strong)", marginBottom: 10 }
     }, t);
-    const accountPanel = /*#__PURE__*/React.createElement("div", null,
-      sectionTitle("My Account"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 12 }
-      }, /*#__PURE__*/React.createElement("div", {
-        "data-brand": demoMode ? "1" : null,
-        style: { width: 64, height: 64, borderRadius: "50%", background: "#2d5a2d", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }
-      }, demoMode ? /*#__PURE__*/React.createElement("span", { style: { color: "#fff", fontSize: 20, fontWeight: 700, letterSpacing: .4 } }, "Demo") : profileName ? /*#__PURE__*/React.createElement("span", { style: { color: "#fff", fontSize: 28, fontWeight: 700 } }, profileName.charAt(0).toUpperCase()) : /*#__PURE__*/React.createElement("svg", { width: "32", height: "32", viewBox: "0 0 24 24", fill: "none", stroke: "white", strokeWidth: "2" }, /*#__PURE__*/React.createElement("path", { d: "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" }), /*#__PURE__*/React.createElement("circle", { cx: "12", cy: "7", r: "4" }))),
-      authUser ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280" } }, authUser.email) : null),
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
-        /*#__PURE__*/React.createElement("div", { style: labelS }, "Your Name"),
-        /*#__PURE__*/React.createElement("input", {
-          value: profileName,
-          onChange: e => {
-            const v = e.target.value;
-            setProfileName(v);
-            try { localStorage.setItem("v-profile-name", v); } catch (err) {}
-            setData(d => ({ ...d, profileName: v }));
-          },
-          placeholder: "Enter your name...",
-          style: inputS
-        })),
-      // "Your Primary Goal" section removed: not part of v1 profile
-      // design. The profileGoal state + Firestore field are retained
-      // as dead data (hydrate effect still mirrors them) to avoid
-      // touching unrelated state init; they're no longer user-editable.
-      // Goal categories are managed in App Settings → Custom. See
-      // appSettingsPanel below. My Account stays identity-only (name,
-      // email, stats).
-      // Lifetime stats — extends the existing 3-stat card with best
-      // streak, days using the app, goals completed. All aggregate —
-      // no titles or content included.
-      (() => {
-        const hs = data.habits || [];
-        const gs = data.goals || [];
-        const archived = (data.goalArchive || data.archive || []);
-        const activeH = hs.filter(h => h.section !== "avoid");
-        const bestStreakLive = activeH.length ? Math.max(0, ...activeH.map(h => getStreak(h))) : 0;
-        const bestStreakEver = Math.max(bestStreakLive, ...Object.values(data.bestStreaks || {}), 0);
-        const daysActive = (data.dayVisits && data.dayVisits.length) || 0;
-        const statCell = (value, label) => /*#__PURE__*/React.createElement("div", { style: { textAlign: "center" } },
-          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#2d5a2d" } }, value),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase" } }, label)
-        );
-        return /*#__PURE__*/React.createElement("div", {
-          style: { padding: "12px", background: "var(--c-tint-success-bg)", borderRadius: 10, marginBottom: 12 }
-        },
-          /*#__PURE__*/React.createElement("div", {
-            style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 10 }
-          },
-            statCell(hs.length, "Habits"),
-            statCell(gs.length, "Goals"),
-            statCell((data.xp || 0).toLocaleString(), "XP")
-          ),
-          /*#__PURE__*/React.createElement("div", {
-            style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, paddingTop: 10, borderTop: "1px solid #c6dfc6" }
-          },
-            statCell(bestStreakEver, "Best streak"),
-            statCell(archived.length, "Completed"),
-            statCell(daysActive, "Days active")
-          ),
-          // Library row added v0.2.0 — surfaces user's My Content
-          // collection size alongside core counters so the user can see
-          // their library grow as they upload audio / link goals to PDFs.
-          /*#__PURE__*/React.createElement("div", {
-            style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, paddingTop: 10, marginTop: 10, borderTop: "1px solid #c6dfc6" }
-          },
-            statCell((data.userContent || []).length, "Content"),
-            statCell((data.todos || []).length, "To-dos"),
-            statCell((data.journal || []).length, "Journal")
-          )
-        );
-      })(),
-      // Account management (change email / password / delete) was moved
-      // out of Profile — password reset lives on the login screen via the
-      // standard Firebase reset-email flow, and the in-app duplicate made
-      // Profile busier without adding anything that isn't already
-      // available before sign-in.
-      // Manual sync (Push/Pull to cloud) removed per product decision —
-      // the normal save() path already writes through to Firestore on
-      // every change, and the manual buttons were both rarely needed
-      // and easy to misuse (a Pull on a stale tab could silently
-      // overwrite local edits).
-      // ── Summary export ──
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
-        /*#__PURE__*/React.createElement("div", { style: labelS }, "Export summary"),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "A plain-text victory-lap summary — aggregate counts only, no habit titles, journal entries, or daily completion logs."),
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: exportSummary,
-          style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }
-        }, "Download summary (.txt)")
-      ),
-      // ── iCalendar export ──
-      // Downloads an .ics file with one recurring event per habit so
-      // they show up in Apple Calendar / Mail, Google Calendar, Outlook,
-      // etc. Times are inferred from section (morning/afternoon/evening
-      // anchors); cadence comes from each habit's frequency. Avoid-list
-      // habits are excluded.
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
-        /*#__PURE__*/React.createElement("div", { style: labelS }, "Export to calendar"),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8, lineHeight: 1.5 } }, "Download an iCalendar (.ics) file you can open in Apple Calendar, Mail, Google Calendar, or Outlook. Each habit becomes a recurring event — morning at 6 AM, afternoon at 12 PM, evening at 6 PM, stacked by duration. Daily Completion habits become all-day events. Avoid habits are skipped."),
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: exportHabitsICS,
-          style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: "pointer" }
-        }, "Download habits (.ics)")
-      ),
-      // ── Leave a review ──
-      // Always available in settings so the user can rate whenever —
-      // separate from the time-gated Home banner which only fires at
-      // the 1w / 2w / 1mo milestones.
-      /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
-        /*#__PURE__*/React.createElement("div", { style: labelS }, "Leave a review"),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#9ca3af", marginBottom: 8 } }, "If Verrocchio's been useful, a rating helps other people find it."),
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: () => openReviewLink(),
-          style: { minHeight: 44, width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #2d5a2d", background: "var(--c-tint-success-bg)", color: "#2d5a2d", fontSize: 13, fontWeight: 700, cursor: "pointer" }
-        }, "★ Rate Verrocchio")
-      ),
-      // ── Danger zone — wipe all data ──
-      // Two-stage confirmation lives in the modal at the bottom of the
-      // tree (see confirmWipe rendering near the other delete modals).
-      // This is just the entry point: a clearly-destructive button at
-      // the end of the My Account panel.
-      !demoMode && /*#__PURE__*/React.createElement("div", {
-        style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)" }
-      },
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, fontWeight: 700, color: "#b91c1c", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }
-        }, "Danger Zone"),
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, color: "#9ca3af", marginBottom: 8, lineHeight: 1.5 }
-        }, "Permanently erase every goal, habit, to-do, journal entry, and saved date on this account. Your sign-in stays intact — only the data is wiped."),
-        /*#__PURE__*/React.createElement("button", {
-          onClick: () => { setConfirmWipeTyped(""); setConfirmWipe("1"); },
-          style: {
-            background: "var(--c-tint-danger-bg)", border: "1px solid var(--c-tint-danger-border)",
-            color: "var(--c-tint-danger-fg)", borderRadius: 8,
-            padding: "8px 14px", fontSize: 12, fontWeight: 700,
-            cursor: "pointer"
-          }
-        }, "Delete All Data")
-      ),
-      // ── About / support ──
-      /*#__PURE__*/React.createElement("div", {
-        style: { marginTop: 4, paddingTop: 14, borderTop: "1px solid var(--c-border)", fontSize: 11, color: "var(--c-text-faint)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }
-      },
-        /*#__PURE__*/React.createElement("span", null, "Verrocchio v", APP_VERSION),
-        /*#__PURE__*/React.createElement("a", {
-          href: "mailto:" + SUPPORT_EMAIL + "?subject=Verrocchio%20feedback%20(v" + APP_VERSION + ")",
-          rel: "noopener",
-          style: { color: "#2d5a2d", textDecoration: "none", fontWeight: 600 }
-        }, "Send feedback →")
-      ),
-      // ── Sign out (always at the very bottom of My Account) ──
-      // Plain text, no glyph or emoji per product decision. Demo mode
-      // exits via doSignOut's branch; real users hit Firebase signOut.
-      /*#__PURE__*/React.createElement("div", {
-        style: { marginTop: 18 }
-      },
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: () => { setShowProfile(false); doSignOut(); },
-          style: {
-            width: "100%", minHeight: 44,
-            padding: "12px 14px", borderRadius: 10,
-            border: "1px solid var(--c-tint-danger-border)",
-            background: "var(--c-tint-danger-bg)",
-            color: "var(--c-tint-danger-fg)",
-            fontSize: 13, fontWeight: 700, cursor: "pointer"
-          }
-        }, demoMode ? "Exit demo" : "Sign out")
-      )
-    );
-    const qKeyP = (x) => (x.text || "") + "|" + (x.author || "");
-    const likedQuotesList = data.likedQuotes || [];
-    const dislikedQuotesList = data.dislikedQuotes || [];
-    const removeFromList = (bucket, q) => {
-      const next = (data[bucket] || []).filter(x => qKeyP(x) !== qKeyP(q));
-      save({ ...data, [bucket]: next });
-    };
-    const quoteGroup = (title, bucket, list, accent) => {
-      if (!list.length) return null;
-      return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 18 } },
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: .5, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }
-        },
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 13 } }, accent),
-          /*#__PURE__*/React.createElement("span", null, title),
-          /*#__PURE__*/React.createElement("span", { style: { color: "#d1d5db", fontWeight: 500 } }, "(" + list.length + ")")
-        ),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
-          list.map((q, i) => /*#__PURE__*/React.createElement("div", {
-            key: bucket + "-" + i,
-            style: { background: "var(--c-surface-raised)", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "flex-start", gap: 8 }
-          },
-            /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-              /*#__PURE__*/React.createElement("div", {
-                style: { fontSize: 12, fontStyle: "italic", color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: q.author ? 4 : 0 }
-              }, "\"", q.text, "\""),
-              q.author ? /*#__PURE__*/React.createElement("div", {
-                style: { fontSize: 11, color: "#2d5a2d", fontWeight: 600 }
-              }, "\u2014 ", q.author) : null
-            ),
-            /*#__PURE__*/React.createElement("button", {
-              "aria-label": "Remove",
-              onClick: () => removeFromList(bucket, q),
-              style: { background: "none", border: "none", cursor: "pointer", color: "#d1d5db", fontSize: 18, padding: 0, lineHeight: 1, flexShrink: 0 }
-            }, "\xD7")
-          ))
-        )
-      );
-    };
-    const inspirationPanel = /*#__PURE__*/React.createElement("div", null,
-      sectionTitle("My Inspiration"),
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#9ca3af", marginBottom: 12 } }, "Your personal quote collection."),
-      quoteGroup("Liked", "likedQuotes", likedQuotesList, "\uD83D\uDC4D"),
-      quoteGroup("Disliked", "dislikedQuotes", dislikedQuotesList, "\uD83D\uDC4E"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { background: "var(--c-surface-raised)", borderRadius: 10, padding: "12px", marginBottom: 12 }
-      },
-        /*#__PURE__*/React.createElement("textarea", {
-          value: nQ,
-          onChange: e => sNQ(e.target.value),
-          placeholder: "Add a quote...",
-          rows: 2,
-          style: { width: "100%", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "8px 10px", color: "var(--c-text)", fontSize: 13, lineHeight: 1.6, marginBottom: 6, outline: "none", fontFamily: "inherit", resize: "none", boxSizing: "border-box" }
-        }),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } },
-          /*#__PURE__*/React.createElement("input", {
-            value: nQA,
-            onChange: e => sNQA(e.target.value),
-            placeholder: "Author (optional)",
-            style: { ...IS, flex: 1 }
-          }),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: addQ,
-            style: { ...AB, padding: "8px 14px", fontSize: 12 }
-          }, "Add"))),
-      /*#__PURE__*/React.createElement("input", {
-        value: qFilter,
-        onChange: e => setQFilter(e.target.value),
-        placeholder: "Search quotes...",
-        style: { ...IS, width: "100%", marginBottom: 10, boxSizing: "border-box" }
-      }),
-      /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-        allQuotes.filter(q => !qFilter || q.text.toLowerCase().includes(qFilter.toLowerCase()) || q.author.toLowerCase().includes(qFilter.toLowerCase())).map(q => {
-          const isCustom = q.custom;
-          const isE = eQId === q.id;
-          return /*#__PURE__*/React.createElement("div", {
-            key: q.id,
-            style: { background: isCustom ? "var(--c-tint-success-bg)" : "var(--c-surface-raised)", border: `1px solid ${isCustom ? "#c6dfc6" : "var(--c-border)"}`, borderRadius: 10, padding: "10px 12px", position: "relative" }
-          }, isE ? /*#__PURE__*/React.createElement("div", null,
-            /*#__PURE__*/React.createElement("textarea", {
-              value: eQTxt,
-              onChange: e => sEQTxt(e.target.value),
-              rows: 2,
-              autoFocus: true,
-              style: { width: "100%", background: "#fff", border: "1px solid #2d5a2d", borderRadius: 6, padding: "6px 8px", color: "var(--c-text)", fontSize: 12, outline: "none", marginBottom: 6, resize: "none", boxSizing: "border-box" }
-            }),
-            /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 5 } },
-              /*#__PURE__*/React.createElement("input", {
-                value: eQA,
-                onChange: e => sEQA(e.target.value),
-                placeholder: "Author",
-                style: { ...EI, flex: 1, fontSize: 12 }
-              }),
-              /*#__PURE__*/React.createElement(SC, { onSave: () => svEQ(q.id), onCancel: () => sEQId(null) }))
-          ) : /*#__PURE__*/React.createElement(React.Fragment, null,
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontStyle: "italic", color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: q.author ? 4 : 0 } }, "\"", q.text, "\""),
-            /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
-              q.author ? /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#2d5a2d", fontWeight: 600 } }, "\u2014 ", q.author) : /*#__PURE__*/React.createElement("span", null),
-              !isCustom && /*#__PURE__*/React.createElement("span", { style: { fontSize: 9, color: "#9ca3af", textTransform: "uppercase", letterSpacing: .5 } }, "Collection"),
-              isCustom && /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 2 } },
-                /*#__PURE__*/React.createElement("button", { "aria-label": "Edit", onClick: () => sEQ(q), style: { background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: 12, padding: "2px" } }, "✎"),
-                /*#__PURE__*/React.createElement("button", { "aria-label": "Close", onClick: () => delQ(q.id), style: { background: "none", border: "none", cursor: "pointer", color: "#d1d5db", fontSize: 15, padding: "2px", lineHeight: 1 } }, "\xD7"))))
-          );
-        }))
-    );
+    // Wave 4.4.1 — body lives in lib/views/profile/AccountPanel.js;
+    // see that file for the verbatim render tree.
+    const accountPanel = /*#__PURE__*/React.createElement(window.AccountPanel, {
+      callbacks: { helpers: {
+        data, demoMode, profileName, setProfileName, setData, authUser,
+        getStreak, exportSummary, exportHabitsICS, openReviewLink,
+        setConfirmWipe, setConfirmWipeTyped, setShowProfile, doSignOut,
+        sectionTitle, labelS, inputS, APP_VERSION, SUPPORT_EMAIL
+      } }
+    });
+    // Wave 4.4.2 — body + quote-helper closures live in
+    // lib/views/profile/InspirationPanel.js. App still owns the form
+    // state and editor callbacks; everything is passed through via
+    // the helpers bag.
+    const inspirationPanel = /*#__PURE__*/React.createElement(window.InspirationPanel, {
+      callbacks: { helpers: {
+        data, save, sectionTitle, labelS,
+        IS, AB, EI, SC,
+        nQ, sNQ, nQA, sNQA, addQ,
+        qFilter, setQFilter, allQuotes,
+        eQId, eQTxt, sEQTxt, eQA, sEQA, svEQ, sEQId, sEQ, delQ
+      } }
+    });
     // My Routines — dedicated top-level Profile section that renders
     // the Routine Compare view inline (week vs month common-vs-different
     // habit cadence). Previously this panel was just a launcher that

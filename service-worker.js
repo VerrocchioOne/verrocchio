@@ -49,6 +49,7 @@ precaching.precacheAndRoute([
   { url: "./lib/views/BriefTopBanners.js",  revision: SHELL_VERSION },
   { url: "./lib/views/HabitsView.js",   revision: SHELL_VERSION },
   { url: "./lib/views/HabitsReorderToolbar.js", revision: SHELL_VERSION },
+  { url: "./lib/views/HabitsNewHabitForm.js",   revision: SHELL_VERSION },
   { url: "./lib/views/GoalsView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/TodosView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/ReflectView.js",  revision: SHELL_VERSION },
