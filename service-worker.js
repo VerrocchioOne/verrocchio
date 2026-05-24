@@ -66,6 +66,9 @@ precaching.precacheAndRoute([
   // Wave 4.1 — modal sub-systems (one file per modal).
   { url: "./lib/modals/WelcomeModal.js",            revision: SHELL_VERSION },
   { url: "./lib/modals/JournalDisclaimerModal.js",  revision: SHELL_VERSION },
+  { url: "./lib/modals/AddCatModal.js",             revision: SHELL_VERSION },
+  { url: "./lib/modals/ConfirmWipeModal.js",        revision: SHELL_VERSION },
+  { url: "./lib/modals/ConfirmDeleteAcctModal.js",  revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);

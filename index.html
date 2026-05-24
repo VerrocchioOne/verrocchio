@@ -108,6 +108,9 @@
 <!-- Wave 4.1 — Modal sub-systems (one file per modal). -->
 <script src="./lib/modals/WelcomeModal.js"></script>
 <script src="./lib/modals/JournalDisclaimerModal.js"></script>
+<script src="./lib/modals/AddCatModal.js"></script>
+<script src="./lib/modals/ConfirmWipeModal.js"></script>
+<script src="./lib/modals/ConfirmDeleteAcctModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -20252,48 +20255,24 @@ function App() {
   // return-focus. autoFocus on the input keeps the keyboard cursor
   // there. Cancel uses data-a11y-dialog-hide; Create still does the
   // save+state-flip work and the wrapper unmounts on next render.
-  addCatModal && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => setAddCatModal(false),
-    ariaLabelledby: "add-cat-title",
-    overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300, alignItems: "center", padding: 24 },
-    cardStyle: { background: "#fff", borderRadius: 16, padding: "24px 20px", maxWidth: 360, boxShadow: "0 8px 40px rgba(0,0,0,.2)" }
-  },
-    /*#__PURE__*/React.createElement("div", {id:"add-cat-title",className:"card-title",style:{fontSize:16,color:"var(--c-text-strong)",marginBottom:16}}, "New Goal Category"),
-    /*#__PURE__*/React.createElement("input", {
-      value: newCatName, onChange: e => setNewCatName(e.target.value),
-      placeholder: "Category name (e.g. Health, Family...)",
-      autoFocus: true,
-      style:{width:"100%",border:"1px solid #e5e7eb",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",marginBottom:12,boxSizing:"border-box"}
-    }),
-    /*#__PURE__*/React.createElement("div", {style:{marginBottom:16}},
-      /*#__PURE__*/React.createElement("div", {style:{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:8,textTransform:"uppercase"}}, "Color"),
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8,flexWrap:"wrap"}},
-        ["#6366f1","#ec4899","#f59e0b","#10b981","#3b82f6","#8b5cf6","#ef4444","#14b8a6","#f97316"].map(c =>
-          /*#__PURE__*/React.createElement("div", {key:c,onClick:()=>setNewCatColor(c),style:{width:28,height:28,borderRadius:"50%",background:c,cursor:"pointer",border:newCatColor===c?"3px solid #111":"3px solid transparent",boxSizing:"border-box"}})
-        )
-      )
-    ),
-    /*#__PURE__*/React.createElement("div", {style:{display:"flex",gap:8}},
-      /*#__PURE__*/React.createElement("button", {"data-a11y-dialog-hide":true,style:{flex:1,background:"var(--c-surface-muted)",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#6b7280",cursor:"pointer"}}, "Cancel"),
-      /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          const name = newCatName.trim();
-          if (!name) return;
-          const c = newCatColor;
-          const hex2 = c+"22";
-          const newType = {value:name,color:c,bg:hex2,border:c+"66"};
-          const customGoalTypes = [...(data.customGoalTypes||[]).filter(t=>t.value!==name), newType];
-          save({...data,customGoalTypes});
-          // goalTypeFilter is a multi-select array now — replace the
-          // selection with the newly-created category so the user
-          // lands filtered to it on the Goals page.
-          setGoalTypeFilter([name]);
-          setAddCatModal(false);
-        },
-        style:{flex:2,background:"#2d5a2d",border:"none",borderRadius:8,padding:"11px",fontSize:13,fontWeight:600,color:"#fff",cursor:"pointer"}
-      }, "Create Category")
-    )
-  ),
+  addCatModal && /*#__PURE__*/React.createElement(window.AddCatModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { newCatName, newCatColor },
+    callbacks: {
+      onClose: () => setAddCatModal(false),
+      setNewCatName, setNewCatColor,
+      onCreate: (rawName, color) => {
+        const name = (rawName || "").trim();
+        if (!name) return;
+        const hex2 = color + "22";
+        const newType = { value: name, color, bg: hex2, border: color + "66" };
+        const customGoalTypes = [...(data.customGoalTypes || []).filter(t => t.value !== name), newType];
+        save({ ...data, customGoalTypes });
+        setGoalTypeFilter([name]);
+        setAddCatModal(false);
+      }
+    }
+  }),
   // ── Delete-account confirmation modal ──
   //    Double-check for the destructive account-delete action. Re-
   //    uses the acctCurrentPw input the user already typed in the
@@ -20306,135 +20285,35 @@ function App() {
   // be backed out by tapping Cancel, the backdrop, or Escape.
   // Migrated to A11yDialog (Port #6+#9 batch 1): role/aria-modal/
   // focus-trap/Escape/backdrop-click are all handled by the wrapper.
-  confirmWipe && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => { setConfirmWipe(null); setConfirmWipeTyped(""); },
-    ariaLabelledby: "wipe-title",
-    overlayStyle: { background: "rgba(0,0,0,0.6)", zIndex: 330, alignItems: "center", padding: 20 },
-    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-  },
-      /*#__PURE__*/React.createElement("div", {
-        id: "wipe-title",
-        style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "#b91c1c", marginBottom: 8 }
-      }, confirmWipe === "1" ? "Delete all data?" : "Final confirmation"),
-      confirmWipe === "1"
-        ? /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 18 }
-          }, "This will permanently erase every goal, habit, to-do, journal entry, and saved date on your account. Your sign-in stays intact — but the data cannot be recovered.")
-        : /*#__PURE__*/React.createElement(React.Fragment, null,
-            /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 12 }
-            }, "Type ", /*#__PURE__*/React.createElement("strong", { style: { color: "#b91c1c" } }, "delete"), " to confirm. This cannot be undone."),
-            /*#__PURE__*/React.createElement("input", {
-              type: "text",
-              value: confirmWipeTyped,
-              onChange: e => setConfirmWipeTyped(e.target.value),
-              autoFocus: true,
-              // Mobile keyboards auto-capitalize the first letter only
-              // — so "DELETE" never lands without help. Force-uppercase
-              // the layout, switch off autocorrect/spellcheck so the
-              // word isn't replaced mid-typing, and accept any case
-              // (case-insensitive compare on the button below) so
-              // either "delete" or "DELETE" works.
-              autoCapitalize: "characters",
-              autoCorrect: "off",
-              spellCheck: false,
-              placeholder: "Type delete",
-              style: { width: "100%", padding: "10px 12px", border: "1px solid var(--c-border)", borderRadius: 8, fontSize: 14, marginBottom: 18, outline: "none", background: "var(--c-surface-raised)" }
-            })
-          ),
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", gap: 8, justifyContent: "flex-end" }
-      },
-        /*#__PURE__*/React.createElement("button", {
-          // data-a11y-dialog-hide so the library closes the modal; the
-          // onHide handler above also clears the typed-text state.
-          "data-a11y-dialog-hide": true,
-          style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
-        }, "Cancel"),
-        confirmWipe === "1"
-          ? /*#__PURE__*/React.createElement("button", {
-              onClick: () => { setConfirmWipeTyped(""); setConfirmWipe("2"); },
-              style: { background: "var(--c-tint-danger-bg)", border: "1px solid var(--c-tint-danger-border)", color: "var(--c-tint-danger-fg)", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }
-            }, "Continue")
-          : (() => {
-              const isReady = confirmWipeTyped.trim().toUpperCase() === "DELETE";
-              return /*#__PURE__*/React.createElement("button", {
-                onClick: wipeAllData,
-                disabled: !isReady,
-                style: {
-                  background: isReady ? "#b91c1c" : "#9ca3af",
-                  color: "#fff", border: "none", borderRadius: 8,
-                  padding: "9px 16px", fontSize: 13, fontWeight: 700,
-                  cursor: isReady ? "pointer" : "not-allowed"
-                }
-              }, "Delete All Data");
-            })()
-      )
-  ),
+  confirmWipe && /*#__PURE__*/React.createElement(window.ConfirmWipeModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { stage: confirmWipe, typedText: confirmWipeTyped },
+    callbacks: {
+      onClose: () => { setConfirmWipe(null); setConfirmWipeTyped(""); },
+      onAdvanceToStage2: () => { setConfirmWipeTyped(""); setConfirmWipe("2"); },
+      onWipe: wipeAllData,
+      setTypedText: setConfirmWipeTyped
+    }
+  }),
   // Delete-account confirmation modal. Migrated to A11yDialog
   // (Port #6+#9 batch 1): role/aria-modal/focus-trap/Escape/backdrop-
   // click are all handled by the wrapper. Cancel button uses
   // data-a11y-dialog-hide so the library closes the modal; the onHide
   // handler also clears the typed confirmation text.
-  confirmDeleteAcct && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => { setConfirmDeleteAcct(false); setDeleteConfirmText(""); },
-    ariaLabelledby: "del-acct-title",
-    overlayStyle: { background: "rgba(0,0,0,0.6)", zIndex: 320, alignItems: "center", padding: 20 },
-    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: "22px 20px", maxWidth: 420, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-  },
-      /*#__PURE__*/React.createElement("div", {
-        id: "del-acct-title",
-        style: { fontFamily: "'Lora',serif", fontSize: 17, fontWeight: 700, color: "#991b1b", marginBottom: 8 }
-      }, "Delete account?"),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 13, color: "var(--c-text)", lineHeight: 1.6, marginBottom: 14 }
-      }, "This permanently deletes your account, all habits, journal entries, goals, and uploaded files. This cannot be undone."),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 11, color: "#6b7280", marginBottom: 14 }
-      }, "Re-enter your current password in the Account section above, then confirm below."),
-      /*#__PURE__*/React.createElement("a", {
-        href: "#",
-        onClick: (e) => {
-          e.preventDefault();
-          if (!auth.currentUser || !auth.currentUser.email) return;
-          auth.sendPasswordResetEmail(auth.currentUser.email).catch(() => {});
-          setAcctFeedback({ kind: "info", msg: "Check your email for a reset link, then sign back in and return here to delete." });
-        },
-        style: { fontSize: 12, color: "var(--c-text-faint)", textDecoration: "underline", cursor: "pointer", marginTop: 4, marginBottom: 12, display: "inline-block" }
-      }, "I forgot my password"),
-      /*#__PURE__*/React.createElement("p", {
-        style: { fontSize: 13, color: "var(--c-text-soft)", marginTop: 8, marginBottom: 6 }
-      }, "Type \"delete my account\" to confirm:"),
-      /*#__PURE__*/React.createElement("input", {
-        type: "text",
-        value: deleteConfirmText,
-        onChange: (e) => setDeleteConfirmText(e.target.value),
-        placeholder: "delete my account",
-        autoCapitalize: "none",
-        autoComplete: "off",
-        style: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid var(--c-border)", marginBottom: 10, fontSize: 14, boxSizing: "border-box" }
-      }),
-      acctFeedback && acctFeedback.kind === "err" && /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 12, padding: "6px 10px", borderRadius: 6, color: "#991b1b", background: "#fef2f2", border: "1px solid #fca5a5", marginBottom: 12 }
-      }, acctFeedback.msg),
-      acctFeedback && acctFeedback.kind === "info" && /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 12, padding: "6px 10px", borderRadius: 6, color: "var(--c-text-soft)", background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", marginBottom: 12 }
-      }, acctFeedback.msg),
-      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          "data-a11y-dialog-hide": true,
-          disabled: acctBusy,
-          style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "1px solid var(--c-border)", background: "var(--c-surface-raised)", color: "var(--c-text)", fontSize: 13, fontWeight: 600, cursor: acctBusy ? "default" : "pointer" }
-        }, "Cancel"),
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: doDeleteAccount,
-          disabled: acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account",
-          style: { flex: 1, minHeight: 44, padding: 11, borderRadius: 10, border: "none", background: "#991b1b", color: "#fff", fontSize: 13, fontWeight: 700, cursor: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? "default" : "pointer", opacity: (acctBusy || !acctCurrentPw || deleteConfirmText.trim().toLowerCase() !== "delete my account") ? 0.5 : 1 }
-        }, acctBusy ? "Deleting…" : "Delete forever")
-      )
-  ),
+  confirmDeleteAcct && /*#__PURE__*/React.createElement(window.ConfirmDeleteAcctModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { confirmText: deleteConfirmText, acctFeedback, acctBusy, acctCurrentPw },
+    callbacks: {
+      onClose: () => { setConfirmDeleteAcct(false); setDeleteConfirmText(""); },
+      setConfirmText: setDeleteConfirmText,
+      onSendPasswordResetEmail: () => {
+        if (!auth.currentUser || !auth.currentUser.email) return;
+        auth.sendPasswordResetEmail(auth.currentUser.email).catch(() => {});
+        setAcctFeedback({ kind: "info", msg: "Check your email for a reset link, then sign back in and return here to delete." });
+      },
+      onDelete: doDeleteAccount
+    }
+  }),
   // ── §9.1: Calendar day-detail snapshot — opened when the user taps
   //    a day cell in the Calendar modal's month grid. Shows that day's
   //    habit hits + misses, active goals (live + within their
