@@ -73,6 +73,8 @@ precaching.precacheAndRoute([
   { url: "./lib/views/profile/MyContentPanel.js",    revision: SHELL_VERSION },
   { url: "./lib/views/profile/ScorecardPanel.js",    revision: SHELL_VERSION },
   { url: "./lib/views/profile/ProfileShell.js",      revision: SHELL_VERSION },
+  // Wave 5.1 — sort utility + per-page picker UI.
+  { url: "./lib/views/SortMenu.js",     revision: SHELL_VERSION },
   // §13.6 Wave 2 — shared inline components extracted from index.html.
   { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },
   { url: "./lib/components/A11yDialog.js",      revision: SHELL_VERSION },

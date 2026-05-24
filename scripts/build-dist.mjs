@@ -55,6 +55,8 @@ const FILES = [
   'lib/views/profile/MyContentPanel.js',
   'lib/views/profile/ScorecardPanel.js',
   'lib/views/profile/ProfileShell.js',
+  // Wave 5.1 — sort utility + per-page picker.
+  'lib/views/SortMenu.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',
