@@ -139,6 +139,7 @@
 <script src="./lib/views/ReflectView.js"></script>
 <script src="./lib/views/CalendarView.js"></script>
 <script src="./lib/views/BottomNav.js"></script>
+<script src="./lib/views/AppChrome.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -12275,66 +12276,11 @@ function App() {
   // iPhone notch / Dynamic Island. Only renders while the tour is
   // active; tapping calls finishTour() which clears the step AND
   // persists tourDone so it won't re-fire on next load.
-  tourStep > 0 && /*#__PURE__*/React.createElement("button", {
-    type: "button",
-    onClick: finishTour,
-    "aria-label": "Exit walkthrough",
-    style: {
-      position: "fixed",
-      top: 0, left: 0, right: 0,
-      zIndex: 10100,
-      paddingTop: "calc(8px + env(safe-area-inset-top, 0px))",
-      paddingBottom: 10,
-      paddingLeft: 14, paddingRight: 14,
-      background: "#b91c1c",
-      color: "#fff",
-      border: "none",
-      fontSize: 14, fontWeight: 700,
-      letterSpacing: 0.3,
-      textAlign: "center",
-      boxShadow: "0 6px 18px rgba(0,0,0,0.25)",
-      cursor: "pointer",
-      WebkitTapHighlightColor: "rgba(255,255,255,0.2)"
-    }
-  }, "\u2715 Exit walkthrough"),
-  demoMode && /*#__PURE__*/React.createElement("div", {
-    // W3-T8: demo banner renders before the sticky header, so in demo
-    // mode it owns the top edge of the viewport. Pad under the notch.
-    style: { background: "linear-gradient(90deg,#fef3c7,#fde68a)", borderBottom: "1px solid #fcd34d", padding: "max(6px, calc(env(safe-area-inset-top, 0px) + 4px)) 14px 6px", fontSize: 12, color: "#78350f", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 60 }
-  },
-    /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700 } }, "\u2728 Demo Mode \u2014 nothing is saved"),
-    // Compact desktop-fallback exit button. On mobile, the shake
-    // gesture is the intended path; this stays visible so desktop
-    // users (no accelerometer) and anyone on iOS who declined the
-    // motion permission still have a way out.
-    /*#__PURE__*/React.createElement("button", {
-      onClick: exitDemo,
-      style: { background: "#78350f", color: "#fff", border: "none", borderRadius: 12, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }
-    }, "Exit demo")),
-  // One-time shake-to-exit hint. Dismisses on tap, auto-dismisses
-  // after ~8 seconds. Dark pill docked above the bottom nav so it's
-  // visible without blocking the main content. sessionStorage flag
-  // keeps it from firing again in the same browser session.
-  demoMode && showShakeHint && /*#__PURE__*/React.createElement("div", {
-    onClick: dismissShakeHint,
-    style: {
-      position: "fixed",
-      left: 12, right: 12, bottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
-      zIndex: 200,
-      background: "rgba(17,24,39,0.92)",
-      color: "#fff",
-      borderRadius: 12,
-      padding: "10px 14px",
-      boxShadow: "0 8px 28px rgba(0,0,0,.25)",
-      display: "flex", alignItems: "center", gap: 10,
-      fontSize: 13, lineHeight: 1.35,
-      cursor: "pointer"
-    }
-  },
-    /*#__PURE__*/React.createElement("span", { style: { fontSize: 18, lineHeight: 1 } }, "\ud83d\udcf3"),
-    /*#__PURE__*/React.createElement("span", { style: { flex: 1 } }, "Shake your phone anytime to exit the demo."),
-    /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: "#9ca3af", fontWeight: 600 } }, "Got it")
-  ),
+  /*#__PURE__*/React.createElement(window.AppChrome, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { tourStep, demoMode, showShakeHint },
+    callbacks: { finishTour, exitDemo, dismissShakeHint }
+  }),
   /*#__PURE__*/React.createElement("div", {
     // Liquid-glass header — translucent fill with heavy backdrop blur so
     // the scrolling content below shows through softly. The .lg class

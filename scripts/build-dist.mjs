@@ -34,6 +34,7 @@ const FILES = [
   'lib/views/ReflectView.js',
   'lib/views/CalendarView.js',
   'lib/views/BottomNav.js',
+  'lib/views/AppChrome.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',
