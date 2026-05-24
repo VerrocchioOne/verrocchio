@@ -61,6 +61,8 @@ const FILES = [
   'lib/services.js',
   // Wave 5.3 — seeded quote collection (owner-only).
   'lib/preset-quotes.js',
+  // Wave 5.9 — confetti burst.
+  'lib/effects.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',

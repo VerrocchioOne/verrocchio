@@ -79,6 +79,8 @@ precaching.precacheAndRoute([
   { url: "./lib/services.js",           revision: SHELL_VERSION },
   // Wave 5.3 — seeded quote collection (owner-only).
   { url: "./lib/preset-quotes.js",      revision: SHELL_VERSION },
+  // Wave 5.9 — confetti burst (DOM-based, no library).
+  { url: "./lib/effects.js",            revision: SHELL_VERSION },
   // §13.6 Wave 2 — shared inline components extracted from index.html.
   { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },
   { url: "./lib/components/A11yDialog.js",      revision: SHELL_VERSION },
