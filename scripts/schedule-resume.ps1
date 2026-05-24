@@ -96,6 +96,11 @@ $action = New-ScheduledTaskAction `
   -Argument "-NoProfile -WindowStyle Hidden -EncodedCommand $encoded"
 
 $trigger = New-ScheduledTaskTrigger -Once -At $FireAt
+# DeleteExpiredTaskAfter on the settings requires the trigger to have an
+# EndBoundary; without it Task Scheduler rejects the XML with "missing
+# required element or attribute" + an EndBoundary pointer. Setting it to
+# fire-time + 5 min gives the action room to finish before expiration.
+$trigger.EndBoundary = $FireAt.AddMinutes(5).ToString("yyyy-MM-ddTHH:mm:ss")
 
 # Remove the task itself shortly after it fires so we don't leave stale
 # entries behind. PT1M (1 minute) instead of PT0S because Task Scheduler
