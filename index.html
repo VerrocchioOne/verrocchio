@@ -95,6 +95,7 @@
 <script src="./lib/auth.js"></script>
 <!-- §13.6 Wave 2 — Shared inline components extracted from index.html. Load BEFORE views so window.X is defined when views init. -->
 <script src="./lib/components/Sparkline14.js"></script>
+<script src="./lib/components/A11yDialog.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -2737,79 +2738,13 @@ const fmtD = iso => new Date(iso).toLocaleDateString("en-US", {
 // React removes the DOM before our cleanup runs anyway — a11y-dialog's
 // destroy() handles the focus-return path even when the node has
 // already been detached.
-const A11yDialog = function A11yDialog({ onHide, overlayStyle, cardStyle, dialogProps, children, ariaLabelledby }) {
-  const elRef = React.useRef(null);
-  const dlgRef = React.useRef(null);
-  const onHideRef = React.useRef(onHide);
-  React.useEffect(() => { onHideRef.current = onHide; }, [onHide]);
-
-  React.useEffect(() => {
-    if (!elRef.current) return;
-    const dlg = (window.verrocchioDialog && window.verrocchioDialog.createDialog(elRef.current));
-    if (!dlg) return;
-    dlgRef.current = dlg;
-    // Bridge a11y-dialog's "hide" event back to React state via onHide.
-    // Without this, an Escape press or data-a11y-dialog-hide click would
-    // close the underlying dialog visually but leave React's open-state
-    // truthy — next render would re-mount and re-show the modal,
-    // creating a stuck-open feel.
-    const handleHide = () => { if (onHideRef.current) onHideRef.current(); };
-    dlg.on("hide", handleHide);
-    dlg.show();
-    return () => {
-      try { dlg.off("hide", handleHide); } catch (_) {}
-      try { dlg.destroy(); } catch (_) {}
-    };
-  }, []);
-
-  // Backdrop click → hide. a11y-dialog's `data-a11y-dialog-hide` selector
-  // only matches descendants; the outer overlay element itself needs an
-  // explicit handler so clicking the dim outside the card still closes.
-  const onBackdropClick = (e) => {
-    if (e.target === e.currentTarget && dlgRef.current) {
-      dlgRef.current.hide();
-    }
-  };
-
-  // Outer wrapper holds role/aria; inner element is the visual card.
-  // Caller-supplied styles merge over defaults.
-  const baseOverlay = {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.5)",
-    zIndex: 350,
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "center"
-  };
-  const baseCard = {
-    background: "var(--c-surface, #fff)",
-    borderRadius: "20px 20px 0 0",
-    padding: "24px 20px",
-    width: "100%",
-    maxWidth: 640,
-    maxHeight: "85vh",
-    overflowY: "auto",
-    boxShadow: "0 -8px 40px rgba(0,0,0,.2)"
-  };
-
-  return React.createElement("div", Object.assign({
-    ref: elRef,
-    role: "dialog",
-    "aria-modal": "true",
-    "aria-labelledby": ariaLabelledby,
-    onClick: onBackdropClick,
-    style: Object.assign({}, baseOverlay, overlayStyle || {})
-  }, dialogProps || {}),
-    React.createElement("div", {
-      className: "fade-in",
-      // Stop click propagation so a backdrop-close handler on the outer
-      // wrapper doesn't fire when the user interacts with card contents.
-      onClick: (e) => e.stopPropagation(),
-      style: Object.assign({}, baseCard, cardStyle || {})
-    }, children)
-  );
-};
+// §13.6 Wave 2 — A11yDialog body extracted to lib/components/A11yDialog.js
+// (loaded via <script src> in head). Exposed there as
+// `window.VerrocchioReactDialog` to avoid clobbering the a11y-dialog
+// UMD library's `window.A11yDialog` class (which lib/dialog.js depends
+// on). All existing `React.createElement(A11yDialog, ...)` call sites
+// see the local const below.
+const A11yDialog = window.VerrocchioReactDialog;
 
 // the last two weeks. Done days draw a 2px bar + a connecting line
 // through the tops; missed/empty days leave a faint tick. Width is
