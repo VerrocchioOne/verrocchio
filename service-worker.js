@@ -81,6 +81,7 @@ precaching.precacheAndRoute([
   { url: "./lib/modals/CoachContextModal.js",       revision: SHELL_VERSION },
   { url: "./lib/modals/VoiceCaptureModal.js",       revision: SHELL_VERSION },
   { url: "./lib/modals/XpChartModal.js",            revision: SHELL_VERSION },
+  { url: "./lib/modals/ReorderCtxModal.js",         revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);

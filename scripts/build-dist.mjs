@@ -60,6 +60,7 @@ const FILES = [
   'lib/modals/CoachContextModal.js',
   'lib/modals/VoiceCaptureModal.js',
   'lib/modals/XpChartModal.js',
+  'lib/modals/ReorderCtxModal.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',
