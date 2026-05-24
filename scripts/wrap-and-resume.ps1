@@ -20,9 +20,19 @@
 #   pwsh -File scripts/wrap-and-resume.ps1 -Watch
 #       Background poller. Tails the latest Claude transcript JSONL
 #       under ~/.claude/projects/<slug>/ for session-limit markers.
-#       When a marker is matched, fires the wrap exactly once and
-#       exits. Run this in a side terminal at the start of a long
-#       Claude session so you don't have to babysit the REPL.
+#       When a marker is matched, fires the wrap, then resets and
+#       resumes watching (re-resolves the latest transcript so it
+#       picks up a freshly-opened session). Runs until killed.
+#
+#   pwsh -File scripts/wrap-and-resume.ps1 -Install
+#       Hands -Watch off to Windows Task Scheduler so it runs
+#       automatically at every user logon. Restarts on failure with
+#       a 5-min backoff (3 attempts) so a crash doesn't leave you
+#       unprotected. Task name: Verrocchio-ClaudeLimitWatcher.
+#       Idempotent: re-running replaces the existing registration.
+#
+#   pwsh -File scripts/wrap-and-resume.ps1 -Uninstall
+#       Remove the auto-start watcher task.
 #
 #   pwsh -File scripts/wrap-and-resume.ps1 -DryRun
 #       Print what would happen without writing the handoff, making
@@ -68,13 +78,21 @@ param(
   [switch]$DryRun,
   [switch]$NoCommit,
   [string]$HandoffTitle = "",
-  [switch]$Cancel
+  [switch]$Cancel,
+  [switch]$Install,
+  [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $HandoffsDir = Join-Path $RepoRoot "docs/handoffs"
 $ScheduleScript = Join-Path $PSScriptRoot "schedule-resume.ps1"
+$WatcherTaskName = "Verrocchio-ClaudeLimitWatcher"
+# Capture the script path at top-level scope. $MyInvocation inside a
+# function returns the function source, not the script path, so we
+# can't compute this inside Install-Watcher.
+$ThisScriptPath = $PSCommandPath
+if (-not $ThisScriptPath) { $ThisScriptPath = Join-Path $PSScriptRoot "wrap-and-resume.ps1" }
 
 # Substrings that, when seen in a Claude transcript JSONL line, mean
 # the session has hit a limit. Matched case-insensitively.
@@ -281,11 +299,93 @@ function Invoke-WrapAndSchedule {
 }
 
 # ---------------------------------------------------------------------
-# -Cancel: bail early to the scheduler's cancel mode. Defined here
-# (after Invoke-Pwsh) because PowerShell does not hoist function
-# definitions — calling Invoke-Pwsh before its function block would
-# raise CommandNotFoundException.
+# Installer: register a Windows scheduled task that runs -Watch at
+# every user logon, with restart-on-failure so a crash doesn't leave
+# the user unprotected. Self-contained inside this script so the
+# install + uninstall both speak the same task name + arg list.
 # ---------------------------------------------------------------------
+function Install-Watcher {
+  $exe = $null
+  $cand = Get-Command pwsh -ErrorAction SilentlyContinue
+  if ($cand) { $exe = $cand.Source }
+  if (-not $exe) {
+    $cand = Get-Command powershell -ErrorAction SilentlyContinue
+    if ($cand) { $exe = $cand.Source }
+  }
+  if (-not $exe) { throw "Neither pwsh nor powershell found on PATH." }
+
+  $scriptPath = $ThisScriptPath
+
+  $action = New-ScheduledTaskAction `
+    -Execute $exe `
+    -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`" -Watch"
+
+  # AtLogOn so the watcher starts the moment the user signs in.
+  # Trigger has an Enabled flag but no EndBoundary; Windows runs it
+  # indefinitely so DeleteExpiredTaskAfter is intentionally omitted.
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+
+  # IgnoreNew prevents a second watcher from spawning if the task
+  # fires while one is already running. RestartCount + RestartInterval
+  # bring the watcher back if it crashes.
+  $settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -MultipleInstances IgnoreNew `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 5) `
+    -ExecutionTimeLimit (New-TimeSpan -Hours 0)
+
+  $existing = Get-ScheduledTask -TaskName $WatcherTaskName -ErrorAction SilentlyContinue
+  if ($existing) {
+    Unregister-ScheduledTask -TaskName $WatcherTaskName -Confirm:$false
+  }
+
+  Register-ScheduledTask `
+    -TaskName $WatcherTaskName `
+    -Action $action `
+    -Trigger $trigger `
+    -Settings $settings `
+    -Description "Auto-launch the wrap-and-resume watcher at logon so Claude session-limit hits trigger a handoff + resume schedule without manual intervention." `
+    -Force | Out-Null
+
+  Write-Host "Installed watcher task '$WatcherTaskName'."
+  Write-Host "  Runs at:     every user logon (and on demand)"
+  Write-Host "  Command:     $exe -File `"$scriptPath`" -Watch"
+  Write-Host "  Restart:     up to 3 times, 5 min apart, on failure"
+  Write-Host ""
+  Write-Host "Start it now without re-logging in:"
+  Write-Host "  Start-ScheduledTask -TaskName '$WatcherTaskName'"
+  Write-Host ""
+  Write-Host "Remove later: pwsh -File scripts/wrap-and-resume.ps1 -Uninstall"
+}
+
+function Uninstall-Watcher {
+  $existing = Get-ScheduledTask -TaskName $WatcherTaskName -ErrorAction SilentlyContinue
+  if ($existing) {
+    # Stop the running instance first so we don't orphan a poller.
+    try { Stop-ScheduledTask -TaskName $WatcherTaskName -ErrorAction SilentlyContinue } catch {}
+    Unregister-ScheduledTask -TaskName $WatcherTaskName -Confirm:$false
+    Write-Host "Uninstalled watcher task '$WatcherTaskName'."
+  } else {
+    Write-Host "No watcher task named '$WatcherTaskName' to uninstall."
+  }
+}
+
+# ---------------------------------------------------------------------
+# Early-return modes. Each delegates and exits.
+# ---------------------------------------------------------------------
+if ($Install) {
+  Install-Watcher
+  return
+}
+
+if ($Uninstall) {
+  Uninstall-Watcher
+  return
+}
+
 if ($Cancel) {
   Invoke-Pwsh -ScriptPath $ScheduleScript -ScriptArgs @('-Cancel')
   return
@@ -293,52 +393,68 @@ if ($Cancel) {
 
 # ---------------------------------------------------------------------
 # Watch mode: tail the latest Claude transcript for limit markers.
+#
+# Runs until killed. After firing a wrap, sleeps 10 min (so we don't
+# fire twice on the same trailing limit message), then re-resolves the
+# latest transcript and resumes watching. If no transcript exists yet
+# (e.g. the auto-start task fired before the user opened Claude), the
+# poller waits patiently instead of throwing.
 # ---------------------------------------------------------------------
 if ($Watch) {
-  $transcript = Get-LatestTranscriptPath
-  if (-not $transcript) {
-    throw "Couldn't find a Claude transcript under ~/.claude/projects/. Open Claude Code in this repo first, then re-run -Watch."
-  }
-  Write-Host "Watching transcript: $transcript"
-  Write-Host "(Ctrl-C to stop. Will exit after one wrap.)"
-
-  # Start tailing AT the current EOF so we don't re-fire on a historical
-  # limit message that already happened.
-  $startSize = (Get-Item $transcript).Length
+  Write-Host "Watcher starting. (Ctrl-C to stop. Runs until killed.)"
 
   while ($true) {
-    Start-Sleep -Seconds 5
-    if (-not (Test-Path $transcript)) {
-      Start-Sleep -Seconds 5
-      $transcript = Get-LatestTranscriptPath
-      if (-not $transcript) { continue }
-      $startSize = 0
+    # Resolve (or re-resolve) the latest transcript. If none exists,
+    # wait and retry — covers the auto-start-at-logon case where the
+    # user hasn't opened Claude yet.
+    $transcript = Get-LatestTranscriptPath
+    if (-not $transcript) {
+      Start-Sleep -Seconds 30
       continue
     }
-    $info = Get-Item $transcript
-    if ($info.Length -le $startSize) { continue }
+    Write-Host "Watching transcript: $transcript"
 
-    # Read only the new tail bytes since we last checked.
-    $fs = [System.IO.File]::Open($transcript, 'Open', 'Read', 'ReadWrite')
-    try {
-      [void]$fs.Seek($startSize, 'Begin')
-      $reader = New-Object System.IO.StreamReader($fs)
-      $newText = $reader.ReadToEnd()
-      $reader.Close()
-    } finally {
-      $fs.Close()
-    }
-    $startSize = $info.Length
+    # Start tailing AT the current EOF so we don't re-fire on a
+    # historical limit message that already happened.
+    $startSize = (Get-Item $transcript).Length
+    $fired = $false
 
-    $hit = $false
-    foreach ($line in ($newText -split "`n")) {
-      if (Test-LineMatchesLimit $line) { $hit = $true; break }
-    }
-    if ($hit) {
-      Write-Host "Limit pattern detected. Wrapping..."
-      Invoke-WrapAndSchedule
-      Write-Host "Wrap complete. Exiting watch loop."
-      return
+    while (-not $fired) {
+      Start-Sleep -Seconds 5
+      if (-not (Test-Path $transcript)) {
+        # File rotated / session ended. Drop back to the outer loop
+        # to re-resolve.
+        break
+      }
+      $info = Get-Item $transcript
+      if ($info.Length -le $startSize) { continue }
+
+      # Read only the new tail bytes since we last checked.
+      $newText = ""
+      $fs = [System.IO.File]::Open($transcript, 'Open', 'Read', 'ReadWrite')
+      try {
+        [void]$fs.Seek($startSize, 'Begin')
+        $reader = New-Object System.IO.StreamReader($fs)
+        $newText = $reader.ReadToEnd()
+        $reader.Close()
+      } finally {
+        $fs.Close()
+      }
+      $startSize = $info.Length
+
+      foreach ($line in ($newText -split "`n")) {
+        if (Test-LineMatchesLimit $line) { $fired = $true; break }
+      }
+      if ($fired) {
+        Write-Host "Limit pattern detected. Wrapping..."
+        try {
+          Invoke-WrapAndSchedule
+          Write-Host "Wrap complete. Cooling down 10 min before resuming watch..."
+        } catch {
+          Write-Warning ("Wrap failed: " + $_.Exception.Message)
+        }
+        Start-Sleep -Seconds 600
+      }
     }
   }
 }
