@@ -1,3 +1,72 @@
+<!-- ─────────── KARPATHY ADDENDUM (added 2026-05-23) ─────────── -->
+# Karpathy Coding Guidelines (Addendum)
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+<!-- ─────────── END KARPATHY ADDENDUM ─────────── -->
+
 # Verrocchio — Project Guidance for Claude
 
 Single-file PWA habit tracker. **All app code lives in `index.html` (~25k lines, hand-rolled `React.createElement` — no JSX, no build step).** Pure date/streak math lives in `utils.js` and is dual-loaded (browser `<script>` + Node `require`) so the test suite shares the same source. iOS shell via Capacitor. Firestore for cross-device sync, scoped per `users/<uid>`. Optional Cloudflare Worker AI proxy at `ai-proxy/`.
@@ -115,6 +184,20 @@ All three in one message, running concurrently.
 - **Never** introduce a UI framework (Tailwind, MUI, Chakra). Inline styles + design tokens is the system.
 - **Never** mutate `h.completions` or `h.completionTimes` in place — always spread (immutability rule applies even without TypeScript enforcing it).
 - **Don't** widen Firestore rules beyond `users/{uid}` without a reason and corresponding threat-model note in `firestore.rules`.
+
+## File-size rule (MASTER, established 2026-05-23)
+
+- **Hard cap: 1000 LOC per file.** Any change that pushes a file over 1000 lines is blocked — split first, then add the change.
+- **Soft target: 500 LOC per file.** New files should aim under 500; existing files between 500 and 1000 are flagged as split candidates whenever you touch them.
+- **Why:** Forces meaningful decomposition. Keeps every file holdable in a subagent's context without truncation. Reduces blast radius of any single edit. The rule is a forcing function for the same architectural goal the v75/v76 view-extraction work was already pursuing.
+- **Current known violators (work them into follow-up plans):**
+  - `index.html` ~30,000 LOC (massive; needs App() sub-system extraction — settings, AI sidebar, modals, onboarding)
+  - `lib/views/HabitsView.js` 3,104 LOC (split into HabitCard / HabitRow / ReorderToolbar / NewHabitForm / FilterPills)
+  - `lib/views/BriefView.js` 1,072 LOC
+  - `lib/views/GoalsView.js` 955 LOC
+  - `lib/views/CalendarView.js` 772 LOC
+  - `lib/views/TodosView.js` 521 LOC (over soft target)
+- **How to apply:** When you finish an edit, `wc -l` the touched files. If any cross the cap, do a follow-up split BEFORE the next feature commit. When extracting a new module, target 200-400 LOC.
 
 ## Quick commands
 

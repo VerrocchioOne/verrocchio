@@ -31,6 +31,47 @@ These are not feature requests — they are process directives that govern HOW w
 
 ---
 
+## 2026-05-23 — 1000-line hard cap rule
+
+### Verbatim
+"Make a master rule for this app: no individual file should exceed 1000 lines of code and every file should aim to be under 500 lines."
+
+### Contextualized summary
+Establishes a project-wide file-size rule: hard cap 1000 LOC, soft target 500 LOC. Added to `CLAUDE.md` and saved to project memory. Forces follow-up splits on every file currently over the cap, including the just-shipped v76 `lib/views/HabitsView.js` (3,104 lines), `lib/views/BriefView.js` (1,072), and most critically `index.html` (~30k lines). Each violator gets its own decomposition plan (see DEBUG_LOG §13.5).
+
+---
+
+## 2026-05-23 — v76 ship (HabitsView full extraction)
+
+### §13.4b — HabitsView full extraction — SHIPPED v76
+
+**Verbatim:** "extract it all. continue it all" (after the v75 ship landed HabitsView as a PARTIAL stub).
+
+**Contextualized summary:** Closed the §13.4a gap. The Habits render block (originally inline at index.html L15685-L18584, ~2900 lines) now lives in `lib/views/HabitsView.js` (3,104 lines — a 1000-line-rule violation; documented as a follow-up split). Strategy was tree-for-tree extraction: the body was copied verbatim and a destructuring prelude re-binds every App-scope identifier the body references (constants HT/IMP/SECTIONS, pure helpers like `getStreak`/`isDone`/`dk`, refs, derived memos, components like `HabitCardShell`) so render output is bit-identical. App still owns the ~40 useState hooks driving the filter pills, reorder UX, swipe gestures, and inline new-habit form — they're passed through via `callbacks` with a single `helpers` sub-bag.
+
+Background subagent `ad391f89b8641eaa4` did the extraction in the prior session but hit the user's account session limit before it could verify or commit; this session picked up its uncommitted work, ran 259/259 unit + 19/19 desktop E2E (including the 4 habit-reorder-layered-drop tests that pin v72-v74 semantics), bumped SHELL_VERSION v75 → v76, snapshotted `archive/index.v76.html`, and shipped.
+
+**Follow-up plans needed (now elevated by the 1000-line rule):**
+- Split `lib/views/HabitsView.js` (3104 LOC) into sub-components: HabitCard, HabitRow, ReorderToolbar, NewHabitForm, FilterPills.
+- Split `lib/views/BriefView.js` (1072 LOC) and `lib/views/GoalsView.js` (955 LOC).
+- Dead-code cleanup of the 6 `false && (() => {...})()` neutralized inline view bodies in index.html (~5000 lines deletable; brings index.html closer to manageable).
+- Long-term: split index.html itself by extracting App() sub-systems (settings, AI sidebar, modals, onboarding) into their own modules.
+- Lift Habits view-local state (reorderMode, filter pills, new-habit form) out of App and into the view module.
+
+**Cross-references:** SW v76, snapshot `archive/index.v76.html`, handoff at [docs/handoffs/HANDOFF_view-extraction-v75-shipped_2026-05-23.md](../handoffs/HANDOFF_view-extraction-v75-shipped_2026-05-23.md). Commits: `055fa9b` (WIP HabitsView extraction landed by background agent) → finalized by the v76 ship commit (this one) replacing the WIP marker.
+
+---
+
+## 2026-05-23 — Session-limit resume automation
+
+### Verbatim
+"create a automatic script such that when i hit my session limit that you check in an hour later to resume the work. That way I don't have to come back to my computer or wake up in the middle of the night if my limit is hit"
+
+### Contextualized summary
+Built a paired automation: (a) in-session CronCreate cron that fires hourly while Claude is open, reads the latest handoff, runs the verify→cleanup→ship sequence, self-deletes when the work is done; (b) `scripts/schedule-resume.ps1` cross-session helper that uses Windows Task Scheduler to fire a toast notification after a configurable delay (default 1h) pointing at the latest `HANDOFF_*.md`. The script handles the case where Claude is fully closed (the cron only fires while the REPL is alive). Pattern saved to project memory at `~/.claude/projects/c--Users-User-Developer-verrocchio/memory/workflow_session_resume_automation.md` so future sessions discover and reuse it.
+
+---
+
 ## 2026-05-23 — v75 ship
 
 ### §13.4a — Decompose index.html into 5 view modules + 6 domain modules — SHIPPED v75 (Habits view deferred)

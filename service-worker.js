@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v75";
+const SHELL_VERSION = "v76";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();

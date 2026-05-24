@@ -51,6 +51,7 @@ android/local.properties
 # Claude Code: per-user settings + runtime state (committed: CLAUDE.md, skills/, memory/)
 .claude/settings.local.json
 .claude/state/
+.claude/scheduled_tasks*
 
 # Local visual-verification harness — Playwright screenshots, throwaway scripts,
 # patched dist outputs. Never committed; kept for fast re-runs during dev.

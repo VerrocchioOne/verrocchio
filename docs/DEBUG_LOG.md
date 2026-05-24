@@ -13,6 +13,31 @@ Append one entry per investigation. Newest first. Every bug fix in the codebase 
 
 ---
 
+### 2026-05-23 — §13.4b (v76) HabitsView full extraction — closes the v75 PARTIAL gap
+
+- **Phase 1 — Root cause:** Not a bug — completion of the v75 §13.4a work. Habits was deferred from §13.4a because tree-for-tree extraction of the ~2900-line inline render would have required moving ~40 App-scope useState hooks AND the v72-v74 select-then-act reorder UX in one shot. v76 closes the gap by adopting a different strategy: leave App owning the state, copy the body verbatim, and re-bind via a destructuring prelude.
+- **Phase 2 — Pattern:** The Phase B view extractions (BriefView/GoalsView/etc.) succeeded because they had clean READ derivations that could be hoisted to `lib/domains/*.js`. Habits' v72-v74 reorder system is deeply intertwined with App-scope refs and state — pure-function extraction is a much bigger refactor. The new pattern: keep App as the state owner, pass everything via a single fat `callbacks` bag with a nested `helpers` sub-bag.
+- **Phase 3 — Hypothesis:** "Verbatim body copy + re-bind prelude preserves render output bit-identically AND keeps v72-v74 reorder behavior intact." **Confirmed.** 259/259 unit + 19/19 desktop E2E green, including the 4 `habit-reorder-layered-drop` specs that pin the v72-v74 semantics.
+- **Phase 4 — Fix:** `lib/views/HabitsView.js` 270 → 3,104 lines. `index.html` Habits-tab call site replaced inline IIFE with `React.createElement(window.HabitsView, ...)` + comprehensive callbacks bag. SHELL_VERSION v75 → v76. `archive/index.v76.html` snapshot. Background subagent `ad391f89b8641eaa4` did the extraction during the prior session but hit the user's account session limit before verifying / committing; this session picked up the uncommitted work, ran verification, bumped, snapshotted, and shipped. WIP commit `055fa9b`; final ship commit lands this entry. **NOTE:** The 3,104-line HabitsView.js violates the new 2026-05-23 1000-line file-size rule (see §13.5). A follow-up split into HabitCard / HabitRow / ReorderToolbar / NewHabitForm / FilterPills sub-modules is queued.
+
+---
+
+### 2026-05-23 — §13.5 1000-line file-size rule
+
+- **Phase 1 — Root cause:** Not a bug — user-imposed architectural rule. Verbatim: "Make a master rule for this app: no individual file should exceed 1000 lines of code and every file should aim to be under 500 lines."
+- **Phase 2 — Pattern:** None yet. The rule is the pattern.
+- **Phase 3 — Hypothesis:** "Hard cap 1000 LOC + soft target 500 LOC forces meaningful decomposition AND keeps any single file holdable in a subagent's context window without truncation. The cap is a forcing function for the same architectural goal the view-extraction work was pursuing."
+- **Phase 4 — Fix:** Added to `CLAUDE.md` (project guidance) and to project memory (`feedback_file_size_cap.md`). Current violations to address in follow-up plans:
+  - `index.html` ~30,000 LOC (massive; split by extracting App() sub-systems)
+  - `lib/views/HabitsView.js` 3,104 LOC (v76 extraction; split into HabitCard/HabitRow/ReorderToolbar/NewHabitForm/FilterPills)
+  - `lib/views/BriefView.js` 1,072 LOC
+  - `lib/views/GoalsView.js` 955 LOC (over the 500 soft target; under the 1000 hard cap, but worth splitting)
+  - `lib/views/CalendarView.js` 772 LOC (same as GoalsView)
+  - `lib/views/TodosView.js` 521 LOC (just over the 500 soft target)
+  Each gets its own decomposition plan in a follow-up session.
+
+---
+
 ### 2026-05-23 — §13.4a (v75) view-level decomposition (Brief/Goals/Todos/Reflect/Calendar); Habits view DEFERRED
 
 - **Phase 1 — Root cause:** Not a bug — a refactor for subagent parallelism. App() in index.html had grown to ~30k lines with all top-level tabs' render trees + helpers inline, making future feature work (especially iOS Chain C: Widgets / Siri / HealthKit) require loading the full file for any view edit.
