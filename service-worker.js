@@ -69,6 +69,7 @@ precaching.precacheAndRoute([
   { url: "./lib/modals/AddCatModal.js",             revision: SHELL_VERSION },
   { url: "./lib/modals/ConfirmWipeModal.js",        revision: SHELL_VERSION },
   { url: "./lib/modals/ConfirmDeleteAcctModal.js",  revision: SHELL_VERSION },
+  { url: "./lib/modals/ConfirmExitDemoModal.js",    revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);

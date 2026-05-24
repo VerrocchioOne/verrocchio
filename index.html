@@ -111,6 +111,7 @@
 <script src="./lib/modals/AddCatModal.js"></script>
 <script src="./lib/modals/ConfirmWipeModal.js"></script>
 <script src="./lib/modals/ConfirmDeleteAcctModal.js"></script>
+<script src="./lib/modals/ConfirmExitDemoModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -16864,95 +16865,15 @@ function App() {
   // lets each phase's glassmorphism tour-tip div be the visible card.
   // "Exit Demo" intentionally does NOT carry data-a11y-dialog-hide \u2014
   // it transitions phase, doesn't close.
-  confirmExitDemo && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => setConfirmExitDemo(null),
-    ariaLabelledby: "exit-demo-title",
-    overlayStyle: { background: "rgba(0,0,0,0.55)", zIndex: 10100, alignItems: "center", padding: 20 },
-    cardStyle: { background: "transparent", boxShadow: "none", padding: 0, borderRadius: 0, maxWidth: 400, maxHeight: "85vh", overflowY: "auto" }
-  }, confirmExitDemo === "confirm"
-    ? /*#__PURE__*/React.createElement("div", {
-        className: "fade-in lg tour-tip",
-        style: {
-          borderRadius: 18, padding: "24px",
-          width: "100%", maxWidth: 360,
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.38), 0 2px 8px rgba(0,0,0,.1)"
-        }
-      },
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 28, textAlign: "center", marginBottom: 12 } }, "\u{1F44B}"),
-        /*#__PURE__*/React.createElement("div", {
-          id: "exit-demo-title",
-          className: "tour-tip-title card-title",
-          style: { fontSize: 16, textAlign: "center", marginBottom: 8 }
-        }, "Exit the demo?"),
-        /*#__PURE__*/React.createElement("div", {
-          className: "tour-tip-body",
-          style: { fontSize: 13, textAlign: "center", lineHeight: 1.6, marginBottom: 16 }
-        }, "You'll leave the guided tour and go back to the sign-in screen. You can replay the tour anytime from Settings."),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 10 } },
-          /*#__PURE__*/React.createElement("button", {
-            "data-a11y-dialog-hide": true,
-            style: {
-              flex: 1, background: "var(--c-surface-muted)", border: "none", borderRadius: 10,
-              padding: "12px", fontSize: 13, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer"
-            }
-          }, "Keep Exploring"),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => setConfirmExitDemo("hint"),
-            style: {
-              flex: 1, background: "#fef3c7", border: "1px solid #fcd34d",
-              borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 600,
-              color: "#78350f", cursor: "pointer"
-            }
-          }, "Exit Demo")
-        )
-      )
-    : /*#__PURE__*/React.createElement("div", {
-        className: "fade-in lg tour-tip",
-        style: {
-          borderRadius: 18, padding: "24px",
-          width: "100%", maxWidth: 380,
-          backdropFilter: "blur(28px) saturate(180%)",
-          WebkitBackdropFilter: "blur(28px) saturate(180%)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 0 rgba(0,0,0,0.04), 0 20px 48px rgba(0,0,0,.38), 0 2px 8px rgba(0,0,0,.1)"
-        }
-      },
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 28, textAlign: "center", marginBottom: 12 } }, "\u{1F9ED}"),
-        /*#__PURE__*/React.createElement("div", {
-          id: "exit-demo-title",
-          className: "tour-tip-title card-title",
-          style: { fontSize: 16, textAlign: "center", marginBottom: 10 }
-        }, "Want to replay the tour later?"),
-        /*#__PURE__*/React.createElement("div", {
-          className: "tour-tip-body",
-          style: { fontSize: 13, lineHeight: 1.6, marginBottom: 14, textAlign: "center" }
-        }, "You'll find it anytime under"),
-        /*#__PURE__*/React.createElement("div", {
-          style: {
-            fontSize: 13, color: "#78350f",
-            background: "#fffbeb", border: "1px solid #fcd34d",
-            borderRadius: 10, padding: "10px 12px",
-            textAlign: "center", marginBottom: 16,
-            fontWeight: 600, lineHeight: 1.5
-          }
-        }, "Profile \u2192 App Settings \u2192 Guided Tour \u2192 Replay Welcome Tour"),
-        /*#__PURE__*/React.createElement("button", {
-          onClick: () => {
-            // Close the modal first so it tears down before
-            // exitDemo() triggers a cascade of state resets + a
-            // splash re-mount on the login screen.
-            setConfirmExitDemo(null);
-            exitDemo();
-          },
-          style: {
-            width: "100%", background: "#2d5a2d", color: "#fff",
-            border: "none", borderRadius: 10, padding: "12px",
-            fontSize: 13, fontWeight: 600, cursor: "pointer"
-          }
-        }, "Got it \u2014 exit demo")
-      )
-  ),
+  confirmExitDemo && /*#__PURE__*/React.createElement(window.ConfirmExitDemoModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { stage: confirmExitDemo },
+    callbacks: {
+      onClose: () => setConfirmExitDemo(null),
+      onAdvanceToHint: () => setConfirmExitDemo("hint"),
+      onExit: () => { setConfirmExitDemo(null); exitDemo(); }
+    }
+  }),
   // Complete-goal confirmation modal \u2014 Phase 2 OSS-port Port #6 pilot.
   // Migrated from a hand-rolled overlay+card with no role/aria/focus
   // trap to A11yDialog, which wraps a11y-dialog and provides:

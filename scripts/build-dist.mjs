@@ -48,6 +48,7 @@ const FILES = [
   'lib/modals/AddCatModal.js',
   'lib/modals/ConfirmWipeModal.js',
   'lib/modals/ConfirmDeleteAcctModal.js',
+  'lib/modals/ConfirmExitDemoModal.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',
