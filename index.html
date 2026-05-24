@@ -107,6 +107,7 @@
 <script src="./lib/components/LinkedContent.js"></script>
 <script src="./lib/components/RadarChart.js"></script>
 <script src="./lib/components/Icons.js"></script>
+<script src="./lib/components/ErrorBoundary.js"></script>
 <!-- Wave 3 — App-scope constants extracted to lib/constants.js -->
 <script src="./lib/constants.js"></script>
 <!-- Wave 4.1 — Modal sub-systems (one file per modal). -->
@@ -1818,37 +1819,8 @@ const HabitCardShell = window.HabitCardShell;
 const BgAudio = window.BgAudio;
 const renderLinkedUserContent = window.renderLinkedUserContent;
 
-class ErrorBoundary extends React.Component {
-  constructor(p) { super(p); this.state = { err: null }; }
-  static getDerivedStateFromError(err) { return { err }; }
-  componentDidCatch(err, info) {
-    try { console.error("[verrocchio:boundary]", err, info && info.componentStack); } catch (_) {}
-    try { localStorage.setItem("v-last-error", JSON.stringify({ msg: String(err && err.message || err), at: Date.now() })); } catch (_) {}
-  }
-  reset = () => { this.setState({ err: null }); };
-  render() {
-    if (!this.state.err) return this.props.children;
-    return React.createElement("div", {
-      style: { padding: 24, textAlign: "center", color: "var(--c-text, #222)",
-               paddingTop: "calc(env(safe-area-inset-top) + 24px)" }
-    },
-      React.createElement("div", { style: { fontSize: 48, marginBottom: 12 } }, "⚠️"),
-      React.createElement("h2", null, "Something went wrong"),
-      React.createElement("p", { style: { opacity: 0.7, marginBottom: 16 } },
-        "Your data is safe. Tap retry to continue."),
-      React.createElement("button", {
-        onClick: this.reset,
-        style: { padding: "10px 20px", borderRadius: 10, border: "none",
-                 background: "var(--accent, #2d5a2d)", color: "#fff", fontWeight: 600 }
-      }, "Retry"),
-      React.createElement("button", {
-        onClick: () => location.reload(),
-        style: { padding: "10px 20px", marginLeft: 8, borderRadius: 10,
-                 border: "1px solid var(--c-border, #ccc)", background: "transparent" }
-      }, "Reload app")
-    );
-  }
-}
+// Wave 5.10 — ErrorBoundary extracted to lib/components/ErrorBoundary.js.
+const ErrorBoundary = window.ErrorBoundary;
 
 /* ── MAIN APP ── */
 function App() {

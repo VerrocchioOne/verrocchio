@@ -76,6 +76,7 @@ const FILES = [
   'lib/components/LinkedContent.js',
   'lib/components/RadarChart.js',
   'lib/components/Icons.js',
+  'lib/components/ErrorBoundary.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
   'lib/modals/JournalDisclaimerModal.js',
