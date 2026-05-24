@@ -58,6 +58,7 @@ const FILES = [
   'lib/modals/TimeEntryCtxModal.js',
   'lib/modals/LinkedMediaPlayerModal.js',
   'lib/modals/CoachContextModal.js',
+  'lib/modals/VoiceCaptureModal.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',

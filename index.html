@@ -121,6 +121,7 @@
 <script src="./lib/modals/TimeEntryCtxModal.js"></script>
 <script src="./lib/modals/LinkedMediaPlayerModal.js"></script>
 <script src="./lib/modals/CoachContextModal.js"></script>
+<script src="./lib/modals/VoiceCaptureModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -20714,8 +20715,10 @@ function App() {
   // entry based on the user's pick. Tapping a destination commits
   // the entry and closes the modal; cancel discards.
   voiceCaptureOpen && (() => {
-    // 30-min hard cap mirrors VoiceMicButton — long enough for a full
-    // dictation session, short enough to bound battery drain.
+    // Session helpers live in the inline scope (closure over the
+    // voice*Ref refs + state setters). The visual chrome is in
+    // window.VoiceCaptureModal — App() supplies onMicToggle / save-as-X
+    // callbacks that invoke these closures.
     const VOICE_MAX_MS = 30 * 60 * 1000;
     const closeModal = () => {
       voiceActiveRef.current = false;
@@ -20726,25 +20729,14 @@ function App() {
       setVoiceTranscript("");
       setVoiceInterim("");
     };
-    // Durable session: the browser auto-stops a single recognition
-    // session after ~60s (Chrome) / ~5min (Safari), and iOS pauses on
-    // silence. We relaunch on onEnd/no-speech/aborted as long as the
-    // user hasn't tapped stop and we're under the 30-min cap. This is
-    // what unlocks "longer messages" — the mic stays usable across
-    // pauses and browser-imposed session limits.
     const startListening = () => {
       if (voiceSessionRef.current) return;
       voiceActiveRef.current = true;
       voiceStartedAtRef.current = Date.now();
-      // Hold the screen awake for the duration of the recording so iOS
-      // doesn't dim → suspend → silently truncate the session.
       acquireWakeLock().then(lock => {
         if (voiceActiveRef.current) voiceWakeLockRef.current = lock;
         else if (lock) lock.release();
       });
-      // Cross-session dedupe — same logic the VoiceMicButton uses.
-      // Drops exact-duplicate / strict-suffix repeats that happen when
-      // iOS Safari relaunches the recognizer after a silence pause.
       const dedupedAppend = dedupeAppender(text => {
         setVoiceTranscript(prev => (prev && prev.trim() ? prev.trimEnd() + " " : "") + text);
         setVoiceInterim("");
@@ -20753,16 +20745,12 @@ function App() {
         const session = startSpeechSession({
           onChunk: ({ text, isFinal }) => {
             if (!text) return;
-            if (isFinal) { dedupedAppend(text); }
-            else { setVoiceInterim(text); }
+            if (isFinal) { dedupedAppend(text); } else { setVoiceInterim(text); }
           },
           onError: (err) => {
             voiceSessionRef.current = null;
             const recoverable = (err === "no-speech" || err === "aborted");
             if (voiceActiveRef.current && recoverable && (Date.now() - voiceStartedAtRef.current) < VOICE_MAX_MS) {
-              // 600 ms gives the user breathing room without the
-              // recognizer popping back on mid-pause and dropping the
-              // first word of the next utterance.
               setTimeout(() => { if (voiceActiveRef.current) launch(); }, 600);
             } else {
               voiceActiveRef.current = false;
@@ -20772,9 +20760,6 @@ function App() {
           onEnd: () => {
             voiceSessionRef.current = null;
             if (voiceActiveRef.current && (Date.now() - voiceStartedAtRef.current) < VOICE_MAX_MS) {
-              // 300 ms — long enough for the previous session to fully
-              // tear down, short enough that the user doesn't perceive
-              // a gap on the next utterance.
               setTimeout(() => { if (voiceActiveRef.current) launch(); }, 300);
             } else {
               voiceActiveRef.current = false;
@@ -20796,11 +20781,6 @@ function App() {
     const finalText = (voiceTranscript || "").trim();
     const hasText = finalText.length > 0;
     const todayKey = tk();
-    // Destination handlers — each takes the captured transcript and
-    // commits it into the right collection using the same shape the
-    // app's own creation flows use.
-    // All voice destinations spread `latestData.current` so a habit
-    // toggle / sync echo that landed during dictation isn't clobbered.
     const saveAsHabit = () => {
       if (!hasText) return;
       stopListening();
@@ -20812,13 +20792,9 @@ function App() {
       save({
         ...cur,
         habits: [...(cur.habits || []), {
-          id: newId,
-          text: finalText,
-          section: "morning",
-          importance: "Important",
-          type: null, duration: null, notes: null,
-          goalIds: [], goalId: null,
-          location: "both",
+          id: newId, text: finalText, section: "morning",
+          importance: "Important", type: null, duration: null, notes: null,
+          goalIds: [], goalId: null, location: "both",
           startDate: todayKey,
           frequency: { type: "daily", days: [], day: null, monthDay: 1, month: 0 },
           target: null, targetOp: ">=", unitLabel: null, increment: null,
@@ -20837,12 +20813,9 @@ function App() {
       save({
         ...cur,
         goals: [...(cur.goals || []), {
-          id: Date.now(),
-          text: finalText,
-          type: null,
+          id: Date.now(), text: finalText, type: null,
           smart: { specific: "", measurable: "", measurableUnit: "", achievable: "", relevant: "", timebound: "" },
-          notes: null,
-          history: []
+          notes: null, history: []
         }]
       });
       closeModal();
@@ -20854,16 +20827,9 @@ function App() {
       const cur = latestData.current || data;
       save({
         ...cur,
-        // Match the addTodo shape — done + date were missing, which
-        // made these voice-captured to-dos invisible to surfaces that
-        // filter on `t.done` or read `t.date`.
         todos: [...(cur.todos || []), {
-          id: Date.now(),
-          text: finalText,
-          done: false,
-          date: new Date().toDateString(),
-          dueDate: null,
-          goalId: null
+          id: Date.now(), text: finalText, done: false,
+          date: new Date().toDateString(), dueDate: null, goalId: null
         }]
       });
       closeModal();
@@ -20876,131 +20842,26 @@ function App() {
       save({
         ...cur,
         journal: [...(cur.journal || []), {
-          id: Date.now(),
-          text: finalText,
-          mood: "",
-          tag: "",
-          timestamp: new Date().toISOString(),
-          dateKey: todayKey
+          id: Date.now(), text: finalText, mood: "", tag: "",
+          timestamp: new Date().toISOString(), dateKey: todayKey
         }]
       });
       closeModal();
       setTab("reflection");
     };
-    const previewText = (finalText + (voiceInterim ? " " + voiceInterim : "")).trim();
-    // Migrated to A11yDialog (Port #6+#9 batch 2): role/aria-modal/
-    // focus-trap/Escape/backdrop-click are all handled by the wrapper.
-    // onHide routes to closeModal() so dismissal via Escape, backdrop,
-    // or data-a11y-dialog-hide stops the recognizer, releases the wake
-    // lock, and clears transcript state — a behavior the pre-migration
-    // modal didn't honor on Escape (no Esc handler existed at all).
-    return /*#__PURE__*/React.createElement(A11yDialog, {
-      onHide: closeModal,
-      ariaLabelledby: "voice-capture-title",
-      overlayStyle: { zIndex: 320 },
-      cardStyle: {
-        padding: "20px 18px 22px",
-        maxWidth: 520
+    return /*#__PURE__*/React.createElement(window.VoiceCaptureModal, {
+      data, dispatch, deviceProfile: window.__deviceProfile,
+      state: { voiceListening, voiceTranscript, voiceInterim },
+      callbacks: {
+        onClose: closeModal,
+        onMicToggle: () => voiceListening ? stopListening() : startListening(),
+        onSaveAsGoal: saveAsGoal,
+        onSaveAsHabit: saveAsHabit,
+        onSaveAsTodo: saveAsTodo,
+        onSaveAsJournal: saveAsJournal,
+        onClear: () => { setVoiceTranscript(""); setVoiceInterim(""); }
       }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }
-      },
-        /*#__PURE__*/React.createElement("div", {
-          id: "voice-capture-title",
-          style: { fontSize: 15, fontWeight: 700, color: "var(--c-text-strong)", letterSpacing: 0.3, textTransform: "uppercase" }
-        }, "Voice Capture"),
-        /*#__PURE__*/React.createElement("button", {
-          // data-a11y-dialog-hide so the library closes the modal; the
-          // onHide handler above runs closeModal() to tear down the
-          // recognizer + wake lock + transcript state.
-          type: "button", "data-a11y-dialog-hide": true, "aria-label": "Close",
-          style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 28, height: 28, fontSize: 14, color: "#6b7280", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }
-        }, "×")
-      ),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 12, color: "#6b7280", marginBottom: 12, lineHeight: 1.45 }
-      }, "Tap the mic, dictate your thought, then pick where it lands."),
-      // Transcript area + record button
-      /*#__PURE__*/React.createElement("div", {
-        style: {
-          display: "flex", alignItems: "stretch", gap: 10,
-          marginBottom: 14
-        }
-      },
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: () => voiceListening ? stopListening() : startListening(),
-          style: {
-            width: 56, height: 56,
-            borderRadius: "50%",
-            border: "1px solid " + (voiceListening ? "#fca5a5" : "var(--c-border)"),
-            background: voiceListening ? "#fee2e2" : "#fff",
-            color: voiceListening ? "#b91c1c" : "#2d5a2d",
-            cursor: "pointer", flexShrink: 0,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            animation: voiceListening ? "pulseDot 1s ease-in-out infinite" : "none"
-          }
-        }, /*#__PURE__*/React.createElement("svg", {
-          width: 24, height: 24, viewBox: "0 0 24 24", fill: "none",
-          stroke: "currentColor", strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round"
-        },
-          /*#__PURE__*/React.createElement("rect", { x: "9", y: "2", width: "6", height: "11", rx: "3" }),
-          /*#__PURE__*/React.createElement("path", { d: "M5 11a7 7 0 0014 0" }),
-          /*#__PURE__*/React.createElement("line", { x1: "12", y1: "18", x2: "12", y2: "22" })
-        )),
-        /*#__PURE__*/React.createElement("div", {
-          style: {
-            flex: 1, minWidth: 0,
-            background: "var(--c-surface-raised)",
-            border: "1px solid var(--c-border)",
-            borderRadius: 12,
-            padding: "10px 12px",
-            fontSize: 13, lineHeight: 1.5,
-            color: previewText ? "var(--c-text)" : "#9ca3af",
-            minHeight: 56,
-            whiteSpace: "normal", wordBreak: "break-word", overflowWrap: "anywhere"
-          }
-        }, previewText || (voiceListening ? "Listening..." : "Tap the mic and start talking."))
-      ),
-      // Destination buttons. Disabled until there's a final transcript.
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }
-      },
-        ([
-          { label: "Save as Goal",   color: "#7c3aed", onClick: saveAsGoal },
-          { label: "Save as Habit",  color: "#2d5a2d", onClick: saveAsHabit },
-          { label: "Save as To-Do",  color: "#b45309", onClick: saveAsTodo },
-          { label: "Save as Journal", color: "#0891b2", onClick: saveAsJournal }
-        ]).map(b => /*#__PURE__*/React.createElement("button", {
-          key: b.label,
-          type: "button",
-          onClick: b.onClick,
-          disabled: !hasText,
-          style: {
-            background: hasText ? b.color : "var(--c-surface-muted)",
-            color: hasText ? "#fff" : "#9ca3af",
-            border: "none",
-            borderRadius: 10,
-            padding: "11px 12px",
-            fontSize: 12, fontWeight: 700,
-            cursor: hasText ? "pointer" : "default",
-            opacity: hasText ? 1 : 0.6,
-            whiteSpace: "nowrap"
-          }
-        }, b.label))
-      ),
-      hasText && /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        onClick: () => { setVoiceTranscript(""); setVoiceInterim(""); },
-        style: {
-          marginTop: 8,
-          background: "transparent", border: "none",
-          color: "#9ca3af", fontSize: 11, fontWeight: 600,
-          cursor: "pointer", padding: 4, width: "100%"
-        }
-      }, "Clear and start over")
-    );
+    });
   })(),
   // §13.3 — The section-picker bottom sheet was retired. The three-line
   // Organize button now enters inline reorder mode directly (no
