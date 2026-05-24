@@ -67,6 +67,7 @@ precaching.precacheAndRoute([
   { url: "./lib/views/profile/InspirationPanel.js",  revision: SHELL_VERSION },
   { url: "./lib/views/profile/HistoryPanel.js",      revision: SHELL_VERSION },
   { url: "./lib/views/profile/ReportsPanel.js",      revision: SHELL_VERSION },
+  { url: "./lib/views/profile/AppSettingsPanel.js",  revision: SHELL_VERSION },
   { url: "./lib/views/profile/ScorecardPanel.js",    revision: SHELL_VERSION },
   // §13.6 Wave 2 — shared inline components extracted from index.html.
   { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },

@@ -49,6 +49,7 @@ const FILES = [
   'lib/views/profile/InspirationPanel.js',
   'lib/views/profile/HistoryPanel.js',
   'lib/views/profile/ReportsPanel.js',
+  'lib/views/profile/AppSettingsPanel.js',
   'lib/views/profile/ScorecardPanel.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
