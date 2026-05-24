@@ -70,6 +70,7 @@ const FILES = [
   'lib/components/YearHeatmap.js',
   'lib/components/AchievementBadge.js',
   'lib/components/CompletionWave.js',
+  'lib/components/VoiceMicButton.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
   'lib/modals/JournalDisclaimerModal.js',
