@@ -133,7 +133,9 @@
 <script src="./lib/domains/calendar.js"></script>
 <!-- §13.4a (v75) — Per-view React component modules. -->
 <script src="./lib/views/BriefView.js"></script>
+<script src="./lib/views/BriefTopBanners.js"></script>
 <script src="./lib/views/HabitsView.js"></script>
+<script src="./lib/views/HabitsReorderToolbar.js"></script>
 <script src="./lib/views/GoalsView.js"></script>
 <script src="./lib/views/TodosView.js"></script>
 <script src="./lib/views/ReflectView.js"></script>
@@ -142,6 +144,9 @@
 <script src="./lib/views/AppChrome.js"></script>
 <script src="./lib/views/Header.js"></script>
 <script src="./lib/views/TourOverlay.js"></script>
+<script src="./lib/views/Splash.js"></script>
+<script src="./lib/views/Onboarding.js"></script>
+<script src="./lib/views/AuthSurface.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -10835,107 +10840,16 @@ function App() {
 
   // Login / Signup screen (skipped when the demo-mode preview is running)
   if (authUser === null && !demoMode) {
-    const isSignup = authMode === "signup";
-    return onboardShell([
-      // Playfair serif green wordmark — user preferred the green version.
-      React.createElement("div", { key: "icn", style: { display: "flex", justifyContent: "center", marginBottom: 10 } }, React.createElement(VerrocchioIcon, { size: 96 })),
-      React.createElement("div", { key: "lg", style: { fontFamily: "'Playfair Display',Georgia,'Times New Roman',serif", fontSize: 36, fontWeight: 700, letterSpacing: ".005em", color: "#2d5a2d", lineHeight: 1, marginBottom: 4 } }, "Verrocchio"),
-      React.createElement("div", { key: "tag", style: { fontSize: 13, color: "#6b7280", marginBottom: 24, fontStyle: "italic" } }, "Achieve Anything"),
-      React.createElement("div", { key: "ttl", style: { fontSize: 18, fontWeight: 700, color: "var(--c-text)", marginBottom: 16 } }, isSignup ? "Create your account" : "Welcome Back"),
-      React.createElement("input", {
-        key: "email",
-        type: "email",
-        value: authEmail,
-        onChange: e => setAuthEmail(e.target.value),
-        placeholder: "Email",
-        autoComplete: "email",
-        onKeyDown: e => { if (e.key === "Enter") doAuth(); },
-        style: { width: "100%", padding: "10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, marginBottom: 10, outline: "none", boxSizing: "border-box", background: "#fff", color: "var(--c-text)" }
-      }),
-      React.createElement("div", { key: "passwrap", style: { position: "relative", marginBottom: 10 } },
-        React.createElement("input", {
-          type: showAuthPass ? "text" : "password",
-          value: authPass,
-          onChange: e => setAuthPass(e.target.value),
-          placeholder: "Password",
-          autoComplete: isSignup ? "new-password" : "current-password",
-          onKeyDown: e => { if (e.key === "Enter") doAuth(); },
-          style: { width: "100%", padding: "10px 36px 10px 12px", fontSize: 14, border: "1px solid #e5e7eb", borderRadius: 8, outline: "none", boxSizing: "border-box", background: "#fff", color: "var(--c-text)" }
-        }),
-        React.createElement("button", {
-          type: "button",
-          onClick: () => setShowAuthPass(s => !s),
-          "aria-label": showAuthPass ? "Hide password" : "Show password",
-          // 44×44 hit area meets iOS HIG minimum touch-target; the icon
-          // stays visually 16px but the button extends invisibly to a
-          // proper tap zone. Centered via flexbox so emoji glyph sits in
-          // the middle regardless of platform-specific glyph metrics.
-          style: { position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer", fontSize: 16, padding: 0, color: "var(--c-text-faint)" }
-        }, showAuthPass ? "🙈" : "👁")
-      ),
-      isSignup ? React.createElement("p", { key: "passhelp", style: { fontSize: 11, color: "var(--c-text-faint)", marginTop: -4, marginBottom: 8 } }, "At least 8 characters.") : null,
-      authErr ? React.createElement("div", { key: "err", style: { fontSize: 12, color: "var(--c-tint-danger-fg)", background: "var(--c-tint-danger-bg)", border: "1px solid var(--c-tint-danger-border)", borderRadius: 6, padding: "6px 10px", marginBottom: 10, textAlign: "left" } }, authErr) : null,
-      React.createElement("button", {
-        key: "sub",
-        onClick: doAuth,
-        disabled: authBusy,
-        style: { width: "100%", padding: "10px 12px", fontSize: 14, fontWeight: 600, color: "#fff", background: authBusy ? "#6b7280" : "#2d5a2d", border: "none", borderRadius: 8, cursor: authBusy ? "default" : "pointer", marginBottom: 12 }
-      }, authBusy ? "Please wait..." : (isSignup ? "Create account" : "Log in")),
-      !isSignup ? React.createElement("button", {
-        key: "forgot",
-        onClick: doForgotPassword,
-        disabled: authBusy,
-        style: { background: "transparent", border: "none", padding: 0, color: "var(--c-text-faint)", fontSize: 12, textDecoration: "underline", cursor: authBusy ? "default" : "pointer", marginTop: 0, marginBottom: 8, display: "block" }
-      }, "Forgot password?") : null,
-      isSignup ? React.createElement("p", {
-        key: "consent",
-        style: { fontSize: 11, color: "var(--c-text-faint)", marginTop: 8, marginBottom: 8, textAlign: "center", lineHeight: 1.5 }
-      },
-        "By signing up you agree to our ",
-        React.createElement("a", {
-          href: "/privacy", target: "_blank", rel: "noopener noreferrer",
-          style: { color: "var(--accent)", textDecoration: "underline" }
-        }, "Privacy Policy"),
-        " and ",
-        React.createElement("a", {
-          href: "/support", target: "_blank", rel: "noopener noreferrer",
-          style: { color: "var(--accent)", textDecoration: "underline" }
-        }, "Support"),
-        "."
-      ) : null,
-      React.createElement("div", { key: "tog", style: { fontSize: 12, color: "#6b7280" } },
-        isSignup ? "Already have an account? " : "New here? ",
-        React.createElement("span", {
-          onClick: () => { setAuthErr(""); setAuthMode(isSignup ? "login" : "signup"); },
-          style: { color: "var(--c-text)", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }
-        }, isSignup ? "Log in" : "Create an account")
-      ),
-      // "or" divider + single demo-account shortcut. Signs in as the
-      // "morning consistent" persona (Alex) — the only seeded demo
-      // account in v1.0 (the original four-persona pool was trimmed
-      // during launch prep). signInAsDemoUser auto-creates the
-      // account on first tap if it doesn't exist yet, so this works
-      // out of the box without running scripts/seed-demo-users.mjs.
-      // Gated by SHOW_DEMO_UI so production users never see this.
-      SHOW_DEMO_UI && React.createElement("div", {
-        key: "demo-divider",
-        style: { display: "flex", alignItems: "center", gap: 8, margin: "18px 0 12px", color: "#9ca3af", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }
-      },
-        React.createElement("div", { style: { flex: 1, height: 1, background: "#e5e7eb" } }),
-        "or",
-        React.createElement("div", { style: { flex: 1, height: 1, background: "#e5e7eb" } })
-      ),
-      SHOW_DEMO_UI && React.createElement("button", {
-        key: "demo-btn",
-        onClick: () => signInAsDemoUser("alex.morning@demo.verrocchio.app"),
-        disabled: authBusy,
-        style: { width: "100%", padding: "10px 12px", fontSize: 13, fontWeight: 600, color: "#2d5a2d", background: "#fff", border: "1px solid #2d5a2d", borderRadius: 8, cursor: authBusy ? "default" : "pointer", opacity: authBusy ? 0.6 : 1 }
-      }, "Try a demo account"),
-      SHOW_DEMO_UI && React.createElement("div", {
-        key: "demo-help",
-        style: { fontSize: 10, color: "#9ca3af", marginTop: 6, lineHeight: 1.5 }
-      }, "Loads a sample account with two weeks of habits, goals, and to-dos. Re-seeds fresh content on every tap.")
-    ]);
+    return /*#__PURE__*/React.createElement(window.AuthSurface, {
+      data, dispatch, deviceProfile: window.__deviceProfile,
+      state: { authMode, authEmail, authPass, showAuthPass, authErr, authBusy, showDemoUI: SHOW_DEMO_UI },
+      callbacks: {
+        setAuthEmail, setAuthPass, setShowAuthPass, setAuthMode, setAuthErr,
+        doAuth, doForgotPassword, signInAsDemoUser,
+        onboardShell,
+        renderIcon: (size) => /*#__PURE__*/React.createElement(VerrocchioIcon, { size })
+      }
+    });
   }
 
   // Welcome / loading page — a single full-bleed Verrocchio "Ink"
@@ -10944,55 +10858,32 @@ function App() {
   // straight to the 3-screen onboarding. No intermediate quote card.
   if (!hasSeenWelcome) {
     if (splashPhase === "loading") {
-      // Ink splash: pyramid blocks stack, then the Playfair Display "V"
-      // is uncovered by two pen strokes — thick left diagonal painted
-      // top-left → apex, then the thinner right diagonal drawn upward
-      // apex → top-right. Wordmark and tagline land after the V is
-      // complete. See the .splashv4 CSS block for full stroke timing.
       const splashQuick = (() => { try { return sessionStorage.getItem("vc_splash_seen") === "1"; } catch (_) { return false; } })();
-      return React.createElement("div", { className: "splashv4" + (splashQuick ? " splashv4-quick" : ""), key: "splash-" + splashAnimKey },
-        React.createElement("div", { className: "stage" },
-          // Each letter of "Verrocchio" pairs 1:1 with a pyramid block:
-          // V↔b1, e↔b2, r↔b3, r↔b4, o↔b5, c↔b6, c↔b7, h↔b8, i↔b9, o↔b10.
-          // The block's animation-delay and the letter's animation-delay
-          // share the same value, so each letter rises into place at
-          // the same instant its block lands.
-          React.createElement("div", { className: "brand-wordmark", "aria-label": "Verrocchio" },
-            ["V","e","r","r","o","c","c","h","i","o"].map((ch, i) =>
-              React.createElement("span", {
-                key: i,
-                className: "wm-letter wm-" + (i + 1),
-                "aria-hidden": "true"
-              }, ch)
-            )
-          ),
-          React.createElement("div", { className: "pyramid" },
-            // 4-3-2-1 stack: 10 blocks total. Row 1 = bottom.
-            React.createElement("div", { className: "block b1" }),
-            React.createElement("div", { className: "block b2" }),
-            React.createElement("div", { className: "block b3" }),
-            React.createElement("div", { className: "block b4" }),
-            React.createElement("div", { className: "block b5" }),
-            React.createElement("div", { className: "block b6" }),
-            React.createElement("div", { className: "block b7" }),
-            React.createElement("div", { className: "block b8" }),
-            React.createElement("div", { className: "block b9" }),
-            React.createElement("div", { className: "block b10" })
-          ),
-          // Splash is now just the wordmark + the pyramid build.
-          // The italic "Achieve Anything" tagline that used to sit
-          // under the pyramid was removed — it competed visually
-          // with the wordmark animation and added nothing the user
-          // hadn't already absorbed from the marketing material.
-        )
-      );
+      return /*#__PURE__*/React.createElement(window.Splash, {
+        data, dispatch, deviceProfile: window.__deviceProfile,
+        state: { splashAnimKey, splashQuick }
+      });
     }
-
-    // No "quote" splash phase anymore — the loading splash auto-advances
-    // by flipping hasSeenWelcome=true (see SPLASH_HOLD effect above).
-    // Keeping this guard so any race that lands here still renders
-    // *something* instead of crashing on an unknown phase.
-    return null;
+    const finishOnboarding = () => {
+      const intent = onbIntent.trim();
+      const todayKey = tk();
+      const existingRitual = (data.dailyRitual && data.dailyRitual[todayKey]) || {};
+      save({
+        ...data,
+        userIntent: intent,
+        dailyRitual: intent ? {
+          ...(data.dailyRitual || {}),
+          [todayKey]: { ...existingRitual, intention: existingRitual.intention || intent }
+        } : (data.dailyRitual || {}),
+        timeRanges: data.timeRanges || DEFAULT_TIME_RANGES,
+        onboardingComplete: true
+      });
+    };
+    return /*#__PURE__*/React.createElement(window.Onboarding, {
+      data, dispatch, deviceProfile: window.__deviceProfile,
+      state: { onboardStep, walkSlide, onbIntent },
+      callbacks: { setOnboardStep, setWalkSlide, setOnbIntent, onFinish: finishOnboarding }
+    });
   }
 
   /* ── NEW-USER ONBOARDING FLOW ──
