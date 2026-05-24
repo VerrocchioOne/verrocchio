@@ -28,7 +28,9 @@ const FILES = [
   'lib/domains/reflect.js',
   'lib/domains/calendar.js',
   'lib/views/BriefView.js',
+  'lib/views/BriefTopBanners.js',
   'lib/views/HabitsView.js',
+  'lib/views/HabitsReorderToolbar.js',
   'lib/views/GoalsView.js',
   'lib/views/TodosView.js',
   'lib/views/ReflectView.js',
@@ -37,6 +39,13 @@ const FILES = [
   'lib/views/AppChrome.js',
   'lib/views/Header.js',
   'lib/views/TourOverlay.js',
+  // Wave 4.5 — pre-app surfaces.
+  'lib/views/Splash.js',
+  'lib/views/Onboarding.js',
+  'lib/views/AuthSurface.js',
+  // Wave 4.4 — profile panels (partial).
+  'lib/views/profile/AccountPanel.js',
+  'lib/views/profile/InspirationPanel.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',

@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v76";
+const SHELL_VERSION = "v77";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -45,8 +45,10 @@ precaching.precacheAndRoute([
   { url: "./lib/domains/todos.js",      revision: SHELL_VERSION },
   { url: "./lib/domains/reflect.js",    revision: SHELL_VERSION },
   { url: "./lib/domains/calendar.js",   revision: SHELL_VERSION },
-  { url: "./lib/views/BriefView.js",    revision: SHELL_VERSION },
+  { url: "./lib/views/BriefView.js",        revision: SHELL_VERSION },
+  { url: "./lib/views/BriefTopBanners.js",  revision: SHELL_VERSION },
   { url: "./lib/views/HabitsView.js",   revision: SHELL_VERSION },
+  { url: "./lib/views/HabitsReorderToolbar.js", revision: SHELL_VERSION },
   { url: "./lib/views/GoalsView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/TodosView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/ReflectView.js",  revision: SHELL_VERSION },
@@ -55,6 +57,13 @@ precaching.precacheAndRoute([
   { url: "./lib/views/AppChrome.js",    revision: SHELL_VERSION },
   { url: "./lib/views/Header.js",       revision: SHELL_VERSION },
   { url: "./lib/views/TourOverlay.js",  revision: SHELL_VERSION },
+  // Wave 4.5 — pre-app surfaces (splash + onboarding + auth).
+  { url: "./lib/views/Splash.js",       revision: SHELL_VERSION },
+  { url: "./lib/views/Onboarding.js",   revision: SHELL_VERSION },
+  { url: "./lib/views/AuthSurface.js",  revision: SHELL_VERSION },
+  // Wave 4.4 — profile panels (partial: AccountPanel + InspirationPanel).
+  { url: "./lib/views/profile/AccountPanel.js",      revision: SHELL_VERSION },
+  { url: "./lib/views/profile/InspirationPanel.js",  revision: SHELL_VERSION },
   // §13.6 Wave 2 — shared inline components extracted from index.html.
   { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },
   { url: "./lib/components/A11yDialog.js",      revision: SHELL_VERSION },
