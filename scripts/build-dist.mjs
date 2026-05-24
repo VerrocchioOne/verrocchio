@@ -36,6 +36,7 @@ const FILES = [
   'lib/views/BottomNav.js',
   'lib/views/AppChrome.js',
   'lib/views/Header.js',
+  'lib/views/TourOverlay.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',

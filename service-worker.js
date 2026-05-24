@@ -54,6 +54,7 @@ precaching.precacheAndRoute([
   { url: "./lib/views/BottomNav.js",    revision: SHELL_VERSION },
   { url: "./lib/views/AppChrome.js",    revision: SHELL_VERSION },
   { url: "./lib/views/Header.js",       revision: SHELL_VERSION },
+  { url: "./lib/views/TourOverlay.js",  revision: SHELL_VERSION },
   // §13.6 Wave 2 — shared inline components extracted from index.html.
   { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },
   { url: "./lib/components/A11yDialog.js",      revision: SHELL_VERSION },
