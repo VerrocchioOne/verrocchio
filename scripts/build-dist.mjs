@@ -46,6 +46,7 @@ const FILES = [
   // Wave 4.4 — profile panels (partial).
   'lib/views/profile/AccountPanel.js',
   'lib/views/profile/InspirationPanel.js',
+  'lib/views/profile/ScorecardPanel.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',

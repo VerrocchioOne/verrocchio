@@ -147,6 +147,7 @@
 <script src="./lib/views/Splash.js"></script>
 <script src="./lib/views/Onboarding.js"></script>
 <script src="./lib/views/AuthSurface.js"></script>
+<script src="./lib/views/profile/ScorecardPanel.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -17538,73 +17539,13 @@ function App() {
         }, "Reset to Verrocchio Defaults") : null
       );
     })();
-    // App Progress scorecard — shows which parts of the app the user
-    // has touched, with last-used dates, so they can see what they
-    // haven't tried yet. Feeds off data.featureAccess which
-    // touchFeature writes throughout the app.
-    const scorecardPanel = (() => {
-      const access = (data && data.featureAccess) || {};
-      const byCat = {};
-      for (const f of FEATURES) {
-        if (!byCat[f.cat]) byCat[f.cat] = [];
-        byCat[f.cat].push(f);
-      }
-      const usedCount = FEATURES.filter(f => access[f.id]).length;
-      const pct = Math.round(usedCount / FEATURES.length * 100);
-      const fmtWhen = ms => {
-        if (!ms) return "Not yet";
-        const days = Math.floor((Date.now() - ms) / 86400000);
-        if (days <= 0) return "Today";
-        if (days === 1) return "Yesterday";
-        if (days < 7) return days + "d ago";
-        return new Date(ms).toLocaleDateString();
-      };
-      return /*#__PURE__*/React.createElement("div", null,
-        sectionTitle("App Progress"),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "#6b7280", marginBottom: 12 } }, "Which parts of Verrocchio you've tried. Anything with an ✗ is worth a look."),
-        /*#__PURE__*/React.createElement("div", {
-          style: { padding: "14px", background: "var(--c-tint-success-bg)", borderRadius: 10, marginBottom: 18, textAlign: "center" }
-        },
-          /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 28, fontWeight: 700, color: "#2d5a2d" } }, pct, "%"),
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: .5, marginTop: 4 } }, usedCount + " of " + FEATURES.length + " features tried")
-        ),
-        Object.entries(byCat).map(([cat, items]) => /*#__PURE__*/React.createElement("div", { key: cat, style: { marginBottom: 16 } },
-          /*#__PURE__*/React.createElement("div", { style: labelS }, cat),
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } },
-            items.map(f => {
-              const ms = access[f.id];
-              const used = !!ms;
-              return /*#__PURE__*/React.createElement("div", {
-                key: f.id,
-                style: {
-                  display: "flex", alignItems: "center", gap: 10,
-                  padding: "9px 12px",
-                  background: used ? "var(--c-surface-raised)" : "var(--c-surface, #fff)",
-                  border: "1px solid " + (used ? "#c6dfc6" : "var(--c-border)"),
-                  borderRadius: 8,
-                  minHeight: 44
-                }
-              },
-                /*#__PURE__*/React.createElement("span", {
-                  style: {
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: used ? "#2d5a2d" : "var(--c-surface-muted)",
-                    color: used ? "#fff" : "#9ca3af",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 11, fontWeight: 700, flexShrink: 0
-                  }
-                }, used ? "✓" : "✗"),
-                /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "var(--c-text)" } }, f.label),
-                  f.tipDesc && !used ? /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, f.tipDesc) : null
-                ),
-                /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#9ca3af", fontWeight: 500, flexShrink: 0 } }, fmtWhen(ms))
-              );
-            })
-          )
-        ))
-      );
-    })();
+    // App Progress scorecard — Wave 4.4.3 lifted the render tree out
+    // to lib/views/profile/ScorecardPanel.js; the body of this IIFE is
+    // verbatim-mirrored there. Feeds off data.featureAccess which
+    // touchFeature() writes throughout the app.
+    const scorecardPanel = /*#__PURE__*/React.createElement(window.ScorecardPanel, {
+      callbacks: { helpers: { data, sectionTitle, labelS, FEATURES } }
+    });
     const panels = { account: accountPanel, scorecard: scorecardPanel, inspiration: inspirationPanel, content: myContentPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
     // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
     // return-focus. Multi-panel modal; the header section label drives
