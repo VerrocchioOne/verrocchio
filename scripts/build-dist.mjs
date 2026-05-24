@@ -33,6 +33,7 @@ const FILES = [
   'lib/views/TodosView.js',
   'lib/views/ReflectView.js',
   'lib/views/CalendarView.js',
+  'lib/views/BottomNav.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',
