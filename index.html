@@ -6391,6 +6391,19 @@ function App() {
   // and the toolbar 'Total scheduled time' pill so layered habits
   // ('Red Light Therapy 15m' with two layered sub-15m habits) read
   // as one 15-minute block instead of stacking to 25 or 30.
+  // Effective duration of a habit: prefer summed child durations
+  // (parents roll up), fall back to the habit's own duration. Lives
+  // at App scope so the HabitsView callbacks-bag can pass it through
+  // (latent reference at L9955 went undefined and crashed Habits-tab
+  // render with "ReferenceError: effDur is not defined").
+  const effDur = (h) => {
+    const kids = habitChildren(h);
+    if (kids.length > 0) {
+      const sum = kids.reduce((s, c) => s + (parseInt(c.duration, 10) || 0), 0);
+      if (sum > 0) return sum;
+    }
+    return parseInt(h.duration, 10) || 0;
+  };
   const cohortDurationSum = (list) => {
     if (!Array.isArray(list) || list.length === 0) return 0;
     const sorted = list.slice().sort((a, b) => {
@@ -6430,6 +6443,18 @@ function App() {
     if (cohortStarted) total += cohortMax;
     return total;
   };
+  // Reorder-drag helpers — STUB IMPLEMENTATIONS.
+  //
+  // resolveReorderDrop / startReorderAutoScroll / stopReorderAutoScroll
+  // are required by the HabitsView callbacks bag (and by HabitsHabitCard).
+  // The v76 HabitsView extraction listed them in the helpers bag without
+  // ever implementing them, which crashed the Habits-tab render with
+  // ReferenceError. Stubbed to no-ops here so the tab loads and the
+  // select-then-act reorder UX (▲/▼/⇶) keeps working; pointer drag-to-
+  // reposition degrades to a no-op until proper implementations land.
+  const resolveReorderDrop = () => null;
+  const startReorderAutoScroll = () => {};
+  const stopReorderAutoScroll = () => {};
   // Multi-slot habits: a habit can declare slotSections: ["morning",
   // "evening", ...] meaning it's due in EACH of those sections every
   // day. Per-slot status lives in habit.slotCompletions[date][section].
