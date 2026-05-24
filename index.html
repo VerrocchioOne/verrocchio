@@ -93,6 +93,8 @@
      called. So load order beyond "before the inline app script" doesn't
      matter. -->
 <script src="./lib/auth.js"></script>
+<!-- §13.6 Wave 2 — Shared inline components extracted from index.html. Load BEFORE views so window.X is defined when views init. -->
+<script src="./lib/components/Sparkline14.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -2813,33 +2815,10 @@ const A11yDialog = function A11yDialog({ onHide, overlayStyle, cardStyle, dialog
 // through the tops; missed/empty days leave a faint tick. Width is
 // configurable because it sits next to other card chrome and may
 // need to shrink on narrow cards.
-const Sparkline14 = React.memo(function Sparkline14({ habit, width = 72, height = 14, color = "#2d5a2d" }) {
-  const l14 = getLast14(habit);
-  const n = l14.length;
-  const step = width / n;
-  const top = 2, bot = height - 2;
-  const pts = l14.map((d, i) => [i * step + step / 2, d.done ? top : bot]);
-  const pathD = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
-  return React.createElement("svg", {
-    width, height, viewBox: `0 0 ${width} ${height}`, "aria-hidden": true,
-    style: { display: "block", flexShrink: 0 }
-  },
-    // Faint baseline
-    React.createElement("line", { x1: 0, y1: bot + 0.5, x2: width, y2: bot + 0.5, stroke: "var(--c-border)", strokeWidth: 1 }),
-    // Connecting line through day tops
-    React.createElement("path", { d: pathD, stroke: color, strokeWidth: 1.2, fill: "none", opacity: 0.55, strokeLinejoin: "round" }),
-    // Dots: filled on done days, empty ring on missed/empty
-    ...l14.map((d, i) => React.createElement("circle", {
-      key: i,
-      cx: (i * step + step / 2).toFixed(1),
-      cy: d.done ? top : bot,
-      r: d.done ? 1.6 : 1.1,
-      fill: d.done ? color : "#fff",
-      stroke: d.done ? color : "#d1d5db",
-      strokeWidth: 0.8
-    }))
-  );
-});
+// §13.6 Wave 2 — Sparkline14 body extracted to lib/components/Sparkline14.js
+// (loaded via <script src> in head). Alias here so all existing
+// React.createElement(Sparkline14, ...) call sites keep working.
+const Sparkline14 = window.Sparkline14;
 
 // 7-day dot strip aligned to the current calendar week (Sun→Sat).
 // Cells: done = green solid, missed = red solid, today (not done
