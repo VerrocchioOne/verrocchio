@@ -75,6 +75,7 @@ precaching.precacheAndRoute([
   { url: "./lib/modals/GoalMoreMenuModal.js",       revision: SHELL_VERSION },
   { url: "./lib/modals/GoalJournalModal.js",        revision: SHELL_VERSION },
   { url: "./lib/modals/AchievementsModal.js",       revision: SHELL_VERSION },
+  { url: "./lib/modals/CompleteGoalModal.js",       revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);

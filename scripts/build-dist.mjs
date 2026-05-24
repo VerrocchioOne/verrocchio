@@ -54,6 +54,7 @@ const FILES = [
   'lib/modals/GoalMoreMenuModal.js',
   'lib/modals/GoalJournalModal.js',
   'lib/modals/AchievementsModal.js',
+  'lib/modals/CompleteGoalModal.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',

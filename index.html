@@ -117,6 +117,7 @@
 <script src="./lib/modals/GoalMoreMenuModal.js"></script>
 <script src="./lib/modals/GoalJournalModal.js"></script>
 <script src="./lib/modals/AchievementsModal.js"></script>
+<script src="./lib/modals/CompleteGoalModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -16892,127 +16893,17 @@ function App() {
   // the library's own delegated click handler; the rendered onClick
   // still runs first (synchronously) so completeGoal() commits its
   // side effect before the dialog tears down.
-  completeGoalModal && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => setCompleteGoalModal(null),
-    ariaLabelledby: "complete-goal-title",
-    cardStyle: { background: "var(--c-surface, #fff)" }
-  },
-    /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 16
-      }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        id: "complete-goal-title",
-        style: {
-          fontFamily: "'Lora',serif",
-          fontSize: 17,
-          fontWeight: 700,
-          color: "var(--c-text-strong)"
-        }
-      }, "Complete Goal \uD83C\uDF89"),
-      /*#__PURE__*/React.createElement("button", {
-        "aria-label": "Close",
-        type: "button",
-        // a11y-dialog's delegated click handler reads this attribute and
-        // calls hide() automatically \u2014 no inline state setter needed.
-        "data-a11y-dialog-hide": true,
-        style: {
-          background: "var(--c-surface-muted)",
-          border: "none",
-          borderRadius: "50%",
-          width: 30,
-          height: 30,
-          cursor: "pointer",
-          fontSize: 16,
-          color: "#6b7280",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center"
-        }
-      }, "\xD7")
-    ),
-    /*#__PURE__*/React.createElement("div", {
-      style: {
-        background: "var(--c-tint-success-bg)",
-        border: "1px solid var(--c-tint-success-border)",
-        borderRadius: 10,
-        padding: "12px",
-        marginBottom: 16
-      }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#2d5a2d",
-          textTransform: "uppercase",
-          marginBottom: 4
-        }
-      }, "Goal Achieved"),
-      /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 14,
-          fontWeight: 600,
-          color: "var(--c-text)"
-        }
-      }, completeGoalModal.text)
-    ),
-    /*#__PURE__*/React.createElement("div", {
-      style: { marginBottom: 16 }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: {
-          fontSize: 12,
-          fontWeight: 600,
-          color: "var(--c-text-soft)",
-          marginBottom: 8
-        }
-      }, "What's your next goal? (optional)"),
-      /*#__PURE__*/React.createElement("input", {
-        value: nextGoalTxt,
-        onChange: e => setNextGoalTxt(e.target.value),
-        placeholder: `e.g., Build on "${completeGoalModal.text.slice(0, 30)}..."`,
-        style: { ...IS, width: "100%", marginBottom: 8 }
-      }),
-      /*#__PURE__*/React.createElement("div", {
-        style: { fontSize: 11, color: "#9ca3af" }
-      }, "This will be linked to the completed goal so you can track your progression.")
-    ),
-    /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", gap: 10 }
-    },
-      /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        onClick: () => completeGoal(completeGoalModal.id, "", ""),
-        style: {
-          flex: 1,
-          background: "var(--c-surface-muted)",
-          border: "none",
-          borderRadius: 10,
-          padding: "12px",
-          fontSize: 13,
-          fontWeight: 600,
-          color: "var(--c-text-soft)",
-          cursor: "pointer"
-        }
-      }, "Complete Only"),
-      /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        onClick: () => completeGoal(completeGoalModal.id, nextGoalTxt, completeGoalModal.type),
-        style: {
-          flex: 1,
-          ...AB,
-          borderRadius: 10,
-          padding: "12px",
-          fontSize: 13
-        }
-      }, "Complete & Create Next")
-    )
-  ), showGoalArchive && /*#__PURE__*/React.createElement("div", {
+  completeGoalModal && /*#__PURE__*/React.createElement(window.CompleteGoalModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { goal: completeGoalModal, nextGoalTxt },
+    callbacks: {
+      onClose: () => setCompleteGoalModal(null),
+      setNextGoalTxt,
+      onCompleteOnly: () => completeGoal(completeGoalModal.id, "", ""),
+      onCompleteAndNext: (nxt) => completeGoal(completeGoalModal.id, nxt, completeGoalModal.type)
+    }
+  }),
+  showGoalArchive && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
