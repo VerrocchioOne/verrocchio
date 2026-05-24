@@ -49,6 +49,8 @@ const FILES = [
   'lib/modals/ConfirmWipeModal.js',
   'lib/modals/ConfirmDeleteAcctModal.js',
   'lib/modals/ConfirmExitDemoModal.js',
+  'lib/modals/CalendarDetailDateModal.js',
+  'lib/modals/AiConsentModal.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',
