@@ -15681,7 +15681,100 @@ function App() {
       // schedule view they can tap to enter the full calendar tab.
       calendarCard
     );
-  })(), tab === "habits" && (() => {
+  })(), tab === "habits" && /*#__PURE__*/React.createElement(window.HabitsView, {
+    data,
+    dispatch,
+    deviceProfile: window.__deviceProfile,
+    callbacks: {
+      // ─── Write actions (App-scope closures) ───
+      onTogHabit: togHabit,
+      onMoveRowWithinSection: moveRowWithinSection,
+      onCommitHabitReorderDrop: commitHabitReorderDrop,
+      onCommitSlotReorderDrop: commitSlotReorderDrop,
+      onToggleConcurrent: toggleConcurrentForHabit,
+      onOpenEditHabit: (habit) => sEHabit(habit),
+      onOpenAddHabit: openNewHabitModal,
+      onAddHabit: addHabit,
+      exitReorderMode,
+      onReorderCrowdingPair: reorderCrowdingPair,
+      onDismissCrowdingPair: dismissCrowdingPair,
+      setTab,
+      // ─── App-owned state slices (current value + setter) ───
+      selDate, setSelDate,
+      eHId,
+      reorderMode, setReorderMode,
+      reorderSelectedId, setReorderSelectedId,
+      showFutureHabits, setShowFutureHabits,
+      openTotalBreakdown, setOpenTotalBreakdown,
+      expHabitGoals, setExpHabitGoals,
+      expChildren, setExpChildren,
+      swipeAnim, setSwipeAnim,
+      setSwipeFeedback,
+      setLinkedMediaPlayer,
+      showAddHabit, setShowAddHabit,
+      // Filter state (shared with Brief tab per spec §3)
+      secFilter,
+      impFilter, setImpFilter,
+      habGoalFilter, setHabGoalFilter,
+      habFreqFilter, setHabFreqFilter,
+      dueFilter, setDueFilter,
+      durRange, setDurRange,
+      filterMenuOpen, setFilterMenuOpen,
+      impPillsOpen, setImpPillsOpen,
+      habGoalPillsOpen, setHabGoalPillsOpen,
+      habFreqPillsOpen, setHabFreqPillsOpen,
+      durPillsOpen, setDurPillsOpen,
+      collapsedSections, setCollapsedSections,
+      // New-habit inline form state
+      nHabit, sNHabit,
+      nHType, sNHType,
+      nHSec, sNHSec,
+      nHImp, sNHImp,
+      nHDur, sNHDur,
+      nHFreq, sNHFreq,
+      nHGoal, sNHGoal,
+      nHNotes, sNHNotes,
+      nHStart, sNHStart,
+      // ─── Helpers bag (App-scope read-only predicates, components,
+      //     constants, derived memos, and refs the body references by
+      //     their original names) ───
+      helpers: {
+        // Constants
+        HT, IMP, SECTIONS, FREQ, DURS, DUR_MIN, DUR_MAX, DUR_STEP,
+        IS, S, AB,
+        // Pure read predicates / formatters
+        pastDays, dk, tk, Glyph,
+        getStreak, getCR, getLast14, getFreq,
+        isDone, isMissed, isFutureHabit,
+        isHabitIncomplete, isLinkedGoalIncomplete,
+        cohortDurationSum, daysSinceLast, effDur, fmtDur,
+        habitChildren, habitGoalIds,
+        rowPositionInSection, habitPositionInSection,
+        resolveReorderDrop, startReorderAutoScroll, stopReorderAutoScroll,
+        renderFreqPicker, renderSortButton,
+        linkedContentForEntity, firstLinkedAudioFor,
+        filterPressProps, slotIdForIndex,
+        detectAdditiveCrowding,
+        // Components
+        HabitCardShell,
+        // App-scope derived memos (passed through so the view doesn't
+        // need to re-derive them — keeps render output bit-identical
+        // to the previous inline render)
+        dH, filtH, groupedH, reorderEntryBlockedByFilter,
+        // Refs (App-owned; the view mutates ref.current via the body's
+        // existing handlers, exactly as the inline render did)
+        habitClickTimerRef, swipeRef,
+        reorderDragRef, reorderDropPreviewRef,
+        impLpRef, habGoalLpRef, habFreqLpRef,
+      },
+    },
+  }), false && (() => {
+    // §13.4b (v76) — dead body below. The original inline Habits render
+    // (~2900 lines) is now mounted via window.HabitsView above. A
+    // follow-up dead-code cleanup commit deletes this entire IIFE
+    // through its matching `})()` near line 18585. Keeping it inert
+    // (gated by `false &&`) for this commit so a one-line revert is
+    // possible if a regression surfaces.
     const hmap = pastDays(30).reverse().map(day => {
       const total = dH.length;
       const done = dH.filter(h => h.completions?.[day]).length;

@@ -1,7 +1,7 @@
 # v75 view extraction shipped (5 of 6 views); HabitsView extraction blocked on session limit; dead-code cleanup + v76 ship pending
 
 **Date:** 2026-05-23
-**Status:** IN PROGRESS — v75 shipped & tagged; HabitsView extraction agent FAILED (session limit, no work done); dead-code cleanup + v76 ship queued
+**Status:** IN PROGRESS — v75 shipped; v76 HabitsView extraction COMPLETED by background agent but UNVERIFIED; committed as WIP; verification + dead-code cleanup + final `feat:` commit deferred to a scheduled cron (fires ~9:20pm CT after session limit reset)
 **Bead(s):** none
 **Epic:** App Store readiness — break `index.html` into per-view modules so multiple subagents can work without context hallucination
 **Chain:** `standalone-4625fb67` seq `1`
@@ -51,16 +51,26 @@ Convert the single-file PWA (`index.html`, ~30k lines of hand-rolled `React.crea
 - L10888: `(data.todos || []).filter(...)` — defensive null-guard added after BriefView smoke surfaced a latent crash.
 - L21629 (Calendar modal mount): callbacks bag includes `initialView: calendarView, initialFocus: calendarFocus` so `openCalendarMonthForTest` still works.
 
-**HabitsView background agent — FAILED:**
-- Agent `ad391f89b8641eaa4` was dispatched right before the prior session's compaction.
-- Final status reported on this session's resume: `completed` with `<total_tokens>2065</total_tokens>` and the literal string "You've hit your session limit · resets 8:20pm (America/Chicago)".
-- 2,065 tokens with the comprehensive prompt that was sent means the agent received the prompt and immediately hit the user-account session cap. **No HabitsView work was done. No files were modified.** The dispatch is sunk cost.
-- Re-dispatch is blocked until the session limit resets at 8:20pm America/Chicago.
+**HabitsView background agent — CORRECTION: WORK DONE, UNCOMMITTED, UNVERIFIED.**
+- Agent `ad391f89b8641eaa4` ran for 878s and completed the full HabitsView extraction. The "You've hit your session limit · resets 8:20pm (America/Chicago)" message was its final return string AFTER it had already written the files; it could not commit or verify.
+- `lib/views/HabitsView.js` grew from 270 lines → 3,104 lines (tree-for-tree extraction). Header reads `§13.4b (v76) full extraction. Supersedes the v75 PARTIAL baseline.`
+- `index.html` Habits-tab render site replaced the `tab === "habits" && (() => {...inline 2900 lines...})()` with `tab === "habits" && React.createElement(window.HabitsView, { data, dispatch, deviceProfile, callbacks })` plus a comprehensive callbacks bag (write actions, App-owned state slices, filter state, new-habit form state, and a `helpers` sub-bag holding constants / pure helpers / components / refs the body references by their original names). Old IIFE neutralized via `false && (() => { ... })()`.
+- Approach: rather than lift the ~40 App-scope `useState` hooks AND the v72-v74 reorder UX into the view in one shot, the agent kept App ownership of those state slices and passed them through via callbacks + a `helpers` re-bind prelude inside `HabitsView`. The body is verbatim from the inline IIFE; render output should be bit-identical. Follow-up plan (documented in the new file header): lift view-local state in a second pass.
+- **NOT verified.** No tests run, no browser smoke, no archive snapshot.
+- Session limit blocks verification until 8:20pm America/Chicago. A scheduled cron (see below) will pick up verification at 9:20pm CT.
 
-**Pending and not yet started:**
-- Re-dispatch HabitsView extraction after the 8:20pm CT reset (or do it in a new top-level Claude session).
-- Dead-code cleanup of the 5 neutralized `false &&` IIFEs (cleanup of the Habits inline block waits on the HabitsView extraction landing).
-- Bump to `v76`, snapshot `archive/index.v76.html`, append DEBUG_LOG + USER_REQUESTS entries, commit.
+**v76 ship — IN-FLIGHT, UNCOMMITTED at handoff time:**
+- `index.html` modified (+95 lines: new call site + neutralized IIFE marker comments).
+- `lib/views/HabitsView.js` modified (+2,838 lines: 270 → 3,104).
+- These changes will be committed as `WIP: feat(views): HabitsView full extraction (§13.4b v76 — UNVERIFIED)` alongside this handoff, so the next session / cron has them on `main`.
+
+**Pending and not yet started (deferred to next session / scheduled cron):**
+- `npm run test:unit` (expect 259/259 still green; HabitsView is purely a wiring change so domain tests should not regress).
+- `npm run test:e2e` + browser smoke for the habits tab golden path (toggle, reorder, multi-slot ⇶, swipe, new-habit form, filter pills).
+- Dead-code cleanup of the 6 neutralized `false &&` IIFEs (now including the v76 Habits IIFE).
+- `archive/index.v76.html` snapshot.
+- DEBUG_LOG §13.4b entry + USER_REQUESTS entry.
+- Final `feat:` commit replacing the WIP marker.
 
 **Working-tree state at handoff time (NOT MINE — flag and investigate before any v76 commit):**
 - ` D .claude/CLAUDE.md` — deleted
