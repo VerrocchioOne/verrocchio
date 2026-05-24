@@ -59,6 +59,8 @@ const FILES = [
   'lib/views/SortMenu.js',
   // Wave 5.2 — device-API services (location, notification).
   'lib/services.js',
+  // Wave 5.3 — seeded quote collection (owner-only).
+  'lib/preset-quotes.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',
