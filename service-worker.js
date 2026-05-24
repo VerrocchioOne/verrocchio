@@ -91,6 +91,7 @@ precaching.precacheAndRoute([
   { url: "./lib/components/CompletionWave.js",  revision: SHELL_VERSION },
   { url: "./lib/components/VoiceMicButton.js",  revision: SHELL_VERSION },
   { url: "./lib/components/LinkedContent.js",   revision: SHELL_VERSION },
+  { url: "./lib/components/RadarChart.js",      revision: SHELL_VERSION },
   // Wave 3 — App-scope constants extracted.
   { url: "./lib/constants.js",                  revision: SHELL_VERSION },
   // Wave 4.1 — modal sub-systems (one file per modal).
