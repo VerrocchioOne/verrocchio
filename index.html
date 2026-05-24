@@ -159,6 +159,7 @@
 <script src="./lib/views/profile/ScorecardPanel.js"></script>
 <script src="./lib/views/profile/ProfileShell.js"></script>
 <script src="./lib/views/SortMenu.js"></script>
+<script src="./lib/services.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -9184,61 +9185,14 @@ function App() {
   // input with the current local time as the default — one tap on "Log
   // now" and the user is done, so adding the modal doesn't punish the
   // "I'm logging this right now" common case.
-  // ── Location service ──
-  // Thin wrapper over navigator.geolocation so the rest of the app
-  // doesn't touch the browser API directly. When the app is wrapped
-  // by Capacitor for native deploy, swap the implementation here
-  // (e.g. import Geolocation from '@capacitor/geolocation') without
-  // touching any callers. Haversine distance is approximate (spherical
-  // earth) but fine for "am I within N meters of home?" checks.
-  const locationService = useMemo(() => {
-    const haversineMeters = (a, b) => {
-      if (!a || !b) return Infinity;
-      const R = 6371000;
-      const toRad = d => d * Math.PI / 180;
-      const dLat = toRad(b.lat - a.lat);
-      const dLng = toRad(b.lng - a.lng);
-      const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
-      const x = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
-      return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-    };
-    return {
-      supported: typeof navigator !== "undefined" && "geolocation" in navigator,
-      getCurrent: () => new Promise((resolve, reject) => {
-        if (!("geolocation" in navigator)) return reject(new Error("geolocation_unsupported"));
-        navigator.geolocation.getCurrentPosition(
-          p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude, capturedAt: Date.now() }),
-          err => reject(err),
-          { enableHighAccuracy: false, timeout: 10000, maximumAge: 5 * 60 * 1000 }
-        );
-      }),
-      haversineMeters
-    };
-  }, []);
-
-  // ── Notification service ──
-  // Wrapper over the Web Notification API + a Capacitor hook. Local
-  // notifications (while the page is open) work everywhere the API is
-  // supported. Push when the app is closed requires @capacitor/push-
-  // notifications on native — the service here is shaped so we can
-  // route to Capacitor's Local/Push plugins later by swapping the
-  // `notify` implementation.
-  const notificationService = useMemo(() => ({
-    supported: typeof window !== "undefined" && "Notification" in window,
-    permission: () => (typeof Notification !== "undefined" ? Notification.permission : "denied"),
-    requestPermission: async () => {
-      if (!("Notification" in window)) return "denied";
-      try { return await Notification.requestPermission(); }
-      catch { return "denied"; }
-    },
-    notify: (title, body, opts) => {
-      if (!("Notification" in window) || Notification.permission !== "granted") return false;
-      try {
-        new Notification(title, { body, icon: "apple-touch-icon-1024.png", ...(opts || {}) });
-        return true;
-      } catch { return false; }
-    }
-  }), []);
+  // ── Device services (location + notification) ──
+  //
+  // Wave 5.2 — body lives in lib/services.js as window.VerrocchioServices.
+  // App keeps these two consts so the rest of the file references them by
+  // the names it always has (used by the home/away useEffect below and by
+  // the AppSettingsPanel helpers bag).
+  const locationService = window.VerrocchioServices ? window.VerrocchioServices.location : { supported: false, getCurrent: () => Promise.reject(new Error("services_not_loaded")), haversineMeters: () => Infinity };
+  const notificationService = window.VerrocchioServices ? window.VerrocchioServices.notification : { supported: false, permission: () => "denied", requestPermission: async () => "denied", notify: () => false };
 
   // On mount (and whenever the opt-ins / homeCoords change), check
   // whether the user is home or away. One-shot per app open — NOT a

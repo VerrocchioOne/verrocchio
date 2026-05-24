@@ -57,6 +57,8 @@ const FILES = [
   'lib/views/profile/ProfileShell.js',
   // Wave 5.1 — sort utility + per-page picker.
   'lib/views/SortMenu.js',
+  // Wave 5.2 — device-API services (location, notification).
+  'lib/services.js',
   'lib/components/Sparkline14.js',
   'lib/components/A11yDialog.js',
   'lib/components/WeekDots.js',
