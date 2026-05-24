@@ -51,6 +51,7 @@ precaching.precacheAndRoute([
   { url: "./lib/views/HabitsReorderToolbar.js", revision: SHELL_VERSION },
   { url: "./lib/views/HabitsNewHabitForm.js",   revision: SHELL_VERSION },
   { url: "./lib/views/HabitsFilterPills.js",     revision: SHELL_VERSION },
+  { url: "./lib/views/HabitsHabitCard.js",       revision: SHELL_VERSION },
   { url: "./lib/views/GoalsView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/TodosView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/ReflectView.js",  revision: SHELL_VERSION },
@@ -71,6 +72,7 @@ precaching.precacheAndRoute([
   { url: "./lib/views/profile/AppSettingsPanel.js",  revision: SHELL_VERSION },
   { url: "./lib/views/profile/MyContentPanel.js",    revision: SHELL_VERSION },
   { url: "./lib/views/profile/ScorecardPanel.js",    revision: SHELL_VERSION },
+  { url: "./lib/views/profile/ProfileShell.js",      revision: SHELL_VERSION },
   // §13.6 Wave 2 — shared inline components extracted from index.html.
   { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },
   { url: "./lib/components/A11yDialog.js",      revision: SHELL_VERSION },

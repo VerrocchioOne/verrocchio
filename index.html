@@ -138,6 +138,7 @@
 <script src="./lib/views/HabitsReorderToolbar.js"></script>
 <script src="./lib/views/HabitsNewHabitForm.js"></script>
 <script src="./lib/views/HabitsFilterPills.js"></script>
+<script src="./lib/views/HabitsHabitCard.js"></script>
 <script src="./lib/views/GoalsView.js"></script>
 <script src="./lib/views/TodosView.js"></script>
 <script src="./lib/views/ReflectView.js"></script>
@@ -156,6 +157,7 @@
 <script src="./lib/views/profile/AppSettingsPanel.js"></script>
 <script src="./lib/views/profile/MyContentPanel.js"></script>
 <script src="./lib/views/profile/ScorecardPanel.js"></script>
+<script src="./lib/views/profile/ProfileShell.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 /* Theme tokens. The palette-level colors below are read from React
@@ -15269,32 +15271,6 @@ function App() {
     }, "Retry")
   ),
   showProfile && (() => {
-    // Profile nav \u2014 emoji icons removed per user request, the
-    // typeface-only labels read cleaner. My Routines is gone since
-    // the Calendar modal already shows the unique-cadence habits
-    // (week + month views surface anything weekly-or-less-frequent).
-    const NAV_ITEMS = [
-      { val: "account", label: "My Account" },
-      { val: "scorecard", label: "App Progress" },
-      { val: "inspiration", label: "My Inspiration" },
-      { val: "content", label: "My Content" },
-      { val: "history", label: "Goal History" },
-      { val: "reports", label: "Habit Reports" },
-      { val: "settings", label: "App Settings" }
-    ];
-    const navBtn = (item, on) => /*#__PURE__*/React.createElement("button", {
-      key: item.val,
-      onClick: () => { setProfileSection(item.val); setProfileNavOpen(false); },
-      style: {
-        display: "flex", alignItems: "center", gap: 8,
-        width: "100%", padding: "10px 12px", borderRadius: 8,
-        background: on ? "#2d5a2d" : "transparent",
-        color: on ? "#fff" : "var(--c-text-soft)",
-        border: "none", cursor: "pointer", fontSize: 13,
-        fontWeight: on ? 700 : 500, textAlign: "left",
-        transition: "background .15s"
-      }
-    }, /*#__PURE__*/React.createElement("span", { style: { lineHeight: 1.2 } }, item.label));
     const labelS = { fontSize: 11, fontWeight: 600, color: "#6b7280", marginBottom: 5, textTransform: "uppercase", letterSpacing: .5 };
     const inputS = { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", color: "var(--c-text)", borderRadius: 8, padding: "10px 12px", fontSize: 13, width: "100%", outline: "none", fontFamily: "inherit", boxSizing: "border-box" };
     const sectionTitle = t => /*#__PURE__*/React.createElement("div", {
@@ -15533,47 +15509,13 @@ function App() {
       callbacks: { helpers: { data, sectionTitle, labelS, FEATURES } }
     });
     const panels = { account: accountPanel, scorecard: scorecardPanel, inspiration: inspirationPanel, content: myContentPanel, history: historyPanel, reports: reportsPanel, settings: appSettingsPanel };
-    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
-    // return-focus. Multi-panel modal; the header section label drives
-    // ariaLabelledby. Close X uses data-a11y-dialog-hide; backdrop and
-    // Escape route through onHide.
-    return /*#__PURE__*/React.createElement(A11yDialog, {
-      onHide: () => setShowProfile(false),
-      ariaLabelledby: "profile-section-title",
-      overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300 },
-      cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", maxWidth: 720, height: "88vh", maxHeight: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }
-    },
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", flexShrink: 0 }
-      },
-        /*#__PURE__*/React.createElement("button", {
-          "aria-label": "Toggle navigation",
-          onClick: () => setProfileNavOpen(p => !p),
-          style: { background: profileNavOpen ? "var(--c-tint-success-bg)" : "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 34, height: 34, cursor: "pointer", color: profileNavOpen ? "#2d5a2d" : "var(--c-text-soft)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, padding: 0 }
-        },
-          /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } }),
-          /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } }),
-          /*#__PURE__*/React.createElement("span", { style: { display: "block", width: 16, height: 2, borderRadius: 1, background: "currentColor" } })),
-        /*#__PURE__*/React.createElement("div", { id: "profile-section-title", style: { fontFamily: "'Lora',serif", fontSize: 14, fontWeight: 700, color: "#6b7280", textTransform: "capitalize" } },
-          (NAV_ITEMS.find(n => n.val === profileSection) || {}).label || "Profile"),
-        /*#__PURE__*/React.createElement("button", { "aria-label": "Close",
-          "data-a11y-dialog-hide": true,
-          style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 16, color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center" }
-        }, "\xD7")),
-      /*#__PURE__*/React.createElement("div", {
-        style: { display: "flex", flex: 1, minHeight: 0 }
-      },
-        profileNavOpen && /*#__PURE__*/React.createElement("div", {
-          style: { width: 150, flexShrink: 0, background: "var(--c-surface-raised)", borderRight: "1px solid #f3f4f6", padding: "12px 8px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }
-        },
-          NAV_ITEMS.map(n => navBtn(n, profileSection === n.val))
-          // Sign-out removed from the side nav; lives at the bottom of
-          // the My Account panel now per product decision.
-        ),
-        /*#__PURE__*/React.createElement("div", {
-          style: { flex: 1, minWidth: 0, padding: "12px 14px 18px", overflowY: "auto" }
-        }, panels[profileSection] || panels.account))
-    );
+    return /*#__PURE__*/React.createElement(window.ProfileShell, {
+      callbacks: { helpers: {
+        profileSection, profileNavOpen,
+        setProfileSection, setProfileNavOpen, setShowProfile,
+        panels
+      } }
+    });
   })(),
   goalMoreMenu && (() => {
     const _g = data.goals.find(g => g.id === goalMoreMenu);
