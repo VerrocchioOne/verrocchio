@@ -96,6 +96,13 @@
 <!-- §13.6 Wave 2 — Shared inline components extracted from index.html. Load BEFORE views so window.X is defined when views init. -->
 <script src="./lib/components/Sparkline14.js"></script>
 <script src="./lib/components/A11yDialog.js"></script>
+<script src="./lib/components/WeekDots.js"></script>
+<script src="./lib/components/StreakChain.js"></script>
+<script src="./lib/components/SproutAvatar.js"></script>
+<script src="./lib/components/MomentumArrow.js"></script>
+<script src="./lib/components/YearHeatmap.js"></script>
+<script src="./lib/components/AchievementBadge.js"></script>
+<script src="./lib/components/CompletionWave.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -2759,171 +2766,29 @@ const Sparkline14 = window.Sparkline14;
 // Cells: done = green solid, missed = red solid, today (not done
 // or missed yet) = green ring, future = grey ring, past-empty = grey ring.
 // Sits beneath the habit title as a glance-able weekly cadence.
-const WeekDots = React.memo(function WeekDots({ habit, size = 7, gap = 3 }) {
-  const today = new Date();
-  const dow = today.getDay(); // 0=Sun
-  // Build the 7 calendar dates for this week starting Sunday.
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - dow + i);
-    const k = dk(d);
-    const isFuture = i > dow;
-    const isToday = i === dow;
-    const state = habit.completions?.[k];
-    days.push({ k, isFuture, isToday, state });
-  }
-  return React.createElement("div", {
-    style: { display: "flex", alignItems: "center", gap, flexShrink: 0 },
-    "aria-hidden": true
-  }, ...days.map((d, i) => {
-    let bg = "transparent", border = "var(--c-border)";
-    if (d.state === "done") { bg = "#22c55e"; border = "#22c55e"; }
-    else if (d.state === "missed") { bg = "#ef4444"; border = "#ef4444"; }
-    else if (d.isToday) { border = "#2d5a2d"; }
-    else if (d.isFuture) { border = "var(--c-surface-muted)"; }
-    return React.createElement("div", {
-      key: i,
-      style: {
-        width: size, height: size, borderRadius: "50%",
-        background: bg, border: `1px solid ${border}`,
-        boxSizing: "border-box"
-      }
-    });
-  }));
-});
+// WeekDots extracted to lib/components/WeekDots.js (Wave 2.3).
+const WeekDots = window.WeekDots;
 
 // Streak-chain glyph — replaces the emoji `🔥 N` pill with a row of
 // stylized flame SVGs that grow as the streak grows. Up to 5 are
 // drawn; after that we show `5+ · N` so the count still reads. Cold
 // state shows frosted "broken-link" glyphs with the days-since count.
-const StreakChain = React.memo(function StreakChain({ streak, cold }) {
-  if (streak > 0) {
-    const shown = Math.min(streak, 5);
-    // Flame colors ramp from amber → orange → red as the streak grows.
-    const hot = streak >= 30 ? "#dc2626" : streak >= 7 ? "#ea580c" : "#f59e0b";
-    return React.createElement("div", {
-      style: {
-        height: 16, display: "flex", alignItems: "center", gap: 1,
-        paddingLeft: 3, paddingRight: 5, background: "#fff7ed",
-        border: "1px solid #fed7aa", borderRadius: 4, flexShrink: 0
-      }
-    },
-      ...Array.from({ length: shown }, (_, i) => React.createElement("svg", {
-        key: i, width: 7, height: 10, viewBox: "0 0 7 10", "aria-hidden": true
-      },
-        React.createElement("path", {
-          d: "M3.5 0.5 C 5 2 6 3.5 6 5.5 C 6 7.8 4.8 9.3 3.5 9.3 C 2.2 9.3 1 7.8 1 5.5 C 1 4.2 1.8 3 3.5 0.5 Z",
-          fill: hot, opacity: 0.55 + (i / Math.max(shown - 1, 1)) * 0.45
-        })
-      )),
-      React.createElement("span", {
-        style: { fontSize: 8, fontWeight: 700, color: "#c2410c", marginLeft: 2 }
-      }, streak > 5 ? "\u00B7 " + streak : streak)
-    );
-  }
-  if (cold != null) {
-    return React.createElement("div", {
-      style: {
-        height: 16, display: "flex", alignItems: "center", gap: 2,
-        paddingLeft: 4, paddingRight: 5, background: "var(--c-tint-info-bg)",
-        border: "1px solid var(--c-tint-info-border)", borderRadius: 4, flexShrink: 0
-      }
-    },
-      React.createElement("svg", {
-        width: 10, height: 10, viewBox: "0 0 10 10", "aria-hidden": true
-      },
-        // Broken chain — two small links with a gap
-        React.createElement("circle", { cx: 3, cy: 5, r: 1.8, fill: "none", stroke: "#3b82f6", strokeWidth: 1.2 }),
-        React.createElement("circle", { cx: 7, cy: 5, r: 1.8, fill: "none", stroke: "#3b82f6", strokeWidth: 1.2, opacity: 0.5 }),
-        React.createElement("line", { x1: 4.5, y1: 5, x2: 5.5, y2: 5, stroke: "#3b82f6", strokeWidth: 1.2, opacity: 0.35 })
-      ),
-      React.createElement("span", { style: { fontSize: 8, fontWeight: 700, color: "var(--c-tint-info-fg)" } }, cold)
-    );
-  }
-  return null;
-});
+// StreakChain extracted to lib/components/StreakChain.js (Wave 2.3).
+const StreakChain = window.StreakChain;
 
 // SproutAvatar — a tiny growth glyph that evolves with streak
 // milestones. 0 = seed, 3 = sprout, 7 = sapling, 30 = small tree,
 // 100 = laurel wreath. Feeds the "Verrocchio growth" brand so habits
 // carry a sense of accrual beyond the numeric streak.
-const SproutAvatar = React.memo(function SproutAvatar({ streak, size = 18 }) {
-  const GREEN = "#2d5a2d", SOFT = "#86b686";
-  const stage = streak >= 100 ? 4 : streak >= 30 ? 3 : streak >= 7 ? 2 : streak >= 3 ? 1 : 0;
-  const common = { width: size, height: size, viewBox: "0 0 18 18", "aria-hidden": true, style: { display: "block", flexShrink: 0 } };
-  if (stage === 0) {
-    // Seed — a single dot on soil
-    return React.createElement("svg", common,
-      React.createElement("ellipse", { cx: 9, cy: 15, rx: 5.5, ry: 1.2, fill: SOFT, opacity: 0.45 }),
-      React.createElement("circle", { cx: 9, cy: 13, r: 1.5, fill: "#8b5a2b" })
-    );
-  }
-  if (stage === 1) {
-    // Sprout — seed + a single curl
-    return React.createElement("svg", common,
-      React.createElement("ellipse", { cx: 9, cy: 15, rx: 5.5, ry: 1.2, fill: SOFT, opacity: 0.45 }),
-      React.createElement("path", { d: "M9 14 Q 9 10 6 8", stroke: GREEN, strokeWidth: 1.6, strokeLinecap: "round", fill: "none" }),
-      React.createElement("ellipse", { cx: 5.5, cy: 7.5, rx: 2, ry: 1.2, fill: GREEN, transform: "rotate(-30 5.5 7.5)" })
-    );
-  }
-  if (stage === 2) {
-    // Sapling — Y-shape with two leaves
-    return React.createElement("svg", common,
-      React.createElement("ellipse", { cx: 9, cy: 16, rx: 6, ry: 1.2, fill: SOFT, opacity: 0.45 }),
-      React.createElement("line", { x1: 9, y1: 15, x2: 9, y2: 7, stroke: GREEN, strokeWidth: 1.6, strokeLinecap: "round" }),
-      React.createElement("ellipse", { cx: 6, cy: 7, rx: 2.6, ry: 1.4, fill: GREEN, transform: "rotate(-30 6 7)" }),
-      React.createElement("ellipse", { cx: 12, cy: 7, rx: 2.6, ry: 1.4, fill: GREEN, transform: "rotate(30 12 7)" })
-    );
-  }
-  if (stage === 3) {
-    // Small tree — trunk + canopy
-    return React.createElement("svg", common,
-      React.createElement("ellipse", { cx: 9, cy: 16, rx: 6, ry: 1.2, fill: SOFT, opacity: 0.45 }),
-      React.createElement("rect", { x: 8, y: 10, width: 2, height: 6, rx: 0.5, fill: "#8b5a2b" }),
-      React.createElement("circle", { cx: 9, cy: 7.5, r: 5, fill: GREEN }),
-      React.createElement("circle", { cx: 6.5, cy: 6, r: 1, fill: "#fff", opacity: 0.25 })
-    );
-  }
-  // Laurel — two curved branches of leaves
-  return React.createElement("svg", common,
-    ...[-1, 1].map(side => React.createElement("g", { key: side, transform: `translate(9 9) scale(${side} 1)` },
-      React.createElement("path", { d: "M 0 6 C -5 3 -6 -2 -4 -6", stroke: GREEN, strokeWidth: 1.2, fill: "none" }),
-      ...[0, 1, 2, 3].map(i => React.createElement("ellipse", {
-        key: i, cx: -2 - i * 0.6, cy: 4 - i * 2.2,
-        rx: 1.6, ry: 0.9, fill: GREEN,
-        transform: `rotate(${-40 - i * 10} ${-2 - i * 0.6} ${4 - i * 2.2})`
-      }))
-    )),
-    React.createElement("circle", { cx: 9, cy: 9, r: 2.2, fill: "#fde68a", stroke: GREEN, strokeWidth: 1 })
-  );
-});
+// SproutAvatar extracted to lib/components/SproutAvatar.js (Wave 2.3).
+const SproutAvatar = window.SproutAvatar;
 
 // Momentum arrow — ▲ / ▼ / ▬ based on the delta between the last 7
 // days and the prior 7 days of completion. `value` optional (shown
 // as a percent delta if provided). Compact; lives next to a habit's
 // completion rate in the stats modal.
-const MomentumArrow = React.memo(function MomentumArrow({ habit }) {
-  const now = new Date();
-  const days = (offset, count) => {
-    let c = 0;
-    for (let i = offset; i < offset + count; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      if (habit.completions?.[dk(d)] === "done") c++;
-    }
-    return c;
-  };
-  const recent = days(0, 7);
-  const prior = days(7, 7);
-  const delta = recent - prior;
-  const glyph = delta > 0 ? "\u25B2" : delta < 0 ? "\u25BC" : "\u2192";
-  const color = delta > 0 ? "#16a34a" : delta < 0 ? "#dc2626" : "#9ca3af";
-  return React.createElement("span", {
-    title: `Last 7d: ${recent} · Prior 7d: ${prior}`,
-    style: { fontSize: 9, fontWeight: 700, color, marginLeft: 4 }
-  }, glyph, delta !== 0 ? " " + Math.abs(delta) : "");
-});
+// MomentumArrow extracted to lib/components/MomentumArrow.js (Wave 2.3).
+const MomentumArrow = window.MomentumArrow;
 
 // Year-heatmap — dense 7-row grid showing ~365 days of completion
 // for a single habit, styled after HabitKit's dot-matrix blocks. When
@@ -2932,59 +2797,8 @@ const MomentumArrow = React.memo(function MomentumArrow({ habit }) {
 // cells, so each heatmap reads as a monochrome "chip" of the habit's
 // brand color. Missed days stay red so gone-sideways data is visible.
 // Fallbacks to Verrocchio green for uncategorized habits.
-const YearHeatmap = React.memo(function YearHeatmap({ habit, cellSize = 10, gap = 3, color, range = "year" }) {
-  const today = new Date();
-  const cells = [];
-  // Range controls how far back the grid looks:
-  //   week  — last 7 days, single column
-  //   month — last 28 days, 4 weeks wide
-  //   year  — 26 weeks + today's DOW offset (~6 months)
-  const daysBack =
-    range === "week"  ? 6
-    : range === "month" ? 27
-    : 7 * 26 + today.getDay();
-  for (let i = daysBack; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const k = dk(d);
-    const state = habit.completions?.[k];
-    cells.push({ k, state });
-  }
-  // Resolve the "done" fill: explicit prop > habit-type color > brand green.
-  const typeColor = color || (habit && habit.type ? (HT.find(t => t.value === habit.type) || {}).color : null) || "#2d5a2d";
-  // Low-opacity version of the same hue for empty cells. Preserves
-  // the HabitKit "monochrome chip" look where empty is a very light
-  // tint instead of a neutral gray.
-  const emptyFill = typeColor + "1A"; // ~10% alpha via appended hex
-  const missedFill = "#fca5a5";
-  // Lay out as 7 rows × N columns. First cell goes in row = DOW of earliest date.
-  const firstDow = new Date(cells[0].k + "T12:00:00").getDay();
-  const total = cells.length;
-  const cols = Math.ceil((firstDow + total) / 7);
-  const w = cols * (cellSize + gap);
-  const h = 7 * (cellSize + gap);
-  const r = Math.max(1.5, Math.round(cellSize * 0.25));
-  return React.createElement("svg", {
-    width: w, height: h, viewBox: `0 0 ${w} ${h}`, "aria-hidden": true,
-    style: { display: "block" }
-  }, cells.map((c, i) => {
-    const idx = firstDow + i;
-    const col = Math.floor(idx / 7);
-    const row = idx % 7;
-    const fill = c.state === "done" ? typeColor
-               : c.state === "missed" ? missedFill
-               : emptyFill;
-    return React.createElement("rect", {
-      key: i,
-      x: col * (cellSize + gap),
-      y: row * (cellSize + gap),
-      width: cellSize,
-      height: cellSize,
-      rx: r,
-      fill
-    });
-  }));
-});
+// YearHeatmap extracted to lib/components/YearHeatmap.js (Wave 2.3).
+const YearHeatmap = window.YearHeatmap;
 
 // Empty-state illustration for "No habits yet" screens. Same
 // language as the onboarding illus* components at ~L5110 —
@@ -3055,83 +2869,14 @@ function VerrocchioIcon({ size = 96, color = "#2d5a2d", bg = "transparent" }) {
 //    glyph. Stays small (44px wrapper already exists at the call
 //    site) and reads cohesively — a row of emojis mixed with a
 //    few SVGs always looked inconsistent.
-const AchievementBadge = React.memo(function AchievementBadge({ cat, tier, size = 30 }) {
-  const tierCol = ({
-    Bronze: "#a16207", Silver: "#6b7280", Gold: "#d97706",
-    Platinum: "#0891b2", Diamond: "#7c3aed"
-  })[tier] || "#6b7280";
-  const glyph = (() => {
-    const common = { stroke: tierCol, strokeWidth: 1.6, fill: "none", strokeLinecap: "round", strokeLinejoin: "round" };
-    if (cat === "Dedication") {
-      return React.createElement("g", null,
-        React.createElement("path", Object.assign({ d: "M4 18 Q 14 6 24 18" }, common)),
-        React.createElement("line", Object.assign({ x1: 4, y1: 21, x2: 24, y2: 21 }, common)),
-        ...[9, 14, 19].map((x, i) => React.createElement("line", Object.assign({ key: i, x1: x, y1: 10 - (i === 1 ? 2 : 0), x2: x, y2: 5 - (i === 1 ? 2 : 0) }, common)))
-      );
-    }
-    if (cat === "Streaks") {
-      return React.createElement("path", Object.assign({
-        d: "M14 3 C 18 8 21 11 21 16 C 21 21 17 24 14 24 C 11 24 7 21 7 16 C 7 12 10 9 14 3 Z"
-      }, common, { fill: tierCol, fillOpacity: 0.18 }));
-    }
-    if (cat === "Achiever") {
-      return React.createElement("g", null,
-        React.createElement("circle", Object.assign({ cx: 14, cy: 14, r: 9 }, common)),
-        React.createElement("circle", Object.assign({ cx: 14, cy: 14, r: 5 }, common)),
-        React.createElement("circle", { cx: 14, cy: 14, r: 2, fill: tierCol })
-      );
-    }
-    if (cat === "Builder") {
-      return React.createElement("g", null,
-        React.createElement("rect", Object.assign({ x: 4, y: 18, width: 20, height: 5, rx: 0.8 }, common)),
-        React.createElement("rect", Object.assign({ x: 6, y: 12, width: 16, height: 5, rx: 0.8 }, common)),
-        React.createElement("rect", Object.assign({ x: 9, y: 6, width: 10, height: 5, rx: 0.8 }, common))
-      );
-    }
-    // XP
-    return React.createElement("path", Object.assign({
-      d: "M16 4 L 8 16 L 14 16 L 12 24 L 20 12 L 14 12 Z"
-    }, common, { fill: tierCol, fillOpacity: 0.22 }));
-  })();
-  return React.createElement("svg", {
-    width: size, height: size, viewBox: "0 0 28 28",
-    "aria-hidden": true, style: { display: "block" }
-  },
-    // Outer shield
-    React.createElement("path", {
-      d: "M14 2 L 24 5 L 24 14 C 24 20 19 25 14 26 C 9 25 4 20 4 14 L 4 5 Z",
-      fill: "#fff", stroke: tierCol, strokeWidth: 1.6
-    }),
-    glyph
-  );
-});
+// AchievementBadge extracted to lib/components/AchievementBadge.js (Wave 2.3).
+const AchievementBadge = window.AchievementBadge;
 
 // Weekly completion wave — a gentle area chart showing the last 14
 // days' per-day completion rate across ALL habits. Sits at the top
 // of the Habits tab. `rates` is an array of 14 numbers in [0,1].
-const CompletionWave = React.memo(function CompletionWave({ rates, width = 300, height = 40 }) {
-  if (!rates || rates.length === 0) return null;
-  const n = rates.length;
-  const step = width / (n - 1);
-  const pts = rates.map((r, i) => [i * step, height - r * (height - 4) - 2]);
-  const line = pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
-  const area = line + ` L ${width} ${height} L 0 ${height} Z`;
-  return React.createElement("svg", {
-    width: "100%", height, viewBox: `0 0 ${width} ${height}`,
-    preserveAspectRatio: "none",
-    "aria-hidden": true,
-    style: { display: "block" }
-  },
-    React.createElement("defs", null,
-      React.createElement("linearGradient", { id: "waveG", x1: 0, y1: 0, x2: 0, y2: 1 },
-        React.createElement("stop", { offset: "0%", stopColor: "#2d5a2d", stopOpacity: 0.35 }),
-        React.createElement("stop", { offset: "100%", stopColor: "#2d5a2d", stopOpacity: 0.02 })
-      )
-    ),
-    React.createElement("path", { d: area, fill: "url(#waveG)" }),
-    React.createElement("path", { d: line, stroke: "#2d5a2d", strokeWidth: 1.2, fill: "none", strokeLinejoin: "round" })
-  );
-});
+// CompletionWave extracted to lib/components/CompletionWave.js (Wave 2.3).
+const CompletionWave = window.CompletionWave;
 const _dr = {
   from: null,
   over: null

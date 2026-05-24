@@ -51,6 +51,16 @@ precaching.precacheAndRoute([
   { url: "./lib/views/TodosView.js",    revision: SHELL_VERSION },
   { url: "./lib/views/ReflectView.js",  revision: SHELL_VERSION },
   { url: "./lib/views/CalendarView.js", revision: SHELL_VERSION },
+  // §13.6 Wave 2 — shared inline components extracted from index.html.
+  { url: "./lib/components/Sparkline14.js",     revision: SHELL_VERSION },
+  { url: "./lib/components/A11yDialog.js",      revision: SHELL_VERSION },
+  { url: "./lib/components/WeekDots.js",        revision: SHELL_VERSION },
+  { url: "./lib/components/StreakChain.js",     revision: SHELL_VERSION },
+  { url: "./lib/components/SproutAvatar.js",    revision: SHELL_VERSION },
+  { url: "./lib/components/MomentumArrow.js",   revision: SHELL_VERSION },
+  { url: "./lib/components/YearHeatmap.js",     revision: SHELL_VERSION },
+  { url: "./lib/components/AchievementBadge.js", revision: SHELL_VERSION },
+  { url: "./lib/components/CompletionWave.js",  revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);
