@@ -113,6 +113,10 @@
 <script src="./lib/modals/ConfirmDeleteAcctModal.js"></script>
 <script src="./lib/modals/ConfirmExitDemoModal.js"></script>
 <script src="./lib/modals/CalendarDetailDateModal.js"></script>
+<script src="./lib/modals/AiConsentModal.js"></script>
+<script src="./lib/modals/GoalMoreMenuModal.js"></script>
+<script src="./lib/modals/GoalJournalModal.js"></script>
+<script src="./lib/modals/AchievementsModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -19591,64 +19595,41 @@ function App() {
           style: { flex: 1, minWidth: 0, padding: "12px 14px 18px", overflowY: "auto" }
         }, panels[profileSection] || panels.account))
     );
-  })(), goalMoreMenu && (() => {
+  })(),
+  goalMoreMenu && (() => {
     const _g = data.goals.find(g => g.id === goalMoreMenu);
     if (!_g) return null;
-    const _btnStyle = (color, first) => ({width:"100%",display:"flex",alignItems:"center",padding:"15px 4px",background:"none",border:"none",cursor:"pointer",fontSize:15,color:color,textAlign:"left",fontWeight:500,borderTop:first?"none":"1px solid #f3f4f6"});
-    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
-    // return-focus. Each action button preserves its own state-change
-    // chain (setGoalMoreMenu(null) clears this modal AND may open a
-    // sibling); the React state change unmounts the wrapper cleanly.
-    return /*#__PURE__*/React.createElement(A11yDialog, {
-      onHide: () => setGoalMoreMenu(null),
-      ariaLabelledby: "goal-more-title",
-      overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300 },
-      cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", padding: "24px 20px", maxWidth: 640, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
-    },
-      /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
-        /*#__PURE__*/React.createElement("div", {id:"goal-more-title",style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, _g.text),
-        /*#__PURE__*/React.createElement("button", { "aria-label": "Close","data-a11y-dialog-hide":true,style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
-      ),
-      /*#__PURE__*/React.createElement("div", {style:{height:1,background:"var(--c-surface-muted)",margin:"14px 0"}}),
-      /*#__PURE__*/React.createElement("button", {onClick:()=>{setGoalJournal({id:_g.id, text:_g.text}); setGoalJournalTxt(""); setGoalMoreMenu(null);},style:_btnStyle("#0891b2",true)}, "\uD83D\uDCDD\u2002Add Journal Entry"),
-      /*#__PURE__*/React.createElement("button", {onClick:()=>{sEGoal(_g);setGoalMoreMenu(null);},style:_btnStyle("var(--c-text)",false)}, "\u270E\u2002Edit Goal"),
-      /*#__PURE__*/React.createElement("button", {onClick:()=>{setCompleteGoalModal(_g);setGoalMoreMenu(null);},style:_btnStyle("#16a34a",false)}, "\u2713\u2002Mark Complete"),
-      /*#__PURE__*/React.createElement("button", {onClick:()=>{delGoal(_g.id);setGoalMoreMenu(null);},style:_btnStyle("#dc2626",false)}, "\uD83D\uDDD1\u2002Delete Goal")
-    );
+    return /*#__PURE__*/React.createElement(window.GoalMoreMenuModal, {
+      data, dispatch, deviceProfile: window.__deviceProfile,
+      state: { goal: _g },
+      callbacks: {
+        onClose: () => setGoalMoreMenu(null),
+        onAddJournal: () => { setGoalJournal({ id: _g.id, text: _g.text }); setGoalJournalTxt(""); setGoalMoreMenu(null); },
+        onEdit: () => { sEGoal(_g); setGoalMoreMenu(null); },
+        onComplete: () => { setCompleteGoalModal(_g); setGoalMoreMenu(null); },
+        onDelete: () => { delGoal(_g.id); setGoalMoreMenu(null); }
+      }
+    });
   })(),
   // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
   // return-focus. autoFocus on the textarea moves keyboard cursor into
   // the textarea on open; a11y-dialog's focus-trap respects autofocus
   // when present and tabs cycle within the dialog. Save button keeps
   // its own state-clear; close X uses data-a11y-dialog-hide.
-  goalJournal && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => setGoalJournal(null),
-    ariaLabelledby: "goal-journal-title",
-    overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 300 },
-    cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", padding: "24px 20px", maxWidth: 640, boxShadow: "0 -8px 40px rgba(0,0,0,.2)" }
-  },
-    /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
-      /*#__PURE__*/React.createElement("div", {id:"goal-journal-title",style:{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"var(--c-text-strong)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:12}}, "Journal: ", goalJournal.text),
-      /*#__PURE__*/React.createElement("button", { "aria-label": "Close","data-a11y-dialog-hide":true,style:{background:"var(--c-surface-muted)",border:"none",borderRadius:"50%",width:30,height:30,cursor:"pointer",fontSize:16,color:"#6b7280",display:"flex",alignItems:"center",justifyContent:"center"}}, "\xD7")
-    ),
-    /*#__PURE__*/React.createElement("textarea", {
-      value: goalJournalTxt,
-      onChange: e => setGoalJournalTxt(e.target.value),
-      placeholder: "Reflect on this goal — what's working, what's not, what's next...",
-      rows: 5,
-      autoFocus: true,
-      style: {width:"100%",border:"1px solid #e5e7eb",borderRadius:10,padding:"10px 12px",fontSize:13,fontFamily:"inherit",resize:"none",outline:"none",color:"var(--c-text)",boxSizing:"border-box",lineHeight:1.6}
-    }),
-    /*#__PURE__*/React.createElement("button", {
-      onClick: () => {
-        if (!goalJournalTxt.trim()) return;
-        const entry = {id:"gj"+Date.now(),text:goalJournalTxt.trim(),dateKey:tk(),timestamp:Date.now(),tag:"goals",goalId:goalJournal.id};
-        save({...data,journal:[entry,...(data.journal||[])]});
+  goalJournal && /*#__PURE__*/React.createElement(window.GoalJournalModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { goal: goalJournal, draft: goalJournalTxt },
+    callbacks: {
+      onClose: () => setGoalJournal(null),
+      setDraft: setGoalJournalTxt,
+      onSave: (draft) => {
+        if (!(draft || "").trim()) return;
+        const entry = { id: "gj" + Date.now(), text: draft.trim(), dateKey: tk(), timestamp: Date.now(), tag: "goals", goalId: goalJournal.id };
+        save({ ...data, journal: [entry, ...(data.journal || [])] });
         setGoalJournal(null); setGoalJournalTxt("");
-      },
-      style:{marginTop:12,width:"100%",background:"#2d5a2d",color:"#fff",border:"none",borderRadius:10,padding:"13px",fontSize:14,fontWeight:600,cursor:"pointer"}
-    }, "Save Entry")
-  ), showXpChart && (() => {
+      }
+    }
+  }), showXpChart && (() => {
     // XP-per-day map derived from habit completions. XP rules mirror
     // togHabit: Non-Negotiable = 30, Important = 20, Additive = 10.
     // Done only — missed/none contribute nothing. To-dos aren't XP-
@@ -20048,131 +20029,11 @@ function App() {
   // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
   // return-focus from the wrapper. The header title gets an id for
   // ariaLabelledby; the close X uses data-a11y-dialog-hide.
-  showAchievements && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => setShowAchievements(false),
-    ariaLabelledby: "achievements-title",
-    overlayStyle: { background: "rgba(0,0,0,0.5)", zIndex: 320 },
-    cardStyle: { background: "#fff", borderRadius: "20px 20px 0 0", maxWidth: 720, height: "88vh", maxHeight: "88vh", boxShadow: "0 -8px 40px rgba(0,0,0,.2)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }
-  },
-    /*#__PURE__*/React.createElement("div", {
-      style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #f3f4f6", flexShrink: 0 }
-    },
-      /*#__PURE__*/React.createElement("div", null,
-        /*#__PURE__*/React.createElement("div", { id: "achievements-title", className: "card-title", style: { fontSize: 18, color: "var(--c-text-strong)" } }, "Achievements"),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, (() => {
-          const earned = ACHIEVEMENTS.filter(a => (achievementStats[a.stat] || 0) >= a.threshold).length;
-          return earned + " of " + ACHIEVEMENTS.length + " unlocked";
-        })())
-      ),
-      /*#__PURE__*/React.createElement("button", {
-        "data-a11y-dialog-hide": true,
-        "aria-label": "Close",
-        style: { background: "var(--c-surface-muted)", border: "none", borderRadius: "50%", width: 30, height: 30, cursor: "pointer", fontSize: 16, color: "#6b7280", display: "flex", alignItems: "center", justifyContent: "center" }
-      }, "\xD7")
-    ),
-    /*#__PURE__*/React.createElement("div", {
-      style: { flex: 1, overflowY: "auto", padding: "16px 18px 80px", display: "flex", flexDirection: "column", gap: 18 }
-    },
-      ACHIEVEMENT_CATEGORIES.map(cat => {
-        const catAchievements = ACHIEVEMENTS.filter(a => a.cat === cat);
-        if (catAchievements.length === 0) return null;
-        const earnedInCat = catAchievements.filter(a => (achievementStats[a.stat] || 0) >= a.threshold).length;
-        // Stat label for the header (e.g., "17 days · Current: 32")
-        const statLabel = (() => {
-          const s = catAchievements[0].stat;
-          if (s === "visits") return achievementStats.visits + (achievementStats.visits === 1 ? " day opened" : " days opened");
-          if (s === "bestStreak") return "Best streak: " + achievementStats.bestStreak + "d";
-          if (s === "goals") return achievementStats.goals + " goal" + (achievementStats.goals === 1 ? "" : "s") + " completed";
-          if (s === "habitsActive") return achievementStats.habitsActive + " active habit" + (achievementStats.habitsActive === 1 ? "" : "s");
-          if (s === "xp") return achievementStats.xp.toLocaleString() + " XP earned";
-          // ── New goal-quality stats. Today these sit mid-list in
-          // Achiever/Builder so `catAchievements[0].stat` won't pick
-          // them up, but if the ordering ever shifts (or a new category
-          // is added that leads with one of these) the header still
-          // renders a sensible caption instead of falling back to "".
-          if (s === "smartGoals") return achievementStats.smartGoals + " SMART-filled goal" + (achievementStats.smartGoals === 1 ? "" : "s");
-          if (s === "goalsCreated") return achievementStats.goalsCreated + " goal" + (achievementStats.goalsCreated === 1 ? "" : "s") + " created";
-          if (s === "activeGoalsCleared") return achievementStats.activeGoalsCleared ? "Clean slate reached" : "Active goals in play";
-          if (s === "habitPerGoal") return achievementStats.habitPerGoal ? "Every goal has a habit" : "Some goals need a habit";
-          // Explorer category header: show discovery progress against
-          // the FEATURES catalog ("7 / 17 parts discovered").
-          if (s === "featuresExplored") return achievementStats.featuresExplored + " / " + FEATURES.length + " parts discovered";
-          return "";
-        })();
-        return /*#__PURE__*/React.createElement("div", { key: cat },
-          /*#__PURE__*/React.createElement("div", {
-            style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 10 }
-          },
-            /*#__PURE__*/React.createElement("div", null,
-              /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "var(--c-text-strong)", textTransform: "uppercase", letterSpacing: .5 } }, cat),
-              /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginTop: 2 } }, statLabel)
-            ),
-            /*#__PURE__*/React.createElement("div", {
-              style: { fontSize: 11, fontWeight: 700, color: earnedInCat === catAchievements.length ? "#2d5a2d" : "#9ca3af" }
-            }, earnedInCat + "/" + catAchievements.length)
-          ),
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
-            catAchievements.map(a => {
-              const statVal = achievementStats[a.stat] || 0;
-              const earned = statVal >= a.threshold;
-              const tier = ACHIEVEMENT_TIERS[a.tier] || ACHIEVEMENT_TIERS.Bronze;
-              const pct = Math.min(100, Math.round((statVal / a.threshold) * 100));
-              const unlockedAt = (data && data.achievementsUnlocked && data.achievementsUnlocked[a.id]) || null;
-              return /*#__PURE__*/React.createElement("div", {
-                key: a.id,
-                style: {
-                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
-                  background: earned ? tier.bg : "var(--c-surface-raised)",
-                  border: "1px solid " + (earned ? tier.border : "var(--c-border)"),
-                  borderRadius: 12,
-                  opacity: earned ? 1 : .75
-                }
-              },
-                /*#__PURE__*/React.createElement("div", {
-                  style: {
-                    width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                    background: earned ? "#fff" : "var(--c-surface-muted)",
-                    border: "2px solid " + (earned ? tier.color : "#d1d5db"),
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: earned ? tier.color : "#6b7280",
-                    filter: earned ? "none" : "grayscale(1) opacity(.55)"
-                  }
-                }, Glyph(a.icon, { size: 22, color: "currentColor", stroke: 1.6 })),
-                /*#__PURE__*/React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-                  /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 } },
-                    /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 700, color: "var(--c-text-strong)" } }, a.name),
-                    /*#__PURE__*/React.createElement("span", {
-                      style: { fontSize: 9, fontWeight: 700, color: tier.color, background: tier.bg, border: "1px solid " + tier.border, padding: "1px 6px", borderRadius: 8, textTransform: "uppercase", letterSpacing: .3 }
-                    }, a.tier)
-                  ),
-                  /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#6b7280", marginBottom: 4, lineHeight: 1.4 } }, a.desc),
-                  earned
-                    ? /*#__PURE__*/React.createElement("div", {
-                        style: { fontSize: 10, color: tier.color, fontWeight: 600 }
-                      },
-                        "\u2713 Unlocked",
-                        unlockedAt ? " \u00B7 " + new Date(unlockedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""
-                      )
-                    : /*#__PURE__*/React.createElement("div", null,
-                        /*#__PURE__*/React.createElement("div", {
-                          style: { height: 4, background: "var(--c-border)", borderRadius: 2, overflow: "hidden", marginBottom: 3 }
-                        },
-                          /*#__PURE__*/React.createElement("div", {
-                            style: { height: "100%", width: pct + "%", background: tier.color, borderRadius: 2, transition: "width .4s ease" }
-                          })
-                        ),
-                        /*#__PURE__*/React.createElement("div", {
-                          style: { fontSize: 10, color: "#9ca3af", fontWeight: 600 }
-                        }, statVal + " / " + a.threshold)
-                      )
-                )
-              );
-            })
-          )
-        );
-      })
-    )
-  ),
+  showAchievements && /*#__PURE__*/React.createElement(window.AchievementsModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { achievementStats },
+    callbacks: { onClose: () => setShowAchievements(false) }
+  }),
   // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
   // return-focus. autoFocus on the input keeps the keyboard cursor
   // there. Cancel uses data-a11y-dialog-hide; Create still does the
