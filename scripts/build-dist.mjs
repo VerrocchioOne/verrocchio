@@ -43,6 +43,8 @@ const FILES = [
   'lib/components/AchievementBadge.js',
   'lib/components/CompletionWave.js',
   'lib/constants.js',
+  'lib/modals/WelcomeModal.js',
+  'lib/modals/JournalDisclaimerModal.js',
   'manifest.json',
   'service-worker.js',
   'apple-touch-icon-1024.png',

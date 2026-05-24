@@ -105,6 +105,9 @@
 <script src="./lib/components/CompletionWave.js"></script>
 <!-- Wave 3 — App-scope constants extracted to lib/constants.js -->
 <script src="./lib/constants.js"></script>
+<!-- Wave 4.1 — Modal sub-systems (one file per modal). -->
+<script src="./lib/modals/WelcomeModal.js"></script>
+<script src="./lib/modals/JournalDisclaimerModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -20532,40 +20535,15 @@ function App() {
   // (which drops the conditional next render) AND data-a11y-dialog-hide
   // the dialog. Escape (a new affordance) routes through onHide, which
   // saves the seen flag too so users aren't shown the welcome again.
-  data && !data.welcomeModalSeen && !(data.habits || []).length && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => save({ ...data, welcomeModalSeen: true }),
-    ariaLabelledby: "welcome-title",
-    overlayStyle: { padding: 16, zIndex: 1000, alignItems: "center" },
-    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, width: "100%", textAlign: "center", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-  },
-      /*#__PURE__*/React.createElement("h2", {
-        id: "welcome-title",
-        style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 22 }
-      },
-        "Welcome to Verrocchio",
-        /*#__PURE__*/React.createElement("button", {
-          type: "button",
-          onClick: speakVerrocchio,
-          title: "Hear how it's pronounced",
-          "aria-label": "Pronounce Verrocchio",
-          style: { background: "transparent", border: "none", color: "var(--c-text-faint)", cursor: "pointer", padding: "2px 6px", marginLeft: 6, fontSize: 14, lineHeight: 1, verticalAlign: "middle" }
-        }, "🔊")
-      ),
-      /*#__PURE__*/React.createElement("p", {
-        style: { color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 20, fontSize: 14 }
-      }, "A calm place for the habits, goals, and reflections that compound into who you become."),
-      /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        "data-a11y-dialog-hide": true,
-        onClick: () => { save({ ...data, welcomeModalSeen: true }); setTab("habits"); },
-        style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, marginBottom: 8, cursor: "pointer", fontSize: 14 }
-      }, "Add my first habit"),
-      /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        "data-a11y-dialog-hide": true,
-        style: { display: "block", width: "100%", padding: "8px 16px", borderRadius: 10, border: "none", background: "transparent", color: "var(--c-text-faint)", fontSize: 13, cursor: "pointer" }
-      }, "Skip for now")
-  ),
+  data && !data.welcomeModalSeen && !(data.habits || []).length && /*#__PURE__*/React.createElement(window.WelcomeModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    callbacks: {
+      onClose: () => save({ ...data, welcomeModalSeen: true }),
+      onAddFirstHabit: () => { save({ ...data, welcomeModalSeen: true }); setTab("habits"); },
+      onSkip: () => save({ ...data, welcomeModalSeen: true }),
+      onPronounce: speakVerrocchio
+    }
+  }),
   // ── W3-T11: Journal / health disclaimer — surfaces once after the
   //    user's first journal save. Non-blocking; the entry was already
   //    committed in addJ() above.
@@ -20573,25 +20551,13 @@ function App() {
   // focus-trap/Escape are handled by the wrapper. "Got it" button keeps
   // its inline onClick because it has a side effect (writes the acked
   // flag to data); onHide also clears the open-state for the Esc path.
-  showJournalDisclaimer && /*#__PURE__*/React.createElement(A11yDialog, {
-    onHide: () => setShowJournalDisclaimer(false),
-    ariaLabelledby: "journal-disclaimer-title",
-    overlayStyle: { background: "rgba(0,0,0,0.5)", padding: 16, zIndex: 1000, alignItems: "center" },
-    cardStyle: { background: "var(--c-surface, #fff)", borderRadius: 16, padding: 24, maxWidth: 360, boxShadow: "0 10px 40px rgba(0,0,0,.3)" }
-  },
-      /*#__PURE__*/React.createElement("h2", {
-        id: "journal-disclaimer-title",
-        style: { fontFamily: "'Playfair Display', Georgia, serif", marginBottom: 12, color: "var(--c-text-strong, var(--c-text))", fontSize: 20 }
-      }, "A quick note"),
-      /*#__PURE__*/React.createElement("p", {
-        style: { color: "var(--c-text-soft)", lineHeight: 1.5, marginBottom: 16, fontSize: 14 }
-      }, "Verrocchio is not a medical device. Your journal entries are stored in your private Firebase account and visible only to you. If you're in crisis, please contact a qualified professional or local emergency services."),
-      /*#__PURE__*/React.createElement("button", {
-        type: "button",
-        onClick: () => { save({ ...data, journalDisclaimerAcked: true }); setShowJournalDisclaimer(false); },
-        style: { display: "block", width: "100%", padding: "12px 16px", borderRadius: 10, border: "none", background: "var(--accent, #4f46e5)", color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: 14 }
-      }, "Got it")
-  ),
+  showJournalDisclaimer && /*#__PURE__*/React.createElement(window.JournalDisclaimerModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    callbacks: {
+      onClose: () => setShowJournalDisclaimer(false),
+      onAck: () => { save({ ...data, journalDisclaimerAcked: true }); setShowJournalDisclaimer(false); }
+    }
+  }),
   // ── W3-T12: AI consent gate — deferred activation. AI_ENABLED is
   //    false in v1.0 so this modal is reachable only via the wired AI
   //    call sites once the constant flips in v1.1.

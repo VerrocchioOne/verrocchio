@@ -63,6 +63,9 @@ precaching.precacheAndRoute([
   { url: "./lib/components/CompletionWave.js",  revision: SHELL_VERSION },
   // Wave 3 — App-scope constants extracted.
   { url: "./lib/constants.js",                  revision: SHELL_VERSION },
+  // Wave 4.1 — modal sub-systems (one file per modal).
+  { url: "./lib/modals/WelcomeModal.js",            revision: SHELL_VERSION },
+  { url: "./lib/modals/JournalDisclaimerModal.js",  revision: SHELL_VERSION },
   { url: "./manifest.json",             revision: SHELL_VERSION },
   { url: "./apple-touch-icon-1024.png", revision: SHELL_VERSION }
 ]);
