@@ -119,6 +119,8 @@
 <script src="./lib/modals/AchievementsModal.js"></script>
 <script src="./lib/modals/CompleteGoalModal.js"></script>
 <script src="./lib/modals/TimeEntryCtxModal.js"></script>
+<script src="./lib/modals/LinkedMediaPlayerModal.js"></script>
+<script src="./lib/modals/CoachContextModal.js"></script>
 <!-- §13.4a (v75) — Per-view domain modules (READ derivations + curried writes). Loaded before view modules. -->
 <script src="./lib/domains/brief.js"></script>
 <script src="./lib/domains/habits.js"></script>
@@ -20670,202 +20672,42 @@ function App() {
   // standard return-to-home banner because setSelDate/setTab takes
   // them off the home tab — same banner shipped earlier on the
   // habit-review flow handles this for free.
-  coachContext && (() => {
-    const ctx = coachContext;
-    const close = () => setCoachContext(null);
-    const REASON_BLURB = {
-      "low-completion": "This habit's completion rate is below 30%. Common reasons: too ambitious for your current week (try a smaller version), wrong time of day (the body's energy doesn't match the task), or a missing dependency (e.g. 'meditate' needs a quiet room you don't have until later).",
-      "off-schedule":   "You keep logging this habit AFTER its scheduled section's cutoff. Your behavior has voted with its feet — moving the habit to the section where you actually do it usually fixes the streak overnight.",
-      "incomplete-details": "This item is missing area / SMART / target details. Filling them in unlocks the tracker math (streak math, momentum, correlation detection) and makes the AI briefing more useful.",
-      "yesterday-incomplete": "These habits were due yesterday but you haven't marked them done OR missed. Marking honestly (even 'missed') keeps the dataset clean — undecided habits weaken every other insight."
-    };
-    const reasonText = REASON_BLURB[ctx.reason] || "Verrocchio noticed something worth your attention.";
-    const renderHabitDetail = (h) => {
-      const cr = getCR(h);
-      const streak = getStreak(h);
-      const days = daysSinceLast(h);
-      const last14 = getLast14(h);
-      const linkedGoals = (h.goalIds || []).map(gid => (data.goals || []).find(g => String(g.id) === String(gid))).filter(Boolean);
-      const ht = HT.find(t => t.value === h.type);
-      const sec = SECTIONS.find(s => s.value === h.section);
-      return /*#__PURE__*/React.createElement("div", { key: h.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3, wordBreak: "break-word", overflowWrap: "anywhere" }
-        }, h.text),
-        /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }
-        },
-          ht && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: ht.color, background: ht.bg, border: "1px solid " + ht.border, borderRadius: 4, padding: "2px 7px" } }, ht.value),
-          sec && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-soft)", background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 4, padding: "2px 7px" } }, sec.label || h.section),
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "#c2410c", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 4, padding: "2px 7px" } }, "🔥 " + streak + "-day streak"),
-          /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: cr.pct >= 70 ? "#15803d" : cr.pct >= 40 ? "#b45309" : "#b91c1c", background: cr.pct >= 70 ? "var(--c-tint-success-bg)" : cr.pct >= 40 ? "#fef3c7" : "#fef2f2", border: "1px solid " + (cr.pct >= 70 ? "var(--c-tint-success-border)" : cr.pct >= 40 ? "#fde68a" : "#fecaca"), borderRadius: 4, padding: "2px 7px" } }, cr.pct + "% (30d)"),
-          days != null && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: "var(--c-text-faint)", background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 4, padding: "2px 7px" } }, "Last: " + days + "d ago")
-        ),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 } }, "Last 14 days"),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 3, marginBottom: 12 } },
-          last14.map((d, i) => /*#__PURE__*/React.createElement("div", {
-            key: i,
-            title: d.k + (d.done ? " — done" : " — not done"),
-            style: { width: 16, height: 16, borderRadius: 3, background: d.done ? "#2d5a2d" : "var(--c-border)" }
-          }))
-        ),
-        linkedGoals.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
-          /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "var(--c-text-faint)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 4 } }, "Linked goals"),
-          /*#__PURE__*/React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } },
-            linkedGoals.map(g => /*#__PURE__*/React.createElement("span", { key: g.id, style: { fontSize: 11, color: "#2d5a2d", background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 12, padding: "3px 9px" } }, "🎯 " + g.text.slice(0, 40)))
-          )
-        ),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 } },
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => { close(); setSelDate(tk()); setTab("habits"); },
-            style: { ...AB, padding: "8px 12px", fontSize: 12 }
-          }, "Open in Habits"),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => { close(); sEHabit(h); },
-            style: { background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
-          }, "Edit habit"),
-          !isDone(h, tk()) && /*#__PURE__*/React.createElement("button", {
-            onClick: () => { togHabit(h.id, tk(), "done"); close(); },
-            style: { background: "var(--c-tint-success-bg)", border: "1px solid var(--c-tint-success-border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#2d5a2d", cursor: "pointer" }
-          }, "Mark done now")
-        )
-      );
-    };
-    const renderGoalDetail = (g) => {
-      const sm = g.smart || {};
-      // §6 — coach detail panel's linked-habit stats must exclude
-      // parked habits so the "Today: X/Y linked done" chip is honest.
-      const linkedHabits = (data.habits || []).filter(h => habitLinkedToGoal(h, g.id) && !h.parked);
-      const linkedDone = linkedHabits.filter(h => isDone(h, tk())).length;
-      return /*#__PURE__*/React.createElement("div", { key: g.id, style: { background: "var(--c-surface-raised)", border: "1px solid var(--c-border)", borderRadius: 10, padding: 14, marginBottom: 10 } },
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 6, lineHeight: 1.3, wordBreak: "break-word", overflowWrap: "anywhere" } }, g.text),
-        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 10 } },
-          linkedHabits.length === 0 ? "No habits linked yet." : ("Today: " + linkedDone + "/" + linkedHabits.length + " linked habits done.")
-        ),
-        sm.specific && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: "var(--c-text-soft)", marginBottom: 8, lineHeight: 1.5 } }, "S: " + sm.specific),
-        sm.timebound && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "var(--c-text-faint)", marginBottom: 10 } }, "Target date: " + sm.timebound),
-        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 } },
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => { close(); setTab("goals"); },
-            style: { ...AB, padding: "8px 12px", fontSize: 12 }
-          }, "Open in Goals"),
-          /*#__PURE__*/React.createElement("button", {
-            onClick: () => { close(); sEGoal(g); },
-            style: { background: "var(--c-surface-muted)", border: "1px solid var(--c-border)", borderRadius: 8, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: "var(--c-text-soft)", cursor: "pointer" }
-          }, "Edit goal")
-        )
-      );
-    };
-    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
-    // return-focus from the wrapper. Body buttons that call close() (e.g.
-    // "Edit goal" → close() + sEGoal()) still work — close() clears
-    // myCoach state, the wrapper unmounts, and destroy() handles focus
-    // return.
-    return /*#__PURE__*/React.createElement(A11yDialog, {
-      onHide: close,
-      dialogProps: { "aria-label": "My Coach" },
-      overlayStyle: { background: "rgba(0,0,0,.55)", zIndex: 9999, padding: 16 },
-      cardStyle: { background: "var(--c-surface)", borderRadius: "20px 20px 0 0", padding: 20, maxWidth: 560, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 24px 60px rgba(0,0,0,.35)" }
-    },
-        /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }
-        },
-          /*#__PURE__*/React.createElement("div", null,
-            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#2d5a2d", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 } }, "My Coach"),
-            /*#__PURE__*/React.createElement("div", { style: { fontFamily: "'Lora',serif", fontSize: 18, fontWeight: 700, color: "var(--c-text-strong)" } }, "Why this surfaced")
-          ),
-          /*#__PURE__*/React.createElement("button", {
-            "aria-label": "Close",
-            "data-a11y-dialog-hide": true,
-            style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", color: "var(--c-text-faint)", fontSize: 16 }
-          }, "×")
-        ),
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 13, color: "var(--c-text-soft)", lineHeight: 1.55, marginBottom: 14, padding: 12, background: "var(--c-tint-info-bg)", border: "1px solid var(--c-tint-info-border)", borderRadius: 8 }
-        }, reasonText),
-        ctx.kind === "habit"        && ctx.habit && renderHabitDetail(ctx.habit),
-        ctx.kind === "goal"         && ctx.goal  && renderGoalDetail(ctx.goal),
-        ctx.kind === "habit-batch"  && (ctx.habits || []).slice(0, 5).map(h => renderHabitDetail(h)),
-        ctx.kind === "habit-batch"  && (ctx.habits || []).length > 5 && /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, color: "var(--c-text-faint)", textAlign: "center", padding: "8px 0" }
-        }, "+ " + ((ctx.habits || []).length - 5) + " more — open Habits to see all.")
-    );
-  })(),
-  linkedMediaPlayer && (() => {
-    const { kind, entityId, item } = linkedMediaPlayer;
-    if (!item) return null;
-    const close = () => {
-      if (linkedMediaTimerRef.current) { clearTimeout(linkedMediaTimerRef.current); linkedMediaTimerRef.current = null; }
-      setLinkedMediaPlayer(null);
-    };
-    const ft = (item.fileType || "");
-    const isAudio = ft.startsWith("audio/");
-    const isVideo = ft.startsWith("video/");
-    const src = item.downloadURL || item.fileData;
-    const onEnded = () => {
-      // Habit auto-complete on audio finish. Only fires when the day's
-      // entry is "none" — if the user already marked it done OR
-      // explicitly missed it during playback, we do nothing rather
-      // than reset their deliberate decision.
-      if (kind === "habit" && isAudio) {
-        const cur = latestData.current || data;
-        const habit = (cur.habits || []).find(h => String(h.id) === String(entityId));
-        const today = tk();
-        const v = habit && habit.completions && habit.completions[today];
-        const alreadyDecided = v === true || v === "done" || v === "missed";
-        if (habit && !alreadyDecided) {
-          togHabit(entityId);
+  coachContext && /*#__PURE__*/React.createElement(window.CoachContextModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { ctx: coachContext },
+    callbacks: {
+      onClose: () => setCoachContext(null),
+      onOpenHabits: () => { setCoachContext(null); setSelDate(tk()); setTab("habits"); },
+      onEditHabit: (h) => { setCoachContext(null); sEHabit(h); },
+      onMarkHabitDone: (h) => { togHabit(h.id, tk(), "done"); setCoachContext(null); },
+      onOpenGoals: () => { setCoachContext(null); setTab("goals"); },
+      onEditGoal: (g) => { setCoachContext(null); sEGoal(g); }
+    }
+  }),
+  linkedMediaPlayer && /*#__PURE__*/React.createElement(window.LinkedMediaPlayerModal, {
+    data, dispatch, deviceProfile: window.__deviceProfile,
+    state: { player: linkedMediaPlayer },
+    callbacks: {
+      onClose: () => {
+        if (linkedMediaTimerRef.current) { clearTimeout(linkedMediaTimerRef.current); linkedMediaTimerRef.current = null; }
+        setLinkedMediaPlayer(null);
+      },
+      onMediaEnded: () => {
+        const { kind, entityId, item } = linkedMediaPlayer;
+        const ft = (item && item.fileType) || "";
+        const isAudio = ft.startsWith("audio/");
+        if (kind === "habit" && isAudio) {
+          const cur = latestData.current || data;
+          const habit = (cur.habits || []).find(h => String(h.id) === String(entityId));
+          const today = tk();
+          const v = habit && habit.completions && habit.completions[today];
+          const alreadyDecided = v === true || v === "done" || v === "missed";
+          if (habit && !alreadyDecided) { togHabit(entityId); }
         }
+        linkedMediaTimerRef.current = setTimeout(() => setLinkedMediaPlayer(null), 800);
       }
-      // Auto-close after a short pause so the user sees the
-      // completion settle before the overlay disappears. Tracked in a
-      // ref so manual close can clear it (avoids a duplicate state
-      // update + the React unmount-during-pending-state warning).
-      linkedMediaTimerRef.current = setTimeout(close, 800);
-    };
-    // Migrated to A11yDialog (Port #6+#9 batch 3): focus-trap + Escape +
-    // return-focus. close() also clears the onEnded auto-close timer.
-    // The wrapper's onHide → close() ensures the timer is cleared on
-    // Escape and backdrop click too.
-    return /*#__PURE__*/React.createElement(A11yDialog, {
-      onHide: close,
-      dialogProps: { "aria-label": (kind === "habit" ? "Habit linked audio" : "Goal linked audio") },
-      overlayStyle: { background: "rgba(0,0,0,.55)", alignItems: "center", zIndex: 9999, padding: 16 },
-      cardStyle: { background: "#fff", borderRadius: 16, padding: 18, maxWidth: 420, boxShadow: "0 24px 60px rgba(0,0,0,.35)" }
-    },
-        /*#__PURE__*/React.createElement("div", {
-          style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }
-        },
-          /*#__PURE__*/React.createElement("div", {
-            style: { fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }
-          }, kind === "habit" ? "Linked to habit" : "Linked to goal"),
-          /*#__PURE__*/React.createElement("button", {
-            "aria-label": "Close",
-            "data-a11y-dialog-hide": true,
-            style: { background: "var(--c-surface-muted)", border: "none", borderRadius: 8, width: 32, height: 32, cursor: "pointer", color: "#6b7280", fontSize: 16 }
-          }, "×")
-        ),
-        /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 16, fontWeight: 700, color: "var(--c-text-strong)", marginBottom: 12, wordBreak: "break-word" }
-        }, item.title || item.fileName || "Linked media"),
-        // Custom audio with onEnded — can't use BgAudio here because
-        // it doesn't expose the ended event. Inline <audio> still
-        // wires MediaSession via the OS for free.
-        isAudio && /*#__PURE__*/React.createElement("audio", {
-          src, controls: true, autoPlay: true, preload: "metadata", playsInline: true,
-          onEnded,
-          style: { width: "100%" }
-        }),
-        isVideo && /*#__PURE__*/React.createElement("video", {
-          src, controls: true, autoPlay: true, playsInline: true, preload: "metadata",
-          onEnded,
-          style: { width: "100%", maxHeight: 320, borderRadius: 8 }
-        }),
-        kind === "habit" && isAudio && /*#__PURE__*/React.createElement("div", {
-          style: { fontSize: 11, color: "#6b7280", marginTop: 10, lineHeight: 1.45 }
-        }, "Habit auto-completes when this audio finishes.")
-    );
-  })(),
+    }
+  }),
   // Voice-capture modal. Opened from the header mic. Listens via
   // the Web Speech API, shows the live transcript building, and
   // routes the captured text into a goal / habit / to-do / journal
