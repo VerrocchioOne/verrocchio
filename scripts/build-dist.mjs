@@ -71,6 +71,7 @@ const FILES = [
   'lib/components/AchievementBadge.js',
   'lib/components/CompletionWave.js',
   'lib/components/VoiceMicButton.js',
+  'lib/components/LinkedContent.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
   'lib/modals/JournalDisclaimerModal.js',
