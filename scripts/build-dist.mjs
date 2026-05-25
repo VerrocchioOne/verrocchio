@@ -82,6 +82,7 @@ const FILES = [
   'lib/dp.js',
   'lib/app-config.js',
   'lib/habit-helpers.js',
+  'lib/device-profile.js',
   'lib/sw-register.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
