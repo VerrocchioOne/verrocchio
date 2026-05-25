@@ -110,6 +110,7 @@
 <script src="./lib/components/ErrorBoundary.js"></script>
 <script src="./lib/fmt.js"></script>
 <script src="./lib/default-data.js"></script>
+<script src="./lib/dp.js"></script>
 <!-- Wave 3 — App-scope constants extracted to lib/constants.js -->
 <script src="./lib/constants.js"></script>
 <!-- Wave 4.1 — Modal sub-systems (one file per modal). -->
@@ -1678,43 +1679,7 @@ const AchievementBadge = window.AchievementBadge;
 // of the Habits tab. `rates` is an array of 14 numbers in [0,1].
 // CompletionWave extracted to lib/components/CompletionWave.js (Wave 2.3).
 const CompletionWave = window.CompletionWave;
-const _dr = {
-  from: null,
-  over: null
-};
-function dp(idx, items, reorder) {
-  return {
-    draggable: true,
-    onDragStart: e => {
-      _dr.from = idx;
-      e.dataTransfer.effectAllowed = "move";
-    },
-    onDragEnter: () => {
-      _dr.over = idx;
-    },
-    onDragOver: e => {
-      e.preventDefault();
-    },
-    onDrop: e => {
-      e.preventDefault();
-      if (_dr.from === null || _dr.over === null || _dr.from === _dr.over) {
-        _dr.from = null;
-        _dr.over = null;
-        return;
-      }
-      const n = [...items];
-      const [m] = n.splice(_dr.from, 1);
-      n.splice(_dr.over, 0, m);
-      reorder(n);
-      _dr.from = null;
-      _dr.over = null;
-    },
-    onDragEnd: () => {
-      _dr.from = null;
-      _dr.over = null;
-    }
-  };
-}
+// Wave 5.13 — _dr + dp now live in lib/dp.js.
 // Wave 5.12 — DD (default per-user state) now lives in lib/default-data.js.
 // hydrateCloudDoc — extracted to lib/hydration.js (Phase 2 OSS-port
 // Port #3). Loaded as a <script> in the head, so the binding is in
