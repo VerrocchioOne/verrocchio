@@ -112,6 +112,7 @@
 <script src="./lib/default-data.js"></script>
 <script src="./lib/dp.js"></script>
 <script src="./lib/app-config.js"></script>
+<script src="./lib/slots.js"></script>
 <script src="./lib/habit-helpers.js"></script>
 <script src="./lib/device-profile.js"></script>
 <script src="./lib/time-of-day.js"></script>
@@ -8291,60 +8292,10 @@ function App() {
   // ordered. Defined early so all downstream derived state can use it.
   const _todayKForFuture = tk();
   const isFutureHabit = h => !!(h && (h.parked || (h.startDate && h.startDate > _todayKForFuture)));
-  // §5.8b — Slot IDs are "<section>:<localIdx>" where localIdx is the
-  // 0-based position of that occurrence within slotSections filtered
-  // to that section. Pure helpers, no React state. slotSections may
-  // contain duplicates (e.g. ["morning","morning","afternoon"]) so
-  // multiple chunks of the same habit can land in the same time
-  // section (2x morning study). MAX_SLOTS caps the per-habit total
-  // at 12; the stepper UI enforces this and the migration is tolerant
-  // of any cap change later. Slot IDs are stable identifiers used as
-  // keys in slotCompletions / slotCompletionTimes / swipeAnim.
-  const MAX_SLOTS = 12;
-  const slotIdForIndex = (slotSections, arrayIdx) => {
-    if (!Array.isArray(slotSections)) return null;
-    const section = slotSections[arrayIdx];
-    if (section == null) return null;
-    let localIdx = 0;
-    for (let i = 0; i < arrayIdx; i++) if (slotSections[i] === section) localIdx++;
-    return section + ":" + localIdx;
-  };
-  const parseSlotId = id => {
-    if (!id || typeof id !== "string") return null;
-    const i = id.indexOf(":");
-    if (i === -1) return { section: id, localIdx: 0 };
-    const idx = parseInt(id.slice(i + 1), 10);
-    return { section: id.slice(0, i), localIdx: isFinite(idx) ? idx : 0 };
-  };
-  // §5.8b — Map of section → number of times it appears in
-  // slotSections. Used by the stepper UI ("morning x 2") and by the
-  // renderer to decide whether a slot row needs the "#N" suffix.
-  const slotSectionCounts = slotSections => {
-    const counts = {};
-    for (const s of (slotSections || [])) counts[s] = (counts[s] || 0) + 1;
-    return counts;
-  };
-  // §5.8b — Materialize a slotSections array into the per-row objects
-  // the renderer iterates. Each entry pairs a section name with its
-  // canonical slot ID + the local index of that occurrence + the
-  // total count of that section in the array (used to decide whether
-  // to suffix the row label with "#N").
-  const slotRowsFor = slotSections => {
-    if (!Array.isArray(slotSections)) return [];
-    const counts = slotSectionCounts(slotSections);
-    let seen = {};
-    return slotSections.map((section, arrayIdx) => {
-      const localIdx = seen[section] || 0;
-      seen[section] = localIdx + 1;
-      return {
-        section,
-        arrayIdx,
-        localIdx,
-        countInSection: counts[section] || 1,
-        slotId: section + ":" + localIdx
-      };
-    });
-  };
+  // §5.8b — Slot helpers (MAX_SLOTS / slotIdForIndex / parseSlotId /
+  // slotSectionCounts / slotRowsFor) live in lib/slots.js, loaded as a
+  // classic script earlier in the page so their consts are script-scope
+  // globals available to every App-scope reference here.
   // A goal is "future" if no currently-active (non-future) habit is
   // linked to it. Mirrors the existing Future Goals drawer rule but
   // routes through isFutureHabit so a goal whose only linked habits

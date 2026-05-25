@@ -101,6 +101,7 @@ precaching.precacheAndRoute([
   { url: "./lib/default-data.js",               revision: SHELL_VERSION },
   { url: "./lib/dp.js",                         revision: SHELL_VERSION },
   { url: "./lib/app-config.js",                 revision: SHELL_VERSION },
+  { url: "./lib/slots.js",                      revision: SHELL_VERSION },
   { url: "./lib/habit-helpers.js",              revision: SHELL_VERSION },
   { url: "./lib/device-profile.js",             revision: SHELL_VERSION },
   { url: "./lib/time-of-day.js",                revision: SHELL_VERSION },

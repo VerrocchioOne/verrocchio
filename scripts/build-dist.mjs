@@ -82,6 +82,7 @@ const FILES = [
   'lib/default-data.js',
   'lib/dp.js',
   'lib/app-config.js',
+  'lib/slots.js',
   'lib/habit-helpers.js',
   'lib/device-profile.js',
   'lib/time-of-day.js',
