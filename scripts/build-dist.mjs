@@ -83,6 +83,7 @@ const FILES = [
   'lib/app-config.js',
   'lib/habit-helpers.js',
   'lib/device-profile.js',
+  'lib/time-of-day.js',
   'lib/sw-register.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
