@@ -78,6 +78,7 @@ const FILES = [
   'lib/components/Icons.js',
   'lib/components/ErrorBoundary.js',
   'lib/fmt.js',
+  'lib/default-data.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
   'lib/modals/JournalDisclaimerModal.js',
