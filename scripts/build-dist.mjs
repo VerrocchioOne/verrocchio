@@ -80,6 +80,7 @@ const FILES = [
   'lib/fmt.js',
   'lib/default-data.js',
   'lib/dp.js',
+  'lib/app-config.js',
   'lib/constants.js',
   'lib/modals/WelcomeModal.js',
   'lib/modals/JournalDisclaimerModal.js',
