@@ -7790,49 +7790,11 @@ function App() {
     return `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`;
   };
 
-  /* §14.3 — Detect "additive habits crowding out non-negotiables".
-     Pure, deterministic — no AI. Returns null when the pattern doesn't
-     fit so the Brief-tab card can render conditionally. Window = 14
-     days. Thresholds: non-negotiable < 50% complete, additive > 80%
-     complete. Also requires the user is actively logging (>=3 done
-     completions in the last 7 days) to avoid firing on dormant users.
-     Picks the worst-missed non-negotiable + the most-reliable additive
-     when multiple candidates exist. */
-  const detectAdditiveCrowding = (habits, todayDate) => {
-    const days = [];
-    for (let i = 0; i < 14; i++) {
-      const d = new Date(todayDate);
-      d.setDate(d.getDate() - i);
-      days.push(dk(d));
-    }
-    const stats = (habits || []).map(h => {
-      let done = 0;
-      days.forEach(k => {
-        const v = h.completions && h.completions[k];
-        if (v === "done" || v === true) done++;
-      });
-      return { h, done, rate: done / 14 };
-    }).filter(s => s.h && s.h.text);
-    const missedNonNeg = stats.filter(s => s.h.importance === "Non-Negotiable" && s.rate < 0.5);
-    const reliableAdd = stats.filter(s => s.h.importance === "Additive" && s.rate > 0.8);
-    if (!missedNonNeg.length || !reliableAdd.length) return null;
-    const lastWeekKeys = days.slice(0, 7);
-    const isActive = stats.some(s => lastWeekKeys.filter(k => {
-      const v = s.h.completions && s.h.completions[k];
-      return v === "done" || v === true;
-    }).length >= 3);
-    if (!isActive) return null;
-    missedNonNeg.sort((a, b) => a.rate - b.rate);
-    reliableAdd.sort((a, b) => b.rate - a.rate);
-    const target = missedNonNeg[0];
-    const culprit = reliableAdd[0];
-    return {
-      nonNeg: target.h,
-      nonNegDone: target.done,
-      additive: culprit.h,
-      additiveDone: culprit.done
-    };
-  };
+  /* §14.3 — "additive habits crowding out non-negotiables" detector.
+     Pure logic lives in lib/domains/brief.js (briefDomain.detectAdditiveCrowding);
+     keeping a same-named local binding here for back-compat with the
+     two helpers-bag spreads that pass it through to BriefView. */
+  const detectAdditiveCrowding = window.briefDomain.detectAdditiveCrowding;
 
   /* §14.3 — Action handlers for the crowding card. Reorder only fires
      when both habits live in the same `section` (cross-section reorder

@@ -281,3 +281,88 @@ test("urgentTodosForBrief surfaces overdue + due-within-3-days, sorted ascending
   assert.equal(out[0].days, -2);
   assert.equal(out[1].days, 1);
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// detectAdditiveCrowding — §14.3
+// ─────────────────────────────────────────────────────────────────────
+
+// Helper: a habit with `completions` filled in for the N most-recent of
+// the past 14 days (oldest filled day = N-1 days ago, newest = today).
+const habitWithRecentRate = (id, text, importance, doneInLast14) => {
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const completions = {};
+  for (let i = 0; i < doneInLast14; i++) {
+    const d = new Date(today0); d.setDate(d.getDate() - i);
+    completions[dk(d)] = "done";
+  }
+  return { id, text, importance, completions };
+};
+
+test("detectAdditiveCrowding fires when a non-negotiable is missed and an additive is reliable", () => {
+  // Arrange — 3/14 = 21% non-negotiable (< 50%), 13/14 = 93% additive (> 80%)
+  const habits = [
+    habitWithRecentRate(1, "Meditate", "Non-Negotiable", 3),
+    habitWithRecentRate(2, "Read",     "Additive",       13)
+  ];
+  // Act
+  const out = briefDomain.detectAdditiveCrowding(habits, new Date());
+  // Assert
+  assert.ok(out, "expected a crowding pair");
+  assert.equal(out.nonNeg.id, 1);
+  assert.equal(out.additive.id, 2);
+  assert.equal(out.nonNegDone, 3);
+  assert.equal(out.additiveDone, 13);
+});
+
+test("detectAdditiveCrowding returns null when no non-negotiable is missed enough (>=50%)", () => {
+  const habits = [
+    habitWithRecentRate(1, "Meditate", "Non-Negotiable", 8),  // ~57%
+    habitWithRecentRate(2, "Read",     "Additive",       13)
+  ];
+  assert.equal(briefDomain.detectAdditiveCrowding(habits, new Date()), null);
+});
+
+test("detectAdditiveCrowding returns null when no additive is reliable enough (<=80%)", () => {
+  const habits = [
+    habitWithRecentRate(1, "Meditate", "Non-Negotiable", 2),
+    habitWithRecentRate(2, "Read",     "Additive",       10)  // ~71%
+  ];
+  assert.equal(briefDomain.detectAdditiveCrowding(habits, new Date()), null);
+});
+
+test("detectAdditiveCrowding returns null on a dormant user (<3 done in last 7 days)", () => {
+  // Arrange — all completions are 7+ days ago, so last-week activity = 0
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const olderOnly = (n) => {
+    const c = {};
+    for (let i = 0; i < n; i++) {
+      const d = new Date(today0); d.setDate(d.getDate() - (7 + i));
+      c[dk(d)] = "done";
+    }
+    return c;
+  };
+  const habits = [
+    { id: 1, text: "Meditate", importance: "Non-Negotiable", completions: olderOnly(3)  },
+    { id: 2, text: "Read",     importance: "Additive",       completions: olderOnly(12) }
+  ];
+  assert.equal(briefDomain.detectAdditiveCrowding(habits, new Date()), null);
+});
+
+test("detectAdditiveCrowding picks the worst-missed non-negotiable + best-reliable additive when multiple candidates exist", () => {
+  const habits = [
+    habitWithRecentRate(1, "Meditate", "Non-Negotiable", 6),  // 43%
+    habitWithRecentRate(2, "Stretch",  "Non-Negotiable", 2),  // 14% — worst
+    habitWithRecentRate(3, "Read",     "Additive",       12), // 86%
+    habitWithRecentRate(4, "Podcast",  "Additive",       14)  // 100% — best
+  ];
+  const out = briefDomain.detectAdditiveCrowding(habits, new Date());
+  assert.ok(out);
+  assert.equal(out.nonNeg.id, 2, "expected the lowest-rate non-negotiable");
+  assert.equal(out.additive.id, 4, "expected the highest-rate additive");
+});
+
+test("detectAdditiveCrowding handles empty/null input gracefully", () => {
+  assert.equal(briefDomain.detectAdditiveCrowding([], new Date()), null);
+  assert.equal(briefDomain.detectAdditiveCrowding(null, new Date()), null);
+  assert.equal(briefDomain.detectAdditiveCrowding(undefined, new Date()), null);
+});
