@@ -31,6 +31,12 @@ These are not feature requests — they are process directives that govern HOW w
 
 ---
 
+### Weekly debug pass — 2026-05-25
+
+5 investigations completed. (1) icalendar MODULE_NOT_FOUND (recurring) — **environment workaround** (npm install); permanent fix requires user to invoke `/session-start-hook` once to install the auto-install hook. (2) getFreq/isHabitDueOn three-way duplication — **fixed** (extracted to `lib/constants.js`, inline definitions in `index.html` replaced with tombstone comments, 20 regression tests added including all §audit-P1 gate scenarios; commit `8f4cf6a`). (3) §5.2 same-section multi-slot reorder — **triage updated**: prior entry was written against SortableJS (removed v71); v72-v74 button-based reorder (`moveRowWithinSection`/`slotOrders`) eliminates the original failure mode by design. (4) Weekly Review hour gate in BriefView — **triaged** (confirmed fixed since 2026-05-13 at `BriefView.js:897-898`; no regression). (5) `habitsDueOnDay` startDate gate — **triaged** (confirmed correct at `calendar.js:151`; lexicographic YYYY-MM-DD comparison matches §audit-P1 semantics).
+
+---
+
 ## 2026-05-23 — 1000-line hard cap rule
 
 ### Verbatim

@@ -87,6 +87,56 @@ SHELL_VERSION v75. Integration commits: `9f9c585` (Phase A), `0d36f10` (Phase B 
 
 ---
 
+### 2026-05-25 — habitsDueOnDay startDate gate matches §audit-P1 semantics — confirmed correct
+
+- **Phase 1 — Root cause:** Review item: does `habitsDueOnDay` in `lib/domains/calendar.js` respect the same startDate cutoff that `allYesterdayHabitsReviewed` had fixed in §audit-P1? If it didn't, newly created habits could appear in the calendar timeline before their start date.
+- **Phase 2 — Pattern:** The §audit-P1 fix for `allYesterdayHabitsReviewed` (2026-05-18) used `h.startDate > yKey` to exclude habits not yet active on the queried date. Calendar's `habitsDueOnDay` uses an equivalent lexicographic check at line 151: `if (h.startDate && dateKey < h.startDate) return false;`. Both are YYYY-MM-DD string comparisons, which are lexicographically equivalent to date arithmetic.
+- **Phase 3 — Hypothesis:** "I think the check is correct." Confirmed — `"2026-05-25" < "2026-06-01"` evaluates true in JS string comparison, matching the expected behavior.
+- **Phase 4 — Fix:** No code change. Implementation at `lib/domains/calendar.js:151` is correct. Verified by the existing `tests/domains/calendar.test.mjs` suite (all green).
+
+---
+
+### 2026-05-25 — Weekly Review hour gate in BriefView — confirmed fixed since 2026-05-13
+
+- **Phase 1 — Root cause:** Review item from TODO: weekly review prompt was showing at wrong times (before the user-configured start hour). The gate at `lib/views/BriefView.js:897-898` was suspected of not enforcing the hour check.
+- **Phase 2 — Pattern:** The fix note in the codebase says "Weekly Review hour gate fixed 2026-05-13". Code at `BriefView.js:897-898` reads:
+  ```js
+  if (now.getDay() !== wr.day) return null;
+  if (now.getHours() < (wr.hour == null ? 0 : wr.hour)) return null;
+  ```
+  The second check correctly defaults to 0 (midnight) when `wr.hour` is null, blocking the prompt until the configured hour on the correct day of week.
+- **Phase 3 — Hypothesis:** "I think this is already fixed." Confirmed — both day AND hour gates are in place. No regression since 2026-05-13.
+- **Phase 4 — Fix:** No code change. Implementation confirmed correct. TODO annotation is accurate.
+
+---
+
+### 2026-05-25 — §5.2 same-section multi-slot reorder — prior SortableJS entry is stale (SortableJS removed v71)
+
+- **Phase 1 — Root cause:** The 2026-05-18 debug entry for §5.2 was written against the SortableJS implementation (v57). Code audit this session found a comment at `index.html:43` confirming SortableJS was removed in v71 (the v72-v74 rewrite introduced button-based ▲/▼/⇶ reorder via `moveRowWithinSection` / `gatherSectionRowsSorted` / `slotOrders`). The SortableJS `onEnd` early-return bug (`if (oldSlots[slotArrayIdx] === newSection) return`) no longer exists.
+- **Phase 2 — Pattern:** Current same-section slot ordering uses `h.slotOrders[i]` (per-slot integer) read by `sectionRowsForRender` in `lib/domains/habits.js:162`. `moveRowWithinSection` updates `slotOrders` for the specific slot being moved. Button-based UI avoids the DOM-snap-back issue that plagued SortableJS — clicking ▲/▼ triggers an immediate data write + React re-render, no pointer capture needed.
+- **Phase 3 — Hypothesis:** "I think the §5.2 bug no longer exists under the v72-v74 implementation." Plausible — the code path is structurally different. Not confirmed with a live device test (no browser available in this environment), but the SortableJS-specific failure mode (early return, no data write) is eliminated by design.
+- **Phase 4 — Fix:** No code change. Prior §5.2 triage entry is superseded by v71/v72/v74 work. Updated TODO accordingly in this session's USER_REQUESTS.md summary.
+
+---
+
+### 2026-05-25 — getFreq/isHabitDueOn duplication: extracted to lib/constants.js, 20 regression tests added
+
+- **Phase 1 — Root cause:** `getFreq` and `isHabitDueOn` were defined three times: inline in `index.html` (~L1640-L1713), in `lib/domains/calendar.js` (`_getFreq` / `_isHabitDueOn` inside the IIFE), and in `lib/domains/habits.js` (`_getFreq` / `isDueOn`). The canonical versions were the inline ones, but they lived inside a non-exported `<script>` block — untestable from Node. The `lib/constants.js` file (where `FREQ` lives) had no exported version, so test files had no access to the authoritative implementation.
+- **Phase 2 — Pattern:** `lib/merge.js` established the pattern for extracting a pure function from `index.html` scope to a dual-load file (browser script-scope global + `module.exports`). `lib/constants.js` already exports `IMP`, `HT`, `SECTIONS`, `DURS`, `FREQ`, and the form style objects. Adding `getFreq` + `isHabitDueOn` there (after the `FREQ` array, their natural home) keeps them co-located with the data they interpret and makes them testable.
+- **Phase 3 — Hypothesis:** "I think adding getFreq + isHabitDueOn to lib/constants.js with matching exports, removing the inline definitions from index.html (leaving tombstone comments), and writing 20 regression tests that cover all 6 cadences + the §audit-P1 gate guards will (a) eliminate the duplication risk, (b) give the canonical implementation a regression harness, and (c) verify the §audit-P1 fixes that were previously triaged as 'confirmed by code review but untested'." **Confirmed** — 20/20 tests green, including all 6 §audit-P1 gate scenarios.
+- **Phase 4 — Fix:** `lib/constants.js` (added `getFreq` + `isHabitDueOn` + updated `module.exports`). `index.html` (replaced ~20 lines of inline definitions with 2-line tombstone comments; script-scope availability preserved because `lib/constants.js` loads before the inline `<script>`). `tests/constants.test.mjs` (new file, 20 tests). Stale "Mirrors index.html" comments in `lib/domains/habits.js` (3 lines) and `lib/domains/calendar.js` (2 lines) updated to "Mirrors lib/constants.js". **Commit: `8f4cf6a`**.
+
+---
+
+### 2026-05-25 — icalendar MODULE_NOT_FOUND (recurring) — permanent session-start hook blocked
+
+- **Phase 1 — Root cause:** Same as 2026-05-18: `node --test tests/icalendar.test.mjs` fails immediately with `MODULE_NOT_FOUND` for `ical.js`. Cloud container starts fresh with empty `node_modules/`; the `session-start.sh` hook that would run `npm install` automatically was never created (the 2026-05-18 investigation recommended it but the hook creation was blocked by the auto-mode classifier, which flagged `.claude/hooks/` writes as a Self-Modification path outside the scoped debug request).
+- **Phase 2 — Pattern:** The `/session-start-hook` skill exists to install this hook permanently. The blocker was authorization scope, not technical difficulty.
+- **Phase 3 — Hypothesis:** "I think the user needs to explicitly invoke `/session-start-hook` once to install the `npm install` hook so every future cloud session starts with devDependencies present." Workaround for this session: `npm install` (confirmed — all 24 icalendar tests green afterward).
+- **Phase 4 — Fix:** No code change this session. `npm install` as one-shot workaround. Permanent fix: user invokes `/session-start-hook` skill in a dedicated session. Recommend to user in this session's summary.
+
+---
+
 ### 2026-05-18 — §7.1 Reflect tab "past entries not surfaced" — already fixed 2026-05-15
 
 - **Phase 1 — Root cause:** TODO §7.1 listed "previously written entries not surfaced" as a bug. Code audit found the fix was applied 2026-05-15: "Past Entries · N total" header added at `index.html:19303`, filter-aware empty state added ("No entries today. Tap 'All' to see your full history (N).").
