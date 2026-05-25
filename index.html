@@ -1637,26 +1637,7 @@ const dowDisplayRank = d => {
   const i = DOW_ORDER.indexOf(d);
   return i === -1 ? 99 : i;
 };
-/* Normalize any habit shape to a
-   `{ type, days, day, monthDay, month }` frequency object.
-   - Legacy habits without a `.frequency` field render as "Daily".
-   - Legacy `weekly-day` cadence is collapsed into `weekly` (its `day`
-     value is preserved, so an existing "every Tuesday" habit stays
-     on Tuesday after the merge).
-   - `monthDay` / `month` are new fields for monthly / quarterly /
-     annual habits; they default to null when absent. */
-const getFreq = h => {
-  const f = h && h.frequency;
-  if (!f || !f.type) return { type: "daily", days: [], day: null, monthDay: null, month: null };
-  const rawType = f.type === "weekly-day" ? "weekly" : f.type;
-  return {
-    type: rawType,
-    days: Array.isArray(f.days) ? f.days : [],
-    day: typeof f.day === "number" ? f.day : null,
-    monthDay: typeof f.monthDay === "number" ? f.monthDay : null,
-    month:    typeof f.month    === "number" ? f.month    : null
-  };
-};
+// getFreq — defined in lib/constants.js (loaded before this script).
 const freqRank = h => {
   const t = getFreq(h).type;
   const row = FREQ.find(f => f.value === t);
@@ -1677,40 +1658,7 @@ const habitGoalIds = h => {
 // new goalIds array or the legacy goalId scalar.
 const habitLinkedToGoal = (h, goalId) =>
   habitGoalIds(h).some(gid => String(gid) === String(goalId));
-// Whether a habit is "due" on a given date based on its frequency.
-// Handles every cadence the FREQ list supports:
-//   daily      → always due
-//   weekdays   → today's day-of-week is in the days array
-//   weekly     → today's day-of-week === fq.day
-//   monthly    → today's date === fq.monthDay
-//   quarterly  → today's month is on the 3-month cadence from fq.month
-//                AND today's date === fq.monthDay
-//   annual     → today's month === fq.month AND today's date === fq.monthDay
-// Legacy habits without a frequency field default to "daily" (always due).
-const isHabitDueOn = (h, dateKey) => {
-  const fq = getFreq(h);
-  if (!fq || fq.type === "daily") return true;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey || "");
-  if (!m) return true; // unparsable date → don't hide
-  const dt = new Date(+m[1], +m[2] - 1, +m[3]);
-  const dow = dt.getDay();
-  const day = dt.getDate();
-  const mon = dt.getMonth();
-  if (fq.type === "weekdays") return Array.isArray(fq.days) && fq.days.includes(dow);
-  if (fq.type === "weekly")   return (fq.day == null ? 1 : fq.day) === dow;
-  if (fq.type === "monthly")  return (fq.monthDay || 1) === day;
-  if (fq.type === "quarterly") {
-    const anchorMonth = fq.month == null ? 0 : fq.month;
-    const anchorDay   = fq.monthDay || 1;
-    return ((mon - anchorMonth) % 3 + 3) % 3 === 0 && anchorDay === day;
-  }
-  if (fq.type === "annual") {
-    const anchorMonth = fq.month == null ? 0 : fq.month;
-    const anchorDay   = fq.monthDay || 1;
-    return mon === anchorMonth && day === anchorDay;
-  }
-  return true;
-};
+// isHabitDueOn — defined in lib/constants.js (loaded before this script).
 const freqLabel = h => {
   const fq = getFreq(h);
   if (fq.type === "weekdays") {
