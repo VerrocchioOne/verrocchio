@@ -366,3 +366,73 @@ test("detectAdditiveCrowding handles empty/null input gracefully", () => {
   assert.equal(briefDomain.detectAdditiveCrowding(null, new Date()), null);
   assert.equal(briefDomain.detectAdditiveCrowding(undefined, new Date()), null);
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// completionDayCount — gate denominator for the AI Daily Briefing
+// ─────────────────────────────────────────────────────────────────────
+
+test("completionDayCount counts distinct days with positive completions across habits", () => {
+  // Arrange — two habits sharing one day, each with one unique day
+  const habits = [
+    { id: 1, completions: { "2026-05-20": "done", "2026-05-21": true } },
+    { id: 2, completions: { "2026-05-21": "done", "2026-05-22": "done" } }
+  ];
+  // Act
+  const out = briefDomain.completionDayCount(habits);
+  // Assert — 3 distinct days: 5-20, 5-21, 5-22
+  assert.equal(out, 3);
+});
+
+test("completionDayCount excludes 'missed' values from the day count", () => {
+  // Arrange — only one positive day; the rest are explicit "missed"
+  const habits = [
+    { id: 1, completions: { "2026-05-20": "done", "2026-05-21": "missed", "2026-05-22": "missed" } }
+  ];
+  // Act
+  // Assert
+  assert.equal(briefDomain.completionDayCount(habits), 1);
+});
+
+test("completionDayCount excludes parked habits entirely", () => {
+  // Arrange — parked habit's history must NOT contribute to the denominator
+  const habits = [
+    { id: 1, parked: true,  completions: { "2026-05-20": "done", "2026-05-21": "done" } },
+    { id: 2, parked: false, completions: { "2026-05-22": "done" } }
+  ];
+  // Act
+  // Assert — only the active habit's one day counts
+  assert.equal(briefDomain.completionDayCount(habits), 1);
+});
+
+test("completionDayCount handles empty / null / undefined input gracefully", () => {
+  assert.equal(briefDomain.completionDayCount([]), 0);
+  assert.equal(briefDomain.completionDayCount(null), 0);
+  assert.equal(briefDomain.completionDayCount(undefined), 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// welcomeBriefing — placeholder copy for pre-unlock state
+// ─────────────────────────────────────────────────────────────────────
+
+test("welcomeBriefing counts down remaining days with correct pluralization", () => {
+  assert.equal(briefDomain.welcomeBriefing(0), "Log 7 more days of use to unlock your daily briefing.");
+  assert.equal(briefDomain.welcomeBriefing(5), "Log 2 more days of use to unlock your daily briefing.");
+  assert.equal(briefDomain.welcomeBriefing(6), "Log 1 more day of use to unlock your daily briefing.");
+});
+
+test("welcomeBriefing switches to the unlock-on-next-open line at threshold", () => {
+  const unlockMsg = "You've logged a full week — your personalized briefing unlocks next time you open the app.";
+  assert.equal(briefDomain.welcomeBriefing(7), unlockMsg);
+  assert.equal(briefDomain.welcomeBriefing(99), unlockMsg, "overshooting the threshold still shows the unlock copy");
+});
+
+test("welcomeBriefing accepts a custom threshold", () => {
+  assert.equal(briefDomain.welcomeBriefing(0, 3), "Log 3 more days of use to unlock your daily briefing.");
+  assert.equal(briefDomain.welcomeBriefing(3, 3), "You've logged a full week — your personalized briefing unlocks next time you open the app.");
+});
+
+test("welcomeBriefing falls back to the 7-day threshold on invalid threshold", () => {
+  assert.equal(briefDomain.welcomeBriefing(0, 0),   "Log 7 more days of use to unlock your daily briefing.");
+  assert.equal(briefDomain.welcomeBriefing(0, -2),  "Log 7 more days of use to unlock your daily briefing.");
+  assert.equal(briefDomain.welcomeBriefing(0, "x"), "Log 7 more days of use to unlock your daily briefing.");
+});

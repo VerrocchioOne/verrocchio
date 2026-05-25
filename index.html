@@ -7757,38 +7757,12 @@ function App() {
     });
   };
 
-  /* Count distinct days with any habit completion — used to gate the
-     AI-generated daily briefing behind a minimum week of data. */
-  const completionDayCount = () => {
-    const set = new Set();
-    // §6 — parked habits' historical completions must not count
-    // toward the AI-briefing unlock gate or dataDays denominator.
-    // Counting them inflated dataDays vs the dH (active, non-parked)
-    // denominator used in area percentages, deflating every "% over
-    // N days" stat shown in the briefing.
-    (data.habits || []).filter(h => h && !h.parked).forEach(h => {
-      const comps = h.completions || {};
-      for (const day in comps) {
-        if (comps[day] && comps[day] !== "missed") set.add(day);
-      }
-    });
-    return set.size;
-  };
-
-  /* Short placeholder briefing shown to new users before the real AI
-     briefing unlocks. Previously this was a three-paragraph welcome
-     message; users wanted something tighter — a one-liner that tells
-     them exactly how many more days they need to log before the
-     personalized briefing kicks in. Unlock threshold matches genBrief
-     (7 completion-days) so the two are in sync. */
-  const welcomeBriefing = () => {
-    const days = completionDayCount();
-    const remaining = Math.max(0, 7 - days);
-    if (remaining === 0) {
-      return "You've logged a full week \u2014 your personalized briefing unlocks next time you open the app.";
-    }
-    return `Log ${remaining} more day${remaining === 1 ? "" : "s"} of use to unlock your daily briefing.`;
-  };
+  /* Pure logic for completionDayCount + welcomeBriefing lives in
+     lib/domains/brief.js so it's unit-testable. App-scope keeps the
+     zero-arg signatures the rest of App() (and the helpers-bag spread
+     that flows into BriefView) was already calling. */
+  const completionDayCount = () => window.briefDomain.completionDayCount(data.habits);
+  const welcomeBriefing = () => window.briefDomain.welcomeBriefing(completionDayCount());
 
   /* §14.3 — "additive habits crowding out non-negotiables" detector.
      Pure logic lives in lib/domains/brief.js (briefDomain.detectAdditiveCrowding);
