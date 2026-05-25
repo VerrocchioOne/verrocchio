@@ -112,6 +112,7 @@
 <script src="./lib/default-data.js"></script>
 <script src="./lib/dp.js"></script>
 <script src="./lib/app-config.js"></script>
+<script src="./lib/habit-helpers.js"></script>
 <script src="./lib/sw-register.js"></script>
 <!-- Wave 3 — App-scope constants extracted to lib/constants.js -->
 <script src="./lib/constants.js"></script>
@@ -1344,94 +1345,9 @@ const Glyph = window.Glyph;
    single `weekly` that always carries a `day`. Legacy `weekly-day`
    habits are migrated on read by `getFreq()`. */
 // Wave 5.11 — MONTHS_SHORT + MONTHS_LONG + ordSuffix now live in lib/fmt.js.
-// Indexed by JS `Date.getDay()` — 0 = Sun … 6 = Sat. Kept in Sunday-first
-// order so day values stored in `frequency.days` / `frequency.day` keep
-// their meaning across the whole codebase.
-const DOW_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-// Display order for the day-picker UI: Mon → Sun. The picker iterates
-// this list when rendering chips so Monday appears first, while the
-// stored day numbers still map to DOW_ABBR. Also used to sort the
-// comma-joined display in freqLabel so "Mon · Wed · Sun" reads left-to
-// -right in the same Monday-first order.
-const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0];
-const dowDisplayRank = d => {
-  const i = DOW_ORDER.indexOf(d);
-  return i === -1 ? 99 : i;
-};
-// getFreq — defined in lib/constants.js (loaded before this script).
-const freqRank = h => {
-  const t = getFreq(h).type;
-  const row = FREQ.find(f => f.value === t);
-  return row ? row.rank : 1;
-};
-// A habit can now belong to multiple goals (e.g. "sleep 8 hours" is
-// underlying for both "Pass CFA" and "Run a marathon"). Stored as
-// goalIds: number[]. Legacy habits store goalId: number — this
-// helper returns the canonical list regardless of which shape the
-// habit doc carries. Empty array if the habit isn't linked anywhere.
-const habitGoalIds = h => {
-  if (!h) return [];
-  if (Array.isArray(h.goalIds)) return h.goalIds.filter(x => x != null);
-  if (h.goalId != null) return [h.goalId];
-  return [];
-};
-// Whether this habit is linked to the given goal id, on either the
-// new goalIds array or the legacy goalId scalar.
-const habitLinkedToGoal = (h, goalId) =>
-  habitGoalIds(h).some(gid => String(gid) === String(goalId));
-// isHabitDueOn — defined in lib/constants.js (loaded before this script).
-const freqLabel = h => {
-  const fq = getFreq(h);
-  if (fq.type === "weekdays") {
-    const picks = (fq.days || []).slice().sort((a, b) => dowDisplayRank(a) - dowDisplayRank(b)).map(d => DOW_ABBR[d]).join(" \u00B7 ");
-    return picks ? "Days: " + picks : "Select Days";
-  }
-  if (fq.type === "weekly") {
-    // Every weekly habit is now anchored to one weekday — merged from
-    // the old weekly / weekly-day split. Show "Weekly — Tue" so the
-    // user can see the anchor at a glance.
-    return "Weekly \u2014 " + (DOW_ABBR[fq.day == null ? 1 : fq.day] || "Mon");
-  }
-  if (fq.type === "monthly") {
-    return fq.monthDay ? "Monthly \u2014 " + ordSuffix(fq.monthDay) : "Monthly";
-  }
-  if (fq.type === "quarterly") {
-    if (fq.month != null && fq.monthDay) {
-      return "Quarterly \u2014 " + MONTHS_SHORT[fq.month] + " " + fq.monthDay;
-    }
-    return "Quarterly";
-  }
-  if (fq.type === "annual") {
-    if (fq.month != null && fq.monthDay) {
-      return "Annual \u2014 " + MONTHS_SHORT[fq.month] + " " + fq.monthDay;
-    }
-    return "Annual";
-  }
-  const row = FREQ.find(f => f.value === fq.type);
-  return row ? row.label : "Daily";
-};
-const SF_FIELDS = [{
-  key: "specific",
-  label: "S — Specific",
-  ph: "What exactly do you want to accomplish?"
-}, {
-  key: "measurable",
-  label: "M — Measurable",
-  ph: "How will you measure progress?"
-}, {
-  key: "achievable",
-  label: "A — Achievable",
-  ph: "Why is this realistic for you?"
-}, {
-  key: "relevant",
-  label: "R — Relevant",
-  ph: "How does this align with your values?"
-}, {
-  key: "timebound",
-  label: "T — Time-bound",
-  ph: "What is your target date?"
-}];
-const HABIT_ICONS = ["🏃", "💪", "🧘", "🚴", "🏊", "⚽", "🎾", "🥊", "🤸", "🧗", "📖", "✍️", "🎯", "🧠", "💻", "🎓", "📝", "🔬", "🎨", "🎭", "🥗", "💊", "💧", "🛌", "🌅", "🧘", "🍎", "🥦", "☕", "🫁", "🙏", "📿", "✝️", "🕊️", "🌿", "⭐", "🌙", "☀️", "🔥", "❤️", "💰", "📊", "💼", "🏦", "📈", "💳", "🏠", "🚗", "✈️", "💎", "🎵", "🎹", "🎸", "🎺", "🎻", "🖼️", "📸", "🌍", "🗣️", "🤝", "😴", "🧹", "🪥", "🛁", "👟", "⌚", "📱", "🔑", "📦", "🎁"];
+// Wave 5.16 — DOW/freq/SF/HABIT_ICONS helpers now live in lib/habit-helpers.js.
+// getFreq + isHabitDueOn (from remote 8f4cf6a) now live in lib/constants.js.
+// habitGoalIds + habitLinkedToGoal live in lib/domains/goals.js.
 const PRESET_QUOTES = (typeof window !== "undefined" && window.PRESET_QUOTES) || [];
 
 /* ── GOALS & HABITS SEED DATA ── */

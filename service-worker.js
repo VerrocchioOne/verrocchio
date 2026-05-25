@@ -100,6 +100,7 @@ precaching.precacheAndRoute([
   { url: "./lib/default-data.js",               revision: SHELL_VERSION },
   { url: "./lib/dp.js",                         revision: SHELL_VERSION },
   { url: "./lib/app-config.js",                 revision: SHELL_VERSION },
+  { url: "./lib/habit-helpers.js",              revision: SHELL_VERSION },
   // Wave 3 — App-scope constants extracted.
   { url: "./lib/constants.js",                  revision: SHELL_VERSION },
   // Wave 4.1 — modal sub-systems (one file per modal).
