@@ -436,3 +436,150 @@ test("welcomeBriefing falls back to the 7-day threshold on invalid threshold", (
   assert.equal(briefDomain.welcomeBriefing(0, -2),  "Log 7 more days of use to unlock your daily briefing.");
   assert.equal(briefDomain.welcomeBriefing(0, "x"), "Log 7 more days of use to unlock your daily briefing.");
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// allYesterdayHabitsReviewed — AI Daily Briefing gate predicate
+// ─────────────────────────────────────────────────────────────────────
+
+// Pin "now" to a known calendar day so yKey is stable for every test.
+// 2026-05-25 local midnight; yesterday = 2026-05-24.
+const PINNED_NOW = new Date(2026, 4, 25, 12, 0, 0); // local noon avoids DST edge cases
+const YKEY = "2026-05-24";
+const neverFuture = () => false;
+
+test("allYesterdayHabitsReviewed returns true when no habit was due yesterday", () => {
+  // Arrange — single daily habit but with startDate after yesterday (= future-relative-to-Y)
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, startDate: "2026-05-25", completions: {} }
+  ];
+  // Act + Assert — dueYesterday is empty, .every returns true
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed returns true when every due habit has a 'done' or 'missed' value", () => {
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, completions: { [YKEY]: "done" } },
+    { id: 2, frequency: { type: "daily" }, completions: { [YKEY]: "missed" } },
+    { id: 3, frequency: { type: "daily" }, completions: { [YKEY]: true } }
+  ];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed returns false when a due habit lacks any explicit yesterday value", () => {
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, completions: { [YKEY]: "done" } },
+    { id: 2, frequency: { type: "daily" }, completions: {} } // missing
+  ];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    false
+  );
+});
+
+test("allYesterdayHabitsReviewed excludes parked / future-start habits via isFutureHabit", () => {
+  // Arrange — second habit is "future" by injection; its missing value must not flip the gate
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, completions: { [YKEY]: "done" } },
+    { id: 2, frequency: { type: "daily" }, completions: {} } // unreviewed but parked
+  ];
+  const isFutureHabit = h => h.id === 2;
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed excludes 'avoid' habits", () => {
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, completions: { [YKEY]: "done" } },
+    { id: 2, frequency: { type: "daily" }, section: "avoid", completions: {} } // implicit count
+  ];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed excludes sub-habits (parentId set) — parent rollup covers them", () => {
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, completions: { [YKEY]: "done" } },
+    { id: 2, frequency: { type: "daily" }, parentId: 1, completions: {} } // child missing OK
+  ];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed excludes habits whose startDate is after yesterday (created today)", () => {
+  const habits = [
+    { id: 1, frequency: { type: "daily" }, startDate: "2026-05-25", completions: {} } // created today
+  ];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed walks every slot for multi-slot habits", () => {
+  // Arrange — 3 slots; one of them is missing yesterday's state, so gate is open
+  const habits = [{
+    id: 1,
+    frequency: { type: "daily" },
+    slotSections: ["morning", "morning", "evening"],
+    slotCompletions: {
+      [YKEY]: {
+        "morning:0": "done",
+        "morning:1": "missed",
+        // "evening:0" missing
+      }
+    }
+  }];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    false
+  );
+});
+
+test("allYesterdayHabitsReviewed passes for multi-slot habit when every slot has explicit state", () => {
+  const habits = [{
+    id: 1,
+    frequency: { type: "daily" },
+    slotSections: ["morning", "morning", "evening"],
+    slotCompletions: {
+      [YKEY]: {
+        "morning:0": "done",
+        "morning:1": "missed",
+        "evening:0": true
+      }
+    }
+  }];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed excludes habits whose frequency doesn't include yesterday", () => {
+  // Arrange — weekly habit anchored to a different weekday than yesterday.
+  // 2026-05-24 was a Sunday (day=0); anchor habit to Monday (day=1).
+  const habits = [
+    { id: 1, frequency: { type: "weekly", day: 1 }, completions: {} } // unreviewed but not due
+  ];
+  assert.equal(
+    briefDomain.allYesterdayHabitsReviewed(habits, { now: PINNED_NOW, isFutureHabit: neverFuture }),
+    true
+  );
+});
+
+test("allYesterdayHabitsReviewed handles empty / null / undefined habits", () => {
+  assert.equal(briefDomain.allYesterdayHabitsReviewed([], { now: PINNED_NOW, isFutureHabit: neverFuture }), true);
+  assert.equal(briefDomain.allYesterdayHabitsReviewed(null, { now: PINNED_NOW, isFutureHabit: neverFuture }), true);
+  assert.equal(briefDomain.allYesterdayHabitsReviewed(undefined, { now: PINNED_NOW, isFutureHabit: neverFuture }), true);
+});

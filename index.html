@@ -7875,52 +7875,12 @@ function App() {
     }
   };
 
-  /* Gate predicate for the AI Daily Briefing.
-     Today's briefing summarizes yesterday's data, so generating before
-     the user has explicitly marked every habit either done or missed
-     for yesterday gives the model a partial picture. The gate excludes:
-       - parked / future-start habits (not active yet)
-       - habits whose frequency excludes yesterday (e.g. Monday-only on
-         a Tuesday) — they were not due, so absence is not a gap
-       - "avoid" habits (their daily count is implicit, no explicit state)
-     For multi-slot habits we walk every slot ID and require an explicit
-     "done" or "missed" state per slot (matches §5.8b semantics). New
-     users with no yesterday data (no dailyRitual yet) pass trivially —
-     dueYesterday is empty, .every returns true. */
-  const allYesterdayHabitsReviewed = () => {
-    const yKey = dk(new Date(Date.now() - 86400000));
-    const habitsList = data.habits || [];
-    const dueYesterday = habitsList.filter(h => {
-      if (!h) return false;
-      if (isFutureHabit(h)) return false;
-      if (h.section === "avoid") return false;
-      // §audit-P1 — Exclude sub-habits (parentId set). The parent's
-      // rollup is "done iff all children done", so children would
-      // double-count alongside the parent and could keep the gate
-      // closed even when the parent looks reviewed.
-      if (h.parentId != null) return false;
-      // §audit-P1 — Exclude habits that did not yet exist yesterday.
-      // A habit created today (startDate >= today) gets checked
-      // against yesterday's empty completions and the gate would
-      // stay permanently closed. dk-format ISO strings compare
-      // lexicographically.
-      if (h.startDate && h.startDate > yKey) return false;
-      return isHabitDueOn(h, yKey);
-    });
-    return dueYesterday.every(h => {
-      const slots = Array.isArray(h.slotSections) ? h.slotSections : null;
-      if (slots && slots.length > 0) {
-        const sc = (h.slotCompletions && h.slotCompletions[yKey]) || {};
-        return slots.every((_, i) => {
-          const sid = slotIdForIndex(slots, i);
-          const v = sc[sid];
-          return v === "done" || v === true || v === "missed";
-        });
-      }
-      const v = (h.completions || {})[yKey];
-      return v === "done" || v === true || v === "missed";
-    });
-  };
+  /* AI Daily Briefing gate predicate — pure logic lives in
+     lib/domains/brief.js (briefDomain.allYesterdayHabitsReviewed).
+     App-scope wrapper just supplies `data.habits` and injects the
+     App-scope `isFutureHabit` predicate. */
+  const allYesterdayHabitsReviewed = () =>
+    window.briefDomain.allYesterdayHabitsReviewed(data.habits, { isFutureHabit });
 
   const genBrief = async () => {
     // New users (< 7 days of completion data) get the welcome briefing —
