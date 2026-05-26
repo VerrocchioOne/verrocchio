@@ -89,9 +89,21 @@ jobs:
       - name: Capacitor sync
         run: npx cap sync ios
 
-      - name: Install CocoaPods dependencies
+      # Capacitor 8 generates a Swift Package Manager project (Package.swift),
+      # not a CocoaPods Podfile. xcodebuild resolves SPM deps on its own at
+      # archive time. No pod install needed. This debug listing makes the
+      # next failure faster to triage if the project layout shifts.
+      - name: Inspect iOS project structure
         working-directory: ios/App
-        run: pod install
+        run: |
+          echo "--- ios/App contents ---"
+          ls -la
+          echo "--- ios/App/App contents ---"
+          ls -la App || true
+          echo "--- Info.plist location ---"
+          find . -name Info.plist -not -path "*/build/*" -maxdepth 4 || true
+          echo "--- Package.swift presence ---"
+          ls -la Package.swift 2>/dev/null || echo "no Package.swift at root"
 
       # Apply marketing version + auto-incrementing build number to
       # Info.plist. CFBundleShortVersionString = user-visible version,
