@@ -149,10 +149,6 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
 
-      # TARGETED_DEVICE_FAMILY=1 builds the app for iPhone only (no iPad
-      # target). Verrocchio is phone-oriented and we don't ship iPad
-      # icons (152x152, 167x167), so iPhone-only sidesteps App Store
-      # Connect's iPad icon validation. Bump to "1,2" if iPad ever ships.
       - name: Archive
         working-directory: ios/App
         run: |
@@ -167,7 +163,6 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="Verrocchio App Store" \
-            TARGETED_DEVICE_FAMILY=1 \
             archive
 
       - name: Export IPA
