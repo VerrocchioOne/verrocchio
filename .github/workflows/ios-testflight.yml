@@ -53,6 +53,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Apple requires apps uploaded to App Store Connect to be built
+      # with the iOS 26 SDK or later (i.e. Xcode 26+). The macos-15
+      # runner image has multiple Xcode versions installed; the default
+      # is not always the newest. Pick the highest-versioned Xcode_*.app
+      # available so we always build against the latest SDK on the box.
+      - name: Select latest Xcode
+        run: |
+          echo "--- installed Xcodes ---"
+          ls -d /Applications/Xcode*.app 2>/dev/null
+          LATEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          echo "--- selecting: $LATEST ---"
+          sudo xcode-select -s "$LATEST/Contents/Developer"
+          xcodebuild -version
+
       - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
@@ -135,6 +149,10 @@ jobs:
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
 
+      # TARGETED_DEVICE_FAMILY=1 builds the app for iPhone only (no iPad
+      # target). Verrocchio is phone-oriented and we don't ship iPad
+      # icons (152x152, 167x167), so iPhone-only sidesteps App Store
+      # Connect's iPad icon validation. Bump to "1,2" if iPad ever ships.
       - name: Archive
         working-directory: ios/App
         run: |
@@ -149,6 +167,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="Verrocchio App Store" \
+            TARGETED_DEVICE_FAMILY=1 \
             archive
 
       - name: Export IPA
