@@ -66,6 +66,13 @@ jobs:
       - name: Build web assets
         run: npm run build
 
+      # The repo commits prep assets at ios/ (AppIcon.appiconset/,
+      # ExportOptions.plist, PrivacyInfo.xcprivacy). Capacitor's `cap
+      # add ios` refuses to scaffold into an existing ios/ directory, so
+      # stash the prep assets at ios-staging/ for the rest of the job.
+      - name: Stash prep assets out of ios/
+        run: mv ios ios-staging
+
       # Capacitor iOS scaffold is generated, never committed — keeps the
       # repo clean and guarantees the project matches the current
       # capacitor.config.json on every run.
@@ -73,11 +80,11 @@ jobs:
         run: npx cap add ios
 
       # Capacitor doesn't auto-wire the prepped icons or privacy
-      # manifest. Copy them into the generated Xcode project.
+      # manifest. Copy them from the stash into the generated project.
       - name: Copy app icons and privacy manifest
         run: |
-          cp -R ios/AppIcon.appiconset/. ios/App/App/Assets.xcassets/AppIcon.appiconset/
-          cp ios/PrivacyInfo.xcprivacy ios/App/App/
+          cp -R ios-staging/AppIcon.appiconset/. ios/App/App/Assets.xcassets/AppIcon.appiconset/
+          cp ios-staging/PrivacyInfo.xcprivacy ios/App/App/
 
       - name: Capacitor sync
         run: npx cap sync ios
@@ -136,7 +143,7 @@ jobs:
           xcodebuild \
             -exportArchive \
             -archivePath build/App.xcarchive \
-            -exportOptionsPlist ../ExportOptions.plist \
+            -exportOptionsPlist ../../ios-staging/ExportOptions.plist \
             -exportPath build/
 
       # Useful when a run fails after archive — grab the .ipa to inspect
