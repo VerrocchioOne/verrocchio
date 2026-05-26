@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v78";
+const SHELL_VERSION = "v79";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -32,6 +32,7 @@ core.clientsClaim();
 // so a single bump forces re-fetch.
 precaching.precacheAndRoute([
   { url: "./index.html",                revision: SHELL_VERSION },
+  { url: "./styles.css",                revision: SHELL_VERSION },
   { url: "./utils.js",                  revision: SHELL_VERSION },
   { url: "./lib/hydration.js",          revision: SHELL_VERSION },
   { url: "./lib/merge.js",              revision: SHELL_VERSION },

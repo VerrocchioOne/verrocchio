@@ -7,6 +7,7 @@ const DIST = path.join(SRC, 'dist');
 const FILES = [
   'index.html',
   'home.html',
+  'styles.css',
   'utils.js',
   // lib/* — all script-tag-loaded extractions. ANY missing entry here
   // causes Firebase Hosting's `** → /index.html` rewrite to serve the

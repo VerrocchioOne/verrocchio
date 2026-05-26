@@ -583,3 +583,78 @@ test("allYesterdayHabitsReviewed handles empty / null / undefined habits", () =>
   assert.equal(briefDomain.allYesterdayHabitsReviewed(null, { now: PINNED_NOW, isFutureHabit: neverFuture }), true);
   assert.equal(briefDomain.allYesterdayHabitsReviewed(undefined, { now: PINNED_NOW, isFutureHabit: neverFuture }), true);
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// reorderForCrowdingPair — §14.3 reorder kernel
+// ─────────────────────────────────────────────────────────────────────
+
+test("reorderForCrowdingPair returns 'missing' when either id is not in habits", () => {
+  const habits = [{ id: 1, section: "morning", _order: 0 }];
+  assert.deepEqual(briefDomain.reorderForCrowdingPair(habits, 99, 1),    { kind: "missing" });
+  assert.deepEqual(briefDomain.reorderForCrowdingPair(habits, 1,  99),   { kind: "missing" });
+  assert.deepEqual(briefDomain.reorderForCrowdingPair([],     1,  2),    { kind: "missing" });
+  assert.deepEqual(briefDomain.reorderForCrowdingPair(null,   1,  2),    { kind: "missing" });
+});
+
+test("reorderForCrowdingPair returns 'cross-section' when the two habits live in different sections", () => {
+  const habits = [
+    { id: 1, section: "morning", _order: 0 },   // non-neg
+    { id: 2, section: "evening", _order: 0 }    // additive
+  ];
+  const out = briefDomain.reorderForCrowdingPair(habits, 1, 2);
+  assert.equal(out.kind, "cross-section");
+  assert.equal(out.nextHabits, undefined, "no nextHabits payload on cross-section");
+});
+
+test("reorderForCrowdingPair returns 'same-section' + unchanged habits when nonNeg already ordered ahead", () => {
+  const habits = [
+    { id: 1, section: "morning", _order: 0 },   // non-neg (ahead)
+    { id: 2, section: "morning", _order: 1 }    // additive (behind)
+  ];
+  const out = briefDomain.reorderForCrowdingPair(habits, 1, 2);
+  assert.equal(out.kind, "same-section");
+  assert.ok(Array.isArray(out.nextHabits));
+  // _order unchanged because nonNeg's _order is already <= additive's
+  assert.equal(out.nextHabits.find(h => h.id === 1)._order, 0);
+  assert.equal(out.nextHabits.find(h => h.id === 2)._order, 1);
+});
+
+test("reorderForCrowdingPair moves nonNeg ABOVE additive when nonNeg was ordered after", () => {
+  // Arrange — 3 morning habits ordered [99, additive(2), nonNeg(1)].
+  // Promotion should land nonNeg directly in the additive's old slot,
+  // pushing additive (and anything after) one step back.
+  const habits = [
+    { id: 99, section: "morning", _order: 0 },  // unrelated peer
+    { id: 2,  section: "morning", _order: 1 },  // additive (well-done)
+    { id: 1,  section: "morning", _order: 2 }   // non-neg (missed)
+  ];
+  const out = briefDomain.reorderForCrowdingPair(habits, 1, 2);
+  assert.equal(out.kind, "same-section");
+  const nh = out.nextHabits;
+  // Order should now be: 99 (still 0), 1 (now 1), 2 (now 2)
+  assert.equal(nh.find(h => h.id === 99)._order, 0);
+  assert.equal(nh.find(h => h.id ===  1)._order, 1, "nonNeg promoted into additive's old slot");
+  assert.equal(nh.find(h => h.id ===  2)._order, 2, "additive shifted back by one");
+});
+
+test("reorderForCrowdingPair does NOT mutate the input habits array", () => {
+  const habits = [
+    { id: 1, section: "morning", _order: 5 },
+    { id: 2, section: "morning", _order: 3 }
+  ];
+  const snapshot = JSON.parse(JSON.stringify(habits));
+  briefDomain.reorderForCrowdingPair(habits, 1, 2);
+  assert.deepEqual(habits, snapshot, "input habits array left untouched");
+});
+
+test("reorderForCrowdingPair only touches habits in the affected section", () => {
+  // Arrange — a peer in a different section must keep its _order
+  const habits = [
+    { id: 1, section: "morning", _order: 5 },   // non-neg (will move)
+    { id: 2, section: "morning", _order: 3 },   // additive
+    { id: 3, section: "evening", _order: 0 }    // unrelated, must not be re-numbered
+  ];
+  const out = briefDomain.reorderForCrowdingPair(habits, 1, 2);
+  assert.equal(out.nextHabits.find(h => h.id === 3)._order, 0,
+    "evening peer's _order untouched");
+});

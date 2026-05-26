@@ -461,3 +461,99 @@ test("sortAreasByProgress handles empty / null habits + areas without throwing",
     ["A"]
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// offScheduleHabits — filter + map wrapper around utils.js detectOffSchedule
+// ─────────────────────────────────────────────────────────────────────────
+
+// Synthetic detector: returns a tagged note when habit.text matches a
+// known "off" pattern, else null. Mirrors detectOffSchedule's shape
+// (caller filters out the nulls).
+const fakeOff = h => (h && h.text && h.text.startsWith("OFF:"))
+  ? { habitId: h.id, note: h.text }
+  : null;
+
+test("offScheduleHabits excludes parked habits", () => {
+  const habits = [
+    { id: 1, text: "OFF:A", parked: true,  section: "morning" },
+    { id: 2, text: "OFF:B", parked: false, section: "morning" }
+  ];
+  const out = habitsDomain.offScheduleHabits(habits, { detectOffSchedule: fakeOff });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].habitId, 2);
+});
+
+test("offScheduleHabits excludes 'avoid'-section habits", () => {
+  const habits = [
+    { id: 1, text: "OFF:A", section: "avoid"   },
+    { id: 2, text: "OFF:B", section: "morning" }
+  ];
+  const out = habitsDomain.offScheduleHabits(habits, { detectOffSchedule: fakeOff });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].habitId, 2);
+});
+
+test("offScheduleHabits drops null detector results (habits that are on-schedule)", () => {
+  const habits = [
+    { id: 1, text: "OFF:A", section: "morning" },
+    { id: 2, text: "ON:fine", section: "morning" },
+    { id: 3, text: "OFF:B", section: "morning" }
+  ];
+  const out = habitsDomain.offScheduleHabits(habits, { detectOffSchedule: fakeOff });
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.map(o => o.habitId).sort(), [1, 3]);
+});
+
+test("offScheduleHabits returns [] when no detector is available + none was injected", () => {
+  // Forcing the no-detector path by passing a non-function override.
+  const habits = [{ id: 1, text: "OFF:A", section: "morning" }];
+  assert.deepEqual(habitsDomain.offScheduleHabits(habits, { detectOffSchedule: null }), []);
+});
+
+test("offScheduleHabits handles empty / null / undefined input", () => {
+  assert.deepEqual(habitsDomain.offScheduleHabits([],        { detectOffSchedule: fakeOff }), []);
+  assert.deepEqual(habitsDomain.offScheduleHabits(null,      { detectOffSchedule: fakeOff }), []);
+  assert.deepEqual(habitsDomain.offScheduleHabits(undefined, { detectOffSchedule: fakeOff }), []);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// isFutureHabit(h, todayKey)
+// ─────────────────────────────────────────────────────────────────────────
+
+const FUTURE_TODAY = "2026-05-26";
+
+test("isFutureHabit returns false for a falsy habit", () => {
+  assert.equal(habitsDomain.isFutureHabit(null, FUTURE_TODAY), false);
+  assert.equal(habitsDomain.isFutureHabit(undefined, FUTURE_TODAY), false);
+});
+
+test("isFutureHabit returns true when the habit is parked, regardless of startDate", () => {
+  assert.equal(habitsDomain.isFutureHabit({ parked: true }, FUTURE_TODAY), true);
+  assert.equal(habitsDomain.isFutureHabit({ parked: true, startDate: "1999-01-01" }, FUTURE_TODAY), true);
+});
+
+test("isFutureHabit returns true when startDate is lexicographically after todayKey", () => {
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2026-05-27" }, FUTURE_TODAY), true);
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2026-12-31" }, FUTURE_TODAY), true);
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2030-01-01" }, FUTURE_TODAY), true);
+});
+
+test("isFutureHabit returns false when startDate is today or earlier", () => {
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2026-05-26" }, FUTURE_TODAY), false, "same day = active");
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2026-05-25" }, FUTURE_TODAY), false, "yesterday = active");
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2025-01-01" }, FUTURE_TODAY), false, "long-active");
+});
+
+test("isFutureHabit returns false when habit has no startDate", () => {
+  assert.equal(habitsDomain.isFutureHabit({}, FUTURE_TODAY), false);
+  assert.equal(habitsDomain.isFutureHabit({ startDate: null }, FUTURE_TODAY), false);
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "" }, FUTURE_TODAY), false);
+});
+
+test("isFutureHabit returns false when todayKey is missing (no comparison possible)", () => {
+  // Without a todayKey, the implementation cannot decide; defaults to "not future"
+  // (i.e. include in active set). Mirrors the inline guard behavior.
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2099-01-01" }, null), false);
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2099-01-01" }, ""), false);
+  assert.equal(habitsDomain.isFutureHabit({ startDate: "2099-01-01" }, undefined), false);
+});

@@ -1,0 +1,1002 @@
+/* Verrocchio — extracted from index.html <style> block in Wave 7.1.
+   See archive/index.v78.html for the inline original. */
+*{box-sizing:border-box;margin:0;padding:0}
+/* Theme tokens. The palette-level colors below are read from React
+   inline styles as `var(--c-…)`. That means flipping a light/dark
+   value here cascades everywhere the var is used — no extra
+   attribute-substring override needed per surface. Colors that are
+   NOT tokenized (brand greens, tints, accents, gradients) still rely
+   on the legacy `body.dark [style*="rgb(…)"]` overrides below, so
+   don't assume every color works via tokens yet. Anything new should
+   prefer a token. */
+:root{
+  --accent:#2d5a2d;
+  --accent-2:#3d7a3d;
+  --app-bg:#f8f7f4;
+  --app-text:#1f2937;
+  --c-surface-raised:#f9fafb;
+  --c-surface-muted:#f3f4f6;
+  --c-border:#e5e7eb;
+  --c-text:#1f2937;
+  --c-text-strong:#111827;
+  --c-text-soft:#374151;
+  --c-text-faint:#6b7280;
+  /* ── Semantic tint family ───────────────────────────────────────
+     The substring-override block below exists because most tints in
+     this file are still hard-coded inline. Going forward, NEW code
+     should use these tokens so dark mode is one --c-tint-X-bg flip
+     away — no per-rgb override needed. As inline styles migrate, the
+     matching override row below can be deleted. ── */
+  --c-tint-success-bg:#f0f7f0;
+  --c-tint-success-border:#c6dfc6;
+  --c-tint-success-fg:#15803d;
+  --c-tint-warn-bg:#fffbeb;
+  --c-tint-warn-border:#fde68a;
+  --c-tint-warn-fg:#b45309;
+  --c-tint-danger-bg:#fef2f2;
+  --c-tint-danger-border:#fecaca;
+  --c-tint-danger-fg:#b91c1c;
+  --c-tint-info-bg:#eff6ff;
+  --c-tint-info-border:#bfdbfe;
+  --c-tint-info-fg:#1d4ed8;
+  --c-tint-travel-bg:#f0f9ff;
+  --c-tint-travel-border:#bae6fd;
+  --c-tint-travel-fg:#0891b2;
+  --c-tint-brand-bg:#f0f7f0;
+  --c-tint-brand-border:#c6dfc6;
+  --c-tint-brand-fg:#2d5a2d;
+  --c-tint-purple-bg:#f5f3ff;
+  --c-tint-purple-border:#ddd6fe;
+  --c-tint-purple-fg:#7c3aed;
+  --c-tint-pink-bg:#fdf4ff;
+  --c-tint-pink-border:#f0abfc;
+  --c-tint-pink-fg:#db2777;
+  --c-tint-teal-bg:#f0fdfa;
+  --c-tint-teal-border:#5eead4;
+  --c-tint-teal-fg:#0d9488;
+  --c-tint-orange-bg:#fff7ed;
+  --c-tint-orange-border:#fed7aa;
+  --c-tint-orange-fg:#ea580c;
+  --c-tint-slate-bg:#f1f5f9;
+  --c-tint-slate-border:#cbd5e1;
+  --c-tint-slate-fg:#64748b;
+  --c-tint-yellow-bg:#fefce8;
+  --c-tint-yellow-border:#fde047;
+  --c-tint-yellow-fg:#ca8a04;
+}
+html{height:100%;-webkit-text-size-adjust:100%}
+/* ── Desktop layout (min-width 900px) ──
+   The app is phone-first, so on a 1440-wide laptop the content
+   would stretch edge-to-edge as a tall narrow column. The rules
+   below center the scrolling content AND let multi-card surfaces
+   (Home daily ritual) flow into 2-3 columns side-by-side. Phone
+   view is 100% intact since these rules only apply above the
+   breakpoints. */
+.home-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+  align-items: start; /* don't stretch shorter cards to tallest */
+  grid-auto-rows: min-content;
+  /* grid-auto-flow stays as default "row" (NOT dense) so cards keep
+     their declared order left-to-right, matching the mobile top-to-
+     bottom reading sequence. dense would jump shorter cards into
+     earlier gaps and break that order. */
+}
+/* Hover + focus affordances for clickable cards on hover-pointer
+   devices. The inline-style heavy codebase can't express :hover, so
+   these global rules give desktop users the visual feedback they
+   expect (cursor + lift + focus ring). Touch-only devices skip this
+   via the (hover: hover) media query. */
+@media (hover: hover) {
+  .home-grid button:hover,
+  .hrow:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,.07) !important;
+    transform: translateY(-1px);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .home-grid button:focus-visible,
+  .hrow:focus-visible {
+    outline: 2px solid #2d5a2d;
+    outline-offset: 2px;
+  }
+}
+/* Cap intrinsically-wide form surfaces so prose textareas don't
+   stretch ~1000px on a laptop. Reading targets are 65-80 characters;
+   constraint the textareas without affecting layout chrome around
+   them. */
+@media (min-width: 900px) {
+  .fade-in textarea,
+  .fade-in input[type="text"],
+  .fade-in input[type="url"] {
+    max-width: 720px;
+  }
+}
+/* Desktop indicator chip in the header. Always rendered in JSX with
+   display:none (inline style); these rules promote it to inline-flex
+   when the device-profile JS classifies the runtime as anything other
+   than "phone". Driven by body.dataset.device which the JS at the
+   top of the inline script keeps in sync with viewport + hover
+   capability changes. */
+body[data-device="tablet"] .device-indicator,
+body[data-device="desktop"] .device-indicator,
+body[data-device="desktop-wide"] .device-indicator {
+  display: inline-flex !important;
+}
+/* §13.1 Desktop mark-missed affordance.
+   Touch devices already have swipe-left + long-press menu to mark
+   missed; desktop has neither (swipe-left is gestural-only on touch,
+   long-press doesn't translate to a trackpad). The .habit-miss-x
+   button is rendered into every .hrow with opacity:0 and
+   pointer-events:none by default, and only fades in on hover when
+   the runtime is a desktop-class device. Phones/tablets never see
+   it, preserving the existing touch flows untouched. */
+body[data-device="desktop"] .hrow:hover .habit-miss-x,
+body[data-device="desktop-wide"] .hrow:hover .habit-miss-x {
+  opacity: 1;
+  pointer-events: auto;
+}
+body[data-device="desktop"] .habit-miss-x:hover,
+body[data-device="desktop-wide"] .habit-miss-x:hover {
+  background: rgba(220, 38, 38, 0.18) !important;
+  color: #991b1b !important;
+}
+body.dark[data-device="desktop"] .habit-miss-x:hover,
+body.dark[data-device="desktop-wide"] .habit-miss-x:hover {
+  background: rgba(220, 38, 38, 0.28) !important;
+  color: #fca5a5 !important;
+}
+@media (min-width: 900px) {
+  /* Tab content uses the FULL viewport width (no narrow centered
+     column). Side gutters keep cards off the screen edges. The
+     auto-fit grids below let cards reflow into more columns as the
+     viewport widens — like WSJ's homepage that uses every pixel of
+     a wide laptop / 4K display. */
+  .fade-in,
+  body > div > .lg.fade-in {
+    /* !important is load-bearing here. The base .fade-in rule
+       (max-width:640px; margin:0 auto; padding:16px 16px 110px) is
+       declared LATER in the stylesheet, so without !important the
+       later rule wins the cascade at every viewport — content stayed
+       clamped to 640px on desktop and this @media override was
+       effectively dead. Without it the user sees the home, habits and
+       goals tabs centered in a narrow column on a wide laptop. */
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+    padding-bottom: 110px !important;
+    box-sizing: border-box;
+  }
+  /* Header inner row: chrome (brand + streak + profile) doesn't need
+     to span the full width. Cap so they cluster comfortably without
+     drifting to corners on ultrawide screens. */
+  body > div > .lg[style*="sticky"] > div {
+    max-width: 1280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* Bottom-nav inner row: nav buttons stay clustered too. */
+  body > div > .lg[style*="fixed"] > div {
+    max-width: 1280px !important;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  /* Home daily-ritual cards use auto-fit so column count scales with
+     viewport width. minmax(540px, 1fr) gives wider modules — ~2 cols
+     at 1100px, 3 cols at 1700px, 4 cols at 2300px. Cards stay
+     comfortably wide and chunky rather than postcard-thin. */
+  .home-grid {
+    grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+    gap: 16px;
+  }
+  /* Goals tab: each Area-of-Life section sits in its own column so
+     multiple areas (Physical, Mental, Career) can be browsed side
+     by side instead of stacked. The section wrapper class is
+     "goals-areas-grid" and gets applied via JSX. */
+  .goals-areas-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  /* Modal centering: every full-screen modal overlay glues its inner
+     card to the BOTTOM of the viewport on phone (sheet UX). On desktop
+     that leaves a giant dim backdrop above a small floating card. */
+  div[role="dialog"][aria-modal="true"] {
+    align-items: center !important;
+  }
+  div[role="dialog"][aria-modal="true"] > div[style*="20px 20px 0 0"],
+  div[role="dialog"][aria-modal="true"] > div[style*="20px 20px 0px 0px"] {
+    border-radius: 16px !important;
+  }
+}
+@media (min-width: 1400px) {
+  /* On wide screens, give cards a touch more gap and breathe a bit
+     more on the gutters. Replicates the dense-but-not-cramped feel
+     of WSJ's wide layout. !important for the same cascade-order
+     reason as the 900px block above. */
+  .fade-in,
+  body > div > .lg.fade-in {
+    padding-left: 48px !important;
+    padding-right: 48px !important;
+  }
+  .home-grid { gap: 20px; }
+}
+/* Habits + Goals tab list container.
+   Phone default: single-column flex (matches the prior inline style).
+   On hover-pointer devices >= 900px wide: multi-column grid so the
+   user sees more cards at once. Hover-gate is critical — side-by-side
+   habit cards make horizontal swipe ambiguous (a swipe-left on the
+   right column would visually overlap the left card), and on touch
+   devices users complete habits via swipe; on mouse/trackpad they
+   click. So the grid only kicks in where swipe isn't expected. */
+.habit-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (min-width: 900px) and (hover: hover) {
+  .habit-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    align-items: start;
+  }
+}
+/* §13.3 SortableJS visual states — applied by the library to .hrow cards
+   while a reorder drag is active. The library handles the touch event
+   stream and CSS class lifecycle; these rules just style what each
+   state looks like.
+   • ghost  — placeholder element shown where the dragged card will land
+   • chosen — the source card the user grabbed (cursor only here; the
+              real drag visual is on the clone via dragClass)
+   • drag   — the floating clone that follows the pointer/finger */
+.hrow-sortable-ghost {
+  opacity: 0.4;
+  background: var(--c-surface-muted) !important;
+}
+.hrow-sortable-chosen {
+  cursor: grabbing;
+}
+.hrow-sortable-drag {
+  box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  opacity: 0.94;
+  transform: scale(1.02);
+}
+/* Habits tab — section-level layout. The five sections (Morning,
+   Afternoon, Evening, Daily Completion, Avoid) are routinely walked
+   sequentially in a day, so on desktop we put the three time-of-day
+   sections side-by-side as columns (left → right matches the
+   morning → evening reading order), with Avoid + Daily Completion
+   below as a second flex row. Within each section the habits stay
+   SINGLE column — sequential checklists, not parallel options.
+   Implemented as flex (not grid) so collapsed sections can shrink
+   horizontally to a thin header strip and the still-expanded
+   sections grow to fill the freed width. */
+@media (min-width: 900px) {
+  .habit-sections-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .habit-sections-grid::before,
+  .habit-sections-grid::after {
+    /* Reserved for future use; explicit pseudo-element resets stop
+       sibling :nth-child counts from drifting. */
+    content: none;
+  }
+  /* Two flex rows: time-of-day on top, all-day + avoid on bottom.
+     We pin section order with flex-order so source-order changes
+     (sortable headers, etc.) don't reflow into the wrong row. */
+  .habit-sections-grid > [data-sec="morning"],
+  .habit-sections-grid > [data-sec="afternoon"],
+  .habit-sections-grid > [data-sec="evening"] { order: 1; }
+  .habit-sections-grid > [data-sec="all-day"],
+  .habit-sections-grid > [data-sec="avoid"]   { order: 2; }
+  /* Pseudo-row trick — wrap children into rows by toggling
+     flex-wrap and sizing each row's items to share width via
+     flex-basis. Easier: replace the single flex with explicit
+     row containers using display: contents on .habit-sections-grid
+     and pseudo-rows via [data-sec] grouping. */
+  .habit-sections-grid {
+    /* Single 5-column row, fixed left-to-right reading order:
+       Morning · Afternoon · Evening · Daily Completion · Avoid.
+       Each section gets equal width via 1fr; minmax(0, 1fr)
+       prevents long card titles from inflating their column. */
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 16px 14px;
+    align-items: start;
+  }
+  .habit-sections-grid > [data-sec="morning"]   { grid-column: 1; }
+  .habit-sections-grid > [data-sec="afternoon"] { grid-column: 2; }
+  .habit-sections-grid > [data-sec="evening"]   { grid-column: 3; }
+  .habit-sections-grid > [data-sec="all-day"]   { grid-column: 4; }
+  .habit-sections-grid > [data-sec="avoid"]     { grid-column: 5; }
+  .habit-sections-grid > [data-sec] {
+    margin-bottom: 0 !important;
+    min-width: 0;
+    transition: opacity .2s ease;
+  }
+  /* Collapse animation — when a section is collapsed on desktop
+     it gets data-collapsed="1" (set in JSX), which shrinks its
+     habit-grid container's max-width to 0 with overflow hidden
+     so the cards slide out leftward into the header strip. The
+     header itself stays visible so the user can re-tap to expand. */
+  .habit-sections-grid > [data-sec][data-collapsed="1"] .habit-grid {
+    max-width: 0 !important;
+    max-height: 0 !important;
+    opacity: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transition: max-width .25s ease, max-height .25s ease, opacity .15s ease;
+  }
+  .habit-sections-grid > [data-sec] .habit-grid {
+    /* No overflow:hidden in the expanded state — that was clipping
+       card box-shadows and producing the faint width inconsistency
+       the user noticed. Hidden returns only during the collapse
+       animation above. */
+    transition: max-width .25s ease, opacity .15s ease;
+  }
+  /* Override the generic .habit-grid 2-col rule above — habits inside
+     a section are sequential, not parallel. Single column wins. */
+  .habit-sections-grid .habit-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    align-items: stretch !important;
+  }
+  /* Force every direct child of .habit-grid to fill the section
+     column. Sequential habits → one full-width card. Concurrent
+     cohort wrappers (`.cohort-row`) → full-width row that the
+     inner towers split via flex:1. Without the explicit width
+     stretch some children rendered at intrinsic content width and
+     looked narrower than their neighbors. */
+  .habit-sections-grid .habit-grid > * {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* Concurrent-cohort rows (h.concurrent === true) keep their
+     side-by-side layout on desktop — a 2-cohort renders as two
+     half-width cards in the column slot, a 3-cohort as three
+     third-width cards. The inline `display: flex` + tower
+     `flex: 1, minWidth: 0` already give that behavior. */
+}
+/* No 3-column promotion at any width — three floating cards on a wide
+   screen looked sparse with the Home tab's variable card heights, and
+   the layout read as "sea of whitespace" rather than a real dashboard.
+   Two columns at all desktop widths keeps cards filled and within a
+   comfortable tab-content max-width. The habits/goals grid stays at
+   2 cols too. */
+/* iOS-26 chrome stack: SF Pro Text on Apple platforms, Segoe UI Variable
+   on Windows, Inter as a download-free Linux/Android fallback. Editorial
+   display fonts (Playfair, Lora) stay opt-in via inline style + the
+   .page-title / .card-title classes below — the *chrome* is system. */
+body{
+  background:var(--app-bg);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI Variable","Segoe UI",system-ui,Inter,Roboto,sans-serif;
+  color:var(--app-text);
+  min-height:100%;
+  min-height:-webkit-fill-available;
+  overscroll-behavior:none;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+/* Tabular numerics across the app — streak counts, XP, percentages, time
+   pills. Anything that's a number reads cleaner with monospace digits. */
+.tnum,[data-tnum]{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+/* Dark mode: flip tokens first (covers every inline style that uses a
+   `var(--c-…)`). Then fall back to inline-style-attribute substring
+   overrides for colors still hard-coded as hex — React normalizes
+   those to rgb() in the DOM, so each override matches a specific rgb
+   triple. If you add a new surface, prefer a token. */
+body.dark{
+  --app-bg:#0b0d0f;
+  --app-text:#e5e7eb;
+  --c-surface-raised:#1c1f23;
+  --c-surface-muted:#22262a;
+  --c-border:#2a2f34;
+  --c-text:#e5e7eb;
+  --c-text-strong:#f3f4f6;
+  --c-text-soft:#d1d5db;
+  --c-text-faint:#9ca3af;
+  --c-tint-success-bg:#182418;
+  --c-tint-success-border:#2a3d2a;
+  --c-tint-success-fg:#86efac;
+  --c-tint-warn-bg:#2a220f;
+  --c-tint-warn-border:#4d3510;
+  --c-tint-warn-fg:#fcd34d;
+  --c-tint-danger-bg:#2a1414;
+  --c-tint-danger-border:#4d1a1a;
+  --c-tint-danger-fg:#fca5a5;
+  --c-tint-info-bg:#0f1a31;
+  --c-tint-info-border:#1e40af;
+  --c-tint-info-fg:#93c5fd;
+  --c-tint-travel-bg:#0f2231;
+  --c-tint-travel-border:#153a4d;
+  --c-tint-travel-fg:#7dd3fc;
+  --c-tint-brand-bg:#182418;
+  --c-tint-brand-border:#2a3d2a;
+  --c-tint-brand-fg:#9fdf9f;
+  --c-tint-purple-bg:#1f1a31;
+  --c-tint-purple-border:#2d2540;
+  --c-tint-purple-fg:#c4b5fd;
+  --c-tint-pink-bg:#2a1531;
+  --c-tint-pink-border:#3d2040;
+  --c-tint-pink-fg:#f9a8d4;
+  --c-tint-teal-bg:#0f2626;
+  --c-tint-teal-border:#2a3d3a;
+  --c-tint-teal-fg:#5eead4;
+  --c-tint-orange-bg:#2a1a0d;
+  --c-tint-orange-border:#4d2e10;
+  --c-tint-orange-fg:#fdba74;
+  --c-tint-slate-bg:#1a1d22;
+  --c-tint-slate-border:#2a2e35;
+  --c-tint-slate-fg:#cbd5e1;
+  --c-tint-yellow-bg:#2a260d;
+  --c-tint-yellow-border:#4d4310;
+  --c-tint-yellow-fg:#fde047;
+  --c-tint-green:var(--c-tint-success-bg);
+}
+/* ── neutral surface → dark card ── */
+body.dark [style*="background: rgb(255, 255, 255)"]{background:#17191c!important}
+body.dark [style*="background: rgb(248, 247, 244)"]{background:#0b0d0f!important}
+/* ── green tints (brand) ── */
+body.dark [style*="background: rgb(240, 247, 240)"]{background:#182418!important}
+body.dark [style*="background: rgb(240, 253, 244)"]{background:#162216!important}
+body.dark [style*="background: rgb(245, 250, 245)"]{background:#182418!important}
+body.dark [style*="background: rgb(198, 223, 198)"]{background:#2a3d2a!important}
+/* ── amber / warning tints ── */
+body.dark [style*="background: rgb(255, 251, 235)"]{background:#2a220f!important}
+body.dark [style*="background: rgb(255, 247, 237)"]{background:#2a1e0f!important}
+body.dark [style*="background: rgb(254, 243, 199)"]{background:#332810!important}
+body.dark [style*="background: rgb(254, 249, 195)"]{background:#332e0f!important}
+/* ── red / danger tints ── */
+body.dark [style*="background: rgb(254, 242, 242)"]{background:#2a1414!important}
+body.dark [style*="background: rgb(254, 226, 226)"]{background:#3a1a1a!important}
+/* Avoid-habit card tints: the default card bg (#fff5f5), the
+   transient "missed" bg (#fff1f1), and the success/miss border
+   colors (#86efac / #fca5a5). Without these the whole avoid list
+   stays stubbornly pink in dark mode. */
+body.dark [style*="background: rgb(255, 245, 245)"]{background:#241414!important}
+body.dark [style*="background: rgb(255, 241, 241)"]{background:#2a1414!important}
+body.dark [style*="solid rgb(254, 202, 202)"]{border-color:#4d1a1a!important}
+body.dark [style*="solid rgb(252, 165, 165)"]{border-color:#5a2020!important}
+body.dark [style*="solid rgb(134, 239, 172)"]{border-color:#2a3d2a!important}
+/* ── cyan / travel tints ── */
+body.dark [style*="background: rgb(240, 249, 255)"]{background:#0f2231!important}
+body.dark [style*="background: rgb(236, 254, 255)"]{background:#0f2631!important}
+body.dark [style*="background: rgb(207, 250, 254)"]{background:#123340!important}
+body.dark [style*="background: rgb(186, 230, 253)"]{background:#153a4d!important}
+/* ── blue tints ── */
+body.dark [style*="background: rgb(239, 246, 255)"]{background:#0f1a31!important}
+body.dark [style*="background: rgb(219, 234, 254)"]{background:#1a2540!important}
+/* ── purple / violet tints ── */
+body.dark [style*="background: rgb(245, 243, 255)"]{background:#1f1a31!important}
+body.dark [style*="background: rgb(221, 214, 254)"]{background:#2d2540!important}
+/* ── pink / rose tints ── */
+body.dark [style*="background: rgb(253, 244, 255)"]{background:#2a1531!important}
+body.dark [style*="background: rgb(240, 171, 252)"]{background:#3d2040!important}
+/* ── teal tints ── */
+body.dark [style*="background: rgb(240, 253, 250)"]{background:#0f2626!important}
+/* ── light gradients → dark gradients (hand-mapped to the 2 specific
+   gradients actually used by the XP/Level bar and the Insights card) ── */
+body.dark [style*="linear-gradient(135deg, rgb(240, 253, 244), rgb(240, 247, 240))"]{background:linear-gradient(135deg,#162216,#182418)!important}
+body.dark [style*="linear-gradient(135deg, rgb(240, 247, 240), rgb(245, 250, 245))"]{background:linear-gradient(135deg,#182418,#1a2a1a)!important}
+body.dark [style*="linear-gradient(180deg, rgb(248, 247, 244) 0%, rgb(239, 236, 229) 100%)"]{background:linear-gradient(180deg,#0b0d0f 0%,#1a1c1f 100%)!important}
+body.dark [style*="linear-gradient(90deg, rgb(254, 243, 199), rgb(253, 230, 138))"]{background:linear-gradient(90deg,#332810,#3d2f10)!important}
+/* ── borders: flip near-white / light gray borders to dark-mode gray.
+      The neutrals #e5e7eb and #f3f4f6 are handled by the --c-border /
+      --c-surface-muted tokens now; only the legacy tinted borders stay
+      here because they're not yet tokenized. ── */
+body.dark [style*="border: 1px solid rgb(198, 223, 198)"]{border-color:#2a3d2a!important}
+body.dark [style*="border: 1px solid rgb(186, 230, 253)"]{border-color:#153a4d!important}
+body.dark [style*="border: 1px solid rgb(253, 186, 116)"]{border-color:#4d2810!important}
+body.dark [style*="border: 1px solid rgb(254, 202, 202)"]{border-color:#4d1a1a!important}
+body.dark [style*="border: 1px solid rgb(253, 211, 77)"]{border-color:#4d3510!important}
+body.dark [style*="border-bottom: 1px solid rgb(252, 211, 77)"]{border-bottom-color:#4d3510!important}
+/* ── text colors: light-mode dark grays → dark-mode near-white.
+      The neutrals #1f2937 / #111827 / #374151 are handled by the
+      --c-text / --c-text-strong / --c-text-soft tokens now. Only the
+      non-tokenized grays (#6b7280, #9ca3af) still need overrides. ── */
+body.dark [style*="color: rgb(75, 85, 99)"]{color:#d1d5db!important}
+body.dark [style*="color: rgb(107, 114, 128)"]{color:#9ca3af!important}
+body.dark [style*="color: rgb(156, 163, 175)"]{color:#9ca3af!important}
+body.dark [style*="color: rgb(209, 213, 219)"]{color:#6b7280!important}
+/* ── accents on tinted cards: keep brand text readable on tinted dark bg ── */
+body.dark [style*="color: rgb(45, 90, 45)"]:not([data-brand]){color:#9fdf9f!important}
+body.dark [style*="color: rgb(8, 145, 178)"]{color:#7dd3fc!important}
+body.dark [style*="color: rgb(120, 53, 15)"]{color:#fcd34d!important}
+body.dark [style*="color: rgb(153, 27, 27)"]{color:#fca5a5!important}
+body.dark [style*="color: rgb(21, 128, 61)"]{color:#86efac!important}
+body.dark [style*="color: rgb(194, 65, 12)"]{color:#fdba74!important}
+body.dark [style*="color: rgb(217, 119, 6)"]{color:#fbbf24!important}
+/* Additional unmapped accents — caught by audit. Without these,
+   text bakes in mid-saturation hues that vanish on a dark surface
+   (info banners, danger-zone buttons, days-til-deadline chips). */
+body.dark [style*="color: rgb(220, 38, 38)"]{color:#fca5a5!important}    /* #dc2626 */
+body.dark [style*="color: rgb(185, 28, 28)"]{color:#fca5a5!important}    /* #b91c1c */
+body.dark [style*="color: rgb(180, 83, 9)"]{color:#fcd34d!important}     /* #b45309 */
+body.dark [style*="color: rgb(29, 78, 216)"]{color:#93c5fd!important}    /* #1d4ed8 */
+body.dark [style*="color: rgb(30, 58, 138)"]{color:#bfdbfe!important}    /* #1e3a8a */
+body.dark [style*="color: rgb(124, 58, 237)"]{color:#c4b5fd!important}   /* #7c3aed */
+body.dark [style*="color: rgb(219, 39, 119)"]{color:#f9a8d4!important}   /* #db2777 */
+body.dark [style*="color: rgb(13, 148, 136)"]{color:#5eead4!important}   /* #0d9488 */
+body.dark [style*="color: rgb(180, 83, 9)"]{color:#fcd34d!important}     /* #b45309 */
+body.dark [style*="color: rgb(22, 163, 74)"]{color:#86efac!important}    /* #16a34a */
+/* Light-blue/light-yellow borders for return banners and sub-pills
+   — keep them visible on a now-dark fill. */
+body.dark [style*="border: 1px solid rgb(191, 219, 254)"]{border-color:#1e40af!important}    /* #bfdbfe */
+body.dark [style*="border: 4px solid rgb(29, 78, 216)"]{border-color:#3b82f6!important}     /* #1d4ed8 */
+body.dark [style*="border: 1px solid rgb(253, 230, 138)"]{border-color:#a16207!important}   /* #fde68a */
+body.dark [style*="borderTop: 1px solid rgb(198, 223, 198)"]{border-top-color:#2a3d2a!important}
+/* Light divider lines (#f3f4f6) — left as near-white on dark. */
+body.dark [style*="border: 1px solid rgb(243, 244, 246)"]{border-color:#2a2f34!important}
+body.dark [style*="borderBottom: 1px solid rgb(243, 244, 246)"]{border-bottom-color:#2a2f34!important}
+body.dark [style*="border: 1px solid rgb(229, 231, 235)"]{border-color:#2a2f34!important}    /* #e5e7eb */
+body.dark [style*="borderBottom: 1px solid rgb(229, 231, 235)"]{border-bottom-color:#2a2f34!important}
+body.dark [style*="borderTop: 1px solid rgb(229, 231, 235)"]{border-top-color:#2a2f34!important}
+body.dark [style*="border: 1.5px solid rgb(209, 213, 219)"]{border-color:#3a3f44!important}  /* #d1d5db */
+/* SVG attribute strokes that the inline-style overrides can't catch. */
+body.dark circle[stroke="#e5e7eb"]{stroke:#2a2f34!important}
+body.dark circle[stroke="#d1d5db"]{stroke:#3a3f44!important}
+body.dark circle[stroke="#f3f4f6"]{stroke:#2a2f34!important}
+/* ── dashed travel-day outlines: stay visible on dark calendar ── */
+body.dark [style*="dashed rgb(103, 232, 249)"]{border-color:#67e8f9!important}
+/* Custom accent: remap the default green button background / accent
+   colors to the user's chosen --accent value. Uses inline-style
+   attribute substring matching because most components hard-code
+   "#2d5a2d" as inline style. Anything marked `data-brand="1"`
+   stays on the canonical Verrocchio green — the demo badge, the
+   "pick Verrocchio green" palette swatch, and the splash/brand
+   artwork explicitly opt out of recoloring. */
+body.accent-custom [style*="background: rgb(45, 90, 45)"]:not([data-brand]){background:var(--accent)!important}
+body.accent-custom [style*="color: rgb(45, 90, 45)"]:not([data-brand]){color:var(--accent)!important}
+body.accent-custom [style*="stroke: rgb(45, 90, 45)"]:not([data-brand]){stroke:var(--accent)!important}
+body.accent-custom [style*="fill: rgb(45, 90, 45)"]:not([data-brand]){fill:var(--accent)!important}
+/* Borders: match any width so `2px solid #2d5a2d` and `1.5px solid
+   #2d5a2d` both remap, plus the shorthand `border-color`, plus each
+   side-specific variant (borderTop/Bottom/Left/Right). */
+body.accent-custom [style*="solid rgb(45, 90, 45)"]:not([data-brand]){border-color:var(--accent)!important}
+body.accent-custom [style*="border-color: rgb(45, 90, 45)"]:not([data-brand]){border-color:var(--accent)!important}
+body.accent-custom [style*="border-top-color: rgb(45, 90, 45)"]:not([data-brand]){border-top-color:var(--accent)!important}
+body.accent-custom [style*="border-bottom-color: rgb(45, 90, 45)"]:not([data-brand]){border-bottom-color:var(--accent)!important}
+/* SVG presentation attributes (the bottom-nav icons and some chart
+   marks set `fill="#2d5a2d"` / `stroke="#2d5a2d"` rather than inline
+   style). Attribute selectors catch both the hex and normalized forms. */
+body.accent-custom svg [fill="#2d5a2d"]:not([data-brand]),
+body.accent-custom [fill="#2d5a2d"]:not([data-brand]){fill:var(--accent)!important}
+body.accent-custom svg [stroke="#2d5a2d"]:not([data-brand]),
+body.accent-custom [stroke="#2d5a2d"]:not([data-brand]){stroke:var(--accent)!important}
+/* Guided-tour highlight ring: gently pulse the brand-green glow around
+   the spotlighted target so the eye lands on it even before reading the
+   tooltip. Ring itself is drawn inline in renderTour(); this just
+   animates the box-shadow radius/alpha. */
+@keyframes tourPulse{
+  0%,100%{box-shadow:0 0 0 4px rgba(45,90,45,.25),0 8px 24px rgba(0,0,0,.3)}
+  50%{box-shadow:0 0 0 8px rgba(45,90,45,.15),0 8px 28px rgba(0,0,0,.32)}
+}
+/* Gated-step + button emphasis. Applied to the real target button (the
+   "New goal" / "New habit" [+]) while the tour is waiting for the user to
+   tap it, so the button itself visibly wobbles — not just a ring around
+   it. Slight scale + rotation so it reads as "look here, tap me" rather
+   than a steady pulse the eye filters out. */
+@keyframes tourTargetBounce{
+  0%,100%{transform:scale(1) rotate(0deg)}
+  20%{transform:scale(1.18) rotate(-4deg)}
+  40%{transform:scale(1.18) rotate(4deg)}
+  60%{transform:scale(1.1) rotate(-2deg)}
+  80%{transform:scale(1.05) rotate(0deg)}
+}
+.tour-target-bounce{animation:tourTargetBounce 1.4s ease-in-out infinite;transform-origin:center center}
+@media (prefers-reduced-motion: reduce){
+  .tour-target-bounce{animation:none}
+}
+/* Gated-step callout bob — arrow + bubble below the spotlighted button,
+   pointing up at it. Separate from tourTargetBounce so the callout
+   motion reads as an independent "look up here" nudge rather than being
+   yoked to the button's jiggle. */
+@keyframes tourCalloutBob{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+.tour-callout{animation:tourCalloutBob 1.1s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .tour-callout{animation:none}
+}
+::placeholder{color:#9ca3af}
+/* Strip the legacy outline so the green focus border on `.sf` reads
+   clean, but restore a visible ring for keyboard focus only. Mouse /
+   touch focus stays quiet; tab / arrow-key focus paints a soft brand
+   ring around inputs, buttons, and any custom focusable surface. */
+input,select,textarea{outline:none;font-family:inherit;-webkit-appearance:none;border-radius:0}
+:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(45,90,45,.28),0 0 0 1px rgba(45,90,45,.55)}
+input:focus-visible,select:focus-visible,textarea:focus-visible{box-shadow:0 0 0 3px rgba(45,90,45,.28),0 0 0 1px rgba(45,90,45,.55)}
+body.dark :focus-visible{box-shadow:0 0 0 3px rgba(159,223,159,.32),0 0 0 1px rgba(159,223,159,.6)}
+body.accent-custom :focus-visible{box-shadow:0 0 0 3px color-mix(in oklch,var(--accent) 32%,transparent),0 0 0 1px color-mix(in oklch,var(--accent) 65%,transparent)}
+/* ── Duration filter slider (Habits tab "Max time" control) ──
+   Native <input type="range"> renders a rectangular track by default.
+   We override with a pill-shaped track on both WebKit and Firefox so
+   the slider matches the rest of the pill-shaped filter chrome.
+   The thumb is a 14px circle in the same cyan accent so drag affordance
+   stays clear. accentColor on the element still tints the filled
+   portion on WebKit (via ::-webkit-slider-runnable-track inheritance)
+   and on Firefox (::-moz-range-progress). */
+/* Dual-thumb duration range slider. Two <input type="range"> elements
+   are absolutely stacked over a shared wrapper; their native tracks are
+   hidden and a custom gray track + accent-colored fill is drawn between
+   the two thumb positions. The inputs themselves get pointer-events:none
+   on the track so neither one steals the wrong thumb — only the thumbs
+   have pointer-events:auto. Thumbs use var(--accent) so they follow the
+   user's selected accent color (Verrocchio green by default). */
+.dur-slider-wrap{position:relative;height:18px;flex:1;min-width:80px}
+.dur-slider-wrap .dur-track{position:absolute;top:50%;transform:translateY(-50%);left:0;right:0;height:6px;border-radius:9999px;background:#e5e7eb;pointer-events:none}
+.dur-slider-wrap .dur-fill{position:absolute;top:50%;transform:translateY(-50%);height:6px;border-radius:9999px;background:var(--accent,#2d5a2d);pointer-events:none}
+.dur-slider-wrap input[type=range].dur-slider{position:absolute;top:0;left:0;width:100%;height:18px;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none;margin:0;padding:0}
+.dur-slider-wrap input[type=range].dur-slider:focus{outline:none}
+.dur-slider-wrap input[type=range].dur-slider::-webkit-slider-runnable-track{height:6px;background:transparent;border:none}
+.dur-slider-wrap input[type=range].dur-slider::-moz-range-track{height:6px;background:transparent;border:none}
+.dur-slider-wrap input[type=range].dur-slider::-moz-range-progress{background:transparent}
+.dur-slider-wrap input[type=range].dur-slider::-webkit-slider-thumb{pointer-events:auto;-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent,#2d5a2d);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);margin-top:-5px;cursor:pointer;position:relative;z-index:2}
+.dur-slider-wrap input[type=range].dur-slider::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:var(--accent,#2d5a2d);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer;position:relative;z-index:2}
+body.dark .dur-slider-wrap .dur-track{background:#2a2f36}
+body.dark .dur-slider-wrap input[type=range].dur-slider::-webkit-slider-thumb{border-color:#17191c}
+body.dark .dur-slider-wrap input[type=range].dur-slider::-moz-range-thumb{border-color:#17191c}
+/* Prevent iOS Safari from auto-zooming into inputs on focus (it fires
+   when the input's computed font-size < 16px and the zoom persists
+   AFTER blur — leaving the whole app stuck zoomed-in and forcing the
+   user to pinch back out). Forcing 16px on touch devices avoids that
+   without affecting desktop layouts that use smaller inputs. */
+@media (hover:none) and (pointer:coarse){
+  input,select,textarea{font-size:16px!important}
+}
+select{-webkit-appearance:none;appearance:none}
+textarea{resize:vertical}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.55)}50%{box-shadow:0 0 0 6px rgba(220,38,38,0)}}
+/* .fade-in base — mobile / small tablet defaults. The previous
+   max-width:640px clamp made portrait tablets and landscape phones
+   render as a narrow centered column with dead margins on each side;
+   tighter padding (12px vs 16px) gives phone cards a touch more room
+   too. Desktop (≥900px) blows the cap away with !important overrides
+   in the @media block above. */
+.fade-in{animation:fadeIn .2s ease forwards;max-width:none;margin:0;padding:14px 12px 110px;box-sizing:border-box}
+/* Phone profile (<=600px or runtime-classified "phone") — tighten the
+   horizontal gutters and top padding so:
+   1) the habits action row ([+] + Today + Filter + Sort + duration pill)
+      fits on ONE line at 390px without wrapping, and
+   2) the gap between the sticky app header and the first action row
+      shrinks closer to Apple-native list density.
+   Top padding 10px (was 14px) shaves ~4px under the header; horizontal
+   10px (was 12px) gives the pills ~4px more usable width on each side. */
+@media (max-width:600px){
+  .fade-in{padding:10px 10px 110px}
+}
+body[data-device="phone"] .fade-in{padding:10px 10px 110px}
+@media (min-width:601px) and (max-width:899px){
+  /* Tablet portrait / landscape phone middle ground — let cards
+     breathe a bit more than phone, but don't go all-the-way to the
+     full-bleed desktop layout (no auto-fit grids yet). */
+  .fade-in{padding-left:18px;padding-right:18px}
+}
+.pulsing{animation:pulse 1.5s ease infinite}
+/* ── Verrocchio welcome splash ("Ink V") ──────────────────────────────
+   Full-bleed brand animation on the welcome screen while
+   splashPhase === "loading" (see setSplashPhase timer). Pyramid
+   blocks stack bottom-to-top in quick springy succession; a Playfair
+   Display "V" is then DRAWN into the pyramid's negative space via
+   an SVG stroke-dashoffset reveal — left arm first, then the
+   thinner right arm — so the glyph appears hand-inked. The Lora
+   wordmark and italic tagline land last.
+   Earlier "Climber" (v2) and "Quick build" (v3) variants lived here
+   too; they were removed once the Ink V was chosen as the final
+   animation. If you need to restore them, their commit is in git. */
+.splashv4{position:fixed;inset:0;background:#faf8f3;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:9999}
+.splashv4 .stage{position:relative;flex:0 0 auto;width:320px;height:280px}
+/* Pyramid built from 10 individual square-ish blocks arranged 4-3-2-1
+   from bottom to top. Replaces the old four-bar version where each row
+   was one solid wide rectangle — the discrete blocks read as a stacked
+   constructed pyramid rather than a stepped wedge. Block size 44x26
+   with an 8px horizontal gap puts the bottom row at the same 200px
+   width the old layout used, so the V glyph sitting on top still
+   lines up. Vertical gap is 4px between rows. */
+.splashv4 .pyramid{position:absolute;top:66px;left:50%;width:200px;height:120px;transform:translateX(-50%)}
+.splashv4 .block{position:absolute;width:44px;height:26px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:4px;box-shadow:0 6px 14px rgba(45,90,45,.22),inset 0 1px 0 rgba(255,255,255,.18);opacity:0;animation:splashv4BlockPop 1s cubic-bezier(.34,1.56,.64,1) forwards;will-change:transform,opacity;transform-origin:50% 100%}
+/* Row 1 (4 blocks, bottom). 4*44 + 3*8 = 200 */
+.splashv4 .b1{bottom:0;left:0;animation-delay:.10s}
+.splashv4 .b2{bottom:0;left:52px;animation-delay:.20s}
+.splashv4 .b3{bottom:0;left:104px;animation-delay:.30s}
+.splashv4 .b4{bottom:0;left:156px;animation-delay:.40s}
+/* Row 2 (3 blocks). Offset 26px to center over row 1. */
+.splashv4 .b5{bottom:30px;left:26px;animation-delay:.54s}
+.splashv4 .b6{bottom:30px;left:78px;animation-delay:.64s}
+.splashv4 .b7{bottom:30px;left:130px;animation-delay:.74s}
+/* Row 3 (2 blocks). Offset 52px. */
+.splashv4 .b8{bottom:60px;left:52px;animation-delay:.88s}
+.splashv4 .b9{bottom:60px;left:104px;animation-delay:.98s}
+/* Row 4 (apex, 1 block). Offset 78px to center. */
+.splashv4 .b10{bottom:90px;left:78px;animation-delay:1.12s}
+/* Pop-in animation replacing the old "drop from above" stack: each
+   block grows from 0 with a slight pre-rotation, overshoots its final
+   size via a back-curve easing, and settles at 1×. Reads as blocks
+   snapping into place like puzzle pieces rather than dropping in. */
+@keyframes splashv4BlockPop{
+  0%   {opacity:0;transform:scale(0) rotate(-10deg)}
+  55%  {opacity:1;transform:scale(1.12) rotate(3deg)}
+  100% {opacity:1;transform:scale(1) rotate(0)}
+}
+/* Wordmark holds 10 individual letter spans — one per pyramid block.
+   Container itself is static (no entrance animation) so each letter
+   can fade up on its own staggered timing, paired 1:1 with the
+   matching block. Block 1 + V, block 2 + e, ..., block 10 + o. */
+.splashv4 .brand-wordmark{position:absolute;top:22px;left:50%;font-family:'Lora',Georgia,'Times New Roman',serif;font-weight:700;font-size:34px;line-height:1;color:#2d5a2d;letter-spacing:-.01em;white-space:nowrap;transform:translateX(-50%)}
+.splashv4 .wm-letter{display:inline-block;opacity:0;transform:translateY(6px);animation:splashv4LetterIn .84s cubic-bezier(.22,1,.36,1) forwards;will-change:transform,opacity}
+.splashv4 .wm-1{animation-delay:.10s}
+.splashv4 .wm-2{animation-delay:.20s}
+.splashv4 .wm-3{animation-delay:.30s}
+.splashv4 .wm-4{animation-delay:.40s}
+.splashv4 .wm-5{animation-delay:.54s}
+.splashv4 .wm-6{animation-delay:.64s}
+.splashv4 .wm-7{animation-delay:.74s}
+.splashv4 .wm-8{animation-delay:.88s}
+.splashv4 .wm-9{animation-delay:.98s}
+.splashv4 .wm-10{animation-delay:1.12s}
+@keyframes splashv4LetterIn{0%{opacity:0;transform:translateY(6px)}100%{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){.splashv4 .block,.splashv4 .wm-letter{animation-duration:.01s!important}}
+/* Quick mode: same-session reopens skip the staggered build and show
+   the finished lockup statically for ~700ms. The full pyramid magic
+   stays for the first cold launch in a tab; reloads stay snappy. */
+.splashv4-quick .block,.splashv4-quick .wm-letter{animation:none!important;opacity:1!important;transform:translateY(0)!important}
+.splashv4-quick .block{transform:translate(0,0) scale(1)!important}
+
+/* Compact pyramid + V brand mark — static lockup used on the quote card. */
+.brand-mark{position:relative;width:140px;height:78px;margin:0 auto 22px}
+.brand-mark .bm-block{position:absolute;left:50%;height:18px;background:linear-gradient(135deg,#2d5a2d 0%,#3d7a3d 100%);border-radius:3px;box-shadow:0 4px 10px rgba(45,90,45,.2),inset 0 1px 0 rgba(255,255,255,.18);transform:translateX(-50%)}
+.brand-mark .bm-b1{bottom:0;width:140px}
+.brand-mark .bm-b2{bottom:20px;width:105px}
+.brand-mark .bm-b3{bottom:40px;width:70px}
+.brand-mark .bm-b4{bottom:60px;width:35px}
+.brand-mark .bm-v{position:absolute;top:20px;left:50%;transform:translate(-50%,-2px);width:70px;height:58px;display:flex;align-items:center;justify-content:center;font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:900;font-size:62px;line-height:1;color:#f4efe4;text-shadow:0 2px 8px rgba(0,0,0,.25);pointer-events:none}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
+.hrow:hover .del-btn,.hrow:hover .edit-btn,.ecard:hover .e-del,.ecard:hover .e-edit{opacity:1!important}
+.sf{width:100%;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:6px 10px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.35;color:#374151;outline:none;resize:none;min-height:34px}
+.sf:focus{border-color:#2d5a2d}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
+input[type=number]{-moz-appearance:textfield}
+/* ── Editorial type voice ────────────────────────────────────────
+   .page-title  → Playfair Display, top-of-tab page heading. One per
+                  tab. Reads as the editorial spine of the app.
+   .card-title  → Lora, card headings + key numbers. Subhead role.
+   .eyebrow     → Mono uppercase kicker for metadata (date, "TODAY",
+                  category). Used sparingly on home + reflect.
+   Body copy stays SF Pro / system from the body{} stack above. */
+.page-title{font-family:'Playfair Display',Georgia,'Times New Roman',serif;font-weight:700;font-size:clamp(28px,7vw,40px);line-height:1.05;letter-spacing:-.012em;color:var(--c-text-strong);margin:0}
+.page-title-sub{font-family:'Playfair Display',Georgia,serif;font-weight:600;font-style:italic;font-size:clamp(15px,3.6vw,17px);line-height:1.35;color:var(--c-text-soft);margin:6px 0 0;letter-spacing:.005em}
+.card-title{font-family:'Lora',Georgia,serif;font-weight:700;letter-spacing:.005em}
+.eyebrow{font-family:ui-monospace,'SF Mono','Menlo',monospace;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--c-text-faint)}
+.tab-btn:active{color:#1f2937!important}
+.add-btn:active{background:#111827!important;transform:scale(0.98)}
+button{-webkit-tap-highlight-color:transparent}
+a{-webkit-tap-highlight-color:transparent}
+/* Safe area support for iPhone notch/home bar */
+.bottom-safe{padding-bottom:env(safe-area-inset-bottom,0px)}
+.top-safe{padding-top:env(safe-area-inset-top,0px)}
+
+/* ── iOS 26 "Liquid Glass" surfaces ────────────────────────────────
+   The header, bottom nav, onboarding cards, and tour tooltips all
+   carry the `.lg` class. The element itself gets a translucent fill
+   and heavy backdrop blur via inline styles (so variants can differ);
+   this class layers on the characteristic specular sheen — a bright
+   highlight at the top edge that fades to neutral, plus a very faint
+   bottom-edge darkening — via a ::before pseudo-element. Pointer
+   events pass through so the sheen never blocks a tap. */
+.lg{position:relative;isolation:isolate}
+.lg::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.55) 0%,rgba(255,255,255,.12) 28%,rgba(255,255,255,0) 55%,rgba(0,0,0,.03) 100%);z-index:0}
+.lg > *{position:relative;z-index:1}
+/* Dark mode — flip the sheen so the top edge still reads as a
+   highlight rather than a bright wash. */
+body.dark .lg::before{background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.04) 35%,rgba(255,255,255,0) 60%,rgba(0,0,0,.18) 100%)}
+
+/* ── Guided-tour tooltip dark-mode overrides ───────────────────────
+   The tour tooltip renders with a translucent white fill and dark
+   grey text so it reads cleanly on the light dim overlay. In dark
+   mode the attribute-selector rules above (which target exact
+   `rgb(...)` strings) don't match `rgba(...)` values, so the tip
+   would stay bright-white with dark text — hard to scan against the
+   dim. These class-based overrides swap the surface to a dark
+   translucent panel with light text, and also re-color the tour's
+   "demo navigation cards" (the top-docked form-step header and the
+   gated bubble callout) so their copy stays legible. */
+.tour-tip{background:rgba(255,255,255,0.72);color:#1f2937;border:1px solid rgba(255,255,255,0.7)}
+.tour-tip-title{color:#111}
+.tour-tip-body{color:#4b5563}
+.tour-tip-swipe{color:#9ca3af}
+body.dark .tour-tip{background:rgba(22,24,27,0.82)!important;color:#e5e7eb!important;border-color:rgba(255,255,255,0.08)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),inset 0 -1px 0 rgba(0,0,0,0.18),0 20px 48px rgba(0,0,0,.5),0 2px 8px rgba(0,0,0,.24)!important}
+body.dark .tour-tip-title{color:#f3f4f6!important}
+body.dark .tour-tip-body{color:#d1d5db!important}
+body.dark .tour-tip-swipe{color:#6b7280!important}
+/* Gated callout bubble (the "Add a goal to continue" pointer below
+   the spotlighted [+] button) uses a dark translucent fill inline,
+   so only its text needs a touch more contrast in dark mode. */
+body.dark .tour-gate-bubble{background:rgba(0,0,0,0.78)!important;color:#fff!important;border-color:rgba(255,255,255,0.12)!important}
+/* "Hold to Exit" affordance in the top-right of every tour tooltip.
+   A tap alone no longer exits the demo — the user has to hold the
+   button for ~900ms. Prevents accidental exits from stray taps while
+   the tooltip sits inside a busy spotlight layout, and the label
+   itself teaches the gesture. The ::after bar fills left→right during
+   the press to give visible progress; we toggle `.holding` from JS
+   (pointerdown/up) to start/stop the fill. */
+.tour-exit-demo{position:relative;overflow:hidden;background:transparent;border:1px solid rgba(0,0,0,0.12);color:#6b7280;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.2px;user-select:none;-webkit-user-select:none;touch-action:none}
+.tour-exit-demo:hover{color:#111;border-color:rgba(0,0,0,0.25)}
+.tour-exit-demo::after{content:"";position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(220,38,38,0.18);transition:width 0s linear;pointer-events:none}
+.tour-exit-demo.holding::after{width:100%;transition:width 900ms linear}
+.tour-exit-demo.holding{color:#b91c1c;border-color:rgba(220,38,38,0.55)}
+body.dark .tour-exit-demo{border-color:rgba(255,255,255,0.18);color:#9ca3af}
+body.dark .tour-exit-demo:hover{color:#fff;border-color:rgba(255,255,255,0.38)}
+body.dark .tour-exit-demo.holding{color:#fca5a5;border-color:rgba(252,165,165,0.6)}
+body.dark .tour-exit-demo.holding::after{background:rgba(252,165,165,0.18)}
+
+/* ── Path A: class-based tour spotlight ────────────────────────────
+   The old rect-tracking spotlight (getBoundingClientRect → 4 dim
+   panels carved around the rect + a ring drawn at the rect position)
+   was fragile in every possible way: targets not yet mounted on tour-
+   step change, tab transitions moving rects mid-render, scrolls
+   leaving the ring pinned to a stale position, nested scroll
+   containers requiring capture-phase listeners, form fields inside
+   the "hole" that still got the dim overlay on top of them. We
+   replaced the whole thing with two CSS classes toggled on the real
+   target DOM node:
+     • `.tour-target` lifts the element above a single full-screen
+       dim, draws a pulsing green ring via box-shadow, and scrolls it
+       into view — so the element IS the spotlight, no overlay math.
+     • `.tour-target-secondary` does the same but dashed + static —
+       used for the "you CAN tap here next" hint (e.g. the form's
+       Next button once a name is typed).
+   Because the element keeps its own position/size, resize and scroll
+   are handled for free by the browser's normal layout. No refs, no
+   re-measure effects, no dim panels. */
+.tour-dim{position:fixed;inset:0;background:rgba(0,0,0,0.42);z-index:9998;pointer-events:none}
+.tour-dim.form-step{background:rgba(0,0,0,0.22)}
+/* Note: no !important on the animated property (box-shadow).
+   Animations are clobbered by !important declarations on the same
+   property, so leaving box-shadow un-marked lets the tourPulse
+   keyframes take over during the spotlight. Position/z-index stay
+   !important so we always escape whatever stacking context the
+   target happens to sit in. */
+.tour-target{position:relative!important;z-index:9999!important;outline:2px solid #2d5a2d;outline-offset:3px;animation:tourPulse 1.6s ease-in-out infinite}
+.tour-target-secondary{position:relative!important;z-index:9999!important;outline:2px dashed #2d5a2d;outline-offset:3px;box-shadow:0 0 0 5px rgba(45,90,45,.14)}
+body.dark .tour-dim{background:rgba(0,0,0,0.62)}
+body.dark .tour-dim.form-step{background:rgba(0,0,0,0.40)}
+/* Floating "tap anywhere to explore" hint — gentle pulse that bobs
+   vertically and fades the pill so it reads as an invitation without
+   demanding attention. Pointer-events:none on the wrapper keeps the
+   hint from swallowing the dim-click that minimizes the tooltip. */
+@keyframes tourExploreBob{0%{transform:translateY(0);opacity:.72}50%{transform:translateY(-4px);opacity:1}100%{transform:translateY(0);opacity:.72}}
+.tour-explore-hint>div{animation:tourExploreBob 2.2s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.tour-explore-hint>div{animation:none;opacity:.9}}
+body.dark .tour-explore-hint>div{background:rgba(22,24,27,0.82)!important;color:#d1d5db!important;box-shadow:0 8px 22px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)!important}
+/* Resume-tour corner pill — same bob as the explore hint plus a soft
+   glow ring that pulses outward, so the pill catches the user's eye
+   after they've been poking at the page for a moment. Two animations
+   compose: tourExploreBob handles vertical drift + opacity; tour
+   ResumeGlow fades the box-shadow between a resting and a highlighted
+   value. Durations offset slightly so the two don't sync into a
+   jittery beat. */
+@keyframes tourResumeGlow{0%{box-shadow:0 10px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.9),0 0 0 0 rgba(45,90,45,0)}50%{box-shadow:0 10px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.9),0 0 0 8px rgba(45,90,45,.18)}100%{box-shadow:0 10px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.9),0 0 0 0 rgba(45,90,45,0)}}
+.tour-resume-pill{animation:tourExploreBob 2.4s ease-in-out infinite,tourResumeGlow 1.8s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.tour-resume-pill{animation:none}}
+body.dark .tour-resume-pill{background:rgba(22,24,27,0.82)!important;color:#9fdf9f!important}
+
+/* ── Dark-mode overrides for the liquid-glass header + bottom nav ──
+   Both surfaces use inline `background: rgba(255,255,255,0.55)` with
+   a heavy backdrop blur. In dark mode that near-white fill makes the
+   bars read as a bright wash against the dark page — the content
+   below bleeds through but the chrome itself becomes hard to pick
+   out. Re-tint with a dark translucent fill, darker border, and a
+   deeper drop shadow so the bars regain their edge.
+
+   Targeting uses the browser-normalized form of the inline style
+   (spaces after commas) so the selector matches what React's style
+   serializer produces. */
+body.dark [style*="background: rgba(255, 255, 255, 0.55)"]{
+  background:rgba(18,20,23,0.78)!important;
+  border-color:rgba(255,255,255,0.08)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),0 1px 10px rgba(0,0,0,.5)!important
+}
+/* The onboarding splash and other shells occasionally use a slightly
+   lighter fill (0.5 alpha) — cover that too. */
+body.dark [style*="background: rgba(255, 255, 255, 0.5)"]{
+  background:rgba(18,20,23,0.74)!important;
+  border-color:rgba(255,255,255,0.08)!important
+}
+
+/* ── Swipe-hint animation ──────────────────────────────────────────
+   The onboarding cards and the tour tooltips show "← swipe →" as a
+   nav hint. The word "swipe" rocks side to side so users who've never
+   seen a swipe-based navigator register the affordance. Gentle amp +
+   slow period — this is a persistent hint, not a call-to-action. */
+@keyframes lgSwipeRock{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-5px)}
+  75%{transform:translateX(5px)}
+}
+.swipe-hint{display:inline-flex;align-items:center;gap:4px}
+.swipe-hint .swipe-word{display:inline-block;animation:lgSwipeRock 2.2s ease-in-out infinite;will-change:transform}
+@media (prefers-reduced-motion: reduce){.swipe-hint .swipe-word{animation:none}}
+
+/* ── Confetti burst keyframe ───────────────────────────────────────
+   Paired with the fireConfetti() DOM helper. Each particle element
+   sets --cf-x / --cf-y / --cf-rot inline; the keyframe applies them
+   uniformly so the whole burst shares one animation at GPU cost
+   roughly equivalent to a single transform per particle. */
+@keyframes confetti-fall{
+  to{transform:translate(var(--cf-x,0),var(--cf-y,80vh)) rotate(var(--cf-rot,720deg));opacity:0}
+}
+
+/* ── Onboarding illustrations ──────────────────────────────────────
+   Replace the emoji header on each pre-app screen with a quiet SVG
+   animation. Same ~48px footprint as the old emoji. Each loop takes
+   a few seconds so the page feels alive without demanding attention.
+   All animations are GPU-friendly transform/opacity only. */
+.ob-illus{width:56px;height:56px;display:block;margin:0 auto 10px}
+.ob-illus *{transform-box:fill-box;transform-origin:center}
+
+/* Target: two rings pulse outward, the bullseye pulses on the spot. */
+@keyframes obTargetRing{
+  0%{transform:scale(.55);opacity:0}
+  35%{opacity:.9}
+  100%{transform:scale(1.25);opacity:0}
+}
+@keyframes obTargetDot{
+  0%,100%{transform:scale(1)}
+  50%{transform:scale(1.35)}
+}
+.ob-target-ring{animation:obTargetRing 2.4s ease-out infinite}
+.ob-target-ring.d2{animation-delay:1.2s}
+.ob-target-dot{animation:obTargetDot 2.4s ease-in-out infinite}
+
+/* Ladder: rungs climb in sequence, then fade together and restart. */
+@keyframes obLadderRung{
+  0%{transform:translateY(10px);opacity:0}
+  15%,80%{transform:translateY(0);opacity:1}
+  100%{transform:translateY(-10px);opacity:0}
+}
+.ob-ladder-rung{animation:obLadderRung 2.8s ease-in-out infinite}
+.ob-ladder-rung.r2{animation-delay:.25s}
+.ob-ladder-rung.r3{animation-delay:.5s}
+.ob-ladder-rung.r4{animation-delay:.75s}
+
+/* Compass: the needle swings, overshoots, settles on north, rests. */
+@keyframes obCompassNeedle{
+  0%{transform:rotate(-45deg)}
+  25%{transform:rotate(140deg)}
+  45%{transform:rotate(60deg)}
+  65%{transform:rotate(100deg)}
+  80%,100%{transform:rotate(90deg)}
+}
+.ob-compass-needle{animation:obCompassNeedle 3s ease-in-out infinite;transform-origin:center}
+
+/* Scale: beam wobbles like a real scale finding equilibrium. */
+@keyframes obScaleTilt{
+  0%,100%{transform:rotate(-8deg)}
+  50%{transform:rotate(8deg)}
+}
+.ob-scale-beam{animation:obScaleTilt 3.2s ease-in-out infinite;transform-origin:center}
+
+/* Sparkle: the core pulses; diagonal rays fade in and out on offset. */
+@keyframes obSparkleCore{
+  0%,100%{transform:scale(.85);opacity:.6}
+  50%{transform:scale(1.15);opacity:1}
+}
+@keyframes obSparkleRay{
+  0%,100%{opacity:.15}
+  50%{opacity:1}
+}
+.ob-sparkle-core{animation:obSparkleCore 2s ease-in-out infinite}
+.ob-sparkle-ray{animation:obSparkleRay 2s ease-in-out infinite}
+.ob-sparkle-ray.r2{animation-delay:1s}
