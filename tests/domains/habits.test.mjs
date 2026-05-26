@@ -383,3 +383,81 @@ test("appWideStreak respects a custom windowDays cap", () => {
     "narrow 3-day window caps the streak at 3"
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// sortAreasByProgress — Goals tab's "areas that need attention" order
+// ─────────────────────────────────────────────────────────────────────────
+
+// Synthetic getCR for deterministic tests: looks up the habit's own
+// `.pct` field so tests can hand-pick the rate without building a real
+// 30-day completion history.
+const fakeCR = h => ({ pct: h && typeof h._pct === "number" ? h._pct : 0 });
+
+test("sortAreasByProgress puts the lowest-average area first", () => {
+  // Arrange — two areas; Mind avg = 30, Fitness avg = 80
+  const habits = [
+    { id: 1, type: "Mind",    _pct: 20 },
+    { id: 2, type: "Mind",    _pct: 40 },
+    { id: 3, type: "Fitness", _pct: 80 }
+  ];
+  const areas = [{ value: "Mind" }, { value: "Fitness" }];
+  // Act
+  const out = habitsDomain.sortAreasByProgress(habits, areas, { getCR: fakeCR });
+  // Assert — Mind first (lower avg means "needs attention")
+  assert.deepEqual(out.map(a => a.value), ["Mind", "Fitness"]);
+});
+
+test("sortAreasByProgress sorts areas with no habits to the very end (score = Infinity)", () => {
+  const habits = [
+    { id: 1, type: "Mind",    _pct: 60 },
+    { id: 2, type: "Fitness", _pct: 30 }
+  ];
+  const areas = [{ value: "Empty" }, { value: "Mind" }, { value: "Fitness" }];
+  const out = habitsDomain.sortAreasByProgress(habits, areas, { getCR: fakeCR });
+  assert.equal(out[out.length - 1].value, "Empty", "Empty area lands at the end");
+});
+
+test("sortAreasByProgress excludes parked habits from each area's score", () => {
+  // Arrange — Mind has one active habit at 10% and one parked at 100%.
+  // Without the parked filter the avg would be 55; with it the avg is 10
+  // and Mind sorts first (low) instead of last (high).
+  const habits = [
+    { id: 1, type: "Mind", parked: false, _pct: 10 },
+    { id: 2, type: "Mind", parked: true,  _pct: 100 },
+    { id: 3, type: "Fitness", _pct: 50 }
+  ];
+  const areas = [{ value: "Mind" }, { value: "Fitness" }];
+  const out = habitsDomain.sortAreasByProgress(habits, areas, { getCR: fakeCR });
+  assert.deepEqual(out.map(a => a.value), ["Mind", "Fitness"]);
+});
+
+test("sortAreasByProgress is stable for tied scores (preserves input order)", () => {
+  // Arrange — every area has the same average. The output order MUST
+  // match the input order; this is what the inline code's `return 0`
+  // tie-breaker pinned.
+  const habits = [
+    { id: 1, type: "A", _pct: 50 },
+    { id: 2, type: "B", _pct: 50 },
+    { id: 3, type: "C", _pct: 50 }
+  ];
+  const areas = [{ value: "A" }, { value: "B" }, { value: "C" }];
+  const out = habitsDomain.sortAreasByProgress(habits, areas, { getCR: fakeCR });
+  assert.deepEqual(out.map(a => a.value), ["A", "B", "C"]);
+});
+
+test("sortAreasByProgress returns a new array (input not mutated)", () => {
+  const habits = [{ id: 1, type: "B", _pct: 10 }, { id: 2, type: "A", _pct: 90 }];
+  const areas = [{ value: "A" }, { value: "B" }];
+  const before = areas.slice();
+  habitsDomain.sortAreasByProgress(habits, areas, { getCR: fakeCR });
+  assert.deepEqual(areas, before, "input areas array must remain unchanged");
+});
+
+test("sortAreasByProgress handles empty / null habits + areas without throwing", () => {
+  assert.deepEqual(habitsDomain.sortAreasByProgress([], [], { getCR: fakeCR }), []);
+  assert.deepEqual(habitsDomain.sortAreasByProgress(null, null, { getCR: fakeCR }), []);
+  assert.deepEqual(
+    habitsDomain.sortAreasByProgress(null, [{ value: "A" }], { getCR: fakeCR }).map(a => a.value),
+    ["A"]
+  );
+});

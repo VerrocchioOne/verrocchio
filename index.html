@@ -5133,30 +5133,14 @@ function App() {
     () => window.historyDomain.flatHistoryEvents(data),
     [data && data.habits, data && data.goals, data && data.goalArchive]
   );
-  // §perf — Goals tab "sort areas by recent progress" was an inline
-  // IIFE inside the Goals render that called getCR(h) for every habit
-  // in every area on EVERY Goals render. With 50 habits × ~10 areas
-  // that's 500 completion-rate computations per render. Memoize so it
-  // only recomputes when habits change (parked flag is read inside).
-  // Mirrors the sortAreasByProgress(HT) call at the Goals tab — same
-  // logic, lifted up. Goals-tab IIFE still has a local fallback for
-  // non-default sort modes (custom / date-sort); this memo only feeds
-  // the default "by progress" path.
-  const memoedAreaProgress = useMemo(() => {
-    const allH = (data && data.habits || []).filter(h => !h.parked);
-    const score = (areaValue) => {
-      const inArea = allH.filter(h => h && h.type === areaValue);
-      if (inArea.length === 0) return Infinity;
-      const total = inArea.reduce((s, h) => s + (getCR(h).pct || 0), 0);
-      return total / inArea.length;
-    };
-    return HT.slice().sort((a, b) => {
-      const sa = score(a.value);
-      const sb = score(b.value);
-      if (sa !== sb) return sa - sb;
-      return 0;
-    });
-  }, [data && data.habits]);
+  // §perf — Goals tab "sort areas by recent progress". Pure logic in
+  // habitsDomain.sortAreasByProgress; useMemo here keeps the per-habit
+  // getCR fan-out off the hot render path. Goals-tab IIFE still has a
+  // local fallback for non-default sort modes (custom / date-sort).
+  const memoedAreaProgress = useMemo(
+    () => window.habitsDomain.sortAreasByProgress((data && data.habits) || [], HT),
+    [data && data.habits]
+  );
   const achievementStats = useMemo(() => {
     const habitsArr = (data && data.habits) || [];
     const goalsArr = (data && data.goals) || [];
