@@ -306,3 +306,80 @@ test("isDueOn: legacy weekly-day type is normalized to weekly", () => {
   assert.equal(habitsDomain.isDueOn(h, "2026-05-23"), true);  // Saturday
   assert.equal(habitsDomain.isDueOn(h, "2026-05-25"), false); // Monday
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// appWideStreak — global "any habit done" streak across all habits
+// ─────────────────────────────────────────────────────────────────────────
+
+// Pin "now" to local noon on 2026-05-25 so day-0 / day-1 / day-2 keys
+// are stable irrespective of timezone.
+const APP_STREAK_NOW = new Date(2026, 4, 25, 12, 0, 0);
+
+test("appWideStreak counts consecutive days with ANY positive completion across habits", () => {
+  // Arrange — two habits cover the last 3 days between them, with no gaps
+  const habits = [
+    { id: 1, completions: { "2026-05-25": "done", "2026-05-23": "done" } },
+    { id: 2, completions: { "2026-05-24": "done" } }
+  ];
+  // Act
+  const out = habitsDomain.appWideStreak(habits, { now: APP_STREAK_NOW });
+  // Assert — streak walks back today, yesterday, day-before — 3
+  assert.equal(out, 3);
+});
+
+test("appWideStreak allows today (day 0) to be blank without breaking the streak", () => {
+  // Arrange — no completion today, but yesterday + 2 days ago are filled
+  const habits = [
+    { id: 1, completions: { "2026-05-24": "done", "2026-05-23": "done" } }
+  ];
+  // Act
+  // Assert — today blank is OK; streak is 2 (yesterday + day-before)
+  assert.equal(habitsDomain.appWideStreak(habits, { now: APP_STREAK_NOW }), 2);
+});
+
+test("appWideStreak breaks on the first blank day after a started streak", () => {
+  // Arrange — today filled, yesterday blank, day-before filled
+  const habits = [
+    { id: 1, completions: { "2026-05-25": "done", "2026-05-23": "done" } }
+  ];
+  // Act
+  // Assert — only today counts; the blank yesterday breaks the chain
+  assert.equal(habitsDomain.appWideStreak(habits, { now: APP_STREAK_NOW }), 1);
+});
+
+test("appWideStreak excludes parked habits from the union", () => {
+  // Arrange — every recent completion is on a parked habit
+  const habits = [
+    { id: 1, parked: true,  completions: { "2026-05-25": "done", "2026-05-24": "done" } },
+    { id: 2, parked: false, completions: {} } // active but blank
+  ];
+  // Act
+  // Assert — the only active habit has no completions, so streak is 0
+  assert.equal(habitsDomain.appWideStreak(habits, { now: APP_STREAK_NOW }), 0);
+});
+
+test("appWideStreak returns 0 when there are no non-parked habits at all", () => {
+  assert.equal(habitsDomain.appWideStreak([], { now: APP_STREAK_NOW }), 0);
+  assert.equal(habitsDomain.appWideStreak([{ id: 1, parked: true }], { now: APP_STREAK_NOW }), 0);
+  assert.equal(habitsDomain.appWideStreak(null, { now: APP_STREAK_NOW }), 0);
+  assert.equal(habitsDomain.appWideStreak(undefined, { now: APP_STREAK_NOW }), 0);
+});
+
+test("appWideStreak respects a custom windowDays cap", () => {
+  // Arrange — 5 consecutive days going back from today
+  const days = ["2026-05-25", "2026-05-24", "2026-05-23", "2026-05-22", "2026-05-21"];
+  const completions = {};
+  days.forEach(k => completions[k] = "done");
+  const habits = [{ id: 1, completions }];
+  // Act + Assert
+  assert.equal(
+    habitsDomain.appWideStreak(habits, { now: APP_STREAK_NOW, windowDays: 365 }),
+    5,
+    "wide window captures the full 5-day streak"
+  );
+  assert.equal(
+    habitsDomain.appWideStreak(habits, { now: APP_STREAK_NOW, windowDays: 3 }),
+    3,
+    "narrow 3-day window caps the streak at 3"
+  );
+});

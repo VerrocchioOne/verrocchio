@@ -5117,26 +5117,13 @@ function App() {
     const hs = (data && data.habits) || [];
     return hs.filter(h => h && h.section !== "avoid" && !h.parked).map(h => detectOffSchedule(h)).filter(Boolean);
   }, [data && data.habits]);
-  // §perf — App-wide streak. Was an inline IIFE in the top-bar JSX
-  // walking up to 365 days × N habits on EVERY app render (every
-  // keypress, every toggle, every state write — CRITICAL hot path).
-  // Memoize so it only recomputes when habits change.
-  const memoedAppStreak = useMemo(() => {
-    const hs = (data && data.habits || []).filter(h => h && !h.parked);
-    if (!hs.length) return 0;
-    let streak = 0;
-    let started = false;
-    for (let i = 0; i < 365; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = dk(d);
-      const any = hs.some(h => h.completions && h.completions[key]);
-      if (any) { streak++; started = true; }
-      else if (started) break;
-      else if (i > 0) break; // today blank is OK, day-1 blank breaks
-    }
-    return streak;
-  }, [data && data.habits]);
+  // §perf — App-wide streak. Pure logic in habitsDomain.appWideStreak;
+  // useMemo here keeps the 365-day walk off the hot render path so it
+  // recomputes only when habits change.
+  const memoedAppStreak = useMemo(
+    () => window.habitsDomain.appWideStreak((data && data.habits) || []),
+    [data && data.habits]
+  );
   // §perf — historyPanel timeline. The Profile sheet's history IIFE
   // used to iterate goalArchive + every goal's history + every
   // habit's history and sort the whole flat array on every Profile
