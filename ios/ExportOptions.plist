@@ -5,7 +5,7 @@
   <key>method</key>
   <string>app-store-connect</string>
   <key>teamID</key>
-  <string>{{TEAM_ID}}</string>
+  <string>ZMKT796J9U</string>
   <key>uploadSymbols</key>
   <true/>
   <key>signingStyle</key>

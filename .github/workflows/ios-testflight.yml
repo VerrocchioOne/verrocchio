@@ -1,0 +1,159 @@
+name: Build iOS app and deploy to TestFlight
+
+# Manual-trigger contract: every workflow_dispatch run scaffolds the
+# Capacitor iOS project from scratch, archives a Release build, and
+# uploads the signed .ipa to App Store Connect / TestFlight under the
+# Verrocchio LLC team (ZMKT796J9U, bundle id app.verrocchio).
+#
+# Setup notes (one-time, per docs/TESTFLIGHT.md):
+#   1. App Store Connect API key (.p8) — Users and Access → Integrations
+#      → App Store Connect API → Team Keys → "+" → Access: App Manager.
+#      Download the .p8 (one-time-only). Note the Key ID and Issuer ID.
+#   2. Distribution certificate (.p12) — generate CSR on Windows with
+#      OpenSSL, upload to developer.apple.com → Certificates → iOS
+#      Distribution (App Store), download .cer, combine with the private
+#      key into a password-protected .p12.
+#   3. Provisioning profile (.mobileprovision) — developer.apple.com →
+#      Profiles → "+" → App Store → select bundle id and distribution
+#      cert from steps above. Download the .mobileprovision file.
+#   4. Add 6 repository secrets at Settings → Secrets and variables →
+#      Actions → New repository secret:
+#        ASC_API_KEY_ID            — 10-char Key ID from step 1
+#        ASC_API_ISSUER_ID         — UUID Issuer ID from step 1
+#        ASC_API_KEY_BASE64        — base64 of the .p8 file from step 1
+#        BUILD_CERTIFICATE_BASE64  — base64 of the .p12 from step 2
+#        P12_PASSWORD              — password used when creating the .p12
+#        BUILD_PROVISION_PROFILE_BASE64 — base64 of the .mobileprovision
+#   5. Run this workflow from the Actions tab → "Run workflow". First
+#      build takes ~12 min on macos-14. Subsequent runs reuse npm cache.
+#
+# Triggering: workflow_dispatch only. Auto-build on every push is
+# explicitly NOT wired — TestFlight builds are billed runner-minutes
+# and intentionally manual to avoid silently burning the macOS quota.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    env:
+      # Bundle id locked once the App Store Connect app entry is created.
+      # See memory: project_apple_developer_team.md.
+      BUNDLE_ID: app.verrocchio
+      TEAM_ID: ZMKT796J9U
+      # Marketing version stays manual (bump per release). Build number
+      # auto-increments via github.run_number so every workflow run
+      # produces a TestFlight-acceptable unique build.
+      MARKETING_VERSION: '1.0.0'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build dist/ first so cap sync has a webDir to copy.
+      - name: Build web assets
+        run: npm run build
+
+      # Capacitor iOS scaffold is generated, never committed — keeps the
+      # repo clean and guarantees the project matches the current
+      # capacitor.config.json on every run.
+      - name: Scaffold Capacitor iOS project
+        run: npx cap add ios
+
+      # Capacitor doesn't auto-wire the prepped icons or privacy
+      # manifest. Copy them into the generated Xcode project.
+      - name: Copy app icons and privacy manifest
+        run: |
+          cp -R ios/AppIcon.appiconset/. ios/App/App/Assets.xcassets/AppIcon.appiconset/
+          cp ios/PrivacyInfo.xcprivacy ios/App/App/
+
+      - name: Capacitor sync
+        run: npx cap sync ios
+
+      - name: Install CocoaPods dependencies
+        working-directory: ios/App
+        run: pod install
+
+      # Apply marketing version + auto-incrementing build number to
+      # Info.plist. CFBundleShortVersionString = user-visible version,
+      # CFBundleVersion = unique per upload (App Store Connect rejects
+      # duplicates within the same marketing version).
+      - name: Set version and build number
+        working-directory: ios/App
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ env.MARKETING_VERSION }}" App/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" App/Info.plist
+
+      # Imports the .p12 into a temporary keychain. The action creates a
+      # throwaway keychain, unlocks it, and adds it to the search list so
+      # codesign can find the identity during xcodebuild archive.
+      - name: Import signing certificate
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+
+      # Decode the provisioning profile and drop it where Xcode looks
+      # for it. xcodebuild matches by bundle id + signing identity.
+      - name: Install provisioning profile
+        env:
+          PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        run: |
+          PP_PATH="$RUNNER_TEMP/Verrocchio_AppStore.mobileprovision"
+          echo -n "$PROVISION_PROFILE_BASE64" | base64 --decode --output "$PP_PATH"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PP_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+
+      - name: Archive
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/App.xcarchive \
+            -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM=$TEAM_ID \
+            CODE_SIGN_STYLE=Manual \
+            archive
+
+      - name: Export IPA
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportOptionsPlist ../ExportOptions.plist \
+            -exportPath build/
+
+      # Useful when a run fails after archive — grab the .ipa to inspect
+      # locally without burning another macOS-runner build.
+      - name: Upload IPA as workflow artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verrocchio-ios-build-${{ github.run_number }}
+          path: ios/App/build/*.ipa
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ios/App/build/App.ipa
+          issuer-id: ${{ secrets.ASC_API_ISSUER_ID }}
+          api-key-id: ${{ secrets.ASC_API_KEY_ID }}
+          api-private-key: ${{ secrets.ASC_API_KEY_BASE64 }}

@@ -1,5 +1,5 @@
 {
-  "appId": "com.verrocchio.app",
+  "appId": "app.verrocchio",
   "appName": "Verrocchio",
   "webDir": "dist",
   "server": {
