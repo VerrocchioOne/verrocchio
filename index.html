@@ -7274,7 +7274,8 @@ function App() {
   // identity. Each row also carries `_renderSlotMeta` with section,
   // localIdx, and total countInSection so the renderer can build the
   // "Morning #2" label without re-deriving the same index data.
-  const groupedH = useMemo(() => SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => {
+  const groupedH = useMemo(() => {
+    const groups = SECTIONS.filter(sec => secFilter.length === 0 || secFilter.includes(sec.value)).map(sec => {
     // Expand each habit into one row per matching slot occurrence in
     // this section. Non-multi-slot habits return a single row.
     const expanded = [];
@@ -7316,7 +7317,29 @@ function App() {
       ...sec,
       habits: sortItems(expanded, habitSortMode, "habit")
     };
-  }).filter(g => g.habits.length > 0), [filtH, secFilter, habitSortMode]);
+    }).filter(g => g.habits.length > 0);
+    // Stamp `displayPartNum` on each slot row based on the row's VISUAL
+    // position across all sections in render order. Replaces the older
+    // `arrayIdx + 1` label, which reflected STORAGE order in slotSections
+    // and could leave a card labeled "3/4" sitting visually in front of
+    // "1/4" after a drag-reorder. Per-habit counter walks groups in
+    // SECTIONS display order so the topmost rendered slot of any given
+    // habit reads "1", the next "2", etc., regardless of the underlying
+    // slotSections array order. _renderSlotMeta is a fresh object created
+    // above, so in-place mutation here is safe (not shared with data.habits).
+    const partCounters = new Map();
+    for (const grp of groups) {
+      for (const row of grp.habits) {
+        const meta = row._renderSlotMeta;
+        if (!meta) continue;
+        const key = String(row.id);
+        const next = (partCounters.get(key) || 0) + 1;
+        partCounters.set(key, next);
+        meta.displayPartNum = next;
+      }
+    }
+    return groups;
+  }, [filtH, secFilter, habitSortMode]);
 
   /* ── ONBOARDING: AUTH + WELCOME GATES ── */
   // Shared page shell for auth/welcome

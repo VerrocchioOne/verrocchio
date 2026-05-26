@@ -31,6 +31,16 @@ These are not feature requests — they are process directives that govern HOW w
 
 ---
 
+## 2026-05-26 — Multi-slot card labels must follow visual order
+
+### Verbatim
+"for the multi-slot habits, make sure the naming convention is correct. i.e., the first card should be 1/y, the 2nd card 2/y, so on and so forth. ANd the cards should rename based on their order. That way you cant have a 3/4 card infront of a 1/4 card."
+
+### Contextualized summary
+The `(Part N/M)` badge on multi-slot habit cards was reading N from `meta.arrayIdx + 1` — the index in the stored `slotSections` array. Drag-reorder uses `slotOrders[arrayIdx]` to change visual position without touching `arrayIdx`, so a card with arrayIdx=2 could be dragged to the top of the section and still display "(Part 3/4)" sitting above "(Part 1/4)". Fix: after `groupedH` sorts each section's rows visually, walk all groups in SECTIONS display order and stamp a per-habit `displayPartNum` (1, 2, 3, ...) on each slot row's `_renderSlotMeta`. The renderer in `lib/views/HabitsHabitCard.js` now reads `meta.displayPartNum` (with `arrayIdx + 1` fallback). Total `M` stays `slots.length`. Slot identity (`slotId = "<section>:<localIdx>"`), persisted slotCompletions keys, and the storage-order semantics of `slotIdForIndex`/`slotRowsFor` are unchanged — this is render-only renumbering. Unit tests: 45/45 pass. E2E: 21/21 desktop pass. **Status:** IMPLEMENTED — visual verification pending (drag a slot in a multi-slot habit and confirm the badge re-numbers).
+
+---
+
 ### Weekly debug pass — 2026-05-25
 
 5 investigations completed. (1) icalendar MODULE_NOT_FOUND (recurring) — **environment workaround** (npm install); permanent fix requires user to invoke `/session-start-hook` once to install the auto-install hook. (2) getFreq/isHabitDueOn three-way duplication — **fixed** (extracted to `lib/constants.js`, inline definitions in `index.html` replaced with tombstone comments, 20 regression tests added including all §audit-P1 gate scenarios; commit `8f4cf6a`). (3) §5.2 same-section multi-slot reorder — **triage updated**: prior entry was written against SortableJS (removed v71); v72-v74 button-based reorder (`moveRowWithinSection`/`slotOrders`) eliminates the original failure mode by design. (4) Weekly Review hour gate in BriefView — **triaged** (confirmed fixed since 2026-05-13 at `BriefView.js:897-898`; no regression). (5) `habitsDueOnDay` startDate gate — **triaged** (confirmed correct at `calendar.js:151`; lexicographic YYYY-MM-DD comparison matches §audit-P1 semantics).
