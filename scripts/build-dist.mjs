@@ -29,6 +29,7 @@ const FILES = [
   'lib/domains/calendar.js',
   'lib/domains/history.js',
   'lib/domains/achievements.js',
+  'lib/domains/quotes.js',
   'lib/views/BriefView.js',
   'lib/views/BriefTopBanners.js',
   'lib/views/HabitsView.js',

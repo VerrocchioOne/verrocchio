@@ -147,6 +147,7 @@
 <script src="./lib/domains/calendar.js"></script>
 <script src="./lib/domains/history.js"></script>
 <script src="./lib/domains/achievements.js"></script>
+<script src="./lib/domains/quotes.js"></script>
 <!-- §13.4a (v75) — Per-view React component modules. -->
 <script src="./lib/views/BriefView.js"></script>
 <script src="./lib/views/BriefTopBanners.js"></script>
@@ -7592,26 +7593,18 @@ function App() {
     });
     sEQId(null);
   };
-  const allQuotes = useMemo(() => {
-    const custom = data.quotes || [];
-    // Owner-only seeded quotes. Non-owner accounts start with an
-    // empty inspiration panel so the experience is theirs to curate
-    // — they can add their own custom quotes from the panel itself.
-    if (!canUploadFiles(authUser && authUser.email)) return custom;
-    const presetWithIds = PRESET_QUOTES.map((q, i) => ({
-      ...q,
-      id: `pq${i}`,
-      preset: true,
-      dateKey: null
-    }));
-    return [...presetWithIds, ...custom];
-  }, [data.quotes, authUser && authUser.email]);
-  const todayQ = () => {
-    const qs = allQuotes;
-    if (!qs.length) return null;
-    const idx = Math.abs(tk().split("-").reduce((a, b) => a * 31 + parseInt(b), 0)) % qs.length;
-    return qs[idx];
-  };
+  // allQuotes + todayQ logic lives in lib/domains/quotes.js.
+  // Owner-only seeded quotes: non-owner accounts start with an empty
+  // Inspiration panel so the experience is theirs to curate.
+  const allQuotes = useMemo(
+    () => window.quotesDomain.mergeQuotes(
+      data.quotes,
+      PRESET_QUOTES,
+      canUploadFiles(authUser && authUser.email)
+    ),
+    [data.quotes, authUser && authUser.email]
+  );
+  const todayQ = () => window.quotesDomain.quoteForDate(allQuotes, tk());
 
   /* MORNING BRIEF */
   /* ── DAILY RITUAL HELPERS ──

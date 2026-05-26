@@ -47,6 +47,7 @@ precaching.precacheAndRoute([
   { url: "./lib/domains/calendar.js",     revision: SHELL_VERSION },
   { url: "./lib/domains/history.js",      revision: SHELL_VERSION },
   { url: "./lib/domains/achievements.js", revision: SHELL_VERSION },
+  { url: "./lib/domains/quotes.js",       revision: SHELL_VERSION },
   { url: "./lib/views/BriefView.js",        revision: SHELL_VERSION },
   { url: "./lib/views/BriefTopBanners.js",  revision: SHELL_VERSION },
   { url: "./lib/views/HabitsView.js",   revision: SHELL_VERSION },
