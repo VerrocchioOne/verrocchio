@@ -517,8 +517,11 @@ The default sell is Path A: it works universally and requires nothing from the u
 ## 4. Home Page — Tips & Reminders
 
 ### 4.1 Remove "review yesterday's habit" tip
-- **Reason:** There is already a separate module dedicated to this.
-- **Action:** Filter out that tip variant from the tips/reminders generator.
+
+> **🟢 Shipped** — the redundant tip variant no longer exists in `tipsForToday` ([lib/domains/brief.js:149-322](../lib/domains/brief.js#L149)). The Brief tab's dedicated "review yesterday" surface is the gate-closed empty state on the Daily Briefing card itself ([lib/views/BriefView.js:343-376](../lib/views/BriefView.js#L343)) with a "Review yesterday" CTA that opens the Habits tab focused on yesterday. The tips/reminders generator only emits 8 tip categories, none of which duplicate the yesterday-review nudge.
+
+- **Original reason:** There is already a separate module dedicated to this.
+- **Original action:** Filter out that tip variant from the tips/reminders generator.
 
 ### 4.2 AI-generated tips based on user data
 - Tips and reminders should be **personalized** by analyzing several days of inputted user data (completions, journal sentiment, neglected habits, goal progress).
@@ -845,8 +848,10 @@ That's a roughly 8–12 callsite change in `index.html` — well under the multi
 ## 8. Urgent To-Do
 
 ### 8.1 Add archive feature
-- Allow archiving urgent to-dos (instead of only delete / complete).
-- Archived items must be retrievable.
+
+> **🟢 Shipped** — `archiveTodo(id)` non-destructively flips an `archived: true` flag on the todo (distinct from `delTodo` which moves to `data.archive` tombstone, and `chkTodo` which completes). See [index.html:4309-4323](../index.html#L4309) for the action and [index.html:4324-4334](../index.html#L4324) for `restoreTodo`. UI: 📦 Archive button on each todo Row at [lib/views/TodosView.js:166-172](../lib/views/TodosView.js#L166); archive drawer ("View archive (N)" toggle + per-row Restore button) at [lib/views/TodosView.js:284-322](../lib/views/TodosView.js#L284). Touches `touchFeature("todo.archive")` for App Progress tracking.
+
+- **Original behavior:** Allow archiving urgent to-dos (instead of only delete / complete). Archived items must be retrievable.
 
 ---
 
@@ -894,7 +899,10 @@ Deferred for future passes:
 > Merged from previously separate Profile and Settings sections. Both are user-controlled configuration surfaces; treating them as one helps avoid duplicated UI patterns.
 
 ### 11.1 Remove "your primary goal" section
-- Delete this UI block from the profile page.
+
+> **🟢 Shipped** — the "your primary goal" UI block no longer exists in the profile page. A grep for `primary goal` / `primaryGoal` across `lib/views/profile/**` returns zero hits; only one unrelated comment survives at [index.html:13099](../index.html#L13099) (about habit↔goal default linking, not the deleted profile section).
+
+- **Original action:** Delete this UI block from the profile page.
 
 ### 11.2 Reduce padding on My Profile
 - The page has too much internal padding overall.
