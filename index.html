@@ -145,6 +145,7 @@
 <script src="./lib/domains/todos.js"></script>
 <script src="./lib/domains/reflect.js"></script>
 <script src="./lib/domains/calendar.js"></script>
+<script src="./lib/domains/history.js"></script>
 <!-- §13.4a (v75) — Per-view React component modules. -->
 <script src="./lib/views/BriefView.js"></script>
 <script src="./lib/views/BriefTopBanners.js"></script>
@@ -5124,50 +5125,14 @@ function App() {
     () => window.habitsDomain.appWideStreak((data && data.habits) || []),
     [data && data.habits]
   );
-  // §perf — historyPanel timeline. The Profile sheet's history IIFE
-  // used to iterate goalArchive + every goal's history + every
-  // habit's history and sort the whole flat array on every Profile
-  // render. For 50 habits × 10 edits + 20 goals × 5 edits that is
-  // 600 events sorted O(N log N) per render — CRITICAL hot path on
-  // mid-range phones. Memoize on the three underlying collections.
-  const memoedHistoryEvents = useMemo(() => {
-    const out = [];
-    for (const g of (data && data.goalArchive || [])) {
-      const ts = g.archivedAt ? new Date(g.archivedAt).getTime() : 0;
-      if (!ts || !isFinite(ts)) continue;
-      const nextGoal = (data && data.goals || []).find(ng => ng.parentGoalId === g.id);
-      out.push({ ts, kind: "goal-completed", name: g.text, type: g.type, nextGoal: nextGoal || null, id: "gc-" + g.id });
-    }
-    for (const g of (data && data.goals || [])) {
-      for (const snap of (g.history || [])) {
-        if (!snap || typeof snap.ts !== "number") continue;
-        out.push({ ts: snap.ts, kind: "goal-edited", name: g.text, type: g.type, prevText: snap.text, id: "ge-" + g.id + "-" + snap.ts });
-      }
-    }
-    for (const h of (data && data.habits || [])) {
-      for (const snap of (h.history || [])) {
-        if (!snap || typeof snap.ts !== "number") continue;
-        // §VersionTimeline — carry habitId so the History panel can
-        // expand the row into the full per-habit version timeline.
-        // `archived` propagates the archive flag (set by the §StreakChoice
-        // "This is a new habit" path) so the UI can mark old definitions
-        // as superseded.
-        out.push({
-          ts: snap.ts,
-          kind: "habit-edited",
-          name: h.text,
-          type: h.type,
-          prevText: snap.text,
-          prevImp: snap.importance,
-          prevSec: snap.section,
-          habitId: h.id,
-          archived: !!h.archived,
-          id: "he-" + h.id + "-" + snap.ts
-        });
-      }
-    }
-    return out.sort((a, b) => b.ts - a.ts);
-  }, [data && data.habits, data && data.goals, data && data.goalArchive]);
+  // §perf — historyPanel timeline. Pure aggregator lives in
+  // lib/domains/history.js (historyDomain.flatHistoryEvents). useMemo
+  // here keeps the O(N log N) sort off the hot render path — only
+  // recomputes when habits / goals / goalArchive change.
+  const memoedHistoryEvents = useMemo(
+    () => window.historyDomain.flatHistoryEvents(data),
+    [data && data.habits, data && data.goals, data && data.goalArchive]
+  );
   // §perf — Goals tab "sort areas by recent progress" was an inline
   // IIFE inside the Goals render that called getCR(h) for every habit
   // in every area on EVERY Goals render. With 50 habits × ~10 areas
