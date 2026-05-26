@@ -28,6 +28,7 @@ const FILES = [
   'lib/domains/reflect.js',
   'lib/domains/calendar.js',
   'lib/domains/history.js',
+  'lib/domains/achievements.js',
   'lib/views/BriefView.js',
   'lib/views/BriefTopBanners.js',
   'lib/views/HabitsView.js',

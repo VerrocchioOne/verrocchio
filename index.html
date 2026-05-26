@@ -146,6 +146,7 @@
 <script src="./lib/domains/reflect.js"></script>
 <script src="./lib/domains/calendar.js"></script>
 <script src="./lib/domains/history.js"></script>
+<script src="./lib/domains/achievements.js"></script>
 <!-- §13.4a (v75) — Per-view React component modules. -->
 <script src="./lib/views/BriefView.js"></script>
 <script src="./lib/views/BriefTopBanners.js"></script>
@@ -5141,79 +5142,13 @@ function App() {
     () => window.habitsDomain.sortAreasByProgress((data && data.habits) || [], HT),
     [data && data.habits]
   );
-  const achievementStats = useMemo(() => {
-    const habitsArr = (data && data.habits) || [];
-    const goalsArr = (data && data.goals) || [];
-    const archiveArr = (data && data.goalArchive) || [];
-    const currentBest = habitsArr.length ? Math.max(0, ...habitsArr.map(h => getStreak(h))) : 0;
-    const cachedBest = Math.max(0, ...Object.values((data && data.bestStreaks) || {}), 0);
-    // ── Derived goal-quality stats (feed the new Achiever/Builder
-    // achievements). None of these introduce new storage — they're
-    // pure functions of `data.goals` / `data.goalArchive` / `data.habits`.
-    //
-    //  smartGoals: count of goals (live OR archived) where every SMART
-    //    field carries a non-empty value. `measurable` is the trickiest
-    //    — the UI splits it into a number field + a unit field, so both
-    //    must be filled for the M to count. The unlock check is
-    //    `smartGoals >= 1` so filling SMART on a SINGLE goal triggers
-    //    it; keeping it as a count (not a boolean) leaves room for
-    //    future "3 SMART goals", "10 SMART goals" tiers without a
-    //    schema change.
-    //
-    //  goalsCreated: total goals the user has ever created, = live +
-    //    archived. Completing a goal moves it from data.goals to
-    //    data.goalArchive; summing both means a 3-goals milestone
-    //    stays unlocked even after the user checks them all off.
-    //
-    //  activeGoalsCleared: 1 at the "zero active, ≥1 archived" clean-
-    //    slate moment, else 0. Boolean-as-threshold so the existing
-    //    `statVal >= threshold` unlock check works unchanged.
-    //
-    //  habitPerGoal: 1 when there's at least one goal AND every live
-    //    goal's id appears as a goalId on at least one habit. Zero-
-    //    goal state stays locked so an empty workspace can't accidentally
-    //    unlock "Laddered Up".
-    const isSmartComplete = (g) => {
-      const s = g && g.smart;
-      if (!s) return false;
-      const measurableOk = String(s.measurable || "").trim().length > 0
-        && String(s.measurableUnit || "").trim().length > 0;
-      return measurableOk
-        && String(s.specific    || "").trim().length > 0
-        && String(s.achievable  || "").trim().length > 0
-        && String(s.relevant    || "").trim().length > 0
-        && String(s.timebound   || "").trim().length > 0;
-    };
-    const smartGoals = goalsArr.filter(isSmartComplete).length
-                     + archiveArr.filter(isSmartComplete).length;
-    const goalsCreated = goalsArr.length + archiveArr.length;
-    const activeGoalsCleared = (goalsArr.length === 0 && archiveArr.length >= 1) ? 1 : 0;
-    // §6 — only ACTIVE habits should satisfy the "every goal has a
-    // linked habit" achievement check. Parked habits don't count.
-    const activeHabitsArr = habitsArr.filter(h => h && !h.parked);
-    const linkedGoalIds = new Set(activeHabitsArr.map(h => h && h.goalId).filter(Boolean).map(String));
-    const habitPerGoal = (goalsArr.length >= 1 && goalsArr.every(g => linkedGoalIds.has(String(g.id)))) ? 1 : 0;
-    // featuresExplored: number of FEATURES entries the user has actually
-    // touched at least once. touchFeature writes a timestamp into
-    // data.featureAccess keyed by feature id — so the count of non-empty
-    // entries is a direct read of "how much of the app has been
-    // discovered". Drives the Explorer achievement tier set.
-    const fa = (data && data.featureAccess) || {};
-    const featuresExplored = Object.keys(fa).filter(k => !!fa[k]).length;
-    return {
-      visits: ((data && data.dayVisits) || []).length,
-      bestStreak: Math.max(currentBest, cachedBest),
-      goals: archiveArr.length,
-      // §6 — count only active habits toward the Builder achievement.
-      habitsActive: activeHabitsArr.length,
-      xp: (data && data.xp) || 0,
-      smartGoals,
-      goalsCreated,
-      activeGoalsCleared,
-      habitPerGoal,
-      featuresExplored
-    };
-  }, [data]);
+  // Pure aggregator lives in lib/domains/achievements.js.
+  // useMemo here keeps the per-habit getStreak fan-out + SMART scan
+  // off the hot render path; only recomputes when `data` changes.
+  const achievementStats = useMemo(
+    () => window.achievementsDomain.computeAchievementStats(data),
+    [data]
+  );
 
   // Removed: a one-shot effect that collapsed every section except
   // the current time-of-day one once data loaded. The user prefers
