@@ -658,3 +658,303 @@ test("reorderForCrowdingPair only touches habits in the affected section", () =>
   assert.equal(out.nextHabits.find(h => h.id === 3)._order, 0,
     "evening peer's _order untouched");
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// nextRitualState — pure kernel for updateRitual
+// ─────────────────────────────────────────────────────────────────────
+
+test("nextRitualState shallow-merges patch into today's entry", () => {
+  // Arrange — existing entry has briefing + intention; patch updates briefing only
+  const data = {
+    dailyRitual: {
+      "2026-05-26": { briefing: "old", intention: "stay focused", reviewedAt: 123 }
+    }
+  };
+  // Act
+  const out = briefDomain.nextRitualState(data, "2026-05-26", { briefing: "new" });
+  // Assert — briefing overridden; intention + reviewedAt preserved
+  assert.deepEqual(out["2026-05-26"], {
+    briefing: "new",
+    intention: "stay focused",
+    reviewedAt: 123
+  });
+});
+
+test("nextRitualState preserves OTHER days' entries by reference", () => {
+  const yesterdayEntry = { briefing: "y" };
+  const data = {
+    dailyRitual: {
+      "2026-05-25": yesterdayEntry,
+      "2026-05-26": { intention: "today" }
+    }
+  };
+  const out = briefDomain.nextRitualState(data, "2026-05-26", { briefing: "t" });
+  assert.equal(out["2026-05-25"], yesterdayEntry, "other days pass through by reference");
+});
+
+test("nextRitualState creates today's entry when it doesn't exist yet", () => {
+  const data = { dailyRitual: { "2026-05-25": { briefing: "y" } } };
+  const out = briefDomain.nextRitualState(data, "2026-05-26", { intention: "new" });
+  assert.deepEqual(out["2026-05-26"], { intention: "new" });
+  assert.deepEqual(out["2026-05-25"], { briefing: "y" }, "yesterday untouched");
+});
+
+test("nextRitualState handles missing data.dailyRitual entirely", () => {
+  const data = {};
+  const out = briefDomain.nextRitualState(data, "2026-05-26", { briefing: "x" });
+  assert.deepEqual(out, { "2026-05-26": { briefing: "x" } });
+});
+
+test("nextRitualState handles null / undefined data", () => {
+  const out1 = briefDomain.nextRitualState(null, "2026-05-26", { briefing: "x" });
+  const out2 = briefDomain.nextRitualState(undefined, "2026-05-26", { briefing: "x" });
+  assert.deepEqual(out1, { "2026-05-26": { briefing: "x" } });
+  assert.deepEqual(out2, { "2026-05-26": { briefing: "x" } });
+});
+
+test("nextRitualState treats null / undefined patch as empty merge (today's entry unchanged)", () => {
+  const data = { dailyRitual: { "2026-05-26": { briefing: "kept" } } };
+  const a = briefDomain.nextRitualState(data, "2026-05-26", null);
+  const b = briefDomain.nextRitualState(data, "2026-05-26", undefined);
+  assert.deepEqual(a["2026-05-26"], { briefing: "kept" });
+  assert.deepEqual(b["2026-05-26"], { briefing: "kept" });
+});
+
+test("nextRitualState does NOT mutate the input data.dailyRitual", () => {
+  const data = {
+    dailyRitual: { "2026-05-26": { briefing: "before" } }
+  };
+  const snapshot = JSON.parse(JSON.stringify(data));
+  briefDomain.nextRitualState(data, "2026-05-26", { briefing: "after" });
+  assert.deepEqual(data, snapshot, "input data left untouched");
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// deterministicBriefing — no-AI Morning Brief renderer
+// ─────────────────────────────────────────────────────────────────────
+
+// Build a deterministic dataset: 14 day keys (today first, oldest
+// last), a tiny isDone predicate that reads habit.completions[dateKey].
+const BRIEF_TODAY = "2026-05-26";
+const briefL30 = (n = 14) => {
+  // n day keys starting at BRIEF_TODAY and counting back
+  const out = [];
+  const t = new Date(2026, 4, 26);
+  for (let i = 0; i < n; i++) {
+    const d = new Date(t); d.setDate(d.getDate() - i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    out.push(`${y}-${m}-${day}`);
+  }
+  return out;
+};
+const briefIsDone = (h, key) => !!(h && h.completions && (h.completions[key] === "done" || h.completions[key] === true));
+const briefHT = [
+  { value: "Mind",    label: "Mind" },
+  { value: "Body",    label: "Body" },
+  { value: "Fitness", label: "Fitness" }
+];
+
+test("deterministicBriefing returns a multi-paragraph string joined by blank lines", () => {
+  const data = {
+    habits: [],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  });
+  assert.ok(typeof out === "string");
+  assert.ok(out.length > 0, "must return non-empty string");
+});
+
+test("deterministicBriefing — neutral tone opens with 'Today's status:' and reports done/total habits", () => {
+  // Arrange — 2 habits; 1 done today
+  const data = {
+    aiTone: "neutral",
+    habits: [
+      { id: 1, text: "Meditate", section: "morning", type: "Mind",    completions: { [BRIEF_TODAY]: "done" } },
+      { id: 2, text: "Run",      section: "morning", type: "Fitness", completions: {} }
+    ],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  });
+  assert.ok(out.startsWith("Today's status:"), "neutral tone opens with 'Today's status:'");
+  assert.ok(out.includes("Habits today: 1/2 logged."), "reports done/total habit count");
+});
+
+test("deterministicBriefing — tough-love tone opens differently and uses 'no excuses' on empty task list", () => {
+  const data = { aiTone: "tough-love", habits: [], todos: [] };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  });
+  assert.ok(out.startsWith("Morning."), "tough-love opens with 'Morning.'");
+  assert.ok(out.includes("no excuses"), "tough-love empty-list line includes 'no excuses'");
+});
+
+test("deterministicBriefing — encouraging (default-warm) tone opens with 'Good morning.'", () => {
+  const data = { aiTone: "encouraging", habits: [], todos: [] };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  });
+  assert.ok(out.startsWith("Good morning."), "encouraging opens with 'Good morning.'");
+});
+
+test("deterministicBriefing lists open todos when 3 or fewer; collapses to count when 4+", () => {
+  const fewTodos = { habits: [], todos: [{ done: false, text: "A" }, { done: false, text: "B" }] };
+  const manyTodos = { habits: [], todos: Array.from({ length: 5 }, (_, i) => ({ done: false, text: `T${i}` })) };
+  const ctx = {
+    today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  };
+  const a = briefDomain.deterministicBriefing({ ...ctx, data: fewTodos });
+  const b = briefDomain.deterministicBriefing({ ...ctx, data: manyTodos });
+  assert.ok(a.includes("2 tasks open — A, B"), "<=3 tasks listed by name");
+  assert.ok(b.includes("5 tasks open."), "4+ tasks collapse to count");
+});
+
+test("deterministicBriefing reports the cross-habit streak when present", () => {
+  // Arrange — 3 consecutive days ending today with at least one
+  // completion across the active habit set.
+  const keys = briefL30();
+  const data = {
+    habits: [{
+      id: 1, text: "Meditate", section: "morning", type: "Mind",
+      completions: { [keys[0]]: "done", [keys[1]]: "done", [keys[2]]: "done" }
+    }],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: keys,
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  });
+  assert.ok(out.includes("Streak: 3 days."), "streak line shown when streak > 0");
+});
+
+test("deterministicBriefing omits the streak line when there's no streak", () => {
+  // Arrange — habit with no completion today nor yesterday
+  const data = {
+    habits: [{ id: 1, text: "X", section: "morning", completions: {} }],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [],
+    isDone: briefIsDone
+  });
+  assert.ok(!out.includes("Streak:"), "no streak line when streak === 0");
+});
+
+test("deterministicBriefing surfaces the top correlation pattern in paragraph 3", () => {
+  // Arrange — a single correlation row; pattern paragraph references it
+  const data = { habits: [], todos: [] };
+  const correlations = [
+    { aText: "Meditate", bText: "Write", aCutoffHour: 12, conditional: 0.82, base: 0.45 }
+  ];
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations, isDone: briefIsDone
+  });
+  assert.ok(out.includes(`Pattern: when you finish "Meditate" by noon`),
+    "noon cutoff renders as 'by noon'");
+  assert.ok(out.includes(`"Write" lands 82% of the time (vs 45% normally)`),
+    "conditional and base both rendered to integer %");
+});
+
+test("deterministicBriefing renders 6pm and bedtime cutoffs for non-noon hours", () => {
+  const data = { habits: [], todos: [] };
+  const out6pm = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(), dataDays: 14,
+    habitTypeAreas: briefHT, isDone: briefIsDone,
+    correlations: [{ aText: "Walk", bText: "Read", aCutoffHour: 18, conditional: 0.6, base: 0.4 }]
+  });
+  const outBed = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(), dataDays: 14,
+    habitTypeAreas: briefHT, isDone: briefIsDone,
+    correlations: [{ aText: "Walk", bText: "Read", aCutoffHour: 22, conditional: 0.6, base: 0.4 }]
+  });
+  assert.ok(out6pm.includes("by 6pm"));
+  assert.ok(outBed.includes("before bed"));
+});
+
+test("deterministicBriefing flags the anchor habit when consistency is >=60% of dataDays", () => {
+  // Arrange — habit completed 9 of last 14 days (>= ceil(14 * 0.6) = 9)
+  const keys = briefL30(14);
+  const completions = {};
+  for (let i = 0; i < 9; i++) completions[keys[i]] = "done";
+  const data = {
+    aiTone: "neutral",
+    habits: [{ id: 1, text: "Meditate", section: "morning", type: "Mind", completions }],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: keys,
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [], isDone: briefIsDone
+  });
+  assert.ok(out.includes(`Most consistent: "Meditate"`),
+    "neutral tone uses 'Most consistent: \"X\"' format");
+});
+
+test("deterministicBriefing flags a slipping habit when pct < 40% (and not the same as topHabit)", () => {
+  const keys = briefL30(14);
+  const topComp = {};
+  for (let i = 0; i < 14; i++) topComp[keys[i]] = "done"; // 100%
+  const offComp = {};
+  offComp[keys[0]] = "done";                              // ~7%
+  const data = {
+    aiTone: "neutral",
+    habits: [
+      { id: 1, text: "Anchor", section: "morning", type: "Mind",    completions: topComp },
+      { id: 2, text: "Wobble", section: "morning", type: "Fitness", completions: offComp }
+    ],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: keys,
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [], isDone: briefIsDone
+  });
+  assert.ok(out.includes(`Lowest: "Wobble"`), "neutral 'Lowest: \"X\"' format");
+});
+
+test("deterministicBriefing excludes 'avoid'-section and parked habits from the dH set", () => {
+  // Arrange — only one habit is in the active set; the other two should
+  // be excluded entirely from "Habits today: N/M logged" + everywhere
+  const data = {
+    aiTone: "neutral",
+    habits: [
+      { id: 1, text: "Active",  section: "morning",   completions: {} },
+      { id: 2, text: "Skipped", section: "avoid",     completions: {} },
+      { id: 3, text: "Parked",  section: "morning", parked: true, completions: {} }
+    ],
+    todos: []
+  };
+  const out = briefDomain.deterministicBriefing({
+    data, today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 14, habitTypeAreas: briefHT, correlations: [], isDone: briefIsDone
+  });
+  assert.ok(out.includes("Habits today: 0/1 logged."),
+    "denominator counts only active non-parked, non-avoid habits");
+});
+
+test("deterministicBriefing handles entirely empty data (no habits, no todos, no correlations)", () => {
+  const out = briefDomain.deterministicBriefing({
+    data: { habits: [], todos: [] },
+    today: BRIEF_TODAY, pastDays30: briefL30(),
+    dataDays: 1, habitTypeAreas: briefHT, correlations: [], isDone: briefIsDone
+  });
+  // Smoke: returns a non-empty string and doesn't crash on empty inputs
+  assert.ok(out.length > 0);
+  assert.ok(!out.includes("Habits today:"), "habit-count line suppressed when no active habits");
+});
