@@ -958,3 +958,118 @@ test("deterministicBriefing handles entirely empty data (no habits, no todos, no
   assert.ok(out.length > 0);
   assert.ok(!out.includes("Habits today:"), "habit-count line suppressed when no active habits");
 });
+
+
+// ─────────────────────────────────────────────────────────────────────
+// aiBriefingPrompt — pinned prompt-shape tests
+// ─────────────────────────────────────────────────────────────────────
+
+const apIsDone = (h, dk) => !!(h.completions && h.completions[dk]);
+
+test("aiBriefingPrompt selects the encouraging tone for data.aiTone=encouraging", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { aiTone: "encouraging", goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /warm personal coach/);
+  assert.doesNotMatch(out, /no-nonsense coach/);
+});
+
+test("aiBriefingPrompt selects the tough-love tone for data.aiTone=tough-love", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { aiTone: "tough-love", goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /no-nonsense coach/);
+});
+
+test("aiBriefingPrompt defaults to neutral tone when aiTone is unset or unknown", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /neutral analyst/);
+});
+
+test("aiBriefingPrompt emits None/All clear/none placeholders when inputs are empty", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /GOALS: None/);
+  assert.match(out, /TASKS: All clear!/);
+  assert.match(out, /HABITS \(0\/0 done\): none/);
+  assert.match(out, /FOCUSED areas \(1d\): none/);
+  assert.match(out, /NEGLECTED areas \(1d\): none/);
+});
+
+test("aiBriefingPrompt renders goals with their type prefix", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [{ type: "Health", text: "Run 5k" }, { text: "Read more" }] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /GOALS: \[Health\] Run 5k \| \[General\] Read more/);
+});
+
+test("aiBriefingPrompt habits line marks done with checkmark, open with circle, and counts", () => {
+  const isDone = (h) => h.id === "h1";
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27",
+    dH: [{ id: "h1", text: "Meditate" }, { id: "h2", text: "Workout" }],
+    pend: [], dataDays: 7, tc: [], correlations: [], isDone
+  });
+  assert.match(out, /HABITS \(1\/2 done\): ✓ Meditate, ○ Workout/);
+});
+
+test("aiBriefingPrompt classifies areas by 70% / 40% thresholds", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 30,
+    tc: [{ type: "Health", pct: 80 }, { type: "Career", pct: 30 }, { type: "Mind", pct: 55 }],
+    correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /FOCUSED areas \(30d\): Health/);
+  assert.match(out, /NEGLECTED areas \(30d\): Career/);
+  assert.doesNotMatch(out, /FOCUSED areas \(30d\): .*Mind/);
+});
+
+test("aiBriefingPrompt formats top-3 correlations with by-noon / by-6pm / by-midnight labels", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 30, tc: [],
+    correlations: [
+      { aText: "Meditate", aCutoffHour: 12, bText: "Run", lift: 0.30, conditional: 0.85, base: 0.55 },
+      { aText: "Read", aCutoffHour: 18, bText: "Sleep early", lift: 0.20, conditional: 0.70, base: 0.50 },
+      { aText: "Walk", aCutoffHour: 23, bText: "Hydrate", lift: 0.10, conditional: 0.60, base: 0.50 },
+      { aText: "Should not appear", aCutoffHour: 12, bText: "Either", lift: 0.05, conditional: 0.50, base: 0.45 }
+    ],
+    isDone: apIsDone
+  });
+  assert.match(out, /PATTERNS DETECTED:/);
+  assert.match(out, /When "Meditate" is done by noon, "Run" is 30pp more likely/);
+  assert.match(out, /When "Read" is done by 6pm, "Sleep early" is 20pp more likely/);
+  assert.match(out, /When "Walk" is done by midnight, "Hydrate" is 10pp more likely/);
+  assert.doesNotMatch(out, /Should not appear/);
+});
+
+test("aiBriefingPrompt omits PATTERNS DETECTED heading line entirely when correlations is empty", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  // The instruction text mentions "PATTERNS DETECTED naturally if present" —
+  // we're checking only that the data heading (PATTERNS DETECTED: ...)
+  // doesn't render when correlations is empty.
+  assert.doesNotMatch(out, /PATTERNS DETECTED: /);
+});
+
+test("aiBriefingPrompt prompt body asks for 3 short paragraphs and forbids quotations", () => {
+  const out = briefDomain.aiBriefingPrompt({
+    data: { goals: [] },
+    today: "2026-05-27", dH: [], pend: [], dataDays: 1, tc: [], correlations: [], isDone: apIsDone
+  });
+  assert.match(out, /3 short paragraphs/);
+  assert.match(out, /Do NOT include any quotations/);
+});
+

@@ -6762,7 +6762,6 @@ function App() {
     const dH = habits.filter(h => h.section !== "avoid" && !h.parked);
     const td = tk();
     const pend = data.todos.filter(t => !t.done);
-    const q = todayQ();
     const l30 = pastDays(30);
     // Actual window length — users with <30 days of history would
     // otherwise see deflated completion percentages (dividing by 30
@@ -6778,30 +6777,18 @@ function App() {
         pct: Math.round(g.reduce((s, h) => s + l30.filter(d => h.completions?.[d]).length, 0) / (g.length * dataDays) * 100)
       };
     }).filter(Boolean);
-    // Correlations from the last 60 days of completion-time data — the
-    // LLM sees them alongside goals/habits so it can weave them into
-    // the narrative instead of listing them mechanically.
-    const corrHints = memoedCorrelations.slice(0, 3).map(r => {
-      const hrLabel = r.aCutoffHour === 12 ? "by noon" : r.aCutoffHour === 18 ? "by 6pm" : "by midnight";
-      const pct = Math.round((r.lift) * 100);
-      return `When "${r.aText}" is done ${hrLabel}, "${r.bText}" is ${pct}pp more likely to happen (${Math.round(r.conditional*100)}% vs ${Math.round(r.base*100)}% base)`;
-    });
-    // AI tone → prompt-shaping preamble. "Neutral" is the default.
-    // "Encouraging" is the warm coach voice. "Tough love" gives direct
-    // feedback without being cruel. Unknown values resolve to neutral
-    // so a future tone can land before this switch knows about it.
-    const toneLine =
-      (data.aiTone === "tough-love")
-        ? "You are a direct, no-nonsense coach who holds the user accountable without being cruel. Call out slipping habits plainly and expect better. Skip the pep talk."
-        : (data.aiTone === "encouraging")
-          ? "You are a warm personal coach. Lead with positive framing and celebrate progress."
-          : "You are a neutral analyst. Summarize the user's day factually without cheerleading or criticism. Plain language, no emotional framing.";
     // W3-T12: consent gate. See genIns above — same v1.0 inert / v1.1 live semantics.
     if (AI_ENABLED && (!data.aiConsentAt || data.aiConsentAt === 0)) {
       setShowAiConsent(true);
       return;
     }
-    const prompt = `${toneLine} Generate a brief, data-driven morning briefing. Do NOT include any quotations, author attributions, or motivational aphorisms — that content lives elsewhere in the app.\n\nGOALS: ${data.goals.map(g => `[${g.type || "General"}] ${g.text}`).join(" | ") || "None"}\nTASKS: ${pend.map(t => t.text).join(", ") || "All clear!"}\nHABITS (${dH.filter(h => isDone(h, td)).length}/${dH.length} done): ${dH.map(h => `${isDone(h, td) ? "✓" : "○"} ${h.text}`).join(", ") || "none"}\nFOCUSED areas (${dataDays}d): ${tc.filter(t => t.pct >= 70).map(t => t.type).join(", ") || "none"}\nNEGLECTED areas (${dataDays}d): ${tc.filter(t => t.pct < 40).map(t => t.type).join(", ") || "none"}${corrHints.length ? `\nPATTERNS DETECTED: ${corrHints.join(" | ")}` : ""}\n\n3 short paragraphs: 1) greeting referencing today's tasks/goals, 2) life-balance insight — weave in any PATTERNS DETECTED naturally if present, 3) brief closing. Match the tone above exactly. No quotes.`;
+    // Prompt-shape lives in lib/domains/brief.js (briefDomain.aiBriefingPrompt)
+    // so unit tests pin the template shape independent of the network call.
+    // Correlation top-3 formatting + tone selection live inside the function.
+    const prompt = window.briefDomain.aiBriefingPrompt({
+      data, today: td, dH, pend, dataDays, tc,
+      correlations: memoedCorrelations, isDone
+    });
     if (!AI_BACKEND_URL) {
       // No backend proxy configured — render the data-driven coaching
       // note from briefDomain.deterministicBriefing (pinned by
