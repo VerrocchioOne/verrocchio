@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v86";
+const SHELL_VERSION = "v87";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -41,6 +41,7 @@ precaching.precacheAndRoute([
   { url: "./lib/auth.js",               revision: SHELL_VERSION },
   // §13.4a (v75) — per-view domain modules + view modules.
   { url: "./lib/domains/brief.js",      revision: SHELL_VERSION },
+  { url: "./lib/domains/demo.js",       revision: SHELL_VERSION },
   { url: "./lib/domains/habits.js",     revision: SHELL_VERSION },
   { url: "./lib/domains/goals.js",      revision: SHELL_VERSION },
   { url: "./lib/domains/todos.js",      revision: SHELL_VERSION },

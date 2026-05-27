@@ -23,6 +23,7 @@ const FILES = [
   'lib/icalendar.js',
   // §13.4a (v75) — per-view domain modules + view modules.
   'lib/domains/brief.js',
+  'lib/domains/demo.js',
   'lib/domains/habits.js',
   'lib/domains/goals.js',
   'lib/domains/todos.js',
