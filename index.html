@@ -898,95 +898,16 @@ function App() {
   // (filter, sort, time-cursor stacking, parent/child collapsing) and
   // hands the resulting habitTimes array to buildICS().
   const exportHabitsICS = () => {
-    // Skip avoid habits AND all-day "Daily Completion" habits â€” neither
-    // sits on a clock-time slot, and their inclusion in a time-of-day
-    // calendar export muddied the daily schedule. The Calendar tab
-    // applies the same filter so what the user sees in the app
-    // matches what gets exported.
-    // Sub-habits (h.parentId set) are dropped â€” only the parent
-    // habit gets exported, with sub-habit names listed in the
-    // VEVENT DESCRIPTION. The parent's effective duration is the
-    // sum of its children's durations (or its own h.duration if
-    // childless).
-    const habits = (data.habits || []).filter(h =>
-      h && h.section !== "avoid" && h.section !== "all-day" && !h.parentId
+    // Pure compute (filter, sort, stack section-anchored times) lives
+    // in habitsDomain.prepareHabitsForICS (Wave 8.3). App keeps only
+    // the alert + blob/download side-effects here.
+    const { habitTimes, tzid } = window.habitsDomain.prepareHabitsForICS(
+      data, { getTimeRanges, getFreq }
     );
-    if (!habits.length) {
+    if (!habitTimes.length) {
       alert("No timed habits to export. Add a Morning/Afternoon/Evening habit first.");
       return;
     }
-    const tzid = (() => {
-      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; }
-      catch (e) { return "UTC"; }
-    })();
-    // Section anchors come from the user's configured timeRanges
-    // (or DEFAULT_TIME_RANGES). morning.start = 6, afternoon.start
-    // = 12, evening.start = 18 by default; if the user customized
-    // them on the Profile page, the export honors that.
-    const ranges = getTimeRanges(data);
-    const SECTION_START = {
-      morning:   (ranges.morning   && ranges.morning.start   != null ? ranges.morning.start   : 6)  * 60,
-      afternoon: (ranges.afternoon && ranges.afternoon.start != null ? ranges.afternoon.start : 12) * 60,
-      evening:   (ranges.evening   && ranges.evening.start   != null ? ranges.evening.start   : 18) * 60
-    };
-    // Compute each habit's start time within its section by stacking
-    // sequentially in the user's manual order. Sort by _order then
-    // id within each section so the exported events line up with
-    // the in-app calendar tab and the Habits-page row order.
-    const sortedHabits = habits.slice().sort((a, b) => {
-      const ao = a._order ?? 999, bo = b._order ?? 999;
-      if (ao !== bo) return ao - bo;
-      return (Number(a.id) || 0) - (Number(b.id) || 0);
-    });
-    const sectionCursor = { morning: 0, afternoon: 0, evening: 0 };
-    // Track each section's previous startMin so habits flagged
-    // h.concurrent share the predecessor's start (stretch + sunlight
-    // exported as overlapping events at the same time).
-    const sectionPrevStart = { morning: null, afternoon: null, evening: null };
-    // Effective duration: when the parent has children, use the
-    // sum of child durations; otherwise fall back to h.duration.
-    const effDur = (h) => {
-      const kids = (data.habits || []).filter(c => c.parentId != null && String(c.parentId) === String(h.id));
-      if (kids.length > 0) {
-        const sum = kids.reduce((s, c) => s + (parseInt(c.duration, 10) || 0), 0);
-        if (sum > 0) return Math.max(5, sum);
-      }
-      return Math.max(5, parseInt(h.duration, 10) || 30);
-    };
-    const habitTimes = sortedHabits.map(h => {
-      const dur = effDur(h);
-      const sec = h.section;
-      const anchor = SECTION_START[sec] != null ? SECTION_START[sec] : 12 * 60;
-      let startMin;
-      if (h.concurrent && sectionPrevStart[sec] != null) {
-        startMin = sectionPrevStart[sec];
-        const endOffset = (startMin - anchor) + dur;
-        if (endOffset > (sectionCursor[sec] || 0)) sectionCursor[sec] = endOffset;
-      } else {
-        const offset = sectionCursor[sec] || 0;
-        startMin = anchor + offset;
-        sectionCursor[sec] = offset + dur;
-      }
-      sectionPrevStart[sec] = startMin;
-      // Children of this parent become "members" so the export's
-      // DESCRIPTION can list them as bullets under the parent.
-      const kids = (data.habits || [])
-        .filter(c => c.parentId != null && String(c.parentId) === String(h.id))
-        .sort((a, b) => (a._order ?? 999) - (b._order ?? 999));
-      // Hand the habit object to buildICS with its frequency already
-      // normalised by getFreq (collapses "weekly-day" â†’ "weekly" and
-      // backfills missing fields with safe defaults). buildICS reads
-      // h.frequency, h.text, h.id, h.importance, h.type, h.duration â€”
-      // everything else (sub-habit kids, section cursor) is carried in
-      // the wrapping habitTime record.
-      return {
-        habit: { ...h, frequency: getFreq(h) },
-        members: kids.length > 0 ? kids.slice() : [h],
-        durationMin: dur,
-        startMin,
-        allDay: false
-      };
-    });
     const ics = buildICS(habitTimes, { tzid });
     const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
     const url = URL.createObjectURL(blob);
