@@ -22,7 +22,7 @@ importScripts("https://storage.googleapis.com/workbox-cdn/releases/7.3.0/workbox
 
 const { precaching, routing, strategies, core } = workbox;
 
-const SHELL_VERSION = "v84";
+const SHELL_VERSION = "v85";
 
 core.setCacheNameDetails({ prefix: "verrocchio", suffix: SHELL_VERSION });
 self.skipWaiting();
@@ -53,8 +53,6 @@ precaching.precacheAndRoute([
   { url: "./lib/views/BriefTopBanners.js",  revision: SHELL_VERSION },
   { url: "./lib/views/HabitsView.js",   revision: SHELL_VERSION },
   { url: "./lib/views/HabitsReorderToolbar.js", revision: SHELL_VERSION },
-  { url: "./lib/views/HabitsDragController.js", revision: SHELL_VERSION },
-  { url: "./lib/views/HabitsTouchReorderBar.js", revision: SHELL_VERSION },
   { url: "./lib/views/HabitsNewHabitForm.js",   revision: SHELL_VERSION },
   { url: "./lib/views/HabitsFilterPills.js",     revision: SHELL_VERSION },
   { url: "./lib/views/HabitsActionButton.js",    revision: SHELL_VERSION },

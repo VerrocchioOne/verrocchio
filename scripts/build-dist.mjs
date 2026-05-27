@@ -35,8 +35,6 @@ const FILES = [
   'lib/views/BriefTopBanners.js',
   'lib/views/HabitsView.js',
   'lib/views/HabitsReorderToolbar.js',
-  'lib/views/HabitsDragController.js',
-  'lib/views/HabitsTouchReorderBar.js',
   'lib/views/HabitsNewHabitForm.js',
   'lib/views/HabitsFilterPills.js',
   'lib/views/HabitsActionButton.js',
